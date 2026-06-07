@@ -8,6 +8,8 @@ module Blink.UI
   , getMousePos
   , getLeftButton
   , getHovered
+  , getFocus
+  , setFocus
   , layout
   , fillRect
   , drawText
@@ -31,6 +33,8 @@ data UIContext e = UIContext
 data UIState e c = UIState
   { drawCalls :: [DrawCall]
   , hoveredElement :: Maybe e
+  , focusedElement :: Maybe e
+  , focusedRendered :: Bool
   , pendingCommands :: [c]
   }
 
@@ -59,6 +63,8 @@ emptyUIState :: UIState e c
 emptyUIState = UIState
   { drawCalls = []
   , hoveredElement = Nothing
+  , focusedElement = Nothing
+  , focusedRendered = False
   , pendingCommands = []
   }
 
@@ -73,6 +79,12 @@ getLeftButton = UI $ \ctx st -> (leftButton (inputState ctx), st)
 
 getHovered :: UI e c (Maybe e)
 getHovered = UI $ \_ st -> (hoveredElement st, st)
+
+getFocus :: UI e c (Maybe e)
+getFocus = UI $ \_ st -> (focusedElement st, st)
+
+setFocus :: e -> UI e c ()
+setFocus eid = UI $ \_ st -> ((), st { focusedElement = Just eid })
 
 layout :: Rectangle -> UI e c a -> UI e c a
 layout r (UI f) = UI $ \ctx st ->
@@ -101,18 +113,28 @@ regionHit = do
 control :: Eq e => e -> UI e c ()
 control eid = do
   hit <- regionHit
+  btn <- getLeftButton
+  let isClicked = hit && btn == ButtonReleased
   when hit $ UI $ \_ st -> ((), st { hoveredElement = Just eid })
+  currentFocus <- getFocus
+  when (currentFocus == Just eid) $
+    UI $ \_ st -> ((), st { focusedRendered = True })
+  when isClicked $ do
+    setFocus eid
+    UI $ \_ st -> ((), st { focusedRendered = True })
 
 button :: Eq e => e -> Text -> UI e c Bool
 button eid label = do
   control eid
   hovered <- (== Just eid) <$> getHovered
+  focused <- (== Just eid) <$> getFocus
   btn <- getLeftButton
   let pressed = hovered && btn == ButtonDown
       clicked = hovered && btn == ButtonReleased
       colour
         | pressed = RGBA 0.7 0.2 0.1 1
-        | hovered = RGBA 1 0.4 0.2 1
+        | hovered = RGBA 1.0 0.4 0.2 1
+        | focused = RGBA 0.2 0.5 0.9 1
         | otherwise = RGBA 0.4 0.4 0.4 1
   fillRect colour
   drawText label
