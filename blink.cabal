@@ -44,4 +44,6 @@ test-suite blink-tests
     type: exitcode-stdio-1.0
     hs-source-dirs: test
     main-is: Main.hs
-    build-depends: blink
+    build-depends:
+        blink,
+        hspec
