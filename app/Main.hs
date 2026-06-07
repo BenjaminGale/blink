@@ -2,7 +2,7 @@
 module Main where
 
 import Blink
-import UI (demoView)
+import UI (AppState, demoApp)
 import SDL (($=))
 import qualified SDL
 import qualified SDL.Font as Font
@@ -19,15 +19,16 @@ main = do
   window <- SDL.createWindow "blink" SDL.defaultWindow
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
   font <- Font.load fontPath 14
-  loop renderer font ButtonUp
+  initialState <- startUp demoApp
+  loop renderer font initialState ButtonUp
   Font.free font
   SDL.destroyRenderer renderer
   SDL.destroyWindow window
   Font.quit
   SDL.quit
 
-loop :: SDL.Renderer -> Font.Font -> ButtonState -> IO ()
-loop renderer font buttonState = do
+loop :: SDL.Renderer -> Font.Font -> AppState -> ButtonState -> IO ()
+loop renderer font state buttonState = do
   events <- SDL.pollEvents
   let shouldQuit = any (== SDL.QuitEvent) (map SDL.eventPayload events)
       buttonState' = foldl updateButton buttonState events
@@ -41,14 +42,23 @@ loop renderer font buttonState = do
             }
           winRect = Rectangle 0 0 800 600
           ctx = UIContext { drawRect = winRect, inputState = input }
-          (_, st) = runUI demoView ctx emptyUIState
+          (_, uiSt) = runUI (view demoApp state) ctx emptyUIState
+          state' = execCommands (update demoApp) (pendingCommands uiSt) state
 
       SDL.rendererDrawColor renderer $= SDL.V4 30 30 30 255
       SDL.clear renderer
-      mapM_ (submitDrawCall renderer font) (drawCalls st)
+      mapM_ (submitDrawCall renderer font) (drawCalls uiSt)
       SDL.present renderer
 
-      loop renderer font buttonState'
+      loop renderer font state' (nextFrameButton buttonState')
+
+execCommands :: (c -> s -> Update s c ()) -> [c] -> s -> s
+execCommands updateFn cmds initialState = foldl step initialState cmds
+  where
+    step s cmd =
+      let Update f = updateFn cmd s
+          ((), s', _) = f s
+      in s'
 
 updateButton :: ButtonState -> SDL.Event -> ButtonState
 updateButton current e = case SDL.eventPayload e of
@@ -56,8 +66,12 @@ updateButton current e = case SDL.eventPayload e of
     | SDL.mouseButtonEventButton d == SDL.ButtonLeft ->
         case SDL.mouseButtonEventMotion d of
           SDL.Pressed -> ButtonDown
-          SDL.Released -> ButtonUp
+          SDL.Released -> ButtonReleased
   _ -> current
+
+nextFrameButton :: ButtonState -> ButtonState
+nextFrameButton ButtonReleased = ButtonUp
+nextFrameButton s = s
 
 sdlPoint :: SDL.Point SDL.V2 CInt -> Point
 sdlPoint (SDL.P (SDL.V2 x y)) = Point (fromIntegral x) (fromIntegral y)

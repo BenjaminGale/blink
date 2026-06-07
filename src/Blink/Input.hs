@@ -8,6 +8,7 @@ import Blink.Geometry (Point)
 data ButtonState
   = ButtonUp
   | ButtonDown
+  | ButtonReleased
   deriving (Eq, Show)
 
 data InputState = InputState

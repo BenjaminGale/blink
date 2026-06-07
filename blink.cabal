@@ -18,9 +18,11 @@ library
     import: defaults
     exposed-modules:
         Blink
+        Blink.App
         Blink.DrawCall
         Blink.Geometry
         Blink.Input
+        Blink.Update
         Blink.UI
     hs-source-dirs: src
 
