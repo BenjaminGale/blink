@@ -14,7 +14,7 @@ data ButtonState
   | ButtonReleased
   deriving (Eq, Show)
 
-data Key = KeyTab
+data Key = KeyTab | KeyReturn
   deriving (Eq, Show)
 
 data Modifier = Shift

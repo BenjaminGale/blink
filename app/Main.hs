@@ -82,6 +82,7 @@ toKeyEvents e = case SDL.eventPayload e of
            let mods = SDL.keysymModifier (SDL.keyboardEventKeysym d)
                shifted = SDL.keyModifierLeftShift mods || SDL.keyModifierRightShift mods
            in [KeyEvent { key = KeyTab, modifiers = if shifted then [Shift] else [] }]
+         SDL.KeycodeReturn -> [KeyEvent { key = KeyReturn, modifiers = [] }]
          _ -> []
   _ -> []
 

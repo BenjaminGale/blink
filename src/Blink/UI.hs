@@ -165,8 +165,10 @@ button eid label = do
   hovered <- (== Just eid) <$> getHovered
   focused <- (== Just eid) <$> getFocus
   btn <- getLeftButton
+  input <- getInput
   let pressed = hovered && btn == ButtonDown
-      clicked = hovered && btn == ButtonReleased
+      activated = any (\e -> key e == KeyReturn) (keyEvents input)
+      clicked = (hovered && btn == ButtonReleased) || (focused && activated)
       colour
         | pressed = RGBA 0.7 0.2 0.1 1
         | hovered = RGBA 1.0 0.4 0.2 1
