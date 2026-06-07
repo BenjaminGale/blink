@@ -1,5 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
+
 module Blink.UI
   ( UIContext (..)
   , UIState (..)
