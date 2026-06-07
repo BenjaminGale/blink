@@ -6,11 +6,12 @@ module Blink.Style
   ) where
 
 import qualified Data.Map.Strict as Map
-import Blink.DrawCall (Colour (..))
+import Blink.DrawCall (Colour (..), TextAlign (..))
 
 data Style = Style
   { background :: Colour
   , textColour :: Colour
+  , textAlign :: TextAlign
   }
 
 data StyleSet = StyleSet

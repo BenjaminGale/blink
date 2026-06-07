@@ -29,7 +29,7 @@ data Alignment
   = TopLeft    | TopCenter    | TopRight
   | MiddleLeft | Center       | MiddleRight
   | BottomLeft | BottomCenter | BottomRight
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Bounded, Enum)
 
 alignRect :: Alignment -> Rectangle -> Size -> Rectangle
 alignRect alignment container size = Rectangle

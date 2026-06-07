@@ -16,6 +16,7 @@ module Blink.UI
   , layout
   , fillRect
   , drawText
+  , clipToCurrent
   , regionHit
   , control
   , button
@@ -25,7 +26,7 @@ module Blink.UI
 import Control.Monad (when)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
-import Blink.DrawCall (Colour (..), DrawCall (..))
+import Blink.DrawCall (Colour (..), TextAlign (..), DrawCall (..))
 import Blink.Geometry (Point, Rectangle, containsPoint)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
@@ -127,10 +128,18 @@ fillRect colour = UI $ \ctx st ->
   let call = FillRect (drawRect ctx) colour
   in ((), st { drawCalls = drawCalls st ++ [call] })
 
-drawText :: Colour -> Text -> UI e c ()
-drawText colour text = UI $ \ctx st ->
-  let call = DrawText (drawRect ctx) text colour
+drawText :: Colour -> TextAlign -> Text -> UI e c ()
+drawText colour align text = UI $ \ctx st ->
+  let call = DrawText (drawRect ctx) text colour align
   in ((), st { drawCalls = drawCalls st ++ [call] })
+
+clipToCurrent :: UI e c a -> UI e c a
+clipToCurrent action = do
+  r <- getRect
+  UI $ \_ st -> ((), st { drawCalls = drawCalls st ++ [PushClip r] })
+  result <- action
+  UI $ \_ st -> ((), st { drawCalls = drawCalls st ++ [PopClip] })
+  return result
 
 emitCommand :: c -> UI e c ()
 emitCommand cmd = UI $ \_ st ->
@@ -187,5 +196,5 @@ button eid label = do
   let activated = any (\e -> key e == KeyReturn) (keyEvents input)
       clicked = (isHovered && btn == ButtonReleased) || (isFocused && activated)
   fillRect (background style)
-  drawText (textColour style) label
+  clipToCurrent $ drawText (textColour style) (textAlign style) label
   return clicked
