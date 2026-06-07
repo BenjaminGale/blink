@@ -29,11 +29,9 @@ applyFocus eid isHit = do
   currentFocus <- getFocus
   when (isNothing currentFocus) $ setFocus eid
   currentFocus' <- getFocus
-  when (currentFocus' == Just eid) $
-    UI $ \ctx -> ((), ctx { ctxFocusedRendered = True })
+  setFocusWhen (currentFocus' == Just eid) eid
   btn <- getLeftButton
-  when (isHit && btn == ButtonReleased) $ do
-    setFocus eid
+  setFocusWhen (isHit && btn == ButtonReleased) eid
 
 applyTabNavigation :: (Eq e, Ord e) => e -> UI e c ()
 applyTabNavigation eid = do
