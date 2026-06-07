@@ -1,22 +1,27 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 module Blink.App
   ( Backend (..)
+  , FrameMode (..)
   , App (..)
   , runApp
   ) where
 
 import Blink.DrawCall (DrawCall)
 import Blink.Geometry (Rectangle (..), Size (..))
-import Blink.Input (InputState)
+import Blink.Input (InputState (..))
 import Blink.Style (Theme)
 import Blink.UI (UI, UIContext (..), UIState (..), emptyUIState, runUI, drawCalls, pendingCommands, focusedElement, focusedRendered, focusNext, previousControl)
 import Blink.Update (Update, execCommands)
 
+data FrameMode = EventDriven | Continuous
+
 data Backend = Backend
-  { shouldClose :: IO Bool
+  { collectEvents :: IO ()
+  , shouldClose :: IO Bool
   , pollInput :: IO InputState
   , windowSize :: IO Size
   , render :: [DrawCall] -> IO ()
+  , frameMode :: FrameMode
   }
 
 data App e s c = App
@@ -33,6 +38,7 @@ runApp backend app = do
 
 loop :: Backend -> App e s c -> s -> Maybe e -> Bool -> Maybe e -> IO ()
 loop backend app state prevFocus prevFocusNext prevPrevCtrl = do
+  collectEvents backend
   close <- shouldClose backend
   if close
     then return ()
@@ -47,8 +53,18 @@ loop backend app state prevFocus prevFocusNext prevPrevCtrl = do
             , focusNext = prevFocusNext
             , previousControl = prevPrevCtrl
             }
-          (_, uiSt) = runUI (view app state) ctx freshSt
-          nextFocus = if focusedRendered uiSt then focusedElement uiSt else Nothing
-          state' = execCommands (update app) (pendingCommands uiSt) state
-      render backend (drawCalls uiSt)
-      loop backend app state' nextFocus (focusNext uiSt) (previousControl uiSt)
+          (_, uiSt1) = runUI (view app state) ctx freshSt
+          nextFocus = if focusedRendered uiSt1 then focusedElement uiSt1 else Nothing
+          state' = execCommands (update app) (pendingCommands uiSt1) state
+          ctx2 = ctx { inputState = (inputState ctx) { keyEvents = [] } }
+          freshSt2 = emptyUIState
+            { focusedElement = nextFocus
+            , previousControl = previousControl uiSt1
+            }
+          (drawCalls', prevCtrl') = case frameMode backend of
+            EventDriven ->
+              let (_, uiSt2) = runUI (view app state') ctx2 freshSt2
+              in (drawCalls uiSt2, previousControl uiSt2)
+            Continuous -> (drawCalls uiSt1, previousControl uiSt1)
+      render backend drawCalls'
+      loop backend app state' nextFocus (focusNext uiSt1) prevCtrl'

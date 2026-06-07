@@ -25,9 +25,12 @@ main = do
   buttonRef <- newIORef ButtonUp
 
   let backend = Backend
-        { shouldClose = do
-            events <- SDL.pollEvents
-            writeIORef eventsRef events
+        { collectEvents = do
+            first <- SDL.waitEvent
+            rest  <- SDL.pollEvents
+            writeIORef eventsRef (first : rest)
+        , shouldClose = do
+            events <- readIORef eventsRef
             return $ any (== SDL.QuitEvent) (map SDL.eventPayload events)
         , pollInput = do
             events <- readIORef eventsRef
@@ -44,6 +47,7 @@ main = do
         , windowSize = do
             SDL.V2 w h <- SDL.get (SDL.windowSize window)
             return (Size (fromIntegral w) (fromIntegral h))
+        , frameMode = EventDriven
         , render = \calls -> do
             SDL.rendererDrawColor renderer $= SDL.V4 229 229 234 255
             SDL.clear renderer
