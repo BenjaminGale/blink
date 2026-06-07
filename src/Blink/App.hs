@@ -12,6 +12,7 @@ import Blink.Input (InputState (..))
 import Blink.Style (Theme)
 import Blink.UI (UI, UIContext (..), UIState (..), emptyUIState, runUI, drawCalls, pendingCommands, focusedElement, focusedRendered, focusNext, previousControl)
 import Blink.Update (Update, execCommands)
+import Control.Monad (unless)
 
 data FrameMode = EventDriven | Continuous
 
@@ -39,9 +40,8 @@ loop :: Backend -> App e s c -> s -> Maybe e -> Bool -> Maybe e -> IO ()
 loop backend app state prevFocus prevFocusNext prevPrevCtrl = do
   input <- collectEvents backend
   close <- shouldClose backend
-  if close
-    then return ()
-    else do
+
+  unless close $ do
       size <- windowSize backend
       let winRect = Rectangle 0 0 (sizeWidth size) (sizeHeight size)
           appTheme = Blink.App.theme app
