@@ -16,9 +16,8 @@ import Blink.Update (Update, execCommands)
 data FrameMode = EventDriven | Continuous
 
 data Backend = Backend
-  { collectEvents :: IO ()
+  { collectEvents :: IO InputState
   , shouldClose :: IO Bool
-  , pollInput :: IO InputState
   , windowSize :: IO Size
   , render :: [DrawCall] -> IO ()
   , frameMode :: FrameMode
@@ -38,13 +37,12 @@ runApp backend app = do
 
 loop :: Backend -> App e s c -> s -> Maybe e -> Bool -> Maybe e -> IO ()
 loop backend app state prevFocus prevFocusNext prevPrevCtrl = do
-  collectEvents backend
+  input <- collectEvents backend
   close <- shouldClose backend
   if close
     then return ()
     else do
       size <- windowSize backend
-      input <- pollInput backend
       let winRect = Rectangle 0 0 (sizeWidth size) (sizeHeight size)
           appTheme = Blink.App.theme app
           ctx = UIContext { drawRect = winRect, inputState = input, uiTheme = appTheme }

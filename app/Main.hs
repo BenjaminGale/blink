@@ -21,19 +21,18 @@ main = do
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
   font <- Font.load fontPath 14
 
-  eventsRef <- newIORef ([] :: [SDL.Event])
+  quitRef <- newIORef False
   buttonRef <- newIORef ButtonUp
 
   let backend = Backend
         { collectEvents = do
             first <- SDL.waitEvent
             rest  <- SDL.pollEvents
-            writeIORef eventsRef (first : rest)
-        , shouldClose = do
-            events <- readIORef eventsRef
-            return $ elem SDL.QuitEvent (map SDL.eventPayload events)
-        , pollInput = do
-            events <- readIORef eventsRef
+
+            let events = first : rest
+
+            writeIORef quitRef (SDL.QuitEvent `elem` map SDL.eventPayload events)
+
             btn <- readIORef buttonRef
             let btn' = foldl updateButton btn events
                 keys = concatMap toKeyEvents events
@@ -44,10 +43,15 @@ main = do
               , leftButton = btn'
               , keyEvents = keys
               }
+
+        , shouldClose = readIORef quitRef
+
         , windowSize = do
             SDL.V2 w h <- SDL.get (SDL.windowSize window)
             return (Size (fromIntegral w) (fromIntegral h))
+
         , frameMode = EventDriven
+
         , render = \calls -> do
             SDL.rendererDrawColor renderer $= SDL.V4 229 229 234 255
             SDL.clear renderer
