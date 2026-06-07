@@ -17,7 +17,7 @@ main :: IO ()
 main = do
   SDL.initializeAll
   Font.initialize
-  window <- SDL.createWindow "blink" SDL.defaultWindow
+  window <- SDL.createWindow "blink" SDL.defaultWindow { SDL.windowResizable = True }
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
   font <- Font.load fontPath 14
 
