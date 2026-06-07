@@ -166,10 +166,10 @@ data ControlState = ControlState
 
 control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ControlState
 control eid content = do
-  ss <- getStyleSet eid
+  s <- getStyle eid
   r <- getRect
-  let bgRect = insetRect (margin (normal ss)) r
-      contentRect = insetRect (padding (normal ss)) bgRect
+  let bgRect = insetRect (margin s) r
+      contentRect = insetRect (padding s) bgRect
   next <- UI $ \_ st -> (focusNext st, st)
   currentFocus <- getFocus
   claimedFromTab <-
