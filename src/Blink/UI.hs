@@ -13,7 +13,6 @@ module Blink.UI
   , setFocus
   , clearFocus
   , getInput
-  , getTabConsumed
   , getStyleSet
   , getStyle
   , layout
@@ -40,7 +39,6 @@ data UIContext e c = UIContext
   , ctxFocusedElement :: Maybe e
   , ctxFocusedRendered :: Bool
   , ctxFocusNext :: Bool
-  , ctxTabConsumed :: Bool
   , ctxPreviousControl :: Maybe e
   , ctxPendingCommands :: [c]
   }
@@ -76,7 +74,6 @@ emptyUIContext bounds input thm = UIContext
   , ctxFocusedElement = Nothing
   , ctxFocusedRendered = False
   , ctxFocusNext = False
-  , ctxTabConsumed = False
   , ctxPreviousControl = Nothing
   , ctxPendingCommands = []
   }
@@ -88,7 +85,6 @@ nextFrameContext bounds input ctx = ctx
   , ctxDrawCommands    = []
   , ctxHoveredElement  = Nothing
   , ctxFocusedRendered = False
-  , ctxTabConsumed     = False
   , ctxPendingCommands = []
   }
 
@@ -103,9 +99,6 @@ getLeftButton = UI $ \ctx -> (leftButton (ctxInput ctx), ctx)
 
 getInput :: UI e c InputState
 getInput = UI $ \ctx -> (ctxInput ctx, ctx)
-
-getTabConsumed :: UI e c Bool
-getTabConsumed = UI $ \ctx -> (ctxTabConsumed ctx, ctx)
 
 getStyleSet :: Ord e => e -> UI e c StyleSet
 getStyleSet eid = do

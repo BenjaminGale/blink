@@ -41,16 +41,14 @@ applyTabNavigation :: (Eq e, Ord e) => e -> Bool -> UI e c ()
 applyTabNavigation eid claimedFromTab = do
   hasFocus <- (== Just eid) <$> getFocus
   input <- getInput
-  consumed <- getTabConsumed
-  let tabPressed = not consumed && any (\e -> key e == KeyTab && Shift `notElem` modifiers e) (keyEvents input)
-      shiftTabPressed = not consumed && any (\e -> key e == KeyTab && Shift `elem` modifiers e) (keyEvents input)
+  let tabPressed = any (\e -> key e == KeyTab && Shift `notElem` modifiers e) (keyEvents input)
+      shiftTabPressed = any (\e -> key e == KeyTab && Shift `elem` modifiers e) (keyEvents input)
   when (hasFocus && tabPressed && not claimedFromTab) $ do
     clearFocus
-    UI $ \ctx -> ((), ctx { ctxFocusNext = True, ctxTabConsumed = True })
+    UI $ \ctx -> ((), ctx { ctxFocusNext = True })
   prevCtrl <- UI $ \ctx -> (ctxPreviousControl ctx, ctx)
-  when (hasFocus && shiftTabPressed && not claimedFromTab) $ do
+  when (hasFocus && shiftTabPressed && not claimedFromTab) $
     mapM_ setFocus prevCtrl
-    UI $ \ctx -> ((), ctx { ctxTabConsumed = True })
 
 control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ()
 control eid content = do
@@ -75,7 +73,6 @@ button eid label = do
   hasFocus <- (== Just eid) <$> getFocus
   btn <- getLeftButton
   input <- getInput
-  consumed <- getTabConsumed
   let wasClicked = isHit && btn == ButtonReleased
-      activated = not consumed && hasFocus && any (\e -> key e == KeyReturn) (keyEvents input)
+      activated = hasFocus && any (\e -> key e == KeyReturn) (keyEvents input)
   return (wasClicked || activated)

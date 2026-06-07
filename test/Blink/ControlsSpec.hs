@@ -114,9 +114,11 @@ controlBehaviourSpec run = do
       ctxFocusedElement (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab [Shift]] }) { ctxFocusedElement = Just TestControl, ctxPreviousControl = Just OtherControl })
         `shouldBe` Just OtherControl
 
-    it "ensures Tab only moves focus once per frame" $
-      ctxTabConsumed (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab []] }) { ctxFocusedElement = Just TestControl })
-        `shouldBe` True
+    it "is not activated when focus moves to the next control" $
+      fst (runUI (button TestControl "label")
+        (mkCtx noInput { keyEvents = [KeyEvent KeyTab [], KeyEvent KeyReturn []] })
+          { ctxFocusedElement = Just TestControl })
+        `shouldBe` False
 
   describe "hover detection" $ do
     forM_ insidePoints $ \(desc, pt) ->
