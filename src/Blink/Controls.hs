@@ -10,6 +10,7 @@ import Blink.Geometry (Rectangle, insetRect)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..))
 import Blink.UI
+import Data.Maybe (isNothing)
 
 applyHover :: (Eq e, Ord e) => e -> Rectangle -> UI e c Bool
 applyHover eid bgRect = do
@@ -26,7 +27,7 @@ consumeTabKey = UI $ \ctx ->
 applyFocus :: (Eq e, Ord e) => e -> Bool -> UI e c ()
 applyFocus eid isHit = do
   currentFocus <- getFocus
-  when (currentFocus == Nothing) $ setFocus eid
+  when (isNothing currentFocus) $ setFocus eid
   currentFocus' <- getFocus
   when (currentFocus' == Just eid) $
     UI $ \ctx -> ((), ctx { ctxFocusedRendered = True })
