@@ -2,10 +2,11 @@
 module Main where
 
 import Blink
-import UI (AppState, demoApp)
+import UI (demoApp)
 import SDL (($=))
 import qualified SDL
 import qualified SDL.Font as Font
+import Data.IORef
 import Data.Word (Word8)
 import Foreign.C.Types (CInt)
 
@@ -19,53 +20,49 @@ main = do
   window <- SDL.createWindow "blink" SDL.defaultWindow
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
   font <- Font.load fontPath 14
-  initialState <- startUp demoApp
-  loop renderer font initialState ButtonUp
+
+  eventsRef <- newIORef ([] :: [SDL.Event])
+  buttonRef <- newIORef ButtonUp
+
+  let backend = Backend
+        { shouldClose = do
+            events <- SDL.pollEvents
+            writeIORef eventsRef events
+            return $ any (== SDL.QuitEvent) (map SDL.eventPayload events)
+        , pollInput = do
+            events <- readIORef eventsRef
+            btn <- readIORef buttonRef
+            let btn' = foldl updateButton btn events
+            writeIORef buttonRef (nextFrameButton btn')
+            mousePos <- SDL.getAbsoluteMouseLocation
+            return InputState
+              { mousePosition = sdlPoint mousePos
+              , leftButton = btn'
+              }
+        , windowSize = do
+            SDL.V2 w h <- SDL.get (SDL.windowSize window)
+            return (Size (fromIntegral w) (fromIntegral h))
+        , render = \calls -> do
+            SDL.rendererDrawColor renderer $= SDL.V4 30 30 30 255
+            SDL.clear renderer
+            mapM_ (submitDrawCall renderer font) calls
+            SDL.present renderer
+        }
+
+  runApp backend demoApp
+
   Font.free font
   SDL.destroyRenderer renderer
   SDL.destroyWindow window
   Font.quit
   SDL.quit
 
-loop :: SDL.Renderer -> Font.Font -> AppState -> ButtonState -> IO ()
-loop renderer font state buttonState = do
-  events <- SDL.pollEvents
-  let shouldQuit = any (== SDL.QuitEvent) (map SDL.eventPayload events)
-      buttonState' = foldl updateButton buttonState events
-  if shouldQuit
-    then return ()
-    else do
-      mousePos <- SDL.getAbsoluteMouseLocation
-      let input = InputState
-            { mousePosition = sdlPoint mousePos
-            , leftButton = buttonState'
-            }
-          winRect = Rectangle 0 0 800 600
-          ctx = UIContext { drawRect = winRect, inputState = input }
-          (_, uiSt) = runUI (view demoApp state) ctx emptyUIState
-          state' = execCommands (update demoApp) (pendingCommands uiSt) state
-
-      SDL.rendererDrawColor renderer $= SDL.V4 30 30 30 255
-      SDL.clear renderer
-      mapM_ (submitDrawCall renderer font) (drawCalls uiSt)
-      SDL.present renderer
-
-      loop renderer font state' (nextFrameButton buttonState')
-
-execCommands :: (c -> s -> Update s c ()) -> [c] -> s -> s
-execCommands updateFn cmds initialState = foldl step initialState cmds
-  where
-    step s cmd =
-      let Update f = updateFn cmd s
-          ((), s', _) = f s
-      in s'
-
 updateButton :: ButtonState -> SDL.Event -> ButtonState
 updateButton current e = case SDL.eventPayload e of
   SDL.MouseButtonEvent d
     | SDL.mouseButtonEventButton d == SDL.ButtonLeft ->
         case SDL.mouseButtonEventMotion d of
-          SDL.Pressed -> ButtonDown
+          SDL.Pressed  -> ButtonDown
           SDL.Released -> ButtonReleased
   _ -> current
 
