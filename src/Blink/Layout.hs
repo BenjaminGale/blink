@@ -81,11 +81,11 @@ boxLayout axisLen axisOrig mkSlot r spacing constraints =
 
 resolveConstraints :: Double -> [Constraint] -> [Double]
 resolveConstraints available constraints =
-  let floors_ = map minLength constraints
-      totalFloor = sum floors_
-      surplus = max 0 (available - totalFloor)
-      expanders = zip [0..] constraints
-  in distribute surplus floors_ expanders
+  let minimums = map minLength constraints
+      minTotal = sum minimums
+      surplus = max 0 (available - minTotal)
+      indexed = zip [0..] constraints
+  in allocateSurplus surplus minimums indexed
 
 resolveConstraint :: Constraint -> Double -> Double
 resolveConstraint (Exactly w) _ = w
@@ -108,31 +108,36 @@ maxLength (AtMost w)    = MaxLength w
 maxLength (Between _ h) = MaxLength h
 maxLength _             = Unlimited
 
-participates :: Constraint -> Bool
-participates (Exactly _) = False
-participates _           = True
+canExpand :: Constraint -> Bool
+canExpand (Exactly _) = False
+canExpand _           = True
 
-distribute :: Double -> [Double] -> [(Int, Constraint)] -> [Double]
-distribute surplus sizes expanders =
-  let active = filter (participates . snd) expanders
-      n = length active
+data AllocPass = AllocPass
+  { allocSizes  :: [Double]
+  , allocLeft   :: Double
+  , allocCapped :: Bool
+  }
+
+allocateSurplus :: Double -> [Double] -> [(Int, Constraint)] -> [Double]
+allocateSurplus surplus sizes indexed =
+  let flexible = filter (canExpand . snd) indexed
+      n        = length flexible
   in if surplus <= 0 || n == 0
      then sizes
      else
-       let share = surplus / fromIntegral n
-           (sizes', remaining, capped) = foldl (applyShare share) (sizes, surplus, False) active
-       in if capped
-          then distribute remaining sizes' expanders
-          else sizes'
+       let share  = surplus / fromIntegral n
+           result = foldl (shareStep share) (AllocPass sizes surplus False) flexible
+       in if allocCapped result
+          then allocateSurplus (allocLeft result) (allocSizes result) indexed
+          else allocSizes result
 
-applyShare :: Double -> ([Double], Double, Bool) -> (Int, Constraint) -> ([Double], Double, Bool)
-applyShare share (sizes, remaining, anyCapped) (i, c) =
-  let current = sizes !! i
-      proposed = current + share
+shareStep :: Double -> AllocPass -> (Int, Constraint) -> AllocPass
+shareStep share pass (i, c) =
+  let cur      = allocSizes pass !! i
+      proposed = cur + share
+      setSizes s = pass { allocSizes = take i (allocSizes pass) ++ [s] ++ drop (i + 1) (allocSizes pass) }
   in case maxLength c of
        MaxLength cap | proposed > cap ->
-         let sizes' = take i sizes ++ [cap] ++ drop (i + 1) sizes
-         in (sizes', remaining - (cap - current), True)
+         (setSizes cap) { allocLeft = allocLeft pass - (cap - cur), allocCapped = True }
        _ ->
-         let sizes' = take i sizes ++ [proposed] ++ drop (i + 1) sizes
-         in (sizes', remaining - share, anyCapped)
+         (setSizes proposed) { allocLeft = allocLeft pass - share }
