@@ -10,6 +10,8 @@ module Blink.UI
   , getHovered
   , getFocus
   , setFocus
+  , clearFocus
+  , getInput
   , layout
   , fillRect
   , drawText
@@ -23,7 +25,7 @@ import Control.Monad (when)
 import Data.Text (Text)
 import Blink.DrawCall (Colour (..), DrawCall (..))
 import Blink.Geometry (Point, Rectangle, containsPoint)
-import Blink.Input (ButtonState (..), InputState (..))
+import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 
 data UIContext e = UIContext
   { drawRect :: Rectangle
@@ -35,6 +37,9 @@ data UIState e c = UIState
   , hoveredElement :: Maybe e
   , focusedElement :: Maybe e
   , focusedRendered :: Bool
+  , focusNext :: Bool
+  , tabConsumed :: Bool
+  , previousControl :: Maybe e
   , pendingCommands :: [c]
   }
 
@@ -65,6 +70,9 @@ emptyUIState = UIState
   , hoveredElement = Nothing
   , focusedElement = Nothing
   , focusedRendered = False
+  , focusNext = False
+  , tabConsumed = False
+  , previousControl = Nothing
   , pendingCommands = []
   }
 
@@ -77,6 +85,9 @@ getMousePos = UI $ \ctx st -> (mousePosition (inputState ctx), st)
 getLeftButton :: UI e c ButtonState
 getLeftButton = UI $ \ctx st -> (leftButton (inputState ctx), st)
 
+getInput :: UI e c InputState
+getInput = UI $ \ctx st -> (inputState ctx, st)
+
 getHovered :: UI e c (Maybe e)
 getHovered = UI $ \_ st -> (hoveredElement st, st)
 
@@ -85,6 +96,9 @@ getFocus = UI $ \_ st -> (focusedElement st, st)
 
 setFocus :: e -> UI e c ()
 setFocus eid = UI $ \_ st -> ((), st { focusedElement = Just eid })
+
+clearFocus :: UI e c ()
+clearFocus = UI $ \_ st -> ((), st { focusedElement = Nothing })
 
 layout :: Rectangle -> UI e c a -> UI e c a
 layout r (UI f) = UI $ \ctx st ->
@@ -112,16 +126,38 @@ regionHit = do
 
 control :: Eq e => e -> UI e c ()
 control eid = do
+  next <- UI $ \_ st -> (focusNext st, st)
+  currentFocus <- getFocus
+  claimedFromTab <-
+    if currentFocus == Nothing
+    then do
+      setFocus eid
+      UI $ \_ st -> ((), st { focusedRendered = True, focusNext = False })
+      return next
+    else return False
   hit <- regionHit
   btn <- getLeftButton
   let isClicked = hit && btn == ButtonReleased
   when hit $ UI $ \_ st -> ((), st { hoveredElement = Just eid })
-  currentFocus <- getFocus
-  when (currentFocus == Just eid) $
+  currentFocus' <- getFocus
+  when (currentFocus' == Just eid) $
     UI $ \_ st -> ((), st { focusedRendered = True })
   when isClicked $ do
     setFocus eid
     UI $ \_ st -> ((), st { focusedRendered = True })
+  isFocused <- (== Just eid) <$> getFocus
+  input <- getInput
+  consumed <- UI $ \_ st -> (tabConsumed st, st)
+  let tabPressed = not consumed && any (\e -> key e == KeyTab && Shift `notElem` modifiers e) (keyEvents input)
+      shiftTabPressed = not consumed && any (\e -> key e == KeyTab && Shift `elem` modifiers e) (keyEvents input)
+  when (isFocused && tabPressed && not claimedFromTab) $ do
+    clearFocus
+    UI $ \_ st -> ((), st { focusNext = True, tabConsumed = True })
+  prevCtrl <- UI $ \_ st -> (previousControl st, st)
+  when (isFocused && shiftTabPressed && not claimedFromTab) $ do
+    mapM_ setFocus prevCtrl
+    UI $ \_ st -> ((), st { tabConsumed = True })
+  UI $ \_ st -> ((), st { previousControl = Just eid })
 
 button :: Eq e => e -> Text -> UI e c Bool
 button eid label = do

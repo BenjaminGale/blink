@@ -33,11 +33,13 @@ main = do
             events <- readIORef eventsRef
             btn <- readIORef buttonRef
             let btn' = foldl updateButton btn events
+                keys = concatMap toKeyEvents events
             writeIORef buttonRef (nextFrameButton btn')
             mousePos <- SDL.getAbsoluteMouseLocation
             return InputState
               { mousePosition = sdlPoint mousePos
               , leftButton = btn'
+              , keyEvents = keys
               }
         , windowSize = do
             SDL.V2 w h <- SDL.get (SDL.windowSize window)
@@ -69,6 +71,19 @@ updateButton current e = case SDL.eventPayload e of
 nextFrameButton :: ButtonState -> ButtonState
 nextFrameButton ButtonReleased = ButtonUp
 nextFrameButton s = s
+
+toKeyEvents :: SDL.Event -> [KeyEvent]
+toKeyEvents e = case SDL.eventPayload e of
+  SDL.KeyboardEvent d
+    | SDL.keyboardEventKeyMotion d == SDL.Pressed
+    , not (SDL.keyboardEventRepeat d)
+    -> case SDL.keysymKeycode (SDL.keyboardEventKeysym d) of
+         SDL.KeycodeTab ->
+           let mods = SDL.keysymModifier (SDL.keyboardEventKeysym d)
+               shifted = SDL.keyModifierLeftShift mods || SDL.keyModifierRightShift mods
+           in [KeyEvent { key = KeyTab, modifiers = if shifted then [Shift] else [] }]
+         _ -> []
+  _ -> []
 
 sdlPoint :: SDL.Point SDL.V2 CInt -> Point
 sdlPoint (SDL.P (SDL.V2 x y)) = Point (fromIntegral x) (fromIntegral y)
