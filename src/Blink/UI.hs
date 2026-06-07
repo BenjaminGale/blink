@@ -12,6 +12,7 @@ module Blink.UI
   , setFocus
   , clearFocus
   , getInput
+  , getStyle
   , layout
   , fillRect
   , drawText
@@ -23,13 +24,16 @@ module Blink.UI
 
 import Control.Monad (when)
 import Data.Text (Text)
+import qualified Data.Map.Strict as Map
 import Blink.DrawCall (Colour (..), DrawCall (..))
 import Blink.Geometry (Point, Rectangle, containsPoint)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
+import Blink.Style (Style (..), StyleSet (..), Theme (..))
 
 data UIContext e = UIContext
   { drawRect :: Rectangle
   , inputState :: InputState
+  , uiTheme :: Theme e
   }
 
 data UIState e c = UIState
@@ -88,6 +92,19 @@ getLeftButton = UI $ \ctx st -> (leftButton (inputState ctx), st)
 getInput :: UI e c InputState
 getInput = UI $ \ctx st -> (inputState ctx, st)
 
+getStyle :: Ord e => e -> UI e c Style
+getStyle eid = do
+  t <- UI $ \ctx st -> (uiTheme ctx, st)
+  isHovered <- (== Just eid) <$> getHovered
+  isFocused <- (== Just eid) <$> getFocus
+  btn <- getLeftButton
+  let ss = Map.findWithDefault (defaultStyle t) eid (elementStyles t)
+      isPressed = isHovered && btn == ButtonDown
+  return $ if isPressed     then pressed  ss
+           else if isHovered then hovered  ss
+           else if isFocused then focused  ss
+           else                   normal   ss
+
 getHovered :: UI e c (Maybe e)
 getHovered = UI $ \_ st -> (hoveredElement st, st)
 
@@ -110,9 +127,9 @@ fillRect colour = UI $ \ctx st ->
   let call = FillRect (drawRect ctx) colour
   in ((), st { drawCalls = drawCalls st ++ [call] })
 
-drawText :: Text -> UI e c ()
-drawText text = UI $ \ctx st ->
-  let call = DrawText (drawRect ctx) text
+drawText :: Colour -> Text -> UI e c ()
+drawText colour text = UI $ \ctx st ->
+  let call = DrawText (drawRect ctx) text colour
   in ((), st { drawCalls = drawCalls st ++ [call] })
 
 emitCommand :: c -> UI e c ()
@@ -159,21 +176,16 @@ control eid = do
     UI $ \_ st -> ((), st { tabConsumed = True })
   UI $ \_ st -> ((), st { previousControl = Just eid })
 
-button :: Eq e => e -> Text -> UI e c Bool
+button :: (Eq e, Ord e) => e -> Text -> UI e c Bool
 button eid label = do
   control eid
-  hovered <- (== Just eid) <$> getHovered
-  focused <- (== Just eid) <$> getFocus
+  style <- getStyle eid
+  isHovered <- (== Just eid) <$> getHovered
+  isFocused <- (== Just eid) <$> getFocus
   btn <- getLeftButton
   input <- getInput
-  let pressed = hovered && btn == ButtonDown
-      activated = any (\e -> key e == KeyReturn) (keyEvents input)
-      clicked = (hovered && btn == ButtonReleased) || (focused && activated)
-      colour
-        | pressed = RGBA 0.7 0.2 0.1 1
-        | hovered = RGBA 1.0 0.4 0.2 1
-        | focused = RGBA 0.2 0.5 0.9 1
-        | otherwise = RGBA 0.4 0.4 0.4 1
-  fillRect colour
-  drawText label
+  let activated = any (\e -> key e == KeyReturn) (keyEvents input)
+      clicked = (isHovered && btn == ButtonReleased) || (isFocused && activated)
+  fillRect (background style)
+  drawText (textColour style) label
   return clicked

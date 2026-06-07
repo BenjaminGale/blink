@@ -1,3 +1,4 @@
+{-# LANGUAGE DisambiguateRecordFields #-}
 module Blink.App
   ( Backend (..)
   , App (..)
@@ -7,6 +8,7 @@ module Blink.App
 import Blink.DrawCall (DrawCall)
 import Blink.Geometry (Rectangle (..), Size (..))
 import Blink.Input (InputState)
+import Blink.Style (Theme)
 import Blink.UI (UI, UIContext (..), UIState (..), emptyUIState, runUI, drawCalls, pendingCommands, focusedElement, focusedRendered, focusNext, previousControl)
 import Blink.Update (Update, execCommands)
 
@@ -19,6 +21,7 @@ data Backend = Backend
 
 data App e s c = App
   { startUp :: IO s
+  , theme :: Theme e
   , view :: s -> UI e c ()
   , update :: c -> Update s c ()
   }
@@ -37,7 +40,8 @@ loop backend app state prevFocus prevFocusNext prevPrevCtrl = do
       size <- windowSize backend
       input <- pollInput backend
       let winRect = Rectangle 0 0 (sizeWidth size) (sizeHeight size)
-          ctx = UIContext { drawRect = winRect, inputState = input }
+          appTheme = Blink.App.theme app
+          ctx = UIContext { drawRect = winRect, inputState = input, uiTheme = appTheme }
           freshSt = emptyUIState
             { focusedElement = prevFocus
             , focusNext = prevFocusNext

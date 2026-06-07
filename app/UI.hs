@@ -4,6 +4,7 @@ module UI (Element, Command (..), AppState (..), demoApp) where
 import Blink
 import Control.Monad (when)
 import Data.Text (Text)
+import qualified Data.Map.Strict as Map
 
 data Element = AlignButton Alignment
   deriving (Eq, Ord)
@@ -14,9 +15,25 @@ data AppState = AppState
   { selected :: Maybe Alignment
   }
 
+demoTheme :: Theme Element
+demoTheme = Theme
+  { elementStyles = Map.empty
+  , defaultStyle = buttonStyleSet
+  }
+
+buttonStyleSet :: StyleSet
+buttonStyleSet = StyleSet
+  { normal   = Style { background = RGBA 0.878 0.878 0.898 1, textColour = RGBA 0.11 0.11 0.12 1 }
+  , hovered  = Style { background = RGBA 0.800 0.800 0.824 1, textColour = RGBA 0.11 0.11 0.12 1 }
+  , pressed  = Style { background = RGBA 0.102 0.435 0.831 1, textColour = RGBA 1.0  1.0  1.0  1 }
+  , focused  = Style { background = RGBA 0.667 0.769 0.941 1, textColour = RGBA 0.11 0.11 0.12 1 }
+  , disabled = Style { background = RGBA 0.898 0.898 0.910 1, textColour = RGBA 0.682 0.682 0.698 1 }
+  }
+
 demoApp :: App Element AppState Command
 demoApp = App
   { startUp = pure (AppState (Just Center))
+  , theme = demoTheme
   , view = demoView
   , update = demoUpdate
   }

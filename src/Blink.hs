@@ -4,6 +4,7 @@ module Blink
   , module Blink.Geometry
   , module Blink.Input
   , module Blink.Layout
+  , module Blink.Style
   , module Blink.Update
   , module Blink.UI
   ) where
@@ -13,5 +14,6 @@ import Blink.DrawCall
 import Blink.Geometry
 import Blink.Input
 import Blink.Layout
+import Blink.Style
 import Blink.Update
 import Blink.UI

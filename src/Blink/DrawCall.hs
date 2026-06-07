@@ -11,5 +11,5 @@ data Colour = RGBA Double Double Double Double
 
 data DrawCall
   = FillRect Rectangle Colour
-  | DrawText Rectangle Text
+  | DrawText Rectangle Text Colour
   deriving (Eq, Show)

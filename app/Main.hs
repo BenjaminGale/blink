@@ -45,7 +45,7 @@ main = do
             SDL.V2 w h <- SDL.get (SDL.windowSize window)
             return (Size (fromIntegral w) (fromIntegral h))
         , render = \calls -> do
-            SDL.rendererDrawColor renderer $= SDL.V4 30 30 30 255
+            SDL.rendererDrawColor renderer $= SDL.V4 229 229 234 255
             SDL.clear renderer
             mapM_ (submitDrawCall renderer font) calls
             SDL.present renderer
@@ -94,8 +94,9 @@ submitDrawCall renderer _ (FillRect r (RGBA red green blue _)) = do
   let toWord8 c = round (c * 255) :: Word8
   SDL.rendererDrawColor renderer $= SDL.V4 (toWord8 red) (toWord8 green) (toWord8 blue) 255
   SDL.fillRect renderer (Just (toSDLRect r))
-submitDrawCall renderer font (DrawText r text) = do
-  surface <- Font.blended font (SDL.V4 255 255 255 255) text
+submitDrawCall renderer font (DrawText r text (RGBA red green blue _)) = do
+  let toWord8 c = round (c * 255) :: Word8
+  surface <- Font.blended font (SDL.V4 (toWord8 red) (toWord8 green) (toWord8 blue) 255) text
   texture <- SDL.createTextureFromSurface renderer surface
   SDL.freeSurface surface
   (SDL.TextureInfo _ _ tw th) <- SDL.queryTexture texture
