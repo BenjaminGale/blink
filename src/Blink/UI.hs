@@ -5,13 +5,14 @@ module Blink.UI
   , emptyUIState
   , getRect
   , getMousePos
+  , getLeftButton
   , layout
   , fillRect
   ) where
 
 import Blink.DrawCall (Colour, DrawCall (..))
 import Blink.Geometry (Point, Rectangle)
-import Blink.Input    (InputState (..))
+import Blink.Input    (ButtonState, InputState (..))
 
 data UIContext = UIContext
   { drawRect :: Rectangle
@@ -51,6 +52,9 @@ getRect = UI $ \ctx st -> (drawRect ctx, st)
 
 getMousePos :: UI Point
 getMousePos = UI $ \ctx st -> (mousePosition (inputState ctx), st)
+
+getLeftButton :: UI ButtonState
+getLeftButton = UI $ \ctx st -> (leftButton (inputState ctx), st)
 
 layout :: Rectangle -> UI a -> UI a
 layout r (UI f) = UI $ \ctx st ->

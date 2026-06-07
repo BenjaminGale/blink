@@ -3,6 +3,7 @@ module Blink.Geometry
   , Size (..)
   , Rectangle (..)
   , rectCentredAt
+  , containsPoint
   ) where
 
 data Point = Point
@@ -21,6 +22,11 @@ data Rectangle = Rectangle
   , rectWidth :: Double
   , rectHeight :: Double
   } deriving (Eq, Show)
+
+containsPoint :: Rectangle -> Point -> Bool
+containsPoint r p =
+  pointX p >= rectX r && pointX p <= rectX r + rectWidth r &&
+  pointY p >= rectY r && pointY p <= rectY r + rectHeight r
 
 rectCentredAt :: Point -> Size -> Rectangle
 rectCentredAt p s = Rectangle

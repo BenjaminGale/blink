@@ -1,9 +1,16 @@
 module Blink.Input
-  ( InputState (..)
+  ( ButtonState (..)
+  , InputState (..)
   ) where
 
 import Blink.Geometry (Point)
 
+data ButtonState
+  = ButtonUp
+  | ButtonDown
+  deriving (Eq, Show)
+
 data InputState = InputState
   { mousePosition :: Point
+  , leftButton :: ButtonState
   } deriving (Eq, Show)
