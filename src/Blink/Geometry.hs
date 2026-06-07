@@ -6,6 +6,8 @@ module Blink.Geometry
   , Insets (..)
   , uniform
   , insetRect
+  , rectOrigin
+  , resizeRect
   , rectCentredAt
   , containsPoint
   , alignRect
@@ -85,6 +87,12 @@ containsPoint :: Rectangle -> Point -> Bool
 containsPoint r p =
   pointX p >= rectX r && pointX p <= rectX r + rectWidth r &&
   pointY p >= rectY r && pointY p <= rectY r + rectHeight r
+
+rectOrigin :: Rectangle
+rectOrigin = Rectangle 0 0 0 0
+
+resizeRect :: Size -> Rectangle -> Rectangle
+resizeRect s r = r { rectWidth = sizeWidth s, rectHeight = sizeHeight s }
 
 rectCentredAt :: Point -> Size -> Rectangle
 rectCentredAt p s = Rectangle

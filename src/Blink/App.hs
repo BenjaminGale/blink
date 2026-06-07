@@ -7,7 +7,7 @@ module Blink.App
   ) where
 
 import Blink.Rendering (DrawCommand)
-import Blink.Geometry (Point (..), Rectangle (..), Size (..))
+import Blink.Geometry (Point (..), Size (..), rectOrigin, resizeRect)
 import Blink.Input (ButtonState (..), InputState (..))
 import Blink.Style (Theme)
 import Blink.UI (UI, UIContext (..), emptyUIContext, nextFrameContext, runUI)
@@ -35,7 +35,7 @@ runApp :: Backend -> App e s c -> IO ()
 runApp backend app = do
   state <- startUp app
   let initialCtx = emptyUIContext
-        (Rectangle 0 0 0 0)
+        rectOrigin
         (InputState (Point 0 0) ButtonUp [])
         (Blink.App.theme app)
   loop backend app state initialCtx
@@ -44,21 +44,18 @@ loop :: Backend -> App e s c -> s -> UIContext e c -> IO ()
 loop backend app state ctx = do
   events <- collectEvents backend
   close <- shouldClose backend
-
   unless close $ do
       size <- windowSize backend
-      let winRect = Rectangle 0 0 (sizeWidth size) (sizeHeight size)
-          (_, ctx1) = runUI (view app state) (nextFrameContext winRect events ctx)
-          nextFocus = if ctxFocusedRendered ctx1 then ctxFocusedElement ctx1 else Nothing
-          state' = execCommands (update app) (ctxPendingCommands ctx1) state
-          freshCtx2 = (nextFrameContext winRect (events { keyEvents = [] }) ctx1)
-            { ctxFocusedElement = nextFocus
-            , ctxFocusNext = False
-            }
+      let winRect = resizeRect size rectOrigin
+          processedCtx = snd $ runUI (view app state) (nextFrameContext winRect events ctx)
+          nextFocus = if ctxFocusedRendered processedCtx then ctxFocusedElement processedCtx else Nothing
+          state' = execCommands (update app) (ctxPendingCommands processedCtx) state
           (drawCalls', nextCtx) = case frameMode backend of
             EventDriven ->
-              let (_, ctx2) = runUI (view app state') freshCtx2
-              in (ctxDrawCommands ctx2, ctx2 { ctxFocusedElement = nextFocus, ctxFocusNext = ctxFocusNext ctx1 })
-            Continuous -> (ctxDrawCommands ctx1, ctx1 { ctxFocusedElement = nextFocus })
+              let freshCtx = (nextFrameContext winRect (events { keyEvents = [] }) processedCtx)
+                    { ctxFocusedElement = nextFocus, ctxFocusNext = False }
+                  renderedCtx = snd $ runUI (view app state') freshCtx
+              in (ctxDrawCommands renderedCtx, renderedCtx { ctxFocusedElement = nextFocus, ctxFocusNext = ctxFocusNext processedCtx })
+            Continuous -> (ctxDrawCommands processedCtx, processedCtx { ctxFocusedElement = nextFocus })
       render backend drawCalls'
       loop backend app state' nextCtx
