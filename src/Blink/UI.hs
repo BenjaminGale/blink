@@ -38,7 +38,6 @@ data UIContext e c = UIContext
   , ctxHoveredElement :: Maybe e
   , ctxFocusedElement :: Maybe e
   , ctxFocusedRendered :: Bool
-  , ctxFocusNext :: Bool
   , ctxPreviousControl :: Maybe e
   , ctxPendingCommands :: [c]
   }
@@ -73,7 +72,6 @@ emptyUIContext bounds input thm = UIContext
   , ctxHoveredElement = Nothing
   , ctxFocusedElement = Nothing
   , ctxFocusedRendered = False
-  , ctxFocusNext = False
   , ctxPreviousControl = Nothing
   , ctxPendingCommands = []
   }

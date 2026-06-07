@@ -53,9 +53,9 @@ loop backend app state ctx = do
           (drawCalls', nextCtx) = case frameMode backend of
             EventDriven ->
               let freshCtx = (nextFrameContext winRect (events { keyEvents = [] }) processedCtx)
-                    { ctxFocusedElement = nextFocus, ctxFocusNext = False }
+                    { ctxFocusedElement = nextFocus }
                   renderedCtx = snd $ runUI (view app state') freshCtx
-              in (ctxDrawCommands renderedCtx, renderedCtx { ctxFocusedElement = nextFocus, ctxFocusNext = ctxFocusNext processedCtx })
+              in (ctxDrawCommands renderedCtx, renderedCtx { ctxFocusedElement = nextFocus })
             Continuous -> (ctxDrawCommands processedCtx, processedCtx { ctxFocusedElement = nextFocus })
       render backend drawCalls'
       loop backend app state' nextCtx

@@ -106,10 +106,6 @@ controlBehaviourSpec run = do
       ctxFocusedElement (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab []] }) { ctxFocusedElement = Just TestControl })
         `shouldBe` Nothing
 
-    it "passes focus to the next control when Tab is pressed" $
-      ctxFocusNext (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab []] }) { ctxFocusedElement = Just TestControl })
-        `shouldBe` True
-
     it "passes focus to the previous control when Shift+Tab is pressed" $
       ctxFocusedElement (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab [Shift]] }) { ctxFocusedElement = Just TestControl, ctxPreviousControl = Just OtherControl })
         `shouldBe` Just OtherControl
