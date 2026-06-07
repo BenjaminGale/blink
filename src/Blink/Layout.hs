@@ -31,22 +31,28 @@ data Cell e c = Cell
   }
 
 hBox :: Spacing -> [Cell e c] -> UI e c ()
-hBox spacing cells = do
-  r <- getRect
-  let slotRects = hBoxLayout r spacing (map width cells)
-  mapM_ (\(slot, cell) ->
-    let h = resolveConstraint (height cell) (rectHeight r)
-        contentRect = alignRect (alignment cell) slot (Size (rectWidth slot) h)
-    in layout contentRect (content cell)
-    ) (zip slotRects cells)
+hBox = box width height rectHeight (Size . rectWidth) hBoxLayout
 
 vBox :: Spacing -> [Cell e c] -> UI e c ()
-vBox spacing cells = do
+vBox = box height width rectWidth (\slot cross -> Size cross (rectHeight slot)) vBoxLayout
+
+-- mainC    -- constraint accessor for the layout axis
+-- crossC   -- constraint accessor for the cross axis
+-- crossLen -- cross-axis length from the bounds, used to resolve crossC
+-- mkSize   -- builds a Size from the slot rect and resolved cross-axis length
+-- layoutFn -- hBoxLayout or vBoxLayout
+box :: (Cell e c -> Constraint)
+    -> (Cell e c -> Constraint)
+    -> (Rectangle -> Double)
+    -> (Rectangle -> Double -> Size)
+    -> (Bounds -> Spacing -> [Constraint] -> [Bounds])
+    -> Spacing -> [Cell e c] -> UI e c ()
+box mainC crossC crossLen mkSize layoutFn spacing cells = do
   r <- getRect
-  let slotRects = vBoxLayout r spacing (map height cells)
+  let slotRects = layoutFn r spacing (map mainC cells)
   mapM_ (\(slot, cell) ->
-    let w = resolveConstraint (width cell) (rectWidth r)
-        contentRect = alignRect (alignment cell) slot (Size w (rectHeight slot))
+    let cross = resolveConstraint (crossC cell) (crossLen r)
+        contentRect = alignRect (alignment cell) slot (mkSize slot cross)
     in layout contentRect (content cell)
     ) (zip slotRects cells)
 
