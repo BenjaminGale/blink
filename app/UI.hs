@@ -2,6 +2,7 @@
 module UI (Element, Command (..), AppState (..), demoApp) where
 
 import Blink
+import Control.Monad (when)
 import Data.Text (Text)
 
 data Element = AlignButton Alignment
@@ -21,31 +22,30 @@ demoApp = App
   }
 
 demoView :: AppState -> UI Element Command ()
-demoView state = do
-  winRect <- getRect
-  let btnSize = Size 120 40
-      alignments =
-        [ TopLeft,    TopCenter,    TopRight
-        , MiddleLeft, Center,       MiddleRight
-        , BottomLeft, BottomCenter, BottomRight
-        ]
-  mapM_ (alignButton winRect btnSize (selected state)) alignments
+demoView state =
+  vBox 0
+    [ row TopLeft TopCenter TopRight
+    , row MiddleLeft Center MiddleRight
+    , row BottomLeft BottomCenter BottomRight
+    ]
+  where
+    row :: Alignment -> Alignment -> Alignment -> Cell Element Command
+    row a b c = Cell Fill Fill Center $ hBox 0 [mkCell a, mkCell b, mkCell c]
 
-alignButton :: Rectangle -> Size -> Maybe Alignment -> Alignment -> UI Element Command ()
-alignButton winRect btnSize sel a =
-  layout (alignRect a winRect btnSize) $ do
-    let label = if sel == Just a then "[" <> alignLabel a <> "]" else alignLabel a
-    clicked <- button (AlignButton a) label
-    if clicked then emitCommand (Select a) else return ()
+    mkCell :: Alignment -> Cell Element Command
+    mkCell a = Cell Fill (Exactly 40) a $ do
+      let label = if selected state == Just a then "[" <> alignLabel a <> "]" else alignLabel a
+      clicked <- button (AlignButton a) label
+      when clicked $ emitCommand (Select a)
 
 alignLabel :: Alignment -> Text
-alignLabel TopLeft     = "Top Left"
-alignLabel TopCenter   = "Top Center"
-alignLabel TopRight    = "Top Right"
-alignLabel MiddleLeft  = "Middle Left"
-alignLabel Center      = "Center"
+alignLabel TopLeft = "Top Left"
+alignLabel TopCenter = "Top Center"
+alignLabel TopRight = "Top Right"
+alignLabel MiddleLeft = "Middle Left"
+alignLabel Center = "Center"
 alignLabel MiddleRight = "Middle Right"
-alignLabel BottomLeft  = "Bottom Left"
+alignLabel BottomLeft = "Bottom Left"
 alignLabel BottomCenter = "Bottom Center"
 alignLabel BottomRight = "Bottom Right"
 

@@ -22,6 +22,7 @@ library
         Blink.DrawCall
         Blink.Geometry
         Blink.Input
+        Blink.Layout
         Blink.Update
         Blink.UI
     hs-source-dirs: src
