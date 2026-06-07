@@ -1,6 +1,8 @@
 module Blink.Layout
   ( Constraint (..)
   , Cell (..)
+  , Bounds
+  , Spacing
   , hBox
   , vBox
   , hBoxLayout
@@ -10,6 +12,9 @@ module Blink.Layout
 
 import Blink.Geometry (Alignment, Rectangle (..), Size (..), alignRect)
 import Blink.UI (UI, getRect, layout)
+
+type Bounds = Rectangle
+type Spacing = Double
 
 data Constraint
   = Exactly Double
@@ -25,7 +30,7 @@ data Cell e c = Cell
   , content :: UI e c ()
   }
 
-hBox :: Double -> [Cell e c] -> UI e c ()
+hBox :: Spacing -> [Cell e c] -> UI e c ()
 hBox spacing cells = do
   r <- getRect
   let slotRects = hBoxLayout r spacing (map width cells)
@@ -35,7 +40,7 @@ hBox spacing cells = do
     in layout contentRect (content cell)
     ) (zip slotRects cells)
 
-vBox :: Double -> [Cell e c] -> UI e c ()
+vBox :: Spacing -> [Cell e c] -> UI e c ()
 vBox spacing cells = do
   r <- getRect
   let slotRects = vBoxLayout r spacing (map height cells)
@@ -45,19 +50,28 @@ vBox spacing cells = do
     in layout contentRect (content cell)
     ) (zip slotRects cells)
 
-hBoxLayout :: Rectangle -> Double -> [Constraint] -> [Rectangle]
-hBoxLayout r spacing constraints =
-  let sizes = resolveConstraints (rectWidth r - spacingTotal) constraints
-      spacingTotal = spacing * fromIntegral (max 0 (length constraints - 1))
-      xs = scanl (\x w -> x + w + spacing) (rectX r) sizes
-  in zipWith (\x w -> Rectangle x (rectY r) w (rectHeight r)) xs sizes
+hBoxLayout :: Bounds -> Spacing -> [Constraint] -> [Bounds]
+hBoxLayout r = boxLayout rectWidth rectX (\x w -> Rectangle x (rectY r) w (rectHeight r)) r
 
-vBoxLayout :: Rectangle -> Double -> [Constraint] -> [Rectangle]
-vBoxLayout r spacing constraints =
-  let sizes = resolveConstraints (rectHeight r - spacingTotal) constraints
+vBoxLayout :: Bounds -> Spacing -> [Constraint] -> [Bounds]
+vBoxLayout r = boxLayout rectHeight rectY (\y h -> Rectangle (rectX r) y (rectWidth r) h) r
+
+-- Divides r into slots along one axis, distributing space according to
+-- constraints with spacing pixels between each slot.
+--   axisLen  -- extracts available length along the layout axis
+--   axisOrig -- extracts the starting position along the layout axis
+--   mkSlot   -- builds a slot rect from (position, size); caller closes over cross-axis values
+boxLayout
+  :: (Rectangle -> Double)
+  -> (Rectangle -> Double)
+  -> (Double -> Double -> Rectangle)
+  -> Bounds -> Spacing -> [Constraint] -> [Bounds]
+boxLayout axisLen axisOrig mkSlot r spacing constraints =
+  let available = axisLen r - spacingTotal
       spacingTotal = spacing * fromIntegral (max 0 (length constraints - 1))
-      ys = scanl (\y h -> y + h + spacing) (rectY r) sizes
-  in zipWith (\y h -> Rectangle (rectX r) y (rectWidth r) h) ys sizes
+      sizes = resolveConstraints available constraints
+      origins = scanl (\o s -> o + s + spacing) (axisOrig r) sizes
+  in zipWith mkSlot origins sizes
 
 resolveConstraints :: Double -> [Constraint] -> [Double]
 resolveConstraints available constraints =
