@@ -50,12 +50,8 @@ bgRect = insetRect (uniform 10) controlRect
 contentRect :: Rectangle
 contentRect = insetRect (uniform 5) bgRect
 
-mkCtx :: InputState -> UIContext TestElement
-mkCtx input = UIContext
-  { ctxBounds = controlRect
-  , ctxInput = input
-  , ctxTheme = testTheme
-  }
+mkCtx :: InputState -> UIContext TestElement ()
+mkCtx input = emptyUIContext controlRect input testTheme
 
 noInput :: InputState
 noInput = InputState
@@ -84,65 +80,65 @@ outsidePoints =
   , ("outside the control", Point 200 200)
   ]
 
-type WidgetRunner = UIContext TestElement -> UIState TestElement () -> UIState TestElement ()
+type WidgetRunner = UIContext TestElement () -> UIContext TestElement ()
 
 runButton :: WidgetRunner
-runButton ctx st = snd $ runUI (button TestControl "label") ctx st
+runButton ctx = snd $ runUI (button TestControl "label") ctx
 
 controlBehaviourSpec :: WidgetRunner -> Spec
 controlBehaviourSpec run = do
   describe "focus" $ do
     it "receives focus when nothing else is focused" $
-      focusedElement (run (mkCtx noInput) emptyUIState)
+      ctxFocusedElement (run (mkCtx noInput))
         `shouldBe` Just TestControl
 
     it "does not take focus from another element" $
-      focusedElement (run (mkCtx noInput) emptyUIState { focusedElement = Just OtherControl })
+      ctxFocusedElement (run (mkCtx noInput) { ctxFocusedElement = Just OtherControl })
         `shouldBe` Just OtherControl
 
     it "receives focus when clicked" $
-      focusedElement (run (mkCtx (mouseAt (Point 50 50) ButtonReleased [])) emptyUIState { focusedElement = Just OtherControl })
+      ctxFocusedElement (run (mkCtx (mouseAt (Point 50 50) ButtonReleased [])) { ctxFocusedElement = Just OtherControl })
         `shouldBe` Just TestControl
 
   describe "tab navigation" $ do
     it "loses focus when Tab is pressed" $
-      focusedElement (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab []] }) emptyUIState { focusedElement = Just TestControl })
+      ctxFocusedElement (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab []] }) { ctxFocusedElement = Just TestControl })
         `shouldBe` Nothing
 
     it "passes focus to the next control when Tab is pressed" $
-      focusNext (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab []] }) emptyUIState { focusedElement = Just TestControl })
+      ctxFocusNext (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab []] }) { ctxFocusedElement = Just TestControl })
         `shouldBe` True
 
     it "passes focus to the previous control when Shift+Tab is pressed" $
-      focusedElement (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab [Shift]] }) emptyUIState { focusedElement = Just TestControl, previousControl = Just OtherControl })
+      ctxFocusedElement (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab [Shift]] }) { ctxFocusedElement = Just TestControl, ctxPreviousControl = Just OtherControl })
         `shouldBe` Just OtherControl
 
     it "ensures Tab only moves focus once per frame" $
-      tabConsumed (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab []] }) emptyUIState { focusedElement = Just TestControl })
+      ctxTabConsumed (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab []] }) { ctxFocusedElement = Just TestControl })
         `shouldBe` True
 
   describe "hover detection" $ do
     forM_ insidePoints $ \(desc, pt) ->
       it ("is hovered when the mouse is " <> desc) $
-        hoveredElement (run (mkCtx (mouseAt pt ButtonUp [])) emptyUIState)
+        ctxHoveredElement (run (mkCtx (mouseAt pt ButtonUp [])))
           `shouldBe` Just TestControl
 
     forM_ outsidePoints $ \(desc, pt) ->
       it ("is not hovered when the mouse is " <> desc) $
-        hoveredElement (run (mkCtx (mouseAt pt ButtonUp [])) emptyUIState)
+        ctxHoveredElement (run (mkCtx (mouseAt pt ButtonUp [])))
           `shouldBe` Nothing
 
   describe "rendering" $ do
     it "does not draw a background in the margin area" $
-      drawCalls (run (mkCtx noInput) emptyUIState)
+      ctxDrawCalls (run (mkCtx noInput))
         `shouldNotContain` [FillRect controlRect testColour]
 
     it "fills its background area" $
-      drawCalls (run (mkCtx noInput) emptyUIState)
+      ctxDrawCalls (run (mkCtx noInput))
         `shouldContain` [FillRect bgRect testColour]
 
     it "clips content to its padding area" $
-      drawCalls (run (mkCtx noInput) emptyUIState)
+      ctxDrawCalls (run (mkCtx noInput))
         `shouldContain` [PushClip contentRect]
 
 main :: IO ()
@@ -153,18 +149,18 @@ main = hspec $ do
     describe "click behaviour" $ do
       forM_ insidePoints $ \(desc, pt) ->
         it ("is clicked when the mouse is released " <> desc) $
-          fst (runUI (button TestControl "label") (mkCtx (mouseAt pt ButtonReleased [])) emptyUIState)
+          fst (runUI (button TestControl "label") (mkCtx (mouseAt pt ButtonReleased [])))
             `shouldBe` True
 
       forM_ outsidePoints $ \(desc, pt) ->
         it ("is not clicked when the mouse is released " <> desc) $
-          fst (runUI (button TestControl "label") (mkCtx (mouseAt pt ButtonReleased [])) emptyUIState)
+          fst (runUI (button TestControl "label") (mkCtx (mouseAt pt ButtonReleased [])))
             `shouldBe` False
 
       it "is clicked when Enter is pressed and the button has focus" $
-        fst (runUI (button TestControl "label") (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] }) emptyUIState)
+        fst (runUI (button TestControl "label") (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] }))
           `shouldBe` True
 
       it "is not clicked when Enter is pressed and the button does not have focus" $
-        fst (runUI (button TestControl "label") (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] }) emptyUIState { focusedElement = Just OtherControl })
+        fst (runUI (button TestControl "label") (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] }) { ctxFocusedElement = Just OtherControl })
           `shouldBe` False
