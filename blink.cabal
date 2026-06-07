@@ -14,7 +14,12 @@ common defaults
 
 library
     import: defaults
-    exposed-modules: Blink
+    exposed-modules:
+        Blink
+        Blink.DrawCall
+        Blink.Geometry
+        Blink.Input
+        Blink.UI
     hs-source-dirs: src
 
 executable demo

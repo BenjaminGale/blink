@@ -1,4 +1,11 @@
-module Blink (backgroundColor) where
+module Blink
+  ( module Blink.DrawCall
+  , module Blink.Geometry
+  , module Blink.Input
+  , module Blink.UI
+  ) where
 
-backgroundColor :: (Int, Int, Int, Int)
-backgroundColor = (100, 149, 237, 255)
+import Blink.DrawCall
+import Blink.Geometry
+import Blink.Input
+import Blink.UI
