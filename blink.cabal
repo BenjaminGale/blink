@@ -47,6 +47,7 @@ test-suite blink-tests
     main-is: Main.hs
     other-modules:
         Blink.ControlsSpec
+        Blink.LayoutSpec
     build-depends:
         blink,
         hspec
