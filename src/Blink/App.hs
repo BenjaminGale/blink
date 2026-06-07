@@ -7,10 +7,10 @@ module Blink.App
   ) where
 
 import Blink.Rendering (DrawCommand)
-import Blink.Geometry (Rectangle (..), Size (..))
-import Blink.Input (InputState (..))
+import Blink.Geometry (Point (..), Rectangle (..), Size (..))
+import Blink.Input (ButtonState (..), InputState (..))
 import Blink.Style (Theme)
-import Blink.UI (UI, UIContext (..), emptyUIContext, runUI)
+import Blink.UI (UI, UIContext (..), emptyUIContext, nextFrameContext, runUI)
 import Blink.Update (Update, execCommands)
 import Control.Monad (unless)
 
@@ -34,33 +34,31 @@ data App e s c = App
 runApp :: Backend -> App e s c -> IO ()
 runApp backend app = do
   state <- startUp app
-  loop backend app state Nothing False Nothing
+  let initialCtx = emptyUIContext
+        (Rectangle 0 0 0 0)
+        (InputState (Point 0 0) ButtonUp [])
+        (Blink.App.theme app)
+  loop backend app state initialCtx
 
-loop :: Backend -> App e s c -> s -> Maybe e -> Bool -> Maybe e -> IO ()
-loop backend app state prevFocus prevFocusNext prevPrevCtrl = do
+loop :: Backend -> App e s c -> s -> UIContext e c -> IO ()
+loop backend app state ctx = do
   events <- collectEvents backend
   close <- shouldClose backend
 
   unless close $ do
       size <- windowSize backend
       let winRect = Rectangle 0 0 (sizeWidth size) (sizeHeight size)
-          appTheme = Blink.App.theme app
-          freshCtx = (emptyUIContext winRect events appTheme)
-            { ctxFocusedElement = prevFocus
-            , ctxFocusNext = prevFocusNext
-            , ctxPreviousControl = prevPrevCtrl
-            }
-          (_, ctx1) = runUI (view app state) freshCtx
+          (_, ctx1) = runUI (view app state) (nextFrameContext winRect events ctx)
           nextFocus = if ctxFocusedRendered ctx1 then ctxFocusedElement ctx1 else Nothing
           state' = execCommands (update app) (ctxPendingCommands ctx1) state
-          freshCtx2 = (emptyUIContext winRect (events { keyEvents = [] }) appTheme)
+          freshCtx2 = (nextFrameContext winRect (events { keyEvents = [] }) ctx1)
             { ctxFocusedElement = nextFocus
-            , ctxPreviousControl = ctxPreviousControl ctx1
+            , ctxFocusNext = False
             }
-          (drawCalls', prevCtrl') = case frameMode backend of
+          (drawCalls', nextCtx) = case frameMode backend of
             EventDriven ->
               let (_, ctx2) = runUI (view app state') freshCtx2
-              in (ctxDrawCommands ctx2, ctxPreviousControl ctx2)
-            Continuous -> (ctxDrawCommands ctx1, ctxPreviousControl ctx1)
+              in (ctxDrawCommands ctx2, ctx2 { ctxFocusedElement = nextFocus, ctxFocusNext = ctxFocusNext ctx1 })
+            Continuous -> (ctxDrawCommands ctx1, ctx1 { ctxFocusedElement = nextFocus })
       render backend drawCalls'
-      loop backend app state' nextFocus (ctxFocusNext ctx1) prevCtrl'
+      loop backend app state' nextCtx

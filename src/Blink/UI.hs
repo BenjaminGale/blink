@@ -4,6 +4,7 @@ module Blink.UI
   ( UIContext (..)
   , UI (..)
   , emptyUIContext
+  , nextFrameContext
   , getRect
   , getMousePos
   , getLeftButton
@@ -77,6 +78,17 @@ emptyUIContext bounds input thm = UIContext
   , ctxFocusNext = False
   , ctxTabConsumed = False
   , ctxPreviousControl = Nothing
+  , ctxPendingCommands = []
+  }
+
+nextFrameContext :: Rectangle -> InputState -> UIContext e c -> UIContext e c
+nextFrameContext bounds input ctx = ctx
+  { ctxBounds          = bounds
+  , ctxInput           = input
+  , ctxDrawCommands    = []
+  , ctxHoveredElement  = Nothing
+  , ctxFocusedRendered = False
+  , ctxTabConsumed     = False
   , ctxPendingCommands = []
   }
 
