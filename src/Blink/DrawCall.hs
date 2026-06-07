@@ -3,6 +3,7 @@ module Blink.DrawCall
   , DrawCall (..)
   ) where
 
+import Data.Text (Text)
 import Blink.Geometry (Rectangle)
 
 data Colour = RGBA Double Double Double Double
@@ -10,4 +11,5 @@ data Colour = RGBA Double Double Double Double
 
 data DrawCall
   = FillRect Rectangle Colour
+  | DrawText Rectangle Text
   deriving (Eq, Show)

@@ -12,8 +12,10 @@ module Blink.UI
   , regionHit
   , control
   , button
+  , drawText
   ) where
 
+import Data.Text (Text)
 import Blink.DrawCall (Colour (..), DrawCall (..))
 import Blink.Geometry (Point, Rectangle, containsPoint)
 import Blink.Input    (ButtonState (..), InputState (..))
@@ -75,11 +77,15 @@ fillRect colour = UI $ \ctx st ->
   let call = FillRect (drawRect ctx) colour
   in  ((), st { drawCalls = drawCalls st ++ [call] })
 
+drawText :: Text -> UI ()
+drawText text = UI $ \ctx st ->
+  let call = DrawText (drawRect ctx) text
+  in  ((), st { drawCalls = drawCalls st ++ [call] })
+
 regionHit :: UI Bool
 regionHit = do
   r <- getRect
-  mouse <- getMousePos
-  return (containsPoint r mouse)
+  containsPoint r <$> getMousePos
 
 control :: UI () -> UI ControlState
 control content = do
@@ -89,12 +95,15 @@ control content = do
   content
   return cs
 
-button :: UI () -> UI Bool
-button content = do
-  cs <- control content
-  let colour
-        | isPressed cs = RGBA 0.7 0.2 0.1 1
-        | isHovered cs = RGBA 1 0.4 0.2 1
+button :: Text -> UI Bool
+button label = do
+  hit <- regionHit
+  btn <- getLeftButton
+  let pressed = hit && btn == ButtonDown
+      colour
+        | pressed = RGBA 0.7 0.2 0.1 1
+        | hit     = RGBA 1 0.4 0.2 1
         | otherwise = RGBA 0.4 0.4 0.4 1
   fillRect colour
+  cs <- control (drawText label)
   return (isPressed cs)
