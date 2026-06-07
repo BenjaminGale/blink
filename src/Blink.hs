@@ -1,4 +1,4 @@
-module Blink (run) where
+module Blink (backgroundColor) where
 
-run :: IO ()
-run = putStrLn "blink"
+backgroundColor :: (Int, Int, Int, Int)
+backgroundColor = (100, 149, 237, 255)

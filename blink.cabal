@@ -20,7 +20,9 @@ library
 executable demo
     import: defaults
     main-is: Main.hs
-    build-depends: blink
+    build-depends:
+        blink,
+        sdl2
     hs-source-dirs: app
 
 test-suite blink-tests
