@@ -11,6 +11,7 @@ module Blink.UI
   , getHovered
   , getFocus
   , setFocus
+  , setFocusWhen
   , clearFocus
   , getInput
   , getStyleSet
@@ -29,6 +30,7 @@ import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Geometry (Point, Rectangle, containsPoint)
 import Blink.Input (ButtonState (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Control.Monad (when)
 
 data UIContext e c = UIContext
   { ctxBounds :: Rectangle
@@ -89,6 +91,9 @@ nextFrameContext bounds input ctx = ctx
 gets :: (UIContext e c -> a) -> UI e c a
 gets f = UI $ \ctx -> (f ctx, ctx)
 
+modify :: (UIContext e c -> UIContext e c) -> UI e c ()
+modify f = UI $ \ctx -> ((), f ctx)
+
 getRect :: UI e c Rectangle
 getRect = gets ctxBounds
 
@@ -129,10 +134,15 @@ getFocus :: UI e c (Maybe e)
 getFocus = gets ctxFocusedElement
 
 setFocus :: e -> UI e c ()
-setFocus eid = UI $ \ctx -> ((), ctx { ctxFocusedElement = Just eid })
+setFocus eid = modify $ \ctx -> ctx { ctxFocusedElement = Just eid, ctxFocusedRendered = True }
+
+setFocusWhen :: UI e c Bool -> e -> UI e c ()
+setFocusWhen cond eid = do
+  ok <- cond
+  when ok $ setFocus eid
 
 clearFocus :: UI e c ()
-clearFocus = UI $ \ctx -> ((), ctx { ctxFocusedElement = Nothing })
+clearFocus = modify $ \ctx -> ctx { ctxFocusedElement = Nothing }
 
 layout :: Rectangle -> UI e c a -> UI e c a
 layout r (UI f) = UI $ \ctx ->
