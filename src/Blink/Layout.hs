@@ -81,7 +81,7 @@ boxLayout axisLen axisOrig mkSlot r spacing constraints =
 
 resolveConstraints :: Double -> [Constraint] -> [Double]
 resolveConstraints available constraints =
-  let floors_ = map floorOf constraints
+  let floors_ = map minLength constraints
       totalFloor = sum floors_
       surplus = max 0 (available - totalFloor)
       expanders = zip [0..] constraints
@@ -94,17 +94,19 @@ resolveConstraint (AtLeast w) available = max w available
 resolveConstraint (AtMost w) available = min w available
 resolveConstraint (Between lo hi) available = max lo (min hi available)
 
-floorOf :: Constraint -> Double
-floorOf (Exactly w) = w
-floorOf Fill = 0
-floorOf (AtLeast w) = w
-floorOf (AtMost _) = 0
-floorOf (Between l _) = l
+minLength :: Constraint -> Double
+minLength (Exactly w) = w
+minLength Fill = 0
+minLength (AtLeast w) = w
+minLength (AtMost _) = 0
+minLength (Between l _) = l
 
-ceiling_ :: Constraint -> Maybe Double
-ceiling_ (AtMost w) = Just w
-ceiling_ (Between _ h) = Just h
-ceiling_ _ = Nothing
+data MaxLength = Unlimited | MaxLength Double
+
+maxLength :: Constraint -> MaxLength
+maxLength (AtMost w)    = MaxLength w
+maxLength (Between _ h) = MaxLength h
+maxLength _             = Unlimited
 
 participates :: Constraint -> Bool
 participates (Exactly _) = False
@@ -127,8 +129,8 @@ applyShare :: Double -> ([Double], Double, Bool) -> (Int, Constraint) -> ([Doubl
 applyShare share (sizes, remaining, anyCapped) (i, c) =
   let current = sizes !! i
       proposed = current + share
-  in case ceiling_ c of
-       Just cap | proposed > cap ->
+  in case maxLength c of
+       MaxLength cap | proposed > cap ->
          let sizes' = take i sizes ++ [cap] ++ drop (i + 1) sizes
          in (sizes', remaining - (cap - current), True)
        _ ->
