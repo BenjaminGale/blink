@@ -86,40 +86,47 @@ nextFrameContext bounds input ctx = ctx
   , ctxPendingCommands = []
   }
 
+gets :: (UIContext e c -> a) -> UI e c a
+gets f = UI $ \ctx -> (f ctx, ctx)
+
 getRect :: UI e c Rectangle
-getRect = UI $ \ctx -> (ctxBounds ctx, ctx)
+getRect = gets ctxBounds
 
 getMousePos :: UI e c Point
-getMousePos = UI $ \ctx -> (mousePosition (ctxInput ctx), ctx)
+getMousePos = mousePosition <$> getInput
 
 getLeftButton :: UI e c ButtonState
-getLeftButton = UI $ \ctx -> (leftButton (ctxInput ctx), ctx)
+getLeftButton = leftButton <$> getInput
 
 getInput :: UI e c InputState
-getInput = UI $ \ctx -> (ctxInput ctx, ctx)
+getInput = gets ctxInput
+
+getTheme :: UI e c (Theme e)
+getTheme = gets ctxTheme
 
 getStyleSet :: Ord e => e -> UI e c StyleSet
 getStyleSet eid = do
-  t <- UI $ \ctx -> (ctxTheme ctx, ctx)
-  return $ Map.findWithDefault (defaultStyle t) eid (elementStyles t)
+  t <- getTheme
+  pure $ Map.findWithDefault (defaultStyle t) eid (elementStyles t)
 
 getStyle :: Ord e => e -> UI e c Style
 getStyle eid = do
-  StyleSet { normal = n, hovered = h, pressed = p, focused = f, disabled = _ } <- getStyleSet eid
+  styles <- getStyleSet eid
   isHov <- (== Just eid) <$> getHovered
   isFoc <- (== Just eid) <$> getFocus
-  btn <- getLeftButton
-  let isPrs = isHov && btn == ButtonDown
-  return $ if isPrs then p
-           else if isHov then h
-           else if isFoc then f
-           else n
+  isPrs <- (&& isHov) . (== ButtonDown) <$> getLeftButton
+
+  pure $
+    if isPrs then pressed styles
+    else if isHov then hovered styles
+    else if isFoc then focused styles
+    else normal styles
 
 getHovered :: UI e c (Maybe e)
-getHovered = UI $ \ctx -> (ctxHoveredElement ctx, ctx)
+getHovered = gets ctxHoveredElement
 
 getFocus :: UI e c (Maybe e)
-getFocus = UI $ \ctx -> (ctxFocusedElement ctx, ctx)
+getFocus = gets ctxFocusedElement
 
 setFocus :: e -> UI e c ()
 setFocus eid = UI $ \ctx -> ((), ctx { ctxFocusedElement = Just eid })
