@@ -3,6 +3,9 @@ module Blink.Geometry
   , Size (..)
   , Rectangle (..)
   , Alignment (..)
+  , Insets (..)
+  , uniform
+  , insetRect
   , rectCentredAt
   , containsPoint
   , alignRect
@@ -24,6 +27,24 @@ data Rectangle = Rectangle
   , rectWidth :: Double
   , rectHeight :: Double
   } deriving (Eq, Show)
+
+data Insets = Insets
+  { topInset :: Double
+  , rightInset :: Double
+  , bottomInset :: Double
+  , leftInset :: Double
+  } deriving (Eq, Show)
+
+uniform :: Double -> Insets
+uniform n = Insets { topInset = n, rightInset = n, bottomInset = n, leftInset = n }
+
+insetRect :: Insets -> Rectangle -> Rectangle
+insetRect ins r = Rectangle
+  { rectX = rectX r + leftInset ins
+  , rectY = rectY r + topInset ins
+  , rectWidth = max 0 (rectWidth r - leftInset ins - rightInset ins)
+  , rectHeight = max 0 (rectHeight r - topInset ins - bottomInset ins)
+  }
 
 data Alignment
   = TopLeft    | TopCenter    | TopRight

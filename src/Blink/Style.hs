@@ -7,11 +7,14 @@ module Blink.Style
 
 import qualified Data.Map.Strict as Map
 import Blink.DrawCall (Colour (..), TextAlign (..))
+import Blink.Geometry (Insets (..))
 
 data Style = Style
   { background :: Colour
   , textColour :: Colour
   , textAlign :: TextAlign
+  , margin :: Insets
+  , padding :: Insets
   }
 
 data StyleSet = StyleSet

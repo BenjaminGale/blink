@@ -1,8 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DisambiguateRecordFields #-}
 module Blink.UI
   ( UIContext (..)
   , UIState (..)
   , UI (..)
+  , ControlState (..)
   , emptyUIState
   , getRect
   , getMousePos
@@ -12,6 +14,7 @@ module Blink.UI
   , setFocus
   , clearFocus
   , getInput
+  , getStyleSet
   , getStyle
   , layout
   , fillRect
@@ -27,7 +30,7 @@ import Control.Monad (when)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import Blink.DrawCall (Colour (..), TextAlign (..), DrawCall (..))
-import Blink.Geometry (Point, Rectangle, containsPoint)
+import Blink.Geometry (Point, Rectangle, insetRect, containsPoint)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 
@@ -93,18 +96,22 @@ getLeftButton = UI $ \ctx st -> (leftButton (inputState ctx), st)
 getInput :: UI e c InputState
 getInput = UI $ \ctx st -> (inputState ctx, st)
 
+getStyleSet :: Ord e => e -> UI e c StyleSet
+getStyleSet eid = do
+  t <- UI $ \ctx st -> (uiTheme ctx, st)
+  return $ Map.findWithDefault (defaultStyle t) eid (elementStyles t)
+
 getStyle :: Ord e => e -> UI e c Style
 getStyle eid = do
-  t <- UI $ \ctx st -> (uiTheme ctx, st)
-  isHovered <- (== Just eid) <$> getHovered
-  isFocused <- (== Just eid) <$> getFocus
+  StyleSet { normal = n, hovered = h, pressed = p, focused = f, disabled = _ } <- getStyleSet eid
+  isHov <- (== Just eid) <$> getHovered
+  isFoc <- (== Just eid) <$> getFocus
   btn <- getLeftButton
-  let ss = Map.findWithDefault (defaultStyle t) eid (elementStyles t)
-      isPressed = isHovered && btn == ButtonDown
-  return $ if isPressed     then pressed  ss
-           else if isHovered then hovered  ss
-           else if isFocused then focused  ss
-           else                   normal   ss
+  let isPrs = isHov && btn == ButtonDown
+  return $ if isPrs then p
+           else if isHov then h
+           else if isFoc then f
+           else n
 
 getHovered :: UI e c (Maybe e)
 getHovered = UI $ \_ st -> (hoveredElement st, st)
@@ -150,8 +157,19 @@ regionHit = do
   r <- getRect
   containsPoint r <$> getMousePos
 
-control :: Eq e => e -> UI e c ()
-control eid = do
+data ControlState = ControlState
+  { isClicked :: Bool
+  , isPressed :: Bool
+  , isHovered :: Bool
+  , isFocused :: Bool
+  }
+
+control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ControlState
+control eid content = do
+  ss <- getStyleSet eid
+  r <- getRect
+  let bgRect = insetRect (margin (normal ss)) r
+      contentRect = insetRect (padding (normal ss)) bgRect
   next <- UI $ \_ st -> (focusNext st, st)
   currentFocus <- getFocus
   claimedFromTab <-
@@ -161,40 +179,44 @@ control eid = do
       UI $ \_ st -> ((), st { focusedRendered = True, focusNext = False })
       return next
     else return False
-  hit <- regionHit
+  isHit <- layout bgRect regionHit
   btn <- getLeftButton
-  let isClicked = hit && btn == ButtonReleased
-  when hit $ UI $ \_ st -> ((), st { hoveredElement = Just eid })
+  let wasPressed = isHit && btn == ButtonDown
+      wasClicked = isHit && btn == ButtonReleased
+  when isHit $ UI $ \_ st -> ((), st { hoveredElement = Just eid })
   currentFocus' <- getFocus
   when (currentFocus' == Just eid) $
     UI $ \_ st -> ((), st { focusedRendered = True })
-  when isClicked $ do
+  when wasClicked $ do
     setFocus eid
     UI $ \_ st -> ((), st { focusedRendered = True })
-  isFocused <- (== Just eid) <$> getFocus
+  hasFocus <- (== Just eid) <$> getFocus
   input <- getInput
   consumed <- UI $ \_ st -> (tabConsumed st, st)
   let tabPressed = not consumed && any (\e -> key e == KeyTab && Shift `notElem` modifiers e) (keyEvents input)
       shiftTabPressed = not consumed && any (\e -> key e == KeyTab && Shift `elem` modifiers e) (keyEvents input)
-  when (isFocused && tabPressed && not claimedFromTab) $ do
+      activated = not consumed && hasFocus && any (\e -> key e == KeyReturn) (keyEvents input)
+  when (hasFocus && tabPressed && not claimedFromTab) $ do
     clearFocus
     UI $ \_ st -> ((), st { focusNext = True, tabConsumed = True })
   prevCtrl <- UI $ \_ st -> (previousControl st, st)
-  when (isFocused && shiftTabPressed && not claimedFromTab) $ do
+  when (hasFocus && shiftTabPressed && not claimedFromTab) $ do
     mapM_ setFocus prevCtrl
     UI $ \_ st -> ((), st { tabConsumed = True })
   UI $ \_ st -> ((), st { previousControl = Just eid })
+  style <- getStyle eid
+  layout bgRect $ fillRect (background style)
+  layout contentRect $ clipToCurrent content
+  return ControlState
+    { isClicked = wasClicked || activated
+    , isPressed = wasPressed
+    , isHovered = isHit
+    , isFocused = hasFocus
+    }
 
 button :: (Eq e, Ord e) => e -> Text -> UI e c Bool
 button eid label = do
-  control eid
-  style <- getStyle eid
-  isHovered <- (== Just eid) <$> getHovered
-  isFocused <- (== Just eid) <$> getFocus
-  btn <- getLeftButton
-  input <- getInput
-  let activated = any (\e -> key e == KeyReturn) (keyEvents input)
-      clicked = (isHovered && btn == ButtonReleased) || (isFocused && activated)
-  fillRect (background style)
-  clipToCurrent $ drawText (textColour style) (textAlign style) label
-  return clicked
+  cs <- control eid $ do
+    style <- getStyle eid
+    drawText (textColour style) (textAlign style) label
+  return (isClicked cs)

@@ -30,12 +30,20 @@ columnAlign a
 
 buttonSet :: TextAlign -> StyleSet
 buttonSet align = StyleSet
-  { normal   = Style { background = RGBA 0.878 0.878 0.898 1, textColour = RGBA 0.11 0.11 0.12 1, textAlign = align }
-  , hovered  = Style { background = RGBA 0.800 0.800 0.824 1, textColour = RGBA 0.11 0.11 0.12 1, textAlign = align }
-  , pressed  = Style { background = RGBA 0.102 0.435 0.831 1, textColour = RGBA 1.0  1.0  1.0  1, textAlign = align }
-  , focused  = Style { background = RGBA 0.667 0.769 0.941 1, textColour = RGBA 0.11 0.11 0.12 1, textAlign = align }
-  , disabled = Style { background = RGBA 0.898 0.898 0.910 1, textColour = RGBA 0.682 0.682 0.698 1, textAlign = align }
+  { normal   = base { background = RGBA 0.878 0.878 0.898 1, textColour = RGBA 0.11 0.11 0.12 1 }
+  , hovered  = base { background = RGBA 0.800 0.800 0.824 1, textColour = RGBA 0.11 0.11 0.12 1 }
+  , pressed  = base { background = RGBA 0.102 0.435 0.831 1, textColour = RGBA 1.0  1.0  1.0  1 }
+  , focused  = base { background = RGBA 0.667 0.769 0.941 1, textColour = RGBA 0.11 0.11 0.12 1 }
+  , disabled = base { background = RGBA 0.898 0.898 0.910 1, textColour = RGBA 0.682 0.682 0.698 1 }
   }
+  where
+    base = Style
+      { background = RGBA 0 0 0 1
+      , textColour = RGBA 0 0 0 1
+      , textAlign = align
+      , margin = uniform 3
+      , padding = uniform 6
+      }
 
 demoApp :: App Element AppState Command
 demoApp = App
