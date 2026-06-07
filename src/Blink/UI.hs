@@ -2,17 +2,21 @@ module Blink.UI
   ( UIContext (..)
   , UIState (..)
   , UI (..)
+  , ControlState (..)
   , emptyUIState
   , getRect
   , getMousePos
   , getLeftButton
   , layout
   , fillRect
+  , regionHit
+  , control
+  , button
   ) where
 
-import Blink.DrawCall (Colour, DrawCall (..))
-import Blink.Geometry (Point, Rectangle)
-import Blink.Input    (ButtonState, InputState (..))
+import Blink.DrawCall (Colour (..), DrawCall (..))
+import Blink.Geometry (Point, Rectangle, containsPoint)
+import Blink.Input    (ButtonState (..), InputState (..))
 
 data UIContext = UIContext
   { drawRect :: Rectangle
@@ -33,16 +37,21 @@ instance Functor UI where
 instance Applicative UI where
   pure a = UI $ \_ st -> (a, st)
   UI f <*> UI x = UI $ \ctx st ->
-    let (g,  st') = f ctx st
-        (a,  st'') = x ctx st'
+    let (g, st') = f ctx st
+        (a, st'') = x ctx st'
     in  (g a, st'')
 
 instance Monad UI where
   return = pure
   UI x >>= f = UI $ \ctx st ->
-    let (a,  st') = x ctx st
+    let (a, st') = x ctx st
         UI g = f a
     in  g ctx st'
+
+data ControlState = ControlState
+  { isHovered :: Bool
+  , isPressed :: Bool
+  }
 
 emptyUIState :: UIState
 emptyUIState = UIState { drawCalls = [] }
@@ -65,3 +74,27 @@ fillRect :: Colour -> UI ()
 fillRect colour = UI $ \ctx st ->
   let call = FillRect (drawRect ctx) colour
   in  ((), st { drawCalls = drawCalls st ++ [call] })
+
+regionHit :: UI Bool
+regionHit = do
+  r <- getRect
+  mouse <- getMousePos
+  return (containsPoint r mouse)
+
+control :: UI () -> UI ControlState
+control content = do
+  hit <- regionHit
+  btn <- getLeftButton
+  let cs = ControlState hit (hit && btn == ButtonDown)
+  content
+  return cs
+
+button :: UI () -> UI Bool
+button content = do
+  cs <- control content
+  let colour
+        | isPressed cs = RGBA 0.7 0.2 0.1 1
+        | isHovered cs = RGBA 1 0.4 0.2 1
+        | otherwise = RGBA 0.4 0.4 0.4 1
+  fillRect colour
+  return (isPressed cs)
