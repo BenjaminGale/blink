@@ -52,9 +52,9 @@ contentRect = insetRect (uniform 5) bgRect
 
 mkCtx :: InputState -> UIContext TestElement
 mkCtx input = UIContext
-  { drawRect = controlRect
-  , inputState = input
-  , uiTheme = testTheme
+  { ctxBounds = controlRect
+  , ctxInput = input
+  , ctxTheme = testTheme
   }
 
 noInput :: InputState

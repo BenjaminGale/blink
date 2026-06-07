@@ -38,14 +38,14 @@ runApp backend app = do
 
 loop :: Backend -> App e s c -> s -> Maybe e -> Bool -> Maybe e -> IO ()
 loop backend app state prevFocus prevFocusNext prevPrevCtrl = do
-  input <- collectEvents backend
+  events <- collectEvents backend
   close <- shouldClose backend
 
   unless close $ do
       size <- windowSize backend
       let winRect = Rectangle 0 0 (sizeWidth size) (sizeHeight size)
           appTheme = Blink.App.theme app
-          ctx = UIContext { drawRect = winRect, inputState = input, uiTheme = appTheme }
+          ctx = UIContext { ctxBounds = winRect, ctxInput = events, ctxTheme = appTheme }
           freshSt = emptyUIState
             { focusedElement = prevFocus
             , focusNext = prevFocusNext
@@ -54,7 +54,7 @@ loop backend app state prevFocus prevFocusNext prevPrevCtrl = do
           (_, uiSt1) = runUI (view app state) ctx freshSt
           nextFocus = if focusedRendered uiSt1 then focusedElement uiSt1 else Nothing
           state' = execCommands (update app) (pendingCommands uiSt1) state
-          ctx2 = ctx { inputState = (inputState ctx) { keyEvents = [] } }
+          ctx2 = ctx { ctxInput = (ctxInput ctx) { keyEvents = [] } }
           freshSt2 = emptyUIState
             { focusedElement = nextFocus
             , previousControl = previousControl uiSt1

@@ -35,9 +35,9 @@ import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), In
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 
 data UIContext e = UIContext
-  { drawRect :: Rectangle
-  , inputState :: InputState
-  , uiTheme :: Theme e
+  { ctxBounds :: Rectangle
+  , ctxInput :: InputState
+  , ctxTheme :: Theme e
   }
 
 data UIState e c = UIState
@@ -85,23 +85,23 @@ emptyUIState = UIState
   }
 
 getRect :: UI e c Rectangle
-getRect = UI $ \ctx st -> (drawRect ctx, st)
+getRect = UI $ \ctx st -> (ctxBounds ctx, st)
 
 getMousePos :: UI e c Point
-getMousePos = UI $ \ctx st -> (mousePosition (inputState ctx), st)
+getMousePos = UI $ \ctx st -> (mousePosition (ctxInput ctx), st)
 
 getLeftButton :: UI e c ButtonState
-getLeftButton = UI $ \ctx st -> (leftButton (inputState ctx), st)
+getLeftButton = UI $ \ctx st -> (leftButton (ctxInput ctx), st)
 
 getInput :: UI e c InputState
-getInput = UI $ \ctx st -> (inputState ctx, st)
+getInput = UI $ \ctx st -> (ctxInput ctx, st)
 
 getTabConsumed :: UI e c Bool
 getTabConsumed = UI $ \_ st -> (tabConsumed st, st)
 
 getStyleSet :: Ord e => e -> UI e c StyleSet
 getStyleSet eid = do
-  t <- UI $ \ctx st -> (uiTheme ctx, st)
+  t <- UI $ \ctx st -> (ctxTheme ctx, st)
   return $ Map.findWithDefault (defaultStyle t) eid (elementStyles t)
 
 getStyle :: Ord e => e -> UI e c Style
@@ -130,17 +130,17 @@ clearFocus = UI $ \_ st -> ((), st { focusedElement = Nothing })
 
 layout :: Rectangle -> UI e c a -> UI e c a
 layout r (UI f) = UI $ \ctx st ->
-  let (a, st') = f (ctx { drawRect = r }) st
+  let (a, st') = f (ctx { ctxBounds = r }) st
   in (a, st')
 
 fillRect :: Colour -> UI e c ()
 fillRect colour = UI $ \ctx st ->
-  let call = FillRect (drawRect ctx) colour
+  let call = FillRect (ctxBounds ctx) colour
   in ((), st { drawCalls = drawCalls st ++ [call] })
 
 drawText :: Colour -> TextAlign -> Text -> UI e c ()
 drawText colour align text = UI $ \ctx st ->
-  let call = DrawText (drawRect ctx) text colour align
+  let call = DrawText (ctxBounds ctx) text colour align
   in ((), st { drawCalls = drawCalls st ++ [call] })
 
 clipToCurrent :: UI e c a -> UI e c a
