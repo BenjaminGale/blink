@@ -1,7 +1,7 @@
-module Blink.DrawCall
+module Blink.Rendering
   ( Colour (..)
   , TextAlign (..)
-  , DrawCall (..)
+  , DrawCommand (..)
   ) where
 
 import Data.Text (Text)
@@ -13,7 +13,7 @@ data Colour = RGBA Double Double Double Double
 data TextAlign = AlignLeft | AlignCenter | AlignRight
   deriving (Eq, Show)
 
-data DrawCall
+data DrawCommand
   = FillRect Rectangle Colour
   | DrawText Rectangle Text Colour TextAlign
   | PushClip Rectangle

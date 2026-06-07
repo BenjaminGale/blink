@@ -6,7 +6,7 @@ module Blink.App
   , runApp
   ) where
 
-import Blink.DrawCall (DrawCall)
+import Blink.Rendering (DrawCommand)
 import Blink.Geometry (Rectangle (..), Size (..))
 import Blink.Input (InputState (..))
 import Blink.Style (Theme)
@@ -20,7 +20,7 @@ data Backend = Backend
   { collectEvents :: IO InputState
   , shouldClose :: IO Bool
   , windowSize :: IO Size
-  , render :: [DrawCall] -> IO ()
+  , render :: [DrawCommand] -> IO ()
   , frameMode :: FrameMode
   }
 
@@ -60,7 +60,7 @@ loop backend app state prevFocus prevFocusNext prevPrevCtrl = do
           (drawCalls', prevCtrl') = case frameMode backend of
             EventDriven ->
               let (_, ctx2) = runUI (view app state') freshCtx2
-              in (ctxDrawCalls ctx2, ctxPreviousControl ctx2)
-            Continuous -> (ctxDrawCalls ctx1, ctxPreviousControl ctx1)
+              in (ctxDrawCommands ctx2, ctxPreviousControl ctx2)
+            Continuous -> (ctxDrawCommands ctx1, ctxPreviousControl ctx1)
       render backend drawCalls'
       loop backend app state' nextFocus (ctxFocusNext ctx1) prevCtrl'

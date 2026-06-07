@@ -20,10 +20,11 @@ library
     exposed-modules:
         Blink
         Blink.App
-        Blink.DrawCall
+        Blink.Controls
         Blink.Geometry
         Blink.Input
         Blink.Layout
+        Blink.Rendering
         Blink.Style
         Blink.Update
         Blink.UI

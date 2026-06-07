@@ -6,7 +6,7 @@ module Blink.Style
   ) where
 
 import qualified Data.Map.Strict as Map
-import Blink.DrawCall (Colour (..), TextAlign (..))
+import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Geometry (Insets (..))
 
 data Style = Style

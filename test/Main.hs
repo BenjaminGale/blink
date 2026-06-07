@@ -5,9 +5,10 @@ import Control.Monad (forM_)
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.DrawCall (Colour (..), TextAlign (..), DrawCall (..))
+import Blink.Controls (button)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
+import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 
@@ -130,15 +131,15 @@ controlBehaviourSpec run = do
 
   describe "rendering" $ do
     it "does not draw a background in the margin area" $
-      ctxDrawCalls (run (mkCtx noInput))
+      ctxDrawCommands (run (mkCtx noInput))
         `shouldNotContain` [FillRect controlRect testColour]
 
     it "fills its background area" $
-      ctxDrawCalls (run (mkCtx noInput))
+      ctxDrawCommands (run (mkCtx noInput))
         `shouldContain` [FillRect bgRect testColour]
 
     it "clips content to its padding area" $
-      ctxDrawCalls (run (mkCtx noInput))
+      ctxDrawCommands (run (mkCtx noInput))
         `shouldContain` [PushClip contentRect]
 
 main :: IO ()

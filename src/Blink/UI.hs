@@ -20,24 +20,21 @@ module Blink.UI
   , drawText
   , clipToCurrent
   , regionHit
-  , control
-  , button
   , emitCommand
   ) where
 
-import Control.Monad (when)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
-import Blink.DrawCall (Colour (..), TextAlign (..), DrawCall (..))
-import Blink.Geometry (Point, Rectangle, insetRect, containsPoint)
-import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
+import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
+import Blink.Geometry (Point, Rectangle, containsPoint)
+import Blink.Input (ButtonState (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 
 data UIContext e c = UIContext
   { ctxBounds :: Rectangle
   , ctxInput :: InputState
   , ctxTheme :: Theme e
-  , ctxDrawCalls :: [DrawCall]
+  , ctxDrawCommands :: [DrawCommand]
   , ctxHoveredElement :: Maybe e
   , ctxFocusedElement :: Maybe e
   , ctxFocusedRendered :: Bool
@@ -73,7 +70,7 @@ emptyUIContext bounds input thm = UIContext
   { ctxBounds = bounds
   , ctxInput = input
   , ctxTheme = thm
-  , ctxDrawCalls = []
+  , ctxDrawCommands = []
   , ctxHoveredElement = Nothing
   , ctxFocusedElement = Nothing
   , ctxFocusedRendered = False
@@ -135,19 +132,19 @@ layout r (UI f) = UI $ \ctx ->
 fillRect :: Colour -> UI e c ()
 fillRect colour = UI $ \ctx ->
   let call = FillRect (ctxBounds ctx) colour
-  in ((), ctx { ctxDrawCalls = ctxDrawCalls ctx ++ [call] })
+  in ((), ctx { ctxDrawCommands = ctxDrawCommands ctx ++ [call] })
 
 drawText :: Colour -> TextAlign -> Text -> UI e c ()
 drawText colour align text = UI $ \ctx ->
   let call = DrawText (ctxBounds ctx) text colour align
-  in ((), ctx { ctxDrawCalls = ctxDrawCalls ctx ++ [call] })
+  in ((), ctx { ctxDrawCommands = ctxDrawCommands ctx ++ [call] })
 
 clipToCurrent :: UI e c a -> UI e c a
 clipToCurrent action = do
   r <- getRect
-  UI $ \ctx -> ((), ctx { ctxDrawCalls = ctxDrawCalls ctx ++ [PushClip r] })
+  UI $ \ctx -> ((), ctx { ctxDrawCommands = ctxDrawCommands ctx ++ [PushClip r] })
   result <- action
-  UI $ \ctx -> ((), ctx { ctxDrawCalls = ctxDrawCalls ctx ++ [PopClip] })
+  UI $ \ctx -> ((), ctx { ctxDrawCommands = ctxDrawCommands ctx ++ [PopClip] })
   return result
 
 emitCommand :: c -> UI e c ()
@@ -159,71 +156,3 @@ regionHit = do
   r <- getRect
   containsPoint r <$> getMousePos
 
-applyHover :: (Eq e, Ord e) => e -> Rectangle -> UI e c Bool
-applyHover eid bgRect = do
-  isHit <- layout bgRect regionHit
-  when isHit $ UI $ \ctx -> ((), ctx { ctxHoveredElement = Just eid })
-  return isHit
-
-applyFocus :: (Eq e, Ord e) => e -> Bool -> UI e c Bool
-applyFocus eid isHit = do
-  next <- UI $ \ctx -> (ctxFocusNext ctx, ctx)
-  currentFocus <- getFocus
-  claimedFromTab <-
-    if currentFocus == Nothing
-    then do
-      setFocus eid
-      UI $ \ctx -> ((), ctx { ctxFocusedRendered = True, ctxFocusNext = False })
-      return next
-    else return False
-  currentFocus' <- getFocus
-  when (currentFocus' == Just eid) $
-    UI $ \ctx -> ((), ctx { ctxFocusedRendered = True })
-  btn <- getLeftButton
-  when (isHit && btn == ButtonReleased) $ do
-    setFocus eid
-    UI $ \ctx -> ((), ctx { ctxFocusedRendered = True })
-  return claimedFromTab
-
-applyTabNavigation :: (Eq e, Ord e) => e -> Bool -> UI e c ()
-applyTabNavigation eid claimedFromTab = do
-  hasFocus <- (== Just eid) <$> getFocus
-  input <- getInput
-  consumed <- getTabConsumed
-  let tabPressed = not consumed && any (\e -> key e == KeyTab && Shift `notElem` modifiers e) (keyEvents input)
-      shiftTabPressed = not consumed && any (\e -> key e == KeyTab && Shift `elem` modifiers e) (keyEvents input)
-  when (hasFocus && tabPressed && not claimedFromTab) $ do
-    clearFocus
-    UI $ \ctx -> ((), ctx { ctxFocusNext = True, ctxTabConsumed = True })
-  prevCtrl <- UI $ \ctx -> (ctxPreviousControl ctx, ctx)
-  when (hasFocus && shiftTabPressed && not claimedFromTab) $ do
-    mapM_ setFocus prevCtrl
-    UI $ \ctx -> ((), ctx { ctxTabConsumed = True })
-
-control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ()
-control eid content = do
-  s <- getStyle eid
-  r <- getRect
-  let bgRect = insetRect (margin s) r
-      contentRect = insetRect (padding s) bgRect
-  isHit <- applyHover eid bgRect
-  claimedFromTab <- applyFocus eid isHit
-  applyTabNavigation eid claimedFromTab
-  UI $ \ctx -> ((), ctx { ctxPreviousControl = Just eid })
-  style <- getStyle eid
-  layout bgRect $ fillRect (background style)
-  layout contentRect $ clipToCurrent content
-
-button :: (Eq e, Ord e) => e -> Text -> UI e c Bool
-button eid label = do
-  control eid $ do
-    style <- getStyle eid
-    drawText (textColour style) (textAlign style) label
-  isHit <- (== Just eid) <$> getHovered
-  hasFocus <- (== Just eid) <$> getFocus
-  btn <- getLeftButton
-  input <- getInput
-  consumed <- getTabConsumed
-  let wasClicked = isHit && btn == ButtonReleased
-      activated = not consumed && hasFocus && any (\e -> key e == KeyReturn) (keyEvents input)
-  return (wasClicked || activated)

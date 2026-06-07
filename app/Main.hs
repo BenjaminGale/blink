@@ -56,7 +56,7 @@ main = do
             SDL.rendererDrawColor renderer $= SDL.V4 229 229 234 255
             SDL.clear renderer
             clipRef <- newIORef ([] :: [SDL.Rectangle CInt])
-            mapM_ (submitDrawCall renderer font clipRef) calls
+            mapM_ (submitDrawCommand renderer font clipRef) calls
             SDL.present renderer
         }
 
@@ -98,12 +98,12 @@ toKeyEvents e = case SDL.eventPayload e of
 sdlPoint :: SDL.Point SDL.V2 CInt -> Point
 sdlPoint (SDL.P (SDL.V2 x y)) = Point (fromIntegral x) (fromIntegral y)
 
-submitDrawCall :: SDL.Renderer -> Font.Font -> IORef [SDL.Rectangle CInt] -> DrawCall -> IO ()
-submitDrawCall renderer _ _ (FillRect r (RGBA red green blue _)) = do
+submitDrawCommand :: SDL.Renderer -> Font.Font -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
+submitDrawCommand renderer _ _ (FillRect r (RGBA red green blue _)) = do
   let toWord8 c = round (c * 255) :: Word8
   SDL.rendererDrawColor renderer $= SDL.V4 (toWord8 red) (toWord8 green) (toWord8 blue) 255
   SDL.fillRect renderer (Just (toSDLRect r))
-submitDrawCall renderer font _ (DrawText r text (RGBA red green blue _) align) = do
+submitDrawCommand renderer font _ (DrawText r text (RGBA red green blue _) align) = do
   let toWord8 c = round (c * 255) :: Word8
   surface <- Font.blended font (SDL.V4 (toWord8 red) (toWord8 green) (toWord8 blue) 255) text
   texture <- SDL.createTextureFromSurface renderer surface
@@ -112,7 +112,7 @@ submitDrawCall renderer font _ (DrawText r text (RGBA red green blue _) align) =
   let dstRect = alignedTextRect r align (fromIntegral tw) (fromIntegral th)
   SDL.copy renderer texture Nothing (Just dstRect)
   SDL.destroyTexture texture
-submitDrawCall renderer _ clipRef (PushClip r) = do
+submitDrawCommand renderer _ clipRef (PushClip r) = do
   stack <- readIORef clipRef
   let new = toSDLRect r
       clipped = case stack of
@@ -120,7 +120,7 @@ submitDrawCall renderer _ clipRef (PushClip r) = do
         (top : _) -> intersectRect top new
   writeIORef clipRef (clipped : stack)
   SDL.rendererClipRect renderer $= Just clipped
-submitDrawCall renderer _ clipRef PopClip = do
+submitDrawCommand renderer _ clipRef PopClip = do
   stack <- readIORef clipRef
   let rest = drop 1 stack
   writeIORef clipRef rest
