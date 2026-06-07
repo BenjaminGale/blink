@@ -31,7 +31,7 @@ main = do
             writeIORef eventsRef (first : rest)
         , shouldClose = do
             events <- readIORef eventsRef
-            return $ any (== SDL.QuitEvent) (map SDL.eventPayload events)
+            return $ elem SDL.QuitEvent (map SDL.eventPayload events)
         , pollInput = do
             events <- readIORef eventsRef
             btn <- readIORef buttonRef
@@ -86,7 +86,7 @@ toKeyEvents e = case SDL.eventPayload e of
          SDL.KeycodeTab ->
            let mods = SDL.keysymModifier (SDL.keyboardEventKeysym d)
                shifted = SDL.keyModifierLeftShift mods || SDL.keyModifierRightShift mods
-           in [KeyEvent { key = KeyTab, modifiers = if shifted then [Shift] else [] }]
+           in [KeyEvent { key = KeyTab, modifiers = [Shift | shifted] }]
          SDL.KeycodeReturn -> [KeyEvent { key = KeyReturn, modifiers = [] }]
          _ -> []
   _ -> []
