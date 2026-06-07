@@ -2,8 +2,10 @@ module Blink.Geometry
   ( Point (..)
   , Size (..)
   , Rectangle (..)
+  , Alignment (..)
   , rectCentredAt
   , containsPoint
+  , alignRect
   ) where
 
 data Point = Point
@@ -22,6 +24,41 @@ data Rectangle = Rectangle
   , rectWidth :: Double
   , rectHeight :: Double
   } deriving (Eq, Show)
+
+data Alignment
+  = TopLeft    | TopCenter    | TopRight
+  | MiddleLeft | Center       | MiddleRight
+  | BottomLeft | BottomCenter | BottomRight
+  deriving (Eq, Ord, Show)
+
+alignRect :: Alignment -> Rectangle -> Size -> Rectangle
+alignRect alignment container size = Rectangle
+  { rectX = x
+  , rectY = y
+  , rectWidth = sizeWidth size
+  , rectHeight = sizeHeight size
+  }
+  where
+    x = case alignment of
+      TopLeft    -> rectX container
+      TopCenter  -> rectX container + (rectWidth container - sizeWidth size) / 2
+      TopRight   -> rectX container + rectWidth container - sizeWidth size
+      MiddleLeft -> rectX container
+      Center     -> rectX container + (rectWidth container - sizeWidth size) / 2
+      MiddleRight -> rectX container + rectWidth container - sizeWidth size
+      BottomLeft  -> rectX container
+      BottomCenter -> rectX container + (rectWidth container - sizeWidth size) / 2
+      BottomRight  -> rectX container + rectWidth container - sizeWidth size
+    y = case alignment of
+      TopLeft    -> rectY container
+      TopCenter  -> rectY container
+      TopRight   -> rectY container
+      MiddleLeft -> rectY container + (rectHeight container - sizeHeight size) / 2
+      Center     -> rectY container + (rectHeight container - sizeHeight size) / 2
+      MiddleRight -> rectY container + (rectHeight container - sizeHeight size) / 2
+      BottomLeft  -> rectY container + rectHeight container - sizeHeight size
+      BottomCenter -> rectY container + rectHeight container - sizeHeight size
+      BottomRight  -> rectY container + rectHeight container - sizeHeight size
 
 containsPoint :: Rectangle -> Point -> Bool
 containsPoint r p =
