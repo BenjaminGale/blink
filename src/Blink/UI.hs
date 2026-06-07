@@ -4,7 +4,6 @@ module Blink.UI
   ( UIContext (..)
   , UIState (..)
   , UI (..)
-  , ControlState (..)
   , emptyUIState
   , getRect
   , getMousePos
@@ -14,6 +13,7 @@ module Blink.UI
   , setFocus
   , clearFocus
   , getInput
+  , getTabConsumed
   , getStyleSet
   , getStyle
   , layout
@@ -96,6 +96,9 @@ getLeftButton = UI $ \ctx st -> (leftButton (inputState ctx), st)
 getInput :: UI e c InputState
 getInput = UI $ \ctx st -> (inputState ctx, st)
 
+getTabConsumed :: UI e c Bool
+getTabConsumed = UI $ \_ st -> (tabConsumed st, st)
+
 getStyleSet :: Ord e => e -> UI e c StyleSet
 getStyleSet eid = do
   t <- UI $ \ctx st -> (uiTheme ctx, st)
@@ -157,19 +160,14 @@ regionHit = do
   r <- getRect
   containsPoint r <$> getMousePos
 
-data ControlState = ControlState
-  { isClicked :: Bool
-  , isPressed :: Bool
-  , isHovered :: Bool
-  , isFocused :: Bool
-  }
+applyHover :: (Eq e, Ord e) => e -> Rectangle -> UI e c Bool
+applyHover eid bgRect = do
+  isHit <- layout bgRect regionHit
+  when isHit $ UI $ \_ st -> ((), st { hoveredElement = Just eid })
+  return isHit
 
-control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ControlState
-control eid content = do
-  s <- getStyle eid
-  r <- getRect
-  let bgRect = insetRect (margin s) r
-      contentRect = insetRect (padding s) bgRect
+applyFocus :: (Eq e, Ord e) => e -> Bool -> UI e c Bool
+applyFocus eid isHit = do
   next <- UI $ \_ st -> (focusNext st, st)
   currentFocus <- getFocus
   claimedFromTab <-
@@ -179,23 +177,22 @@ control eid content = do
       UI $ \_ st -> ((), st { focusedRendered = True, focusNext = False })
       return next
     else return False
-  isHit <- layout bgRect regionHit
-  btn <- getLeftButton
-  let wasPressed = isHit && btn == ButtonDown
-      wasClicked = isHit && btn == ButtonReleased
-  when isHit $ UI $ \_ st -> ((), st { hoveredElement = Just eid })
   currentFocus' <- getFocus
   when (currentFocus' == Just eid) $
     UI $ \_ st -> ((), st { focusedRendered = True })
-  when wasClicked $ do
+  btn <- getLeftButton
+  when (isHit && btn == ButtonReleased) $ do
     setFocus eid
     UI $ \_ st -> ((), st { focusedRendered = True })
+  return claimedFromTab
+
+applyTabNavigation :: (Eq e, Ord e) => e -> Bool -> UI e c ()
+applyTabNavigation eid claimedFromTab = do
   hasFocus <- (== Just eid) <$> getFocus
   input <- getInput
-  consumed <- UI $ \_ st -> (tabConsumed st, st)
+  consumed <- getTabConsumed
   let tabPressed = not consumed && any (\e -> key e == KeyTab && Shift `notElem` modifiers e) (keyEvents input)
       shiftTabPressed = not consumed && any (\e -> key e == KeyTab && Shift `elem` modifiers e) (keyEvents input)
-      activated = not consumed && hasFocus && any (\e -> key e == KeyReturn) (keyEvents input)
   when (hasFocus && tabPressed && not claimedFromTab) $ do
     clearFocus
     UI $ \_ st -> ((), st { focusNext = True, tabConsumed = True })
@@ -203,20 +200,31 @@ control eid content = do
   when (hasFocus && shiftTabPressed && not claimedFromTab) $ do
     mapM_ setFocus prevCtrl
     UI $ \_ st -> ((), st { tabConsumed = True })
+
+control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ()
+control eid content = do
+  s <- getStyle eid
+  r <- getRect
+  let bgRect = insetRect (margin s) r
+      contentRect = insetRect (padding s) bgRect
+  isHit <- applyHover eid bgRect
+  claimedFromTab <- applyFocus eid isHit
+  applyTabNavigation eid claimedFromTab
   UI $ \_ st -> ((), st { previousControl = Just eid })
   style <- getStyle eid
   layout bgRect $ fillRect (background style)
   layout contentRect $ clipToCurrent content
-  return ControlState
-    { isClicked = wasClicked || activated
-    , isPressed = wasPressed
-    , isHovered = isHit
-    , isFocused = hasFocus
-    }
 
 button :: (Eq e, Ord e) => e -> Text -> UI e c Bool
 button eid label = do
-  cs <- control eid $ do
+  control eid $ do
     style <- getStyle eid
     drawText (textColour style) (textAlign style) label
-  return (isClicked cs)
+  isHit <- (== Just eid) <$> getHovered
+  hasFocus <- (== Just eid) <$> getFocus
+  btn <- getLeftButton
+  input <- getInput
+  consumed <- getTabConsumed
+  let wasClicked = isHit && btn == ButtonReleased
+      activated = not consumed && hasFocus && any (\e -> key e == KeyReturn) (keyEvents input)
+  return (wasClicked || activated)
