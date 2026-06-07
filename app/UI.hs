@@ -49,5 +49,5 @@ alignLabel BottomLeft = "Bottom Left"
 alignLabel BottomCenter = "Bottom Center"
 alignLabel BottomRight = "Bottom Right"
 
-demoUpdate :: Command -> AppState -> Update AppState Command ()
-demoUpdate (Select a) _ = modify $ \s -> s { selected = Just a }
+demoUpdate :: Command -> Update AppState Command ()
+demoUpdate (Select a) = modify $ \s -> s { selected = Just a }

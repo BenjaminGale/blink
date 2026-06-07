@@ -20,7 +20,7 @@ data Backend = Backend
 data App e s c = App
   { startUp :: IO s
   , view :: s -> UI e c ()
-  , update :: c -> s -> Update s c ()
+  , update :: c -> Update s c ()
   }
 
 runApp :: Backend -> App e s c -> IO ()

@@ -36,10 +36,10 @@ modify f = Update $ \s -> ((), f s, [])
 effect :: Effect c -> Update s c ()
 effect eff = Update $ \s -> ((), s, [eff])
 
-execCommands :: (c -> s -> Update s c ()) -> [c] -> s -> s
+execCommands :: (c -> Update s c ()) -> [c] -> s -> s
 execCommands updateFn cmds initial = foldl step initial cmds
   where
     step s cmd =
-      let Update f = updateFn cmd s
+      let Update f = updateFn cmd
           ((), s', _) = f s
       in s'
