@@ -100,10 +100,8 @@ moveRect p r = r
   , rectY = pointY p
   }
 
-rectCentredAt :: Point -> Size -> Rectangle
-rectCentredAt p s = Rectangle
-  { rectX = pointX p - sizeWidth s / 2
-  , rectY = pointY p - sizeHeight s / 2
-  , rectWidth = sizeWidth s
-  , rectHeight = sizeHeight s
+rectCentredAt :: Point -> Rectangle -> Rectangle
+rectCentredAt p r = r
+  { rectX = pointX p - rectWidth r / 2
+  , rectY = pointY p - rectHeight r / 2
   }

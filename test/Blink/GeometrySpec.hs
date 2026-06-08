@@ -57,11 +57,11 @@ spec = describe "geometry" $ do
 
   describe "rectCentredAt" $ do
     it "produces a rectangle centred at the given point with the given size" $
-      rectCentredAt (Point 50 40) (Size 20 10)
+      rectCentredAt (Point 50 40) (Rectangle 0 0 20 10)
         `shouldBe` Rectangle 40 35 20 10
 
     it "correctly centres when the resulting origin has negative coordinates" $
-      rectCentredAt (Point 0 0) (Size 10 6)
+      rectCentredAt (Point 0 0) (Rectangle 0 0 10 6)
         `shouldBe` Rectangle (-5) (-3) 10 6
 
   describe "containsPoint" $ do
