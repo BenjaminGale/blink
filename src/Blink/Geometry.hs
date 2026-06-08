@@ -58,7 +58,7 @@ data Align1D = AlignStart | AlignCenter | AlignEnd
 
 alignRect :: Alignment -> Rectangle -> Rectangle -> Rectangle
 alignRect alignment container rect =
-  rect { rectX = x, rectY = y }
+  moveRect (Point x y) rect
   where
     (hPos, vPos) = split alignment
     x = align1D hPos (rectX container) (rectWidth container) (rectWidth rect)
@@ -89,7 +89,16 @@ rectOrigin :: Rectangle
 rectOrigin = Rectangle 0 0 0 0
 
 resizeRect :: Size -> Rectangle -> Rectangle
-resizeRect s r = r { rectWidth = sizeWidth s, rectHeight = sizeHeight s }
+resizeRect s r = r
+  { rectWidth = sizeWidth s
+  , rectHeight = sizeHeight s
+  }
+
+moveRect :: Point -> Rectangle -> Rectangle
+moveRect p r = r
+  { rectX = pointX p
+  , rectY = pointY p
+  }
 
 rectCentredAt :: Point -> Size -> Rectangle
 rectCentredAt p s = Rectangle
