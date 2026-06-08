@@ -4,11 +4,12 @@ module Blink.Layout
   , BoxConfig (..)
   , hBox
   , vBox
+  , defaultBoxConfig
   , layoutWithConstraint
   , resolveConstraint
   ) where
 
-import Blink.Geometry (Alignment, Rectangle (..), Size (..), alignRect, insetRect, uniform)
+import Blink.Geometry (Alignment (..), Rectangle (..), Size (..), alignRect, insetRect, uniform)
 import Blink.UI (UI, clipToCurrent, getRect, layout)
 
 data Constraint
@@ -29,6 +30,14 @@ data BoxConfig = BoxConfig
   , boxMargin     :: Double
   , boxAlignment  :: Alignment
   , boxFillCross  :: Bool
+  }
+
+defaultBoxConfig :: BoxConfig
+defaultBoxConfig = BoxConfig
+  { boxSpacing   = 0
+  , boxMargin    = 0
+  , boxAlignment = TopLeft
+  , boxFillCross = True
   }
 
 layoutWithConstraint :: RectConstraint -> UI e c a -> UI e c a
