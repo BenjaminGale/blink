@@ -6,6 +6,7 @@ module Blink.Layout
   , vBox
   , hBoxLayout
   , vBoxLayout
+  , layoutWithConstraint
   , resolveConstraint
   ) where
 
@@ -32,6 +33,13 @@ data BoxConfig = BoxConfig
   , boxFillCross  :: Bool
   }
 
+layoutWithConstraint :: RectConstraint -> UI e c a -> UI e c a
+layoutWithConstraint rc ui = do
+  r <- getRect
+  let w = resolveConstraint (rcWidth rc) (rectWidth r)
+      h = resolveConstraint (rcHeight rc) (rectHeight r)
+  layout (alignRect (rcAlignment rc) r (Size w h)) ui
+
 hBox :: BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
 hBox = box rcWidth rcHeight rectWidth rectHeight rectX rectY
            (\m cr -> Size m cr)
@@ -54,7 +62,7 @@ box
   -> BoxConfig
   -> [(RectConstraint, UI e c ())]
   -> UI e c ()
-box mainC crossC mainLen crossLen mainOrig crossOrig mkSize mkSlot cfg children = do
+box mainC _ mainLen crossLen mainOrig crossOrig mkSize mkSlot cfg children = do
   r <- getRect
   let ca        = insetRect (uniform (boxMargin cfg)) r
       n         = length children
@@ -66,13 +74,10 @@ box mainC crossC mainLen crossLen mainOrig crossOrig mkSize mkSlot cfg children 
       origins   = scanl (\o s -> o + s + sp) (mainOrig cb) slotMains
   layout ca $ clipToCurrent $
     mapM_ (\(mo, ms, (rc, ui)) ->
-      let cross     = crossLen cb
-          slotRect  = mkSlot mo (crossOrig cb) ms cross
-          childRect = if boxFillCross cfg
-                      then slotRect
-                      else let childCross = resolveConstraint (crossC rc) cross
-                           in alignRect (rcAlignment rc) slotRect (mkSize ms childCross)
-      in layout childRect ui
+      let slotRect = mkSlot mo (crossOrig cb) ms (crossLen cb)
+      in if boxFillCross cfg
+         then layout slotRect ui
+         else layout slotRect $ layoutWithConstraint rc ui
       ) (zip3 origins slotMains children)
 
 hBoxLayout :: Rectangle -> Double -> [Constraint] -> [Rectangle]
