@@ -14,8 +14,9 @@ data TextAlign = AlignLeft | AlignCenter | AlignRight
   deriving (Eq, Show)
 
 data DrawCommand
-  = FillRect Rectangle Colour
-  | DrawText Rectangle Text Colour TextAlign
-  | PushClip Rectangle
+  = FillRect   Rectangle Colour
+  | StrokeRect Rectangle Colour Double
+  | DrawText   Rectangle Text Colour TextAlign
+  | PushClip   Rectangle
   | PopClip
   deriving (Eq, Show)

@@ -103,6 +103,10 @@ submitDrawCommand renderer _ _ (FillRect r (RGBA red green blue _)) = do
   let toWord8 c = round (c * 255) :: Word8
   SDL.rendererDrawColor renderer $= SDL.V4 (toWord8 red) (toWord8 green) (toWord8 blue) 255
   SDL.fillRect renderer (Just (toSDLRect r))
+submitDrawCommand renderer _ _ (StrokeRect r (RGBA red green blue _) _) = do
+  let toWord8 c = round (c * 255) :: Word8
+  SDL.rendererDrawColor renderer $= SDL.V4 (toWord8 red) (toWord8 green) (toWord8 blue) 255
+  SDL.drawRect renderer (Just (toSDLRect r))
 submitDrawCommand renderer font _ (DrawText r text (RGBA red green blue _) align) = do
   let toWord8 c = round (c * 255) :: Word8
   surface <- Font.blended font (SDL.V4 (toWord8 red) (toWord8 green) (toWord8 blue) 255) text

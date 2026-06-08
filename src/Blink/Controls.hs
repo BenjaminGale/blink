@@ -55,6 +55,9 @@ control eid content = do
   setPreviousControl eid
   style <- getStyle eid
   layout bgRect $ fillRect (background style)
+  case borderColour style of
+    Just c  -> layout bgRect $ strokeRect c (borderWidth style)
+    Nothing -> pure ()
   layout contentRect $ clipToCurrent content
 
 button :: (Eq e, Ord e) => e -> Text -> UI e c Bool

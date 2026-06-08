@@ -20,11 +20,13 @@ testColour = RGBA 0 0 0 1
 
 testStyle :: Style
 testStyle = Style
-  { background = testColour
-  , textColour = testColour
-  , textAlign = AlignCenter
-  , margin = uniform 10
-  , padding = uniform 5
+  { background   = testColour
+  , textColour   = testColour
+  , textAlign    = AlignCenter
+  , margin       = uniform 10
+  , padding      = uniform 5
+  , borderColour = Nothing
+  , borderWidth  = 0
   }
 
 testStyleSet :: StyleSet
@@ -87,10 +89,38 @@ outsidePoints =
   , ("outside the control", Point 200 200)
   ]
 
+testBorderColour :: Colour
+testBorderColour = RGBA 1 0 0 1
+
+testStyleWithBorder :: Style
+testStyleWithBorder = testStyle { borderColour = Just testBorderColour, borderWidth = 1 }
+
+testStyleSetWithBorder :: StyleSet
+testStyleSetWithBorder = StyleSet
+  { normal = testStyleWithBorder
+  , hovered = testStyleWithBorder
+  , pressed = testStyleWithBorder
+  , focused = testStyleWithBorder
+  , disabled = testStyleWithBorder
+  }
+
+testThemeWithBorder :: Theme TestElement
+testThemeWithBorder = Theme
+  { elementStyles = Map.fromList [(TestControl, testStyleSetWithBorder), (OtherControl, testStyleSetWithBorder)]
+  , defaultStyle = testStyleSetWithBorder
+  }
+
+isStrokeRect :: DrawCommand -> Bool
+isStrokeRect (StrokeRect {}) = True
+isStrokeRect _               = False
+
 type WidgetRunner = UIContext TestElement () -> UIContext TestElement ()
 
 runButton :: WidgetRunner
 runButton ctx = snd $ runUI (button TestControl "label") ctx
+
+runWithBorder :: UIContext TestElement () -> UIContext TestElement ()
+runWithBorder ctx = snd $ runUI (button TestControl "label") ctx { ctxTheme = testThemeWithBorder }
 
 controlBehaviourSpec :: WidgetRunner -> Spec
 controlBehaviourSpec run = do
@@ -144,6 +174,14 @@ controlBehaviourSpec run = do
     it "clips content to its padding area" $
       ctxDrawCommands (run (mkCtx noInput))
         `shouldContain` [PushClip contentRect]
+
+    it "does not draw a border when borderColour is Nothing" $
+      filter isStrokeRect (ctxDrawCommands (run (mkCtx noInput)))
+        `shouldBe` []
+
+    it "draws a border when borderColour is set" $
+      ctxDrawCommands (runWithBorder (mkCtx noInput))
+        `shouldContain` [StrokeRect bgRect testBorderColour 1]
 
 spec :: Spec
 spec = describe "button" $ do

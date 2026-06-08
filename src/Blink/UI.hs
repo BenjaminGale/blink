@@ -24,6 +24,7 @@ module Blink.UI
   , getStyle
   , layout
   , fillRect
+  , strokeRect
   , drawText
   , clipToCurrent
   , regionHit
@@ -181,6 +182,11 @@ layout r (UI f) = UI $ \ctx ->
 fillRect :: Colour -> UI e c ()
 fillRect colour = UI $ \ctx ->
   let call = FillRect (ctxBounds ctx) colour
+  in ((), ctx { ctxDrawCommands = ctxDrawCommands ctx ++ [call] })
+
+strokeRect :: Colour -> Double -> UI e c ()
+strokeRect colour width = UI $ \ctx ->
+  let call = StrokeRect (ctxBounds ctx) colour width
   in ((), ctx { ctxDrawCommands = ctxDrawCommands ctx ++ [call] })
 
 drawText :: Colour -> TextAlign -> Text -> UI e c ()

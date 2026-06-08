@@ -30,19 +30,21 @@ columnAlign a
 
 buttonSet :: TextAlign -> StyleSet
 buttonSet align = StyleSet
-  { normal   = base { background = RGBA 0.878 0.878 0.898 1, textColour = RGBA 0.11 0.11 0.12 1 }
-  , hovered  = base { background = RGBA 0.800 0.800 0.824 1, textColour = RGBA 0.11 0.11 0.12 1 }
-  , pressed  = base { background = RGBA 0.102 0.435 0.831 1, textColour = RGBA 1.0  1.0  1.0  1 }
-  , focused  = base { background = RGBA 0.667 0.769 0.941 1, textColour = RGBA 0.11 0.11 0.12 1 }
+  { normal   = base { background = RGBA 0.878 0.878 0.898 1, textColour = RGBA 0.11 0.11 0.12 1, borderColour = Just (RGBA 0.600 0.600 0.620 1) }
+  , hovered  = base { background = RGBA 0.800 0.800 0.824 1, textColour = RGBA 0.11 0.11 0.12 1, borderColour = Just (RGBA 0.400 0.400 0.420 1) }
+  , pressed  = base { background = RGBA 0.102 0.435 0.831 1, textColour = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.071 0.306 0.584 1) }
+  , focused  = base { background = RGBA 0.667 0.769 0.941 1, textColour = RGBA 0.11 0.11 0.12 1, borderColour = Just (RGBA 0.102 0.435 0.831 1) }
   , disabled = base { background = RGBA 0.898 0.898 0.910 1, textColour = RGBA 0.682 0.682 0.698 1 }
   }
   where
     base = Style
-      { background = RGBA 0 0 0 1
-      , textColour = RGBA 0 0 0 1
-      , textAlign = align
-      , margin = uniform 3
-      , padding = uniform 6
+      { background   = RGBA 0 0 0 1
+      , textColour   = RGBA 0 0 0 1
+      , textAlign    = align
+      , margin       = uniform 3
+      , padding      = uniform 6
+      , borderColour = Nothing
+      , borderWidth  = 0
       }
 
 demoApp :: App Element AppState Command

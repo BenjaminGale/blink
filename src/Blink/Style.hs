@@ -10,11 +10,13 @@ import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Geometry (Insets (..))
 
 data Style = Style
-  { background :: Colour
-  , textColour :: Colour
-  , textAlign :: TextAlign
-  , margin :: Insets
-  , padding :: Insets
+  { background   :: Colour
+  , textColour   :: Colour
+  , textAlign    :: TextAlign
+  , margin       :: Insets
+  , padding      :: Insets
+  , borderColour :: Maybe Colour
+  , borderWidth  :: Double
   }
 
 data StyleSet = StyleSet
