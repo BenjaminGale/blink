@@ -5,18 +5,19 @@ import Blink
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 
-data Element = Btn Int
+data Element = Btn Int | TextInput1
   deriving (Eq, Ord)
 
-data Command = Clicked Int
+data Command = Clicked Int | TextChanged Text
 
 data AppState = AppState
   { lastClicked :: Maybe Int
+  , inputText   :: Text
   }
 
 demoTheme :: Theme Element
 demoTheme = Theme
-  { elementStyles = Map.empty
+  { elementStyles = Map.fromList [(TextInput1, textInputStyle)]
   , defaultStyle  = btnStyle
   }
 
@@ -39,9 +40,28 @@ btnStyle = StyleSet
       , borderWidth  = 0
       }
 
+textInputStyle :: StyleSet
+textInputStyle = StyleSet
+  { normal   = base { background = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.600 0.600 0.620 1) }
+  , hovered  = base { background = RGBA 0.97 0.97 0.97 1, borderColour = Just (RGBA 0.400 0.400 0.420 1) }
+  , pressed  = base { background = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.102 0.435 0.831 1) }
+  , focused  = base { background = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.102 0.435 0.831 1) }
+  , disabled = base { background = RGBA 0.95 0.95 0.95 1, textColour   = RGBA 0.682 0.682 0.698 1 }
+  }
+  where
+    base = Style
+      { background   = RGBA 0 0 0 1
+      , textColour   = RGBA 0.11 0.11 0.12 1
+      , textAlign    = AlignLeft
+      , margin       = uniform 3
+      , padding      = uniform 6
+      , borderColour = Nothing
+      , borderWidth  = 1
+      }
+
 demoApp :: App Element AppState Command
 demoApp = App
-  { startUp = pure (AppState Nothing)
+  { startUp = pure (AppState Nothing "")
   , theme   = demoTheme
   , view    = demoView
   , update  = demoUpdate
@@ -83,12 +103,21 @@ row3 = withBg (RGBA 0.87 0.87 0.95 1) $
     , (RectConstraint (Exactly 100) (Exactly 40) BottomLeft, btn 10 "Bot")
     ]
 
+-- Row 4: text input
+row4 :: AppState -> UI Element Command ()
+row4 s = withBg (RGBA 0.90 0.90 0.98 1) $
+  hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4 })
+    [ (RectConstraint Fill (Exactly 30) MiddleLeft,
+         textInput TextInput1 (inputText s) TextChanged) ]
+
 demoView :: AppState -> UI Element Command ()
-demoView _ = vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
+demoView s = vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
   [ (RectConstraint Fill (Exactly 50) TopLeft, row1)
   , (RectConstraint Fill Fill         TopLeft, row2)
   , (RectConstraint Fill (Exactly 80) TopLeft, row3)
+  , (RectConstraint Fill (Exactly 50) TopLeft, row4 s)
   ]
 
 demoUpdate :: Command -> Update AppState Command ()
-demoUpdate (Clicked i) = modify $ \s -> s { lastClicked = Just i }
+demoUpdate (Clicked i)     = modify $ \s -> s { lastClicked = Just i }
+demoUpdate (TextChanged t) = modify $ \s -> s { inputText = t }

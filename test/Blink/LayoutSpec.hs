@@ -18,6 +18,7 @@ noInput = InputState
   { mousePosition = Point 0 0
   , leftButton    = ButtonUp
   , keyEvents     = ([] :: [KeyEvent])
+  , typedText     = []
   }
 
 emptyStyle :: Style

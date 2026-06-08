@@ -36,7 +36,7 @@ runApp backend app = do
   state <- startUp app
   let initialCtx = emptyUIContext
         rectOrigin
-        (InputState (Point 0 0) ButtonUp [])
+        (InputState (Point 0 0) ButtonUp [] [])
         (Blink.App.theme app)
   loop backend app state initialCtx
 
@@ -53,7 +53,7 @@ loop backend app state ctx = do
           state' = execCommands (update app) (getCommands processedCtx) state
           (drawCalls', nextCtx) = case frameMode backend of
             EventDriven ->
-              let freshCtx = (nextFrameContext winRect (events { keyEvents = [] }) processedCtx)
+              let freshCtx = (nextFrameContext winRect (events { keyEvents = [], typedText = [] }) processedCtx)
                     { ctxFocusState = focusState { focusedElement = nextFocus } }
                   renderedCtx = snd $ runUI (view app state') freshCtx
               in (getDrawCommands renderedCtx, renderedCtx { ctxFocusState = focusState { focusedElement = nextFocus } })

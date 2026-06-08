@@ -65,15 +65,17 @@ getFocused = focusedElement . ctxFocusState
 noInput :: InputState
 noInput = InputState
   { mousePosition = Point 200 200
-  , leftButton = ButtonUp
-  , keyEvents = []
+  , leftButton    = ButtonUp
+  , keyEvents     = []
+  , typedText     = []
   }
 
 mouseAt :: Point -> ButtonState -> [KeyEvent] -> InputState
 mouseAt pos btn keys = InputState
   { mousePosition = pos
-  , leftButton = btn
-  , keyEvents = keys
+  , leftButton    = btn
+  , keyEvents     = keys
+  , typedText     = []
   }
 
 insidePoints :: [(String, Point)]

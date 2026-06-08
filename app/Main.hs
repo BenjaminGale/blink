@@ -6,7 +6,10 @@ import UI (demoApp)
 import SDL (($=))
 import qualified SDL
 import qualified SDL.Font as Font
+import qualified SDL.Raw
 import Data.IORef
+import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Word (Word8)
 import Foreign.C.Types (CInt)
 
@@ -20,6 +23,7 @@ main = do
   window <- SDL.createWindow "blink" SDL.defaultWindow { SDL.windowResizable = True }
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
   font <- Font.load fontPath 14
+  SDL.Raw.startTextInput
 
   quitRef <- newIORef False
   buttonRef <- newIORef ButtonUp
@@ -35,13 +39,15 @@ main = do
 
             btn <- readIORef buttonRef
             let btn' = foldl updateButton btn events
-                keys = concatMap toKeyEvents events
+                keys  = concatMap toKeyEvents events
+                chars = concatMap toTypedText events
             writeIORef buttonRef (nextFrameButton btn')
             mousePos <- SDL.getAbsoluteMouseLocation
             return InputState
               { mousePosition = sdlPoint mousePos
-              , leftButton = btn'
-              , keyEvents = keys
+              , leftButton    = btn'
+              , keyEvents     = keys
+              , typedText     = chars
               }
 
         , shouldClose = readIORef quitRef
@@ -88,12 +94,18 @@ toKeyEvents e = case SDL.eventPayload e of
     , not (SDL.keyboardEventRepeat d)
     -> case SDL.keysymKeycode (SDL.keyboardEventKeysym d) of
          SDL.KeycodeTab ->
-           let mods = SDL.keysymModifier (SDL.keyboardEventKeysym d)
+           let mods    = SDL.keysymModifier (SDL.keyboardEventKeysym d)
                shifted = SDL.keyModifierLeftShift mods || SDL.keyModifierRightShift mods
            in [KeyEvent { key = KeyTab, modifiers = [Shift | shifted] }]
-         SDL.KeycodeReturn -> [KeyEvent { key = KeyReturn, modifiers = [] }]
+         SDL.KeycodeReturn    -> [KeyEvent { key = KeyReturn,    modifiers = [] }]
+         SDL.KeycodeBackspace -> [KeyEvent { key = KeyBackspace, modifiers = [] }]
          _ -> []
   _ -> []
+
+toTypedText :: SDL.Event -> [Text]
+toTypedText e = case SDL.eventPayload e of
+  SDL.TextInputEvent d -> [SDL.textInputEventText d]
+  _                    -> []
 
 sdlPoint :: SDL.Point SDL.V2 CInt -> Point
 sdlPoint (SDL.P (SDL.V2 x y)) = Point (fromIntegral x) (fromIntegral y)
@@ -107,6 +119,7 @@ submitDrawCommand renderer _ _ (StrokeRect r (RGBA red green blue _) _) = do
   let toWord8 c = round (c * 255) :: Word8
   SDL.rendererDrawColor renderer $= SDL.V4 (toWord8 red) (toWord8 green) (toWord8 blue) 255
   SDL.drawRect renderer (Just (toSDLRect r))
+submitDrawCommand _ _ _ (DrawText _ text _ _) | T.null text = pure ()
 submitDrawCommand renderer font _ (DrawText r text (RGBA red green blue _) align) = do
   let toWord8 c = round (c * 255) :: Word8
   surface <- Font.blended font (SDL.V4 (toWord8 red) (toWord8 green) (toWord8 blue) 255) text

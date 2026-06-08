@@ -6,6 +6,7 @@ module Blink.Input
   , InputState (..)
   ) where
 
+import Data.Text (Text)
 import Blink.Geometry (Point)
 
 data ButtonState
@@ -14,7 +15,7 @@ data ButtonState
   | ButtonReleased
   deriving (Eq, Show)
 
-data Key = KeyTab | KeyReturn
+data Key = KeyTab | KeyReturn | KeyBackspace
   deriving (Eq, Show)
 
 data Modifier = Shift
@@ -27,6 +28,7 @@ data KeyEvent = KeyEvent
 
 data InputState = InputState
   { mousePosition :: Point
-  , leftButton :: ButtonState
-  , keyEvents :: [KeyEvent]
+  , leftButton    :: ButtonState
+  , keyEvents     :: [KeyEvent]
+  , typedText     :: [Text]
   } deriving (Eq, Show)
