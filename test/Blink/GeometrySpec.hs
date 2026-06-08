@@ -94,7 +94,7 @@ spec = describe "geometry" $ do
 
   describe "alignRect" $ do
     let container = Rectangle 10 20 100 60
-        size = Size 40 20
+        size = Rectangle 0 0 40 20
 
     let alignmentCases =
           [ ("TopLeft places the rectangle at the top-left of the container", TopLeft, Rectangle 10 20 40 20)
@@ -115,5 +115,5 @@ spec = describe "geometry" $ do
     it "preserves the given size for all alignments" $
       let allAlignments = [minBound .. maxBound] :: [Alignment]
           results = map (\a -> alignRect a container size) allAlignments
-      in all (\rect -> rectWidth rect == sizeWidth size && rectHeight rect == sizeHeight size) results
+      in all (\rect -> rectWidth rect == rectWidth size && rectHeight rect == rectHeight size) results
            `shouldBe` True

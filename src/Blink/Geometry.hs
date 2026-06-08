@@ -54,34 +54,34 @@ data Alignment
   | BottomLeft | BottomCenter | BottomRight
   deriving (Eq, Ord, Show, Bounded, Enum)
 
-alignRect :: Alignment -> Rectangle -> Size -> Rectangle
-alignRect alignment container size = Rectangle
+alignRect :: Alignment -> Rectangle -> Rectangle -> Rectangle
+alignRect alignment container rect = Rectangle
   { rectX = x
   , rectY = y
-  , rectWidth = sizeWidth size
-  , rectHeight = sizeHeight size
+  , rectWidth = rectWidth rect
+  , rectHeight = rectHeight rect
   }
   where
     x = case alignment of
       TopLeft    -> rectX container
-      TopCenter  -> rectX container + (rectWidth container - sizeWidth size) / 2
-      TopRight   -> rectX container + rectWidth container - sizeWidth size
+      TopCenter  -> rectX container + (rectWidth container - rectWidth rect) / 2
+      TopRight   -> rectX container + rectWidth container - rectWidth rect
       MiddleLeft -> rectX container
-      Center     -> rectX container + (rectWidth container - sizeWidth size) / 2
-      MiddleRight -> rectX container + rectWidth container - sizeWidth size
+      Center     -> rectX container + (rectWidth container - rectWidth rect) / 2
+      MiddleRight -> rectX container + rectWidth container - rectWidth rect
       BottomLeft  -> rectX container
-      BottomCenter -> rectX container + (rectWidth container - sizeWidth size) / 2
-      BottomRight  -> rectX container + rectWidth container - sizeWidth size
+      BottomCenter -> rectX container + (rectWidth container - rectWidth rect) / 2
+      BottomRight  -> rectX container + rectWidth container - rectWidth rect
     y = case alignment of
       TopLeft    -> rectY container
       TopCenter  -> rectY container
       TopRight   -> rectY container
-      MiddleLeft -> rectY container + (rectHeight container - sizeHeight size) / 2
-      Center     -> rectY container + (rectHeight container - sizeHeight size) / 2
-      MiddleRight -> rectY container + (rectHeight container - sizeHeight size) / 2
-      BottomLeft  -> rectY container + rectHeight container - sizeHeight size
-      BottomCenter -> rectY container + rectHeight container - sizeHeight size
-      BottomRight  -> rectY container + rectHeight container - sizeHeight size
+      MiddleLeft -> rectY container + (rectHeight container - rectHeight rect) / 2
+      Center     -> rectY container + (rectHeight container - rectHeight rect) / 2
+      MiddleRight -> rectY container + (rectHeight container - rectHeight rect) / 2
+      BottomLeft  -> rectY container + rectHeight container - rectHeight rect
+      BottomCenter -> rectY container + rectHeight container - rectHeight rect
+      BottomRight  -> rectY container + rectHeight container - rectHeight rect
 
 containsPoint :: Rectangle -> Point -> Bool
 containsPoint r p =

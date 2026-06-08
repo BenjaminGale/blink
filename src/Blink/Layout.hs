@@ -146,7 +146,7 @@ layoutWithConstraint rc ui = do
   r <- getRect
   let w = preferredSize (rcWidth rc) (rectWidth r)
       h = preferredSize (rcHeight rc) (rectHeight r)
-  layout (alignRect (rcAlignment rc) r (Size w h)) ui
+  layout (alignRect (rcAlignment rc) r (Rectangle 0 0 w h)) ui
 
 -- | Arranges children left-to-right. Each child is paired with a
 --   'RectConstraint' governing its width and, when 'boxFillCross' is 'False',
@@ -186,7 +186,8 @@ box mainC mainLen crossLen mainOrig crossOrig mkSize mkSlot setCrossC cfg childr
       availMain = mainLen ca - sp * fromIntegral (max 0 (n - 1))
       slotMains = preferredSizes availMain (map (mainC . fst) children)
       totalMain = sum slotMains + sp * fromIntegral (max 0 (n - 1))
-      cb        = alignRect (boxAlignment cfg) ca (mkSize totalMain (crossLen ca))
+      slotSize  = mkSize totalMain (crossLen ca)
+      cb        = alignRect (boxAlignment cfg) ca (Rectangle 0 0 (sizeWidth slotSize) (sizeHeight slotSize))
       origins   = scanl (\o s -> o + s + sp) (mainOrig cb) slotMains
   layout ca $ clipToCurrent $
     mapM_ (\(mo, ms, (rc, ui)) ->
