@@ -41,18 +41,17 @@ layoutWithConstraint rc ui = do
   layout (alignRect (rcAlignment rc) r (Size w h)) ui
 
 hBox :: BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
-hBox = box rcWidth rcHeight rectWidth rectHeight rectX rectY
+hBox = box rcWidth rectWidth rectHeight rectX rectY
            (\m cr -> Size m cr)
            (\mo co ms cs -> Rectangle mo co ms cs)
 
 vBox :: BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
-vBox = box rcHeight rcWidth rectHeight rectWidth rectY rectX
+vBox = box rcHeight rectHeight rectWidth rectY rectX
            (\m cr -> Size cr m)
            (\mo co ms cs -> Rectangle co mo cs ms)
 
 box
   :: (RectConstraint -> Constraint)
-  -> (RectConstraint -> Constraint)
   -> (Rectangle -> Double)
   -> (Rectangle -> Double)
   -> (Rectangle -> Double)
@@ -62,7 +61,7 @@ box
   -> BoxConfig
   -> [(RectConstraint, UI e c ())]
   -> UI e c ()
-box mainC _ mainLen crossLen mainOrig crossOrig mkSize mkSlot cfg children = do
+box mainC mainLen crossLen mainOrig crossOrig mkSize mkSlot cfg children = do
   r <- getRect
   let ca        = insetRect (uniform (boxMargin cfg)) r
       n         = length children
