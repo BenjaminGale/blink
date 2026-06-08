@@ -30,6 +30,7 @@ module Blink.UI
   , regionHit
   , emitCommand
   , control
+  , getDrawCommands
   ) where
 
 import Control.Monad (when)
@@ -183,32 +184,38 @@ layout r (UI f) = UI $ \ctx ->
   let (a, ctx') = f (ctx { ctxBounds = r })
   in (a, ctx' { ctxBounds = ctxBounds ctx })
 
+emit :: DrawCommand -> UI e c ()
+emit cmd = modify $ \ctx -> ctx { ctxDrawCommands = cmd : ctxDrawCommands ctx }
+
 fillRect :: Colour -> UI e c ()
-fillRect colour = UI $ \ctx ->
-  let call = FillRect (ctxBounds ctx) colour
-  in ((), ctx { ctxDrawCommands = ctxDrawCommands ctx ++ [call] })
+fillRect colour = do
+  r <- getRect
+  emit $ FillRect r colour
 
 strokeRect :: Colour -> Double -> UI e c ()
-strokeRect colour width = UI $ \ctx ->
-  let call = StrokeRect (ctxBounds ctx) colour width
-  in ((), ctx { ctxDrawCommands = ctxDrawCommands ctx ++ [call] })
+strokeRect colour width = do
+  r <- getRect
+  emit $ StrokeRect r colour width
 
 drawText :: Colour -> TextAlign -> Text -> UI e c ()
-drawText colour align text = UI $ \ctx ->
-  let call = DrawText (ctxBounds ctx) text colour align
-  in ((), ctx { ctxDrawCommands = ctxDrawCommands ctx ++ [call] })
+drawText colour align text = do
+  r <- getRect
+  emit $ DrawText r text colour align
 
 clipToCurrent :: UI e c a -> UI e c a
 clipToCurrent action = do
   r <- getRect
-  UI $ \ctx -> ((), ctx { ctxDrawCommands = ctxDrawCommands ctx ++ [PushClip r] })
+  emit $ PushClip r
   result <- action
-  UI $ \ctx -> ((), ctx { ctxDrawCommands = ctxDrawCommands ctx ++ [PopClip] })
+  emit PopClip
   return result
 
 emitCommand :: c -> UI e c ()
 emitCommand cmd = UI $ \ctx ->
   ((), ctx { ctxPendingCommands = ctxPendingCommands ctx ++ [cmd] })
+
+getDrawCommands :: UIContext e c -> [DrawCommand]
+getDrawCommands = reverse . ctxDrawCommands
 
 regionHit :: UI e c Bool
 regionHit = do
