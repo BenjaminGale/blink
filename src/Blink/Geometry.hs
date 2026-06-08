@@ -58,7 +58,7 @@ data Align1D = AlignStart | AlignCenter | AlignEnd
 
 alignRect :: Alignment -> Rectangle -> Rectangle -> Rectangle
 alignRect alignment container rect =
-  (rect) { rectX = x, rectY = y }
+  rect { rectX = x, rectY = y }
   where
     (hPos, vPos) = split alignment
     x = align1D hPos (rectX container) (rectWidth container) (rectWidth rect)
