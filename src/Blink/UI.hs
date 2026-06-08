@@ -274,7 +274,9 @@ control eid content = do
   applyTabNavigation eid
   setPreviousControl eid
   style <- getStyle eid
-  layout bgRect $ fillRect (background style)
+  case background style of
+    RGBA _ _ _ 0 -> pure ()
+    c            -> layout bgRect $ fillRect c
   case borderColour style of
     Just c  -> layout bgRect $ strokeRect c (borderWidth style)
     Nothing -> pure ()
