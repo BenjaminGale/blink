@@ -11,7 +11,7 @@ import Blink.Geometry (Rectangle, insetRect)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..))
 import Blink.UI
-import Data.Maybe (isNothing)
+import Data.Maybe (isNothing, isJust, fromJust)
 
 applyHover :: (Eq e, Ord e) => e -> Rectangle -> UI e c Bool
 applyHover eid bgRect = do
@@ -39,8 +39,8 @@ applyTabNavigation eid = do
   when (hasFocus && tabPressed) $ do
     clearFocus
     consumeKey KeyTab
-  when (hasFocus && shiftTabPressed) $ do
-    mapM_ setFocus prevCtrl
+  when (hasFocus && shiftTabPressed && isJust prevCtrl) $ do
+    setFocus (fromJust prevCtrl)
     consumeKey KeyTab
 
 control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ()
