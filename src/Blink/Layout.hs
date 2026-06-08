@@ -47,6 +47,8 @@ let each child size and align itself on the cross axis using its own
 -}
 module Blink.Layout
   ( Constraint (..)
+  , SumConstraint (..)
+  , MaxConstraint (..)
   , RectConstraint (..)
   , BoxConfig (..)
   , hBox
@@ -76,6 +78,65 @@ data Constraint
     -- ^ Fills available space up to the given maximum.
   | Between Double Double
     -- ^ Fills available space clamped between the given minimum and maximum.
+  deriving (Eq, Show)
+
+-- | Combines two constraints by summing their space requirements.
+-- Useful for computing the total space needed along the main axis of a box.
+-- The identity is @Exactly 0@.
+newtype SumConstraint = SumConstraint { getSumConstraint :: Constraint }
+  deriving (Eq, Show)
+
+-- | Combines two constraints by taking the maximum of their space requirements.
+-- Useful for computing the space needed along the cross axis of a box.
+-- The identity is @Exactly 0@.
+newtype MaxConstraint = MaxConstraint { getMaxConstraint :: Constraint }
+  deriving (Eq, Show)
+
+instance Semigroup SumConstraint where
+  SumConstraint (Exactly 0)      <> b                              = b
+  a                              <> SumConstraint (Exactly 0)      = a
+  SumConstraint (Exactly n)      <> SumConstraint (Exactly m)      = SumConstraint $ Exactly (n + m)
+  SumConstraint (Exactly n)      <> SumConstraint Fill             = SumConstraint $ AtLeast n
+  SumConstraint (Exactly n)      <> SumConstraint (AtLeast m)      = SumConstraint $ AtLeast (n + m)
+  SumConstraint (Exactly n)      <> SumConstraint (AtMost m)       = SumConstraint $ Between n (n + m)
+  SumConstraint (Exactly n)      <> SumConstraint (Between lo hi)  = SumConstraint $ Between (n + lo) (n + hi)
+  SumConstraint Fill             <> SumConstraint Fill             = SumConstraint Fill
+  SumConstraint Fill             <> SumConstraint (AtLeast m)      = SumConstraint $ AtLeast m
+  SumConstraint Fill             <> SumConstraint (AtMost _)       = SumConstraint Fill
+  SumConstraint Fill             <> SumConstraint (Between lo _)   = SumConstraint $ AtLeast lo
+  SumConstraint (AtLeast n)      <> SumConstraint (AtLeast m)      = SumConstraint $ AtLeast (n + m)
+  SumConstraint (AtLeast n)      <> SumConstraint (AtMost _)       = SumConstraint $ AtLeast n
+  SumConstraint (AtLeast n)      <> SumConstraint (Between lo _)   = SumConstraint $ AtLeast (n + lo)
+  SumConstraint (AtMost n)       <> SumConstraint (AtMost m)       = SumConstraint $ AtMost (n + m)
+  SumConstraint (AtMost n)       <> SumConstraint (Between lo hi)  = SumConstraint $ Between lo (n + hi)
+  SumConstraint (Between lo hi)  <> SumConstraint (Between lo2 hi2) = SumConstraint $ Between (lo + lo2) (hi + hi2)
+  a                              <> b                              = b <> a
+
+instance Monoid SumConstraint where
+  mempty = SumConstraint (Exactly 0)
+
+instance Semigroup MaxConstraint where
+  MaxConstraint (Exactly 0)      <> b                              = b
+  a                              <> MaxConstraint (Exactly 0)      = a
+  MaxConstraint (Exactly n)      <> MaxConstraint (Exactly m)      = MaxConstraint $ Exactly (max n m)
+  MaxConstraint (Exactly n)      <> MaxConstraint Fill             = MaxConstraint $ AtLeast n
+  MaxConstraint (Exactly n)      <> MaxConstraint (AtLeast m)      = MaxConstraint $ AtLeast (max n m)
+  MaxConstraint (Exactly n)      <> MaxConstraint (AtMost m)       = MaxConstraint $ if n <= m then Between n m else Exactly n
+  MaxConstraint (Exactly n)      <> MaxConstraint (Between lo hi)  = MaxConstraint $ Between (max n lo) (max n hi)
+  MaxConstraint Fill             <> MaxConstraint Fill             = MaxConstraint Fill
+  MaxConstraint Fill             <> MaxConstraint (AtLeast m)      = MaxConstraint $ AtLeast m
+  MaxConstraint Fill             <> MaxConstraint (AtMost _)       = MaxConstraint Fill
+  MaxConstraint Fill             <> MaxConstraint (Between lo _)   = MaxConstraint $ AtLeast lo
+  MaxConstraint (AtLeast n)      <> MaxConstraint (AtLeast m)      = MaxConstraint $ AtLeast (max n m)
+  MaxConstraint (AtLeast n)      <> MaxConstraint (AtMost _)       = MaxConstraint $ AtLeast n
+  MaxConstraint (AtLeast n)      <> MaxConstraint (Between lo _)   = MaxConstraint $ AtLeast (max n lo)
+  MaxConstraint (AtMost n)       <> MaxConstraint (AtMost m)       = MaxConstraint $ AtMost (max n m)
+  MaxConstraint (AtMost n)       <> MaxConstraint (Between lo hi)  = MaxConstraint $ Between lo (max n hi)
+  MaxConstraint (Between lo hi)  <> MaxConstraint (Between lo2 hi2) = MaxConstraint $ Between (max lo lo2) (max hi hi2)
+  a                              <> b                              = b <> a
+
+instance Monoid MaxConstraint where
+  mempty = MaxConstraint (Exactly 0)
 
 -- | Per-child sizing and alignment within a layout panel slot.
 data RectConstraint = RectConstraint
