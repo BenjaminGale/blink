@@ -42,11 +42,13 @@ hBox :: BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
 hBox = box rcWidth rectWidth rectHeight rectX rectY
            (\m cr -> Size m cr)
            (\mo co ms cs -> Rectangle mo co ms cs)
+           (\c rc -> rc { rcHeight = c })
 
 vBox :: BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
 vBox = box rcHeight rectHeight rectWidth rectY rectX
            (\m cr -> Size cr m)
            (\mo co ms cs -> Rectangle co mo cs ms)
+           (\c rc -> rc { rcWidth = c })
 
 box
   :: (RectConstraint -> Constraint)
@@ -56,10 +58,11 @@ box
   -> (Rectangle -> Double)
   -> (Double -> Double -> Size)
   -> (Double -> Double -> Double -> Double -> Rectangle)
+  -> (Constraint -> RectConstraint -> RectConstraint)
   -> BoxConfig
   -> [(RectConstraint, UI e c ())]
   -> UI e c ()
-box mainC mainLen crossLen mainOrig crossOrig mkSize mkSlot cfg children = do
+box mainC mainLen crossLen mainOrig crossOrig mkSize mkSlot setCrossC cfg children = do
   r <- getRect
   let ca        = insetRect (uniform (boxMargin cfg)) r
       n         = length children
@@ -71,10 +74,9 @@ box mainC mainLen crossLen mainOrig crossOrig mkSize mkSlot cfg children = do
       origins   = scanl (\o s -> o + s + sp) (mainOrig cb) slotMains
   layout ca $ clipToCurrent $
     mapM_ (\(mo, ms, (rc, ui)) ->
-      let slotRect = mkSlot mo (crossOrig cb) ms (crossLen cb)
-      in if boxFillCross cfg
-         then layout slotRect ui
-         else layout slotRect $ layoutWithConstraint rc ui
+      let slotRect    = mkSlot mo (crossOrig cb) ms (crossLen cb)
+          effectiveRc = if boxFillCross cfg then setCrossC Fill rc else rc
+      in layout slotRect $ layoutWithConstraint effectiveRc ui
       ) (zip3 origins slotMains children)
 
 resolveConstraints :: Double -> [Constraint] -> [Double]
