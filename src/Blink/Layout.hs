@@ -58,8 +58,12 @@ module Blink.Layout
   , preferredSize
   ) where
 
+import Data.List (sortBy)
+import Data.Ord  (comparing)
+
 import Blink.Geometry (Alignment (..), Rectangle (..), Size (..), alignRect, insetRect, uniform)
 import Blink.UI (UI, clipToCurrent, getRect, layout)
+import Data.Maybe (fromMaybe)
 
 {- | Describes how a child should be sized along a single axis.
 
@@ -270,11 +274,9 @@ preferredSize (Between lo hi) available  = max lo (min hi available)
 
 preferredSizes :: Double -> [Constraint] -> [Double]
 preferredSizes available constraints =
-  let minimums = map minLength constraints
-      minTotal = sum minimums
-      surplus  = max 0 (available - minTotal)
-      indexed  = zip [0..] constraints
-  in allocateSurplus surplus minimums indexed
+  let mins    = map minLength constraints
+      surplus = max 0 (available - sum mins)
+  in zipWith (+) mins (distributeSurplusSpace surplus constraints)
 
 minLength :: Constraint -> Double
 minLength (Exactly w)    = w
@@ -283,43 +285,25 @@ minLength (AtLeast w)    = w
 minLength (AtMost _)     = 0
 minLength (Between l _)  = l
 
-data MaxLength = Unlimited | MaxLength Double
-
-maxLength :: Constraint -> MaxLength
-maxLength (AtMost w)    = MaxLength w
-maxLength (Between _ h) = MaxLength h
-maxLength _             = Unlimited
-
 canExpand :: Constraint -> Bool
 canExpand (Exactly _) = False
 canExpand _           = True
 
-data AllocPass = AllocPass
-  { allocSizes  :: [Double]
-  , allocLeft   :: Double
-  , allocCapped :: Bool
-  }
-
-allocateSurplus :: Double -> [Double] -> [(Int, Constraint)] -> [Double]
-allocateSurplus surplus sizes indexed =
-  let flexible = filter (canExpand . snd) indexed
-      n        = length flexible
-  in if surplus <= 0 || n == 0
-     then sizes
-     else
-       let share  = surplus / fromIntegral n
-           result = foldl (shareStep share) (AllocPass sizes surplus False) flexible
-       in if allocCapped result
-          then allocateSurplus (allocLeft result) (allocSizes result) indexed
-          else allocSizes result
-
-shareStep :: Double -> AllocPass -> (Int, Constraint) -> AllocPass
-shareStep share pass (i, c) =
-  let cur      = allocSizes pass !! i
-      proposed = cur + share
-      setSizes s = pass { allocSizes = take i (allocSizes pass) ++ [s] ++ drop (i + 1) (allocSizes pass) }
-  in case maxLength c of
-       MaxLength cap | proposed > cap ->
-         (setSizes cap) { allocLeft = allocLeft pass - (cap - cur), allocCapped = True }
-       _ ->
-         (setSizes proposed) { allocLeft = allocLeft pass - share }
+-- Computes how much extra space (above each constraint's minimum) each slot
+-- receives, distributing surplus equally and redistributing any space left
+-- over from slots that hit their cap.
+distributeSurplusSpace :: Double -> [Constraint] -> [Double]
+distributeSurplusSpace surplus constraints =
+  let flexible = sortBy (comparing snd) [(i, cap c) | (i, c) <- zip [0..] constraints, canExpand c]
+      shares   = go surplus flexible
+  in [fromMaybe 0 (lookup i shares) | i <- [0 .. length constraints - 1]]
+  where
+    go _ [] = []
+    go s slots@((i, c) : rest) =
+      let share = s / fromIntegral (length slots)
+      in if c <= share
+         then (i, c) : go (s - c) rest
+         else [(j, share) | (j, _) <- slots]
+    cap (AtMost w)    = w
+    cap (Between l h) = h - l
+    cap _             = 1 / 0
