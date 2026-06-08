@@ -55,7 +55,7 @@ module Blink.Layout
   , vBox
   , defaultBoxConfig
   , layoutWithConstraint
-  , resolveConstraint
+  , preferredSize
   ) where
 
 import Blink.Geometry (Alignment (..), Rectangle (..), Size (..), alignRect, insetRect, uniform)
@@ -200,8 +200,8 @@ defaultBoxConfig = BoxConfig
 layoutWithConstraint :: RectConstraint -> UI e c a -> UI e c a
 layoutWithConstraint rc ui = do
   r <- getRect
-  let w = resolveConstraint (rcWidth rc) (rectWidth r)
-      h = resolveConstraint (rcHeight rc) (rectHeight r)
+  let w = preferredSize (rcWidth rc) (rectWidth r)
+      h = preferredSize (rcHeight rc) (rectHeight r)
   layout (alignRect (rcAlignment rc) r (Size w h)) ui
 
 -- | Arranges children left-to-right. Each child is paired with a
@@ -240,7 +240,7 @@ box mainC mainLen crossLen mainOrig crossOrig mkSize mkSlot setCrossC cfg childr
       n         = length children
       sp        = boxSpacing cfg
       availMain = mainLen ca - sp * fromIntegral (max 0 (n - 1))
-      slotMains = resolveConstraints availMain (map (mainC . fst) children)
+      slotMains = preferredSizes availMain (map (mainC . fst) children)
       totalMain = sum slotMains + sp * fromIntegral (max 0 (n - 1))
       cb        = alignRect (boxAlignment cfg) ca (mkSize totalMain (crossLen ca))
       origins   = scanl (\o s -> o + s + sp) (mainOrig cb) slotMains
@@ -251,25 +251,25 @@ box mainC mainLen crossLen mainOrig crossOrig mkSize mkSlot setCrossC cfg childr
       in layout slotRect $ layoutWithConstraint effectiveRc ui
       ) (zip3 origins slotMains children)
 
--- | Resolves a single 'Constraint' given the amount of available space.
+-- | Returns the preferred size for a 'Constraint' given the amount of available space.
 --
--- >>> resolveConstraint (Exactly 80) 200
+-- >>> preferredSize (Exactly 80) 200
 -- 80.0
--- >>> resolveConstraint Fill 200
+-- >>> preferredSize Fill 200
 -- 200.0
--- >>> resolveConstraint (AtLeast 50) 200
+-- >>> preferredSize (AtLeast 50) 200
 -- 200.0
--- >>> resolveConstraint (AtMost 150) 200
+-- >>> preferredSize (AtMost 150) 200
 -- 150.0
-resolveConstraint :: Constraint -> Double -> Double
-resolveConstraint (Exactly w)     _         = w
-resolveConstraint Fill            available  = available
-resolveConstraint (AtLeast w)     available  = max w available
-resolveConstraint (AtMost w)      available  = min w available
-resolveConstraint (Between lo hi) available  = max lo (min hi available)
+preferredSize :: Constraint -> Double -> Double
+preferredSize (Exactly w)     _         = w
+preferredSize Fill            available  = available
+preferredSize (AtLeast w)     available  = max w available
+preferredSize (AtMost w)      available  = min w available
+preferredSize (Between lo hi) available  = max lo (min hi available)
 
-resolveConstraints :: Double -> [Constraint] -> [Double]
-resolveConstraints available constraints =
+preferredSizes :: Double -> [Constraint] -> [Double]
+preferredSizes available constraints =
   let minimums = map minLength constraints
       minTotal = sum minimums
       surplus  = max 0 (available - minTotal)

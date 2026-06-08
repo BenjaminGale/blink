@@ -191,36 +191,36 @@ spec = describe "layout" $ do
         it desc $
           m a <> m b `shouldBe` m expected
 
-  describe "resolveConstraint" $ do
+  describe "preferredSize" $ do
     it "Exactly ignores available space" $
-      resolveConstraint (Exactly 50) 100 `shouldBe` 50
+      preferredSize (Exactly 50) 100 `shouldBe` 50
 
     it "Fill uses all available space" $
-      resolveConstraint Fill 100 `shouldBe` 100
+      preferredSize Fill 100 `shouldBe` 100
 
     describe "AtLeast" $ do
       it "enforces the minimum size when space is insufficient" $
-        resolveConstraint (AtLeast 50) 30 `shouldBe` 50
+        preferredSize (AtLeast 50) 30 `shouldBe` 50
 
       it "grows to fill space when it exceeds the minimum" $
-        resolveConstraint (AtLeast 50) 80 `shouldBe` 80
+        preferredSize (AtLeast 50) 80 `shouldBe` 80
 
     describe "AtMost" $ do
       it "grows to fill space when within its maximum" $
-        resolveConstraint (AtMost 80) 50 `shouldBe` 50
+        preferredSize (AtMost 80) 50 `shouldBe` 50
 
       it "limits to its maximum when space exceeds it" $
-        resolveConstraint (AtMost 80) 100 `shouldBe` 80
+        preferredSize (AtMost 80) 100 `shouldBe` 80
 
     describe "Between" $ do
       it "enforces the minimum size when space is insufficient" $
-        resolveConstraint (Between 20 80) 10 `shouldBe` 20
+        preferredSize (Between 20 80) 10 `shouldBe` 20
 
       it "grows to fill space when within its range" $
-        resolveConstraint (Between 20 80) 50 `shouldBe` 50
+        preferredSize (Between 20 80) 50 `shouldBe` 50
 
       it "limits to its maximum when space exceeds it" $
-        resolveConstraint (Between 20 80) 100 `shouldBe` 80
+        preferredSize (Between 20 80) 100 `shouldBe` 80
 
   describe "layoutWithConstraint" $ do
     let run rct = runLayout hBounds (layoutWithConstraint rct fill)
