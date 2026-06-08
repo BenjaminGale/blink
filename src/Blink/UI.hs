@@ -1,5 +1,3 @@
-{-# LANGUAGE DisambiguateRecordFields #-}
-
 module Blink.UI
   ( FocusState (..)
   , UIContext (..)
