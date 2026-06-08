@@ -70,7 +70,7 @@ demoView state =
     mkCell a = Cell Fill (Exactly 40) a $ do
       let label = if selected state == Just a then "[" <> alignLabel a <> "]" else alignLabel a
       clicked <- button (AlignButton a) label
-      when clicked $ emitCommand (Select a)
+      when clicked $ dispatch (Select a)
 
 alignLabel :: Alignment -> Text
 alignLabel TopLeft = "Top Left"

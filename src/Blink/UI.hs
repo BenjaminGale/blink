@@ -26,9 +26,10 @@ module Blink.UI
   , drawText
   , clipToCurrent
   , regionHit
-  , emitCommand
+  , dispatch
   , control
   , getDrawCommands
+  , getCommands
   ) where
 
 import Control.Monad (when)
@@ -59,7 +60,7 @@ data UIContext e c = UIContext
   , ctxHoveredElement :: Maybe e
   , ctxFocusState :: FocusState e
   , ctxPreviousControl :: Maybe e
-  , ctxPendingCommands :: [c]
+  , ctxCommands :: [c]
   }
 
 newtype UI e c a = UI { runUI :: UIContext e c -> (a, UIContext e c) }
@@ -92,7 +93,7 @@ emptyUIContext bounds input thm = UIContext
   , ctxHoveredElement = Nothing
   , ctxFocusState = FocusState { focusedElement = Nothing, focusedThisFrame = False }
   , ctxPreviousControl = Nothing
-  , ctxPendingCommands = []
+  , ctxCommands = []
   }
 
 nextFrameContext :: Rectangle -> InputState -> UIContext e c -> UIContext e c
@@ -102,7 +103,7 @@ nextFrameContext bounds input ctx = ctx
   , ctxDrawCommands    = []
   , ctxHoveredElement  = Nothing
   , ctxFocusState      = (ctxFocusState ctx) { focusedThisFrame = False }
-  , ctxPendingCommands = []
+  , ctxCommands = []
   }
 
 gets :: (UIContext e c -> a) -> UI e c a
@@ -208,12 +209,14 @@ clipToCurrent action = do
   emit PopClip
   return result
 
-emitCommand :: c -> UI e c ()
-emitCommand cmd = UI $ \ctx ->
-  ((), ctx { ctxPendingCommands = ctxPendingCommands ctx ++ [cmd] })
+dispatch :: c -> UI e c ()
+dispatch cmd = modify $ \ctx -> ctx { ctxCommands = cmd : ctxCommands ctx }
 
 getDrawCommands :: UIContext e c -> [DrawCommand]
 getDrawCommands = reverse . ctxDrawCommands
+
+getCommands :: UIContext e c -> [c]
+getCommands = reverse . ctxCommands
 
 regionHit :: UI e c Bool
 regionHit = do

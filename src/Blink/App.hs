@@ -10,7 +10,7 @@ import Blink.Rendering (DrawCommand)
 import Blink.Geometry (Point (..), Size (..), rectOrigin, resizeRect)
 import Blink.Input (ButtonState (..), InputState (..))
 import Blink.Style (Theme)
-import Blink.UI (FocusState (..), UI, UIContext (..), emptyUIContext, nextFrameContext, runUI, getDrawCommands)
+import Blink.UI (FocusState (..), UI, UIContext (..), emptyUIContext, nextFrameContext, runUI, getDrawCommands, getCommands)
 import Blink.Update (Update, execCommands)
 import Control.Monad (unless)
 
@@ -50,7 +50,7 @@ loop backend app state ctx = do
           processedCtx = snd $ runUI (view app state) (nextFrameContext winRect events ctx)
           focusState = ctxFocusState processedCtx
           nextFocus = if focusedThisFrame focusState then focusedElement focusState else Nothing
-          state' = execCommands (update app) (ctxPendingCommands processedCtx) state
+          state' = execCommands (update app) (getCommands processedCtx) state
           (drawCalls', nextCtx) = case frameMode backend of
             EventDriven ->
               let freshCtx = (nextFrameContext winRect (events { keyEvents = [] }) processedCtx)
