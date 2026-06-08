@@ -137,13 +137,21 @@ spec = describe "layout" $ do
           `shouldBe` [Rectangle 0 0 150 100]
 
     describe "height constraints" $ do
-      it "Exactly gives the child its exact height" $
-        run (rc Fill (Exactly 40) TopLeft)
-          `shouldBe` [Rectangle 0 0 200 40]
-
-      it "Fill gives the child the full available height" $
-        run (rc Fill Fill TopLeft)
-          `shouldBe` [Rectangle 0 0 200 100]
+      let cases =
+            [ ( "Exactly gives the child its exact height"
+              , Exactly 40,       Rectangle 0 0 200 40  )
+            , ( "Fill gives the child the full available height"
+              , Fill,             Rectangle 0 0 200 100 )
+            , ( "AtLeast expands to fill available space beyond the minimum"
+              , AtLeast 50,       Rectangle 0 0 200 100 )
+            , ( "AtMost caps the child at its maximum"
+              , AtMost 80,        Rectangle 0 0 200 80  )
+            , ( "Between clamps the child between its floor and ceiling"
+              , Between 50 80,    Rectangle 0 0 200 80  )
+            ]
+      forM_ cases $ \(desc, hc, expected) ->
+        it desc $
+          run (rc Fill hc TopLeft) `shouldBe` [expected]
 
     describe "alignment" $ do
       let cases =
@@ -248,10 +256,22 @@ spec = describe "layout" $ do
           `shouldBe` [Rectangle 0 0 100 200]
 
       let cases =
-            [ ("TopLeft aligns the child to the left",    TopLeft,  Rectangle 0  0 60 200)
-            , ("TopRight aligns the child to the right",  TopRight, Rectangle 40 0 60 200)
+            [ ("TopLeft aligns the child to the left",      TopLeft,  Rectangle 0  0 60 200)
+            , ("Center aligns the child to the centre",     Center,   Rectangle 20 0 60 200)
+            , ("TopRight aligns the child to the right",    TopRight, Rectangle 40 0 60 200)
             ]
       forM_ cases $ \(desc, alignment, expected) ->
         it desc $
           runVBox vBounds cfg { boxFillCross = False } [rc (Exactly 60) Fill alignment]
             `shouldBe` [expected]
+
+    describe "boxAlignment" $ do
+      let threeExact = [rc Fill (Exactly 40) TopLeft, rc Fill (Exactly 40) TopLeft, rc Fill (Exactly 40) TopLeft]
+
+      it "Center centres the content block vertically" $
+        runVBox vBounds cfg { boxAlignment = Center } threeExact
+          `shouldBe` [Rectangle 0 40 100 40, Rectangle 0 80 100 40, Rectangle 0 120 100 40]
+
+      it "BottomLeft aligns the content block to the bottom" $
+        runVBox vBounds cfg { boxAlignment = BottomLeft } threeExact
+          `shouldBe` [Rectangle 0 80 100 40, Rectangle 0 120 100 40, Rectangle 0 160 100 40]
