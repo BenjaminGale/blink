@@ -27,9 +27,11 @@ consumeTabKey = UI $ \ctx ->
 applyFocus :: (Eq e, Ord e) => e -> Bool -> UI e c ()
 applyFocus eid isHit = do
   currentFocus <- getFocus
-  setFocusWhen (isNothing currentFocus || currentFocus == Just eid) eid
   btn <- getLeftButton
-  setFocusWhen (isHit && btn == ButtonReleased) eid
+  let nothingIsFocused  = isNothing currentFocus
+      isRequestingFocus = currentFocus == Just eid
+      wasClicked = isHit && btn == ButtonReleased
+  setFocusWhen (nothingIsFocused || isRequestingFocus || wasClicked) eid
 
 applyTabNavigation :: (Eq e, Ord e) => e -> UI e c ()
 applyTabNavigation eid = do

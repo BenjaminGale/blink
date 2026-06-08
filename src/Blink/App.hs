@@ -10,7 +10,7 @@ import Blink.Rendering (DrawCommand)
 import Blink.Geometry (Point (..), Size (..), rectOrigin, resizeRect)
 import Blink.Input (ButtonState (..), InputState (..))
 import Blink.Style (Theme)
-import Blink.UI (UI, UIContext (..), emptyUIContext, nextFrameContext, runUI)
+import Blink.UI (FocusState (..), UI, UIContext (..), emptyUIContext, nextFrameContext, runUI)
 import Blink.Update (Update, execCommands)
 import Control.Monad (unless)
 
@@ -48,14 +48,15 @@ loop backend app state ctx = do
       size <- windowSize backend
       let winRect = resizeRect size rectOrigin
           processedCtx = snd $ runUI (view app state) (nextFrameContext winRect events ctx)
-          nextFocus = if ctxFocusedRendered processedCtx then ctxFocusedElement processedCtx else Nothing
+          focusState = ctxFocusState processedCtx
+          nextFocus = if focusedThisFrame focusState then focusedElement focusState else Nothing
           state' = execCommands (update app) (ctxPendingCommands processedCtx) state
           (drawCalls', nextCtx) = case frameMode backend of
             EventDriven ->
               let freshCtx = (nextFrameContext winRect (events { keyEvents = [] }) processedCtx)
-                    { ctxFocusedElement = nextFocus }
+                    { ctxFocusState = focusState { focusedElement = nextFocus } }
                   renderedCtx = snd $ runUI (view app state') freshCtx
-              in (ctxDrawCommands renderedCtx, renderedCtx { ctxFocusedElement = nextFocus })
-            Continuous -> (ctxDrawCommands processedCtx, processedCtx { ctxFocusedElement = nextFocus })
+              in (ctxDrawCommands renderedCtx, renderedCtx { ctxFocusState = focusState { focusedElement = nextFocus } })
+            Continuous -> (ctxDrawCommands processedCtx, processedCtx { ctxFocusState = focusState { focusedElement = nextFocus } })
       render backend drawCalls'
       loop backend app state' nextCtx

@@ -54,6 +54,12 @@ contentRect = insetRect (uniform 5) bgRect
 mkCtx :: InputState -> UIContext TestElement ()
 mkCtx input = emptyUIContext controlRect input testTheme
 
+withFocus :: Maybe TestElement -> UIContext TestElement () -> UIContext TestElement ()
+withFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = e } }
+
+getFocused :: UIContext TestElement () -> Maybe TestElement
+getFocused = focusedElement . ctxFocusState
+
 noInput :: InputState
 noInput = InputState
   { mousePosition = Point 200 200
@@ -90,30 +96,29 @@ controlBehaviourSpec :: WidgetRunner -> Spec
 controlBehaviourSpec run = do
   describe "focus" $ do
     it "receives focus when nothing else is focused" $
-      ctxFocusedElement (run (mkCtx noInput))
+      getFocused (run (mkCtx noInput))
         `shouldBe` Just TestControl
 
     it "does not take focus from another element" $
-      ctxFocusedElement (run (mkCtx noInput) { ctxFocusedElement = Just OtherControl })
+      getFocused (run (withFocus (Just OtherControl) (mkCtx noInput)))
         `shouldBe` Just OtherControl
 
     it "receives focus when clicked" $
-      ctxFocusedElement (run (mkCtx (mouseAt (Point 50 50) ButtonReleased [])) { ctxFocusedElement = Just OtherControl })
+      getFocused (run (withFocus (Just OtherControl) (mkCtx (mouseAt (Point 50 50) ButtonReleased []))))
         `shouldBe` Just TestControl
 
   describe "tab navigation" $ do
     it "loses focus when Tab is pressed" $
-      ctxFocusedElement (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab []] }) { ctxFocusedElement = Just TestControl })
+      getFocused (run (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyTab []] })))
         `shouldBe` Nothing
 
     it "passes focus to the previous control when Shift+Tab is pressed" $
-      ctxFocusedElement (run (mkCtx noInput { keyEvents = [KeyEvent KeyTab [Shift]] }) { ctxFocusedElement = Just TestControl, ctxPreviousControl = Just OtherControl })
+      getFocused (run (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyTab [Shift]] }) { ctxPreviousControl = Just OtherControl }))
         `shouldBe` Just OtherControl
 
     it "is not activated when focus moves to the next control" $
       fst (runUI (button TestControl "label")
-        (mkCtx noInput { keyEvents = [KeyEvent KeyTab [], KeyEvent KeyReturn []] })
-          { ctxFocusedElement = Just TestControl })
+        (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyTab [], KeyEvent KeyReturn []] })))
         `shouldBe` False
 
   describe "hover detection" $ do
@@ -160,5 +165,5 @@ spec = describe "button" $ do
         `shouldBe` True
 
     it "is not clicked when Enter is pressed and the button does not have focus" $
-      fst (runUI (button TestControl "label") (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] }) { ctxFocusedElement = Just OtherControl })
+      fst (runUI (button TestControl "label") (withFocus (Just OtherControl) (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] })))
         `shouldBe` False

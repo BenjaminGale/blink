@@ -1,7 +1,8 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 
 module Blink.UI
-  ( UIContext (..)
+  ( FocusState (..)
+  , UIContext (..)
   , UI (..)
   , emptyUIContext
   , nextFrameContext
@@ -31,14 +32,23 @@ import Blink.Geometry (Point, Rectangle, containsPoint)
 import Blink.Input (ButtonState (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 
+-- | Tracks which element holds keyboard focus and whether it was visited
+-- during the current frame's render pass.
+data FocusState e = FocusState
+  { focusedElement   :: Maybe e
+    -- ^ The element that currently holds focus, or 'Nothing' if no element is focused.
+  , focusedThisFrame :: Bool
+    -- ^ 'True' if the focused element was encountered during this frame's render pass.
+    -- Used to clear stale focus when a focused element is no longer present in the UI.
+  }
+
 data UIContext e c = UIContext
   { ctxBounds :: Rectangle
   , ctxInput :: InputState
   , ctxTheme :: Theme e
   , ctxDrawCommands :: [DrawCommand]
   , ctxHoveredElement :: Maybe e
-  , ctxFocusedElement :: Maybe e
-  , ctxFocusedRendered :: Bool
+  , ctxFocusState :: FocusState e
   , ctxPreviousControl :: Maybe e
   , ctxPendingCommands :: [c]
   }
@@ -71,8 +81,7 @@ emptyUIContext bounds input thm = UIContext
   , ctxTheme = thm
   , ctxDrawCommands = []
   , ctxHoveredElement = Nothing
-  , ctxFocusedElement = Nothing
-  , ctxFocusedRendered = False
+  , ctxFocusState = FocusState { focusedElement = Nothing, focusedThisFrame = False }
   , ctxPreviousControl = Nothing
   , ctxPendingCommands = []
   }
@@ -83,7 +92,7 @@ nextFrameContext bounds input ctx = ctx
   , ctxInput           = input
   , ctxDrawCommands    = []
   , ctxHoveredElement  = Nothing
-  , ctxFocusedRendered = False
+  , ctxFocusState      = (ctxFocusState ctx) { focusedThisFrame = False }
   , ctxPendingCommands = []
   }
 
@@ -130,17 +139,17 @@ getHovered :: UI e c (Maybe e)
 getHovered = gets ctxHoveredElement
 
 getFocus :: UI e c (Maybe e)
-getFocus = gets ctxFocusedElement
+getFocus = gets (focusedElement . ctxFocusState)
 
 setFocus :: e -> UI e c ()
-setFocus eid = modify $ \ctx -> ctx { ctxFocusedElement = Just eid, ctxFocusedRendered = True }
+setFocus eid = modify $ \ctx -> ctx { ctxFocusState = FocusState { focusedElement = Just eid, focusedThisFrame = True } }
 
 setFocusWhen :: Bool -> e -> UI e c ()
 setFocusWhen True eid  = setFocus eid
 setFocusWhen False _   = pure ()
 
 clearFocus :: UI e c ()
-clearFocus = modify $ \ctx -> ctx { ctxFocusedElement = Nothing }
+clearFocus = modify $ \ctx -> ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = Nothing } }
 
 layout :: Rectangle -> UI e c a -> UI e c a
 layout r (UI f) = UI $ \ctx ->
