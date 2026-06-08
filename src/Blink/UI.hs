@@ -8,6 +8,8 @@ module Blink.UI
   , getMousePos
   , getLeftButton
   , getHovered
+  , isHovered
+  , isPressed
   , setHovered
   , getFocus
   , isFocused
@@ -146,10 +148,9 @@ getStyleSet eid = do
 getStyle :: Ord e => e -> UI e c Style
 getStyle eid = do
   styles <- getStyleSet eid
-  isHov <- (== Just eid) <$> getHovered
+  isHov <- isHovered eid
   isFoc <- isFocused eid
-  isPrs <- (&& isHov) . (== ButtonDown) <$> getLeftButton
-
+  isPrs <- isPressed eid
   pure $
     if isPrs then pressed styles
     else if isHov then hovered styles
@@ -158,6 +159,15 @@ getStyle eid = do
 
 getHovered :: UI e c (Maybe e)
 getHovered = gets ctxHoveredElement
+
+isHovered :: Eq e => e -> UI e c Bool
+isHovered eid = (== Just eid) <$> getHovered
+
+isPressed :: Eq e => e -> UI e c Bool
+isPressed eid = do
+  isHov <- isHovered eid
+  btn <- getLeftButton
+  pure $ isHov && btn == ButtonDown
 
 setHovered :: e -> UI e c ()
 setHovered eid = modify $ \ctx -> ctx { ctxHoveredElement = Just eid }
@@ -269,4 +279,3 @@ control eid content = do
     Just c  -> layout bgRect $ strokeRect c (borderWidth style)
     Nothing -> pure ()
   layout contentRect $ clipToCurrent content
-
