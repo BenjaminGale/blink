@@ -1,64 +1,12 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 module Blink.Controls
-  ( control
-  , button
+  ( button
   ) where
 
-import Control.Monad (when)
-import Data.List (find)
 import Data.Text (Text)
-import Blink.Geometry (Rectangle, insetRect)
-import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
+import Blink.Input (ButtonState (..), Key (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..))
 import Blink.UI
-import Data.Maybe (isNothing, isJust, fromJust)
-
-applyHover :: (Eq e, Ord e) => e -> Rectangle -> UI e c ()
-applyHover eid bgRect = do
-  isHit <- layout bgRect regionHit
-  when isHit $ setHovered eid
-
-applyFocus :: (Eq e, Ord e) => e -> UI e c ()
-applyFocus eid = do
-  currentFocus <- getFocus
-  isHit        <- (== Just eid) <$> getHovered
-  btn          <- getLeftButton
-  let nothingIsFocused  = isNothing currentFocus
-      isRequestingFocus = currentFocus == Just eid
-      wasClicked        = isHit && btn == ButtonReleased
-  setFocusWhen (nothingIsFocused || isRequestingFocus || wasClicked) eid
-
-applyTabNavigation :: (Eq e, Ord e) => e -> UI e c ()
-applyTabNavigation eid = do
-  hasFocus <- isFocused eid
-  input    <- getInput
-  prevCtrl <- getPreviousControl
-  let tabKey          = find (\e -> key e == KeyTab) (keyEvents input)
-      tabPressed      = maybe False (\e -> Shift `notElem` modifiers e) tabKey
-      shiftTabPressed = maybe False (\e -> Shift `elem`    modifiers e) tabKey
-  when (hasFocus && tabPressed) $ do
-    clearFocus
-    consumeKey KeyTab
-  when (hasFocus && shiftTabPressed && isJust prevCtrl) $ do
-    setFocus (fromJust prevCtrl)
-    consumeKey KeyTab
-
-control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ()
-control eid content = do
-  s <- getStyle eid
-  r <- getRect
-  let bgRect = insetRect (margin s) r
-      contentRect = insetRect (padding s) bgRect
-  applyHover eid bgRect
-  applyFocus eid
-  applyTabNavigation eid
-  setPreviousControl eid
-  style <- getStyle eid
-  layout bgRect $ fillRect (background style)
-  case borderColour style of
-    Just c  -> layout bgRect $ strokeRect c (borderWidth style)
-    Nothing -> pure ()
-  layout contentRect $ clipToCurrent content
 
 button :: (Eq e, Ord e) => e -> Text -> UI e c Bool
 button eid label = do
