@@ -2,37 +2,29 @@
 module UI (Element, Command (..), AppState (..), demoApp) where
 
 import Blink
-import Control.Monad (when)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 
-data Element = AlignButton Alignment
+data Element = Btn Int
   deriving (Eq, Ord)
 
-data Command = Select Alignment
+data Command = Clicked Int
 
 data AppState = AppState
-  { selected :: Maybe Alignment
+  { lastClicked :: Maybe Int
   }
 
 demoTheme :: Theme Element
 demoTheme = Theme
-  { elementStyles = Map.fromList
-      [ (AlignButton a, buttonSet (columnAlign a)) | a <- [minBound .. maxBound] ]
-  , defaultStyle = buttonSet AlignCenter
+  { elementStyles = Map.empty
+  , defaultStyle  = btnStyle
   }
 
-columnAlign :: Alignment -> TextAlign
-columnAlign a
-  | a `elem` [TopLeft, MiddleLeft, BottomLeft]   = AlignLeft
-  | a `elem` [TopRight, MiddleRight, BottomRight] = AlignRight
-  | otherwise                                      = AlignCenter
-
-buttonSet :: TextAlign -> StyleSet
-buttonSet align = StyleSet
+btnStyle :: StyleSet
+btnStyle = StyleSet
   { normal   = base { background = RGBA 0.878 0.878 0.898 1, textColour = RGBA 0.11 0.11 0.12 1, borderColour = Just (RGBA 0.600 0.600 0.620 1) }
   , hovered  = base { background = RGBA 0.800 0.800 0.824 1, textColour = RGBA 0.11 0.11 0.12 1, borderColour = Just (RGBA 0.400 0.400 0.420 1) }
-  , pressed  = base { background = RGBA 0.102 0.435 0.831 1, textColour = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.071 0.306 0.584 1) }
+  , pressed  = base { background = RGBA 0.102 0.435 0.831 1, textColour = RGBA 1.0   1.0  1.0  1, borderColour = Just (RGBA 0.071 0.306 0.584 1) }
   , focused  = base { background = RGBA 0.667 0.769 0.941 1, textColour = RGBA 0.11 0.11 0.12 1, borderColour = Just (RGBA 0.102 0.435 0.831 1) }
   , disabled = base { background = RGBA 0.898 0.898 0.910 1, textColour = RGBA 0.682 0.682 0.698 1 }
   }
@@ -40,7 +32,7 @@ buttonSet align = StyleSet
     base = Style
       { background   = RGBA 0 0 0 1
       , textColour   = RGBA 0 0 0 1
-      , textAlign    = align
+      , textAlign    = AlignCenter
       , margin       = uniform 3
       , padding      = uniform 6
       , borderColour = Nothing
@@ -49,39 +41,53 @@ buttonSet align = StyleSet
 
 demoApp :: App Element AppState Command
 demoApp = App
-  { startUp = pure (AppState (Just Center))
-  , theme = demoTheme
-  , view = demoView
-  , update = demoUpdate
+  { startUp = pure (AppState Nothing)
+  , theme   = demoTheme
+  , view    = demoView
+  , update  = demoUpdate
   }
 
-demoView :: AppState -> UI Element Command ()
-demoView state =
-  vBox 0
-    [ row TopLeft TopCenter TopRight
-    , row MiddleLeft Center MiddleRight
-    , row BottomLeft BottomCenter BottomRight
+btn :: Int -> Text -> UI Element Command ()
+btn i label = do
+  clicked <- button (Btn i) label
+  if clicked then dispatch (Clicked i) else pure ()
+
+withBg :: Colour -> UI Element Command () -> UI Element Command ()
+withBg colour ui = fillRect colour >> ui
+
+-- Row 1: fill behaviour — fixed | fill | fixed
+row1 :: UI Element Command ()
+row1 = withBg (RGBA 0.95 0.87 0.87 1) $
+  hBox2 (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center, boxFillCross = True })
+    [ (RectConstraint (Exactly 80) Fill TopLeft, btn 1 "Left")
+    , (RectConstraint Fill         Fill Center,  btn 2 "<fill>")
+    , (RectConstraint (Exactly 80) Fill TopLeft, btn 3 "Right")
     ]
-  where
-    row :: Alignment -> Alignment -> Alignment -> Cell Element Command
-    row a b c = Cell Fill Fill Center $ hBox 0 [mkCell a, mkCell b, mkCell c]
 
-    mkCell :: Alignment -> Cell Element Command
-    mkCell a = Cell Fill (Exactly 40) a $ do
-      let label = if selected state == Just a then "[" <> alignLabel a <> "]" else alignLabel a
-      clicked <- button (AlignButton a) label
-      when clicked $ dispatch (Select a)
+-- Row 2: fillCross = False, children at different heights with different alignments
+row2 :: UI Element Command ()
+row2 = withBg (RGBA 0.87 0.95 0.87 1) $
+  hBox2 (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = MiddleLeft, boxFillCross = False })
+    [ (RectConstraint (Exactly 100) (Exactly 30) TopLeft,    btn 4 "Top")
+    , (RectConstraint (Exactly 100) (Exactly 50) Center,     btn 5 "Mid")
+    , (RectConstraint (Exactly 100) (Exactly 40) BottomRight, btn 6 "Bot")
+    ]
 
-alignLabel :: Alignment -> Text
-alignLabel TopLeft = "Top Left"
-alignLabel TopCenter = "Top Center"
-alignLabel TopRight = "Top Right"
-alignLabel MiddleLeft = "Middle Left"
-alignLabel Center = "Center"
-alignLabel MiddleRight = "Middle Right"
-alignLabel BottomLeft = "Bottom Left"
-alignLabel BottomCenter = "Bottom Center"
-alignLabel BottomRight = "Bottom Right"
+-- Row 3: same constraints as row 2 but fillCross = True — height constraints ignored
+row3 :: UI Element Command ()
+row3 = withBg (RGBA 0.87 0.87 0.95 1) $
+  hBox2 (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = MiddleLeft, boxFillCross = True })
+    [ (RectConstraint (Exactly 100) (Exactly 30) TopLeft,    btn 7 "Top")
+    , (RectConstraint (Exactly 100) (Exactly 50) Center,     btn 8 "Mid")
+    , (RectConstraint (Exactly 100) (Exactly 40) BottomRight, btn 9 "Bot")
+    ]
+
+demoView :: AppState -> UI Element Command ()
+demoView _ = vBox2 (BoxConfig { boxSpacing = 8, boxMargin = 8, boxAlignment = TopLeft, boxFillCross = True })
+  [ (RectConstraint Fill (Exactly 50) TopLeft, row1)
+  , (RectConstraint Fill Fill         TopLeft, row2)
+  , (RectConstraint Fill (Exactly 80) TopLeft, row3)
+  ]
 
 demoUpdate :: Command -> Update AppState Command ()
-demoUpdate (Select a) = modify $ \s -> s { selected = Just a }
+demoUpdate (Clicked i) = modify $ \s -> s { lastClicked = Just i }

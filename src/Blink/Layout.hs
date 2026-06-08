@@ -1,17 +1,21 @@
 module Blink.Layout
   ( Constraint (..)
   , Cell (..)
+  , RectConstraint (..)
+  , BoxConfig (..)
   , Bounds
   , Spacing
   , hBox
   , vBox
+  , hBox2
+  , vBox2
   , hBoxLayout
   , vBoxLayout
   , resolveConstraint
   ) where
 
-import Blink.Geometry (Alignment, Rectangle (..), Size (..), alignRect)
-import Blink.UI (UI, getRect, layout)
+import Blink.Geometry (Alignment, Rectangle (..), Size (..), alignRect, insetRect, uniform)
+import Blink.UI (UI, clipToCurrent, getRect, layout)
 
 type Bounds = Rectangle
 type Spacing = Double
@@ -141,3 +145,63 @@ shareStep share pass (i, c) =
          (setSizes cap) { allocLeft = allocLeft pass - (cap - cur), allocCapped = True }
        _ ->
          (setSizes proposed) { allocLeft = allocLeft pass - share }
+
+data RectConstraint = RectConstraint
+  { rcWidth     :: Constraint
+  , rcHeight    :: Constraint
+  , rcAlignment :: Alignment
+  }
+
+data BoxConfig = BoxConfig
+  { boxSpacing    :: Double
+  , boxMargin     :: Double
+  , boxAlignment  :: Alignment
+  , boxFillCross  :: Bool
+  }
+
+hBox2 :: BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
+hBox2 = box2 rcWidth rcHeight rectWidth rectHeight rectX rectY
+             (\m cr -> Size m cr)
+             (\mo co ms cs -> Rectangle mo co ms cs)
+
+vBox2 :: BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
+vBox2 = box2 rcHeight rcWidth rectHeight rectWidth rectY rectX
+             (\m cr -> Size cr m)
+             (\mo co ms cs -> Rectangle co mo cs ms)
+
+box2
+  :: (RectConstraint -> Constraint)
+  -> (RectConstraint -> Constraint)
+  -> (Rectangle -> Double)
+  -> (Rectangle -> Double)
+  -> (Rectangle -> Double)
+  -> (Rectangle -> Double)
+  -> (Double -> Double -> Size)
+  -> (Double -> Double -> Double -> Double -> Rectangle)
+  -> BoxConfig
+  -> [(RectConstraint, UI e c ())]
+  -> UI e c ()
+box2 mainC crossC mainLen crossLen mainOrig crossOrig mkSize mkSlot cfg children = do
+  r <- getRect
+  let ca         = insetRect (uniform (boxMargin cfg)) r
+      n          = length children
+      sp         = boxSpacing cfg
+      availMain  = mainLen ca - sp * fromIntegral (max 0 (n - 1))
+      slotMains  = resolveConstraints availMain (map (mainC . fst) children)
+      totalMain  = sum slotMains + sp * fromIntegral (max 0 (n - 1))
+      totalCross
+        | boxFillCross cfg = crossLen ca
+        | null children    = 0
+        | otherwise        = maximum (map (\(rc, _) -> resolveConstraint (crossC rc) (crossLen ca)) children)
+      cb       = alignRect (boxAlignment cfg) ca (mkSize totalMain totalCross)
+      origins  = scanl (\o s -> o + s + sp) (mainOrig cb) slotMains
+  layout ca $ clipToCurrent $
+    mapM_ (\(mo, ms, (rc, ui)) ->
+      let cross     = crossLen cb
+          slotRect  = mkSlot mo (crossOrig cb) ms cross
+          childRect = if boxFillCross cfg
+                      then slotRect
+                      else let childCross = resolveConstraint (crossC rc) cross
+                           in alignRect (rcAlignment rc) slotRect (mkSize ms childCross)
+      in layout childRect ui
+      ) (zip3 origins slotMains children)
