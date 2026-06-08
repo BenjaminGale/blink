@@ -54,34 +54,31 @@ data Alignment
   | BottomLeft | BottomCenter | BottomRight
   deriving (Eq, Ord, Show, Bounded, Enum)
 
+data Align1D = AlignStart | AlignCenter | AlignEnd
+
 alignRect :: Alignment -> Rectangle -> Rectangle -> Rectangle
-alignRect alignment container rect = Rectangle
-  { rectX = x
-  , rectY = y
-  , rectWidth = rectWidth rect
-  , rectHeight = rectHeight rect
-  }
+alignRect alignment container rect =
+  (rect) { rectX = x, rectY = y }
   where
-    x = case alignment of
-      TopLeft    -> rectX container
-      TopCenter  -> rectX container + (rectWidth container - rectWidth rect) / 2
-      TopRight   -> rectX container + rectWidth container - rectWidth rect
-      MiddleLeft -> rectX container
-      Center     -> rectX container + (rectWidth container - rectWidth rect) / 2
-      MiddleRight -> rectX container + rectWidth container - rectWidth rect
-      BottomLeft  -> rectX container
-      BottomCenter -> rectX container + (rectWidth container - rectWidth rect) / 2
-      BottomRight  -> rectX container + rectWidth container - rectWidth rect
-    y = case alignment of
-      TopLeft    -> rectY container
-      TopCenter  -> rectY container
-      TopRight   -> rectY container
-      MiddleLeft -> rectY container + (rectHeight container - rectHeight rect) / 2
-      Center     -> rectY container + (rectHeight container - rectHeight rect) / 2
-      MiddleRight -> rectY container + (rectHeight container - rectHeight rect) / 2
-      BottomLeft  -> rectY container + rectHeight container - rectHeight rect
-      BottomCenter -> rectY container + rectHeight container - rectHeight rect
-      BottomRight  -> rectY container + rectHeight container - rectHeight rect
+    (hPos, vPos) = split alignment
+    x = align1D hPos (rectX container) (rectWidth container) (rectWidth rect)
+    y = align1D vPos (rectY container) (rectHeight container) (rectHeight rect)
+
+split :: Alignment -> (Align1D, Align1D)
+split TopLeft      = (AlignStart, AlignStart)
+split TopCenter    = (AlignCenter, AlignStart)
+split TopRight     = (AlignEnd, AlignStart)
+split MiddleLeft   = (AlignStart, AlignCenter)
+split Center       = (AlignCenter, AlignCenter)
+split MiddleRight  = (AlignEnd, AlignCenter)
+split BottomLeft   = (AlignStart, AlignEnd)
+split BottomCenter = (AlignCenter, AlignEnd)
+split BottomRight  = (AlignEnd, AlignEnd)
+
+align1D :: Align1D -> Double -> Double -> Double -> Double
+align1D AlignStart  origin _            _       = origin
+align1D AlignCenter origin containerLen itemLen = origin + (containerLen - itemLen) / 2
+align1D AlignEnd    origin containerLen itemLen = origin + containerLen - itemLen
 
 containsPoint :: Rectangle -> Point -> Bool
 containsPoint r p =
