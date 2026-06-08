@@ -55,31 +55,32 @@ btn i label = do
 withBg :: Colour -> UI Element Command () -> UI Element Command ()
 withBg colour ui = fillRect colour >> ui
 
--- Row 1: fill behaviour — fixed | fill | fixed
+-- Row 1: fill behaviour — fixed | fill | fill | fixed (two fills share surplus evenly)
 row1 :: UI Element Command ()
 row1 = withBg (RGBA 0.95 0.87 0.87 1) $
   hBox2 (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center, boxFillCross = True })
     [ (RectConstraint (Exactly 80) Fill TopLeft, btn 1 "Left")
-    , (RectConstraint Fill         Fill Center,  btn 2 "<fill>")
-    , (RectConstraint (Exactly 80) Fill TopLeft, btn 3 "Right")
+    , (RectConstraint Fill         Fill Center,  btn 2 "<fill 1>")
+    , (RectConstraint Fill         Fill Center,  btn 3 "<fill 2>")
+    , (RectConstraint (Exactly 80) Fill TopLeft, btn 4 "Right")
     ]
 
--- Row 2: fillCross = False, children at different heights with different alignments
+-- Row 2: fillCross = False, children top/centre/bottom aligned
 row2 :: UI Element Command ()
 row2 = withBg (RGBA 0.87 0.95 0.87 1) $
-  hBox2 (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = MiddleLeft, boxFillCross = False })
-    [ (RectConstraint (Exactly 100) (Exactly 30) TopLeft,    btn 4 "Top")
-    , (RectConstraint (Exactly 100) (Exactly 50) Center,     btn 5 "Mid")
-    , (RectConstraint (Exactly 100) (Exactly 40) BottomRight, btn 6 "Bot")
+  hBox2 (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center, boxFillCross = False })
+    [ (RectConstraint (Exactly 100) (Exactly 30) TopLeft,    btn 5 "Top")
+    , (RectConstraint (Exactly 100) (Exactly 50) MiddleLeft, btn 6 "Mid")
+    , (RectConstraint (Exactly 100) (Exactly 40) BottomLeft, btn 7 "Bot")
     ]
 
--- Row 3: same constraints as row 2 but fillCross = True — height constraints ignored
+-- Row 3: same constraints as row 2, fillCross = True, content aligned to the right
 row3 :: UI Element Command ()
 row3 = withBg (RGBA 0.87 0.87 0.95 1) $
-  hBox2 (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = MiddleLeft, boxFillCross = True })
-    [ (RectConstraint (Exactly 100) (Exactly 30) TopLeft,    btn 7 "Top")
-    , (RectConstraint (Exactly 100) (Exactly 50) Center,     btn 8 "Mid")
-    , (RectConstraint (Exactly 100) (Exactly 40) BottomRight, btn 9 "Bot")
+  hBox2 (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = MiddleRight, boxFillCross = True })
+    [ (RectConstraint (Exactly 100) (Exactly 30) TopLeft,    btn 8 "Top")
+    , (RectConstraint (Exactly 100) (Exactly 50) MiddleLeft, btn 9 "Mid")
+    , (RectConstraint (Exactly 100) (Exactly 40) BottomLeft, btn 10 "Bot")
     ]
 
 demoView :: AppState -> UI Element Command ()

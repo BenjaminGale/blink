@@ -189,11 +189,7 @@ box2 mainC crossC mainLen crossLen mainOrig crossOrig mkSize mkSlot cfg children
       availMain  = mainLen ca - sp * fromIntegral (max 0 (n - 1))
       slotMains  = resolveConstraints availMain (map (mainC . fst) children)
       totalMain  = sum slotMains + sp * fromIntegral (max 0 (n - 1))
-      totalCross
-        | boxFillCross cfg = crossLen ca
-        | null children    = 0
-        | otherwise        = maximum (map (\(rc, _) -> resolveConstraint (crossC rc) (crossLen ca)) children)
-      cb       = alignRect (boxAlignment cfg) ca (mkSize totalMain totalCross)
+      cb       = alignRect (boxAlignment cfg) ca (mkSize totalMain (crossLen ca))
       origins  = scanl (\o s -> o + s + sp) (mainOrig cb) slotMains
   layout ca $ clipToCurrent $
     mapM_ (\(mo, ms, (rc, ui)) ->
