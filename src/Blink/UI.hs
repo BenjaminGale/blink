@@ -10,11 +10,15 @@ module Blink.UI
   , getMousePos
   , getLeftButton
   , getHovered
+  , setHovered
   , getFocus
   , setFocus
   , setFocusWhen
   , clearFocus
   , getInput
+  , consumeKey
+  , getPreviousControl
+  , setPreviousControl
   , getStyleSet
   , getStyle
   , layout
@@ -29,7 +33,7 @@ import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Geometry (Point, Rectangle, containsPoint)
-import Blink.Input (ButtonState (..), InputState (..))
+import Blink.Input (ButtonState (..), Key (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 
 -- | Tracks which element holds keyboard focus and whether it was visited
@@ -114,6 +118,17 @@ getLeftButton = leftButton <$> getInput
 getInput :: UI e c InputState
 getInput = gets ctxInput
 
+consumeKey :: Key -> UI e c ()
+consumeKey k = modify $ \ctx ->
+  let input = ctxInput ctx
+  in ctx { ctxInput = input { keyEvents = filter (\e -> key e /= k) (keyEvents input) } }
+
+getPreviousControl :: UI e c (Maybe e)
+getPreviousControl = gets ctxPreviousControl
+
+setPreviousControl :: e -> UI e c ()
+setPreviousControl eid = modify $ \ctx -> ctx { ctxPreviousControl = Just eid }
+
 getTheme :: UI e c (Theme e)
 getTheme = gets ctxTheme
 
@@ -137,6 +152,9 @@ getStyle eid = do
 
 getHovered :: UI e c (Maybe e)
 getHovered = gets ctxHoveredElement
+
+setHovered :: e -> UI e c ()
+setHovered eid = modify $ \ctx -> ctx { ctxHoveredElement = Just eid }
 
 getFocus :: UI e c (Maybe e)
 getFocus = gets (focusedElement . ctxFocusState)

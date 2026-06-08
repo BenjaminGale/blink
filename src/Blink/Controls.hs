@@ -15,14 +15,8 @@ import Data.Maybe (isNothing)
 applyHover :: (Eq e, Ord e) => e -> Rectangle -> UI e c Bool
 applyHover eid bgRect = do
   isHit <- layout bgRect regionHit
-  when isHit $ UI $ \ctx -> ((), ctx { ctxHoveredElement = Just eid })
+  when isHit $ setHovered eid
   return isHit
-
-consumeTabKey :: UI e c ()
-consumeTabKey = UI $ \ctx ->
-  let input = ctxInput ctx
-      filtered = filter (\e -> key e /= KeyTab) (keyEvents input)
-  in ((), ctx { ctxInput = input { keyEvents = filtered } })
 
 applyFocus :: (Eq e, Ord e) => e -> Bool -> UI e c ()
 applyFocus eid isHit = do
@@ -41,11 +35,11 @@ applyTabNavigation eid = do
       shiftTabPressed = any (\e -> key e == KeyTab && Shift `elem` modifiers e) (keyEvents input)
   when (hasFocus && tabPressed) $ do
     clearFocus
-    consumeTabKey
-  prevCtrl <- UI $ \ctx -> (ctxPreviousControl ctx, ctx)
+    consumeKey KeyTab
+  prevCtrl <- getPreviousControl
   when (hasFocus && shiftTabPressed) $ do
     mapM_ setFocus prevCtrl
-    consumeTabKey
+    consumeKey KeyTab
 
 control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ()
 control eid content = do
@@ -56,7 +50,7 @@ control eid content = do
   isHit <- applyHover eid bgRect
   applyFocus eid isHit
   applyTabNavigation eid
-  UI $ \ctx -> ((), ctx { ctxPreviousControl = Just eid })
+  setPreviousControl eid
   style <- getStyle eid
   layout bgRect $ fillRect (background style)
   layout contentRect $ clipToCurrent content
