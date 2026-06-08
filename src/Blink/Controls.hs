@@ -13,19 +13,19 @@ import Blink.Style (Style (..))
 import Blink.UI
 import Data.Maybe (isNothing, isJust, fromJust)
 
-applyHover :: (Eq e, Ord e) => e -> Rectangle -> UI e c Bool
+applyHover :: (Eq e, Ord e) => e -> Rectangle -> UI e c ()
 applyHover eid bgRect = do
   isHit <- layout bgRect regionHit
   when isHit $ setHovered eid
-  return isHit
 
-applyFocus :: (Eq e, Ord e) => e -> Bool -> UI e c ()
-applyFocus eid isHit = do
+applyFocus :: (Eq e, Ord e) => e -> UI e c ()
+applyFocus eid = do
   currentFocus <- getFocus
-  btn <- getLeftButton
+  isHit        <- (== Just eid) <$> getHovered
+  btn          <- getLeftButton
   let nothingIsFocused  = isNothing currentFocus
       isRequestingFocus = currentFocus == Just eid
-      wasClicked = isHit && btn == ButtonReleased
+      wasClicked        = isHit && btn == ButtonReleased
   setFocusWhen (nothingIsFocused || isRequestingFocus || wasClicked) eid
 
 applyTabNavigation :: (Eq e, Ord e) => e -> UI e c ()
@@ -49,8 +49,8 @@ control eid content = do
   r <- getRect
   let bgRect = insetRect (margin s) r
       contentRect = insetRect (padding s) bgRect
-  isHit <- applyHover eid bgRect
-  applyFocus eid isHit
+  applyHover eid bgRect
+  applyFocus eid
   applyTabNavigation eid
   setPreviousControl eid
   style <- getStyle eid
