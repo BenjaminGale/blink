@@ -58,7 +58,7 @@ withBg colour ui = fillRect colour >> ui
 -- Row 1: fill behaviour — fixed | fill | fill | fixed (two fills share surplus evenly)
 row1 :: UI Element Command ()
 row1 = withBg (RGBA 0.95 0.87 0.87 1) $
-  hBox2 (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center, boxFillCross = True })
+  hBox (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center, boxFillCross = True })
     [ (RectConstraint (Exactly 80) Fill TopLeft, btn 1 "Left")
     , (RectConstraint Fill         Fill Center,  btn 2 "<fill 1>")
     , (RectConstraint Fill         Fill Center,  btn 3 "<fill 2>")
@@ -68,7 +68,7 @@ row1 = withBg (RGBA 0.95 0.87 0.87 1) $
 -- Row 2: fillCross = False, children top/centre/bottom aligned
 row2 :: UI Element Command ()
 row2 = withBg (RGBA 0.87 0.95 0.87 1) $
-  hBox2 (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center, boxFillCross = False })
+  hBox (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center, boxFillCross = False })
     [ (RectConstraint (Exactly 100) (Exactly 30) TopLeft,    btn 5 "Top")
     , (RectConstraint (Exactly 100) (Exactly 50) MiddleLeft, btn 6 "Mid")
     , (RectConstraint (Exactly 100) (Exactly 40) BottomLeft, btn 7 "Bot")
@@ -77,14 +77,14 @@ row2 = withBg (RGBA 0.87 0.95 0.87 1) $
 -- Row 3: same constraints as row 2, fillCross = True, content aligned to the right
 row3 :: UI Element Command ()
 row3 = withBg (RGBA 0.87 0.87 0.95 1) $
-  hBox2 (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = MiddleRight, boxFillCross = True })
+  hBox (BoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = MiddleRight, boxFillCross = True })
     [ (RectConstraint (Exactly 100) (Exactly 30) TopLeft,    btn 8 "Top")
     , (RectConstraint (Exactly 100) (Exactly 50) MiddleLeft, btn 9 "Mid")
     , (RectConstraint (Exactly 100) (Exactly 40) BottomLeft, btn 10 "Bot")
     ]
 
 demoView :: AppState -> UI Element Command ()
-demoView _ = vBox2 (BoxConfig { boxSpacing = 8, boxMargin = 8, boxAlignment = TopLeft, boxFillCross = True })
+demoView _ = vBox (BoxConfig { boxSpacing = 8, boxMargin = 8, boxAlignment = TopLeft, boxFillCross = True })
   [ (RectConstraint Fill (Exactly 50) TopLeft, row1)
   , (RectConstraint Fill Fill         TopLeft, row2)
   , (RectConstraint Fill (Exactly 80) TopLeft, row3)
