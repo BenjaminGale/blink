@@ -30,7 +30,7 @@ applyFocus eid isHit = do
 
 applyTabNavigation :: (Eq e, Ord e) => e -> UI e c ()
 applyTabNavigation eid = do
-  hasFocus <- (== Just eid) <$> getFocus
+  hasFocus <- isFocused eid
   input    <- getInput
   prevCtrl <- getPreviousControl
   let tabKey          = find (\e -> key e == KeyTab) (keyEvents input)
@@ -63,7 +63,7 @@ button eid label = do
     style <- getStyle eid
     drawText (textColour style) (textAlign style) label
   isHit <- (== Just eid) <$> getHovered
-  hasFocus <- (== Just eid) <$> getFocus
+  hasFocus <- isFocused eid
   btn <- getLeftButton
   input <- getInput
   let wasClicked = isHit && btn == ButtonReleased

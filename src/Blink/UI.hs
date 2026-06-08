@@ -12,6 +12,7 @@ module Blink.UI
   , getHovered
   , setHovered
   , getFocus
+  , isFocused
   , setFocus
   , setFocusWhen
   , clearFocus
@@ -141,7 +142,7 @@ getStyle :: Ord e => e -> UI e c Style
 getStyle eid = do
   styles <- getStyleSet eid
   isHov <- (== Just eid) <$> getHovered
-  isFoc <- (== Just eid) <$> getFocus
+  isFoc <- isFocused eid
   isPrs <- (&& isHov) . (== ButtonDown) <$> getLeftButton
 
   pure $
@@ -158,6 +159,9 @@ setHovered eid = modify $ \ctx -> ctx { ctxHoveredElement = Just eid }
 
 getFocus :: UI e c (Maybe e)
 getFocus = gets (focusedElement . ctxFocusState)
+
+isFocused :: Eq e => e -> UI e c Bool
+isFocused eid = (== Just eid) <$> getFocus
 
 setFocus :: e -> UI e c ()
 setFocus eid = modify $ \ctx -> ctx { ctxFocusState = FocusState { focusedElement = Just eid, focusedThisFrame = True } }
