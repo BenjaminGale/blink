@@ -4,8 +4,6 @@ module Blink.Layout
   , BoxConfig (..)
   , hBox
   , vBox
-  , hBoxLayout
-  , vBoxLayout
   , layoutWithConstraint
   , resolveConstraint
   ) where
@@ -78,20 +76,6 @@ box mainC mainLen crossLen mainOrig crossOrig mkSize mkSlot cfg children = do
          then layout slotRect ui
          else layout slotRect $ layoutWithConstraint rc ui
       ) (zip3 origins slotMains children)
-
-hBoxLayout :: Rectangle -> Double -> [Constraint] -> [Rectangle]
-hBoxLayout r spacing constraints =
-  let available = rectWidth r - spacing * fromIntegral (max 0 (length constraints - 1))
-      sizes     = resolveConstraints available constraints
-      origins   = scanl (\o s -> o + s + spacing) (rectX r) sizes
-  in zipWith (\x w -> Rectangle x (rectY r) w (rectHeight r)) origins sizes
-
-vBoxLayout :: Rectangle -> Double -> [Constraint] -> [Rectangle]
-vBoxLayout r spacing constraints =
-  let available = rectHeight r - spacing * fromIntegral (max 0 (length constraints - 1))
-      sizes     = resolveConstraints available constraints
-      origins   = scanl (\o s -> o + s + spacing) (rectY r) sizes
-  in zipWith (\y h -> Rectangle (rectX r) y (rectWidth r) h) origins sizes
 
 resolveConstraints :: Double -> [Constraint] -> [Double]
 resolveConstraints available constraints =

@@ -1,16 +1,86 @@
 module Blink.LayoutSpec (spec) where
 
 import Control.Monad (forM_)
+import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Geometry (Rectangle (..))
-import Blink.Layout (Constraint (..), hBoxLayout, resolveConstraint, vBoxLayout)
+import Blink.Geometry (Alignment (..), Point (..), Rectangle (..), uniform)
+import Blink.Input (ButtonState (..), KeyEvent, InputState (..))
+import Blink.Layout
+import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
+import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.UI
 
-r :: Rectangle
-r = Rectangle 0 0 100 50
+-- Test infrastructure
+
+noInput :: InputState
+noInput = InputState
+  { mousePosition = Point 0 0
+  , leftButton    = ButtonUp
+  , keyEvents     = ([] :: [KeyEvent])
+  }
+
+emptyStyle :: Style
+emptyStyle = Style
+  { background   = RGBA 0 0 0 1
+  , textColour   = RGBA 0 0 0 1
+  , textAlign    = AlignCenter
+  , margin       = uniform 0
+  , padding      = uniform 0
+  , borderColour = Nothing
+  , borderWidth  = 0
+  }
+
+emptyStyleSet :: StyleSet
+emptyStyleSet = StyleSet
+  { normal   = emptyStyle
+  , hovered  = emptyStyle
+  , pressed  = emptyStyle
+  , focused  = emptyStyle
+  , disabled = emptyStyle
+  }
+
+emptyTheme :: Theme ()
+emptyTheme = Theme
+  { elementStyles = Map.empty
+  , defaultStyle  = emptyStyleSet
+  }
+
+testColour :: Colour
+testColour = RGBA 0 0 0 1
+
+fill :: UI () () ()
+fill = fillRect testColour
+
+runLayout :: Rectangle -> UI () () () -> [Rectangle]
+runLayout bounds ui =
+  let ctx        = emptyUIContext bounds noInput emptyTheme
+      (_, ctx')  = runUI ui ctx
+  in [r | FillRect r _ <- getDrawCommands ctx']
+
+-- hBox / vBox helpers
+
+cfg :: BoxConfig
+cfg = BoxConfig { boxSpacing = 0, boxMargin = 0, boxAlignment = TopLeft, boxFillCross = True }
+
+runHBox :: Rectangle -> BoxConfig -> [RectConstraint] -> [Rectangle]
+runHBox bounds c rcs = runLayout bounds $ hBox c [(r, fill) | r <- rcs]
+
+runVBox :: Rectangle -> BoxConfig -> [RectConstraint] -> [Rectangle]
+runVBox bounds c rcs = runLayout bounds $ vBox c [(r, fill) | r <- rcs]
+
+rc :: Constraint -> Constraint -> Alignment -> RectConstraint
+rc = RectConstraint
+
+hBounds :: Rectangle
+hBounds = Rectangle 0 0 200 100
+
+vBounds :: Rectangle
+vBounds = Rectangle 0 0 100 200
 
 spec :: Spec
 spec = describe "layout" $ do
+
   describe "resolveConstraint" $ do
     it "Exactly ignores available space" $
       resolveConstraint (Exactly 50) 100 `shouldBe` 50
@@ -42,84 +112,146 @@ spec = describe "layout" $ do
       it "limits to its maximum when space exceeds it" $
         resolveConstraint (Between 20 80) 100 `shouldBe` 80
 
-  describe "hBoxLayout" $ do
-    it "single cell occupies the full bounds" $
-      hBoxLayout r 0 [Fill] `shouldBe` [Rectangle 0 0 100 50]
+  describe "layoutWithConstraint" $ do
+    let run rct = runLayout hBounds (layoutWithConstraint rct fill)
 
-    it "two cells split the width equally with no spacing" $
-      hBoxLayout r 0 [Fill, Fill] `shouldBe`
-        [Rectangle 0 0 50 50, Rectangle 50 0 50 50]
+    describe "width constraints" $ do
+      it "Exactly gives the child its exact width" $
+        run (rc (Exactly 80) Fill TopLeft)
+          `shouldBe` [Rectangle 0 0 80 100]
 
-    it "gaps between cells reduce the space available for cell widths" $
-      hBoxLayout (Rectangle 0 0 110 50) 10 [Fill, Fill] `shouldBe`
-        [Rectangle 0 0 50 50, Rectangle 60 0 50 50]
+      it "Fill gives the child the full available width" $
+        run (rc Fill Fill TopLeft)
+          `shouldBe` [Rectangle 0 0 200 100]
 
-    it "each cell is offset by the widths of preceding cells and gaps" $
-      hBoxLayout (Rectangle 0 0 160 50) 5 [Fill, Fill, Fill] `shouldBe`
-        [Rectangle 0 0 50 50, Rectangle 55 0 50 50, Rectangle 110 0 50 50]
+      it "AtLeast expands to fill available space beyond the minimum" $
+        run (rc (AtLeast 50) Fill TopLeft)
+          `shouldBe` [Rectangle 0 0 200 100]
 
-    it "all cells share the vertical position and height of the bounds" $
-      hBoxLayout (Rectangle 20 10 100 50) 0 [Fill, Fill] `shouldBe`
-        [Rectangle 20 10 50 50, Rectangle 70 10 50 50]
+      it "AtMost caps the child at its maximum" $
+        run (rc (AtMost 150) Fill TopLeft)
+          `shouldBe` [Rectangle 0 0 150 100]
 
-    describe "constraint resolution" $ do
+      it "Between clamps the child between its floor and ceiling" $
+        run (rc (Between 50 150) Fill TopLeft)
+          `shouldBe` [Rectangle 0 0 150 100]
+
+    describe "height constraints" $ do
+      it "Exactly gives the child its exact height" $
+        run (rc Fill (Exactly 40) TopLeft)
+          `shouldBe` [Rectangle 0 0 200 40]
+
+      it "Fill gives the child the full available height" $
+        run (rc Fill Fill TopLeft)
+          `shouldBe` [Rectangle 0 0 200 100]
+
+    describe "alignment" $ do
       let cases =
-            [ ( "fixed-size cells get their exact sizes"
-              , [Exactly 30, Exactly 70], [30, 70] )
-            , ( "fill cell takes all space not claimed by fixed-size cells"
-              , [Exactly 40, Fill], [40, 60] )
-            , ( "fill cells share remaining space equally"
-              , [Exactly 40, Fill, Fill], [40, 30, 30] )
-            , ( "fill cells divide all available space equally"
-              , [Fill, Fill], [50, 50] )
-            , ( "minimum-size cells grow equally to fill available space"
-              , [AtLeast 20, Fill], [60, 40] )
-            , ( "minimum-size cells share available space equally"
-              , [AtLeast 20, AtLeast 20], [50, 50] )
-            , ( "cells below their maximum grow to share available space"
-              , [AtMost 60, Fill], [50, 50] )
-            , ( "cells are not shrunk below their required size"
-              , [Exactly 50, Exactly 80], [50, 80] )
-            , ( "cells within their size range grow to fill available space"
-              , [Between 10 90, Fill], [55, 45] )
+            [ ( "TopLeft places the child at the top-left"
+              , TopLeft,    Rectangle 0  0  80 40 )
+            , ( "TopCenter centres the child horizontally at the top"
+              , TopCenter,  Rectangle 60 0  80 40 )
+            , ( "TopRight places the child at the top-right"
+              , TopRight,   Rectangle 120 0  80 40 )
+            , ( "MiddleLeft places the child at the left, vertically centred"
+              , MiddleLeft, Rectangle 0  30 80 40 )
+            , ( "Center centres the child in both axes"
+              , Center,     Rectangle 60 30 80 40 )
+            , ( "MiddleRight places the child at the right, vertically centred"
+              , MiddleRight, Rectangle 120 30 80 40 )
+            , ( "BottomLeft places the child at the bottom-left"
+              , BottomLeft,  Rectangle 0   60 80 40 )
+            , ( "BottomCenter centres the child horizontally at the bottom"
+              , BottomCenter, Rectangle 60  60 80 40 )
+            , ( "BottomRight places the child at the bottom-right"
+              , BottomRight,  Rectangle 120 60 80 40 )
             ]
-      forM_ cases $ \(desc, constraints, expectedWidths) ->
+      forM_ cases $ \(desc, alignment, expected) ->
         it desc $
-          map rectWidth (hBoxLayout r 0 constraints) `shouldBe` expectedWidths
+          run (rc (Exactly 80) (Exactly 40) alignment)
+            `shouldBe` [expected]
 
-  describe "vBoxLayout" $ do
-    it "single cell occupies the full bounds" $
-      vBoxLayout r 0 [Fill] `shouldBe` [Rectangle 0 0 100 50]
+  describe "hBox" $ do
+    describe "main axis (width)" $ do
+      it "a single Fill child fills the available width" $
+        runHBox hBounds cfg [rc Fill Fill TopLeft]
+          `shouldBe` [Rectangle 0 0 200 100]
 
-    it "two cells split the height equally with no spacing" $
-      vBoxLayout r 0 [Fill, Fill] `shouldBe`
-        [Rectangle 0 0 100 25, Rectangle 0 25 100 25]
+      it "two Fill children share the available width equally" $
+        runHBox hBounds cfg [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
+          `shouldBe` [Rectangle 0 0 100 100, Rectangle 100 0 100 100]
 
-    it "gaps between cells reduce the space available for cell heights" $
-      vBoxLayout (Rectangle 0 0 100 60) 10 [Fill, Fill] `shouldBe`
-        [Rectangle 0 0 100 25, Rectangle 0 35 100 25]
+      it "an Exactly child gets its exact width" $
+        runHBox hBounds cfg [rc (Exactly 60) Fill TopLeft]
+          `shouldBe` [Rectangle 0 0 60 100]
 
-    it "each cell is offset by the heights of preceding cells and gaps" $
-      vBoxLayout (Rectangle 0 0 100 160) 5 [Fill, Fill, Fill] `shouldBe`
-        [Rectangle 0 0 100 50, Rectangle 0 55 100 50, Rectangle 0 110 100 50]
+      it "a fixed child and a Fill child share the remaining space" $
+        runHBox hBounds cfg [rc (Exactly 60) Fill TopLeft, rc Fill Fill TopLeft]
+          `shouldBe` [Rectangle 0 0 60 100, Rectangle 60 0 140 100]
 
-    it "all cells share the horizontal position and width of the bounds" $
-      vBoxLayout (Rectangle 20 10 100 50) 0 [Fill, Fill] `shouldBe`
-        [Rectangle 20 10 100 25, Rectangle 20 35 100 25]
+      it "spacing separates children" $
+        runHBox hBounds cfg { boxSpacing = 10 } [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
+          `shouldBe` [Rectangle 0 0 95 100, Rectangle 105 0 95 100]
 
-    describe "constraint resolution" $ do
+    describe "content area" $ do
+      it "margin reduces the available space on all sides" $
+        runHBox hBounds cfg { boxMargin = 10 } [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
+          `shouldBe` [Rectangle 10 10 90 80, Rectangle 100 10 90 80]
+
+    describe "cross axis (height)" $ do
+      it "fillCross = True stretches children to the full available height" $
+        runHBox hBounds cfg [rc Fill (Exactly 40) TopLeft]
+          `shouldBe` [Rectangle 0 0 200 100]
+
       let cases =
-            [ ( "fixed-size cells get their exact sizes"
-              , [Exactly 10, Exactly 40], [10, 40] )
-            , ( "fill cell takes all space not claimed by fixed-size cells"
-              , [Exactly 20, Fill], [20, 30] )
-            , ( "fill cells divide all available space equally"
-              , [Fill, Fill], [25, 25] )
-            , ( "minimum-size cells grow equally to fill available space"
-              , [AtLeast 10, Fill], [30, 20] )
-            , ( "cells are not shrunk below their required size"
-              , [Exactly 30, Exactly 40], [30, 40] )
+            [ ("TopLeft aligns the child to the top",    TopLeft,    Rectangle 0 0  200 40)
+            , ("Center aligns the child to the middle",  Center,     Rectangle 0 30 200 40)
+            , ("BottomLeft aligns the child to the bottom", BottomLeft, Rectangle 0 60 200 40)
             ]
-      forM_ cases $ \(desc, constraints, expectedHeights) ->
+      forM_ cases $ \(desc, alignment, expected) ->
         it desc $
-          map rectHeight (vBoxLayout r 0 constraints) `shouldBe` expectedHeights
+          runHBox hBounds cfg { boxFillCross = False } [rc Fill (Exactly 40) alignment]
+            `shouldBe` [expected]
+
+    describe "boxAlignment" $ do
+      let threeExact = [rc (Exactly 40) Fill TopLeft, rc (Exactly 40) Fill TopLeft, rc (Exactly 40) Fill TopLeft]
+
+      it "Center centres the content block horizontally" $
+        runHBox hBounds cfg { boxAlignment = Center } threeExact
+          `shouldBe` [Rectangle 40 0 40 100, Rectangle 80 0 40 100, Rectangle 120 0 40 100]
+
+      it "MiddleRight aligns the content block to the right" $
+        runHBox hBounds cfg { boxAlignment = MiddleRight } threeExact
+          `shouldBe` [Rectangle 80 0 40 100, Rectangle 120 0 40 100, Rectangle 160 0 40 100]
+
+  describe "vBox" $ do
+    describe "main axis (height)" $ do
+      it "a single Fill child fills the available height" $
+        runVBox vBounds cfg [rc Fill Fill TopLeft]
+          `shouldBe` [Rectangle 0 0 100 200]
+
+      it "two Fill children share the available height equally" $
+        runVBox vBounds cfg [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
+          `shouldBe` [Rectangle 0 0 100 100, Rectangle 0 100 100 100]
+
+      it "a fixed child and a Fill child share the remaining space" $
+        runVBox vBounds cfg [rc Fill (Exactly 60) TopLeft, rc Fill Fill TopLeft]
+          `shouldBe` [Rectangle 0 0 100 60, Rectangle 0 60 100 140]
+
+      it "spacing separates children" $
+        runVBox vBounds cfg { boxSpacing = 10 } [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
+          `shouldBe` [Rectangle 0 0 100 95, Rectangle 0 105 100 95]
+
+    describe "cross axis (width)" $ do
+      it "fillCross = True stretches children to the full available width" $
+        runVBox vBounds cfg [rc (Exactly 60) Fill TopLeft]
+          `shouldBe` [Rectangle 0 0 100 200]
+
+      let cases =
+            [ ("TopLeft aligns the child to the left",    TopLeft,  Rectangle 0  0 60 200)
+            , ("TopRight aligns the child to the right",  TopRight, Rectangle 40 0 60 200)
+            ]
+      forM_ cases $ \(desc, alignment, expected) ->
+        it desc $
+          runVBox vBounds cfg { boxFillCross = False } [rc (Exactly 60) Fill alignment]
+            `shouldBe` [expected]
