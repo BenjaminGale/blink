@@ -5,6 +5,7 @@ module Blink.Controls
   ) where
 
 import Control.Monad (when)
+import Data.List (find)
 import Data.Text (Text)
 import Blink.Geometry (Rectangle, insetRect)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
@@ -30,13 +31,14 @@ applyFocus eid isHit = do
 applyTabNavigation :: (Eq e, Ord e) => e -> UI e c ()
 applyTabNavigation eid = do
   hasFocus <- (== Just eid) <$> getFocus
-  input <- getInput
-  let tabPressed = any (\e -> key e == KeyTab && Shift `notElem` modifiers e) (keyEvents input)
-      shiftTabPressed = any (\e -> key e == KeyTab && Shift `elem` modifiers e) (keyEvents input)
+  input    <- getInput
+  prevCtrl <- getPreviousControl
+  let tabKey          = find (\e -> key e == KeyTab) (keyEvents input)
+      tabPressed      = maybe False (\e -> Shift `notElem` modifiers e) tabKey
+      shiftTabPressed = maybe False (\e -> Shift `elem`    modifiers e) tabKey
   when (hasFocus && tabPressed) $ do
     clearFocus
     consumeKey KeyTab
-  prevCtrl <- getPreviousControl
   when (hasFocus && shiftTabPressed) $ do
     mapM_ setFocus prevCtrl
     consumeKey KeyTab
