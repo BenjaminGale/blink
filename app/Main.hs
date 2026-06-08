@@ -91,7 +91,6 @@ toKeyEvents :: SDL.Event -> [KeyEvent]
 toKeyEvents e = case SDL.eventPayload e of
   SDL.KeyboardEvent d
     | SDL.keyboardEventKeyMotion d == SDL.Pressed
-    , not (SDL.keyboardEventRepeat d)
     -> case SDL.keysymKeycode (SDL.keyboardEventKeysym d) of
          SDL.KeycodeTab ->
            let mods    = SDL.keysymModifier (SDL.keyboardEventKeysym d)
