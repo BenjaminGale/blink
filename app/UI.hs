@@ -222,16 +222,18 @@ row4 s = withBg (RGBA 0.95 0.95 0.87 1) $
     [ (RectConstraint Fill (Exactly 30) MiddleLeft,
          textInput TextInput1 (inputText s) TextChanged) ]
 
--- Row 5: checkboxes
+-- Row 5: checkboxes — the first checkbox enables/disables the rest
 row5 :: AppState -> UI Element Command ()
 row5 s = withBg (RGBA 0.95 0.87 0.95 1) $
   hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
     [ (RectConstraint (Exactly 160) (Exactly 30) MiddleLeft,
-         checkbox CheckboxBox1 CheckboxLabel1 "Enable feature" (isChecked1 s) Checkbox1Toggled)
+         checkbox CheckboxBox1 CheckboxLabel1 "Enable editing"  (isChecked1 s) Checkbox1Toggled)
     , (RectConstraint (Exactly 160) (Exactly 30) MiddleLeft,
-         checkbox CheckboxBox2 CheckboxLabel2 "Dark mode"      (isChecked2 s) Checkbox2Toggled)
+         disableWhen (not (isChecked1 s)) $
+           checkbox CheckboxBox2 CheckboxLabel2 "Dark mode"     (isChecked2 s) Checkbox2Toggled)
     , (RectConstraint (Exactly 160) (Exactly 30) MiddleLeft,
-         checkbox CheckboxBox3 CheckboxLabel3 "Notifications"  (isChecked3 s) Checkbox3Toggled)
+         disableWhen (not (isChecked1 s)) $
+           checkbox CheckboxBox3 CheckboxLabel3 "Notifications" (isChecked3 s) Checkbox3Toggled)
     ]
 
 -- Row 6: progress bar with +/- buttons
@@ -252,9 +254,9 @@ demoView s = vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
   [ (RectConstraint Fill (Exactly 50) TopLeft, row1)
   , (RectConstraint Fill Fill         TopLeft, row2)
   , (RectConstraint Fill (Exactly 80) TopLeft, row3)
-  , (RectConstraint Fill (Exactly 50) TopLeft, row4 s)
+  , (RectConstraint Fill (Exactly 50) TopLeft, disableWhen (not (isChecked1 s)) $ row4 s)
   , (RectConstraint Fill (Exactly 50) TopLeft, row5 s)
-  , (RectConstraint Fill (Exactly 50) TopLeft, row6 s)
+  , (RectConstraint Fill (Exactly 50) TopLeft, disableWhen (not (isChecked1 s)) $ row6 s)
   ]
 
 demoUpdate :: Command -> Update AppState Command ()

@@ -22,6 +22,8 @@ module Blink.UI
   , setPreviousControl
   , getStyleSet
   , getStyle
+  , isDisabled
+  , disableWhen
   , withBounds
   , fillRect
   , strokeRect
@@ -64,6 +66,7 @@ data UIContext e c = UIContext
   , ctxFocusState :: FocusState e
   , ctxPreviousControl :: Maybe e
   , ctxCommands :: [c]
+  , ctxDisabled :: Bool
   }
 
 newtype UI e c a = UI { runUI :: UIContext e c -> (a, UIContext e c) }
@@ -97,6 +100,7 @@ emptyUIContext bounds input thm = UIContext
   , ctxFocusState = FocusState { focusedElement = Nothing, focusedThisFrame = False }
   , ctxPreviousControl = Nothing
   , ctxCommands = []
+  , ctxDisabled = False
   }
 
 nextFrameContext :: Rectangle -> InputState -> UIContext e c -> UIContext e c
@@ -148,15 +152,19 @@ getStyleSet eid = do
 
 getStyle :: Ord e => e -> UI e c Style
 getStyle eid = do
-  styles <- getStyleSet eid
-  isHov <- isHovered eid
-  isFoc <- isFocused eid
-  isPrs <- isPressed eid
-  pure $
-    if isPrs then pressed styles
-    else if isHov then hovered styles
-    else if isFoc then focused styles
-    else normal styles
+  styles   <- getStyleSet eid
+  isDisabl <- isDisabled
+  if isDisabl
+    then pure (disabled styles)
+    else do
+      isHov <- isHovered eid
+      isFoc <- isFocused eid
+      isPrs <- isPressed eid
+      pure $
+        if isPrs then pressed styles
+        else if isHov then hovered styles
+        else if isFoc then focused styles
+        else normal styles
 
 getHovered :: UI e c (Maybe e)
 getHovered = gets ctxHoveredElement
@@ -193,6 +201,15 @@ withBounds :: Rectangle -> UI e c a -> UI e c a
 withBounds r (UI f) = UI $ \ctx ->
   let (a, ctx') = f (ctx { ctxBounds = r })
   in (a, ctx' { ctxBounds = ctxBounds ctx })
+
+isDisabled :: UI e c Bool
+isDisabled = gets ctxDisabled
+
+disableWhen :: Bool -> UI e c a -> UI e c a
+disableWhen True (UI f) = UI $ \ctx ->
+  let (a, ctx') = f (ctx { ctxDisabled = True })
+  in (a, ctx' { ctxDisabled = ctxDisabled ctx })
+disableWhen False action = action
 
 emit :: DrawCommand -> UI e c ()
 emit cmd = modify $ \ctx -> ctx { ctxDrawCommands = cmd : ctxDrawCommands ctx }
@@ -236,18 +253,22 @@ regionHit = do
 
 applyHover :: (Eq e, Ord e) => e -> Rectangle -> UI e c ()
 applyHover eid bgRect = do
-  isHit <- withBounds bgRect regionHit
-  when isHit $ setHovered eid
+  isDisabl <- isDisabled
+  when (not isDisabl) $ do
+    isHit <- withBounds bgRect regionHit
+    when isHit $ setHovered eid
 
 applyFocus :: (Eq e, Ord e) => e -> UI e c ()
 applyFocus eid = do
-  currentFocus <- getFocus
-  isHit        <- (== Just eid) <$> getHovered
-  btn          <- getLeftButton
-  let nothingIsFocused  = isNothing currentFocus
-      isRequestingFocus = currentFocus == Just eid
-      wasClicked        = isHit && btn == ButtonReleased
-  setFocusWhen (nothingIsFocused || isRequestingFocus || wasClicked) eid
+  isDisabl     <- isDisabled
+  when (not isDisabl) $ do
+    currentFocus <- getFocus
+    isHit        <- (== Just eid) <$> getHovered
+    btn          <- getLeftButton
+    let nothingIsFocused  = isNothing currentFocus
+        isRequestingFocus = currentFocus == Just eid
+        wasClicked        = isHit && btn == ButtonReleased
+    setFocusWhen (nothingIsFocused || isRequestingFocus || wasClicked) eid
 
 applyTabNavigation :: (Eq e, Ord e) => e -> UI e c ()
 applyTabNavigation eid = do
@@ -286,5 +307,6 @@ control eid content = do
   applyHover eid bgRect
   applyFocus eid
   applyTabNavigation eid
-  setPreviousControl eid
+  isDisabl <- isDisabled
+  when (not isDisabl) $ setPreviousControl eid
   renderWithStyle eid content

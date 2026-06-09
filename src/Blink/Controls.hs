@@ -56,35 +56,39 @@ checkbox boxId labelId text checked mkCmd = do
     case borderColour s of
       Just c  -> strokeRect c (borderWidth s)
       Nothing -> pure ()
-  isHit <- (== Just boxId) <$> getHovered
-  btn   <- getLeftButton
+  isHit    <- (== Just boxId) <$> getHovered
+  btn      <- getLeftButton
   input    <- getInput
+  isDisabl <- isDisabled
   let wasClicked = isHit && btn == ButtonReleased
       activated  = hasFocus && any (\e -> key e == KeyReturn) (keyEvents input)
-  when (wasClicked || activated) $ dispatch (mkCmd (not checked))
+  when ((wasClicked || activated) && not isDisabl) $ dispatch (mkCmd (not checked))
 
 button :: (Eq e, Ord e) => e -> Text -> UI e c Bool
 button eid txt = do
   control eid $ do
     style <- getStyle eid
     drawText (textColour style) (textAlign style) txt
-  isHit <- (== Just eid) <$> getHovered
+  isHit    <- (== Just eid) <$> getHovered
   hasFocus <- isFocused eid
-  btn <- getLeftButton
-  input <- getInput
+  btn      <- getLeftButton
+  input    <- getInput
+  isDisabl <- isDisabled
   let wasClicked = isHit && btn == ButtonReleased
-      activated = hasFocus && any (\e -> key e == KeyReturn) (keyEvents input)
-  return (wasClicked || activated)
+      activated  = hasFocus && any (\e -> key e == KeyReturn) (keyEvents input)
+  return ((wasClicked || activated) && not isDisabl)
 
 textInput :: (Eq e, Ord e) => e -> Text -> (Text -> c) -> UI e c ()
 textInput eid value mkCmd = do
   control eid $ do
     style    <- getStyle eid
     hasFocus <- isFocused eid
-    let displayed = if hasFocus then value <> "|" else value
+    isDisabl <- isDisabled
+    let displayed = if hasFocus && not isDisabl then value <> "|" else value
     drawText (textColour style) (textAlign style) displayed
   hasFocus <- isFocused eid
-  when hasFocus $ do
+  isDisabl <- isDisabled
+  when (hasFocus && not isDisabl) $ do
     input <- getInput
     let withTyped    = foldl (<>) value (typedText input)
         hasBackspace = any (\e -> key e == KeyBackspace) (keyEvents input)

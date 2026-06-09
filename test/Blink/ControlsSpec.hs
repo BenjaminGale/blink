@@ -180,6 +180,25 @@ controlBehaviourSpec run hitPoint = do
       ctxHoveredElement (run (mkCtx (mouseAt (Point 200 200) ButtonUp [])))
         `shouldBe` Nothing
 
+  describe "when disabled" $ do
+    let disabledRun ctx = run (ctx { ctxDisabled = True })
+
+    it "does not take auto-focus" $
+      getFocused (disabledRun (mkCtx noInput))
+        `shouldBe` Nothing
+
+    it "does not steal focus when clicked" $
+      getFocused (disabledRun (withFocus (Just OtherControl) (mkCtx (mouseAt hitPoint ButtonReleased []))))
+        `shouldBe` Just OtherControl
+
+    it "is not hovered when the mouse is inside" $
+      ctxHoveredElement (disabledRun (mkCtx (mouseAt hitPoint ButtonUp [])))
+        `shouldBe` Nothing
+
+    it "is not recorded as the previous control" $
+      ctxPreviousControl (disabledRun (mkCtx noInput))
+        `shouldBe` Nothing
+
 -- | Background and border rendering tests. Only applicable to single controls
 --   that fill controlRect directly (not composite widgets).
 backgroundAndBorderSpec :: WidgetRunner c -> Spec
@@ -270,6 +289,15 @@ spec = do
         getCommands (runTextInput "hello" (withFocus (Just OtherControl) (mkCtx noInput { typedText = ["!"], keyEvents = [KeyEvent KeyBackspace []] })))
           `shouldBe` []
 
+    describe "disabled" $ do
+      it "does not process input when disabled" $
+        getCommands (snd (runUI (disableWhen True (textInput TestControl "hello" id)) (withFocus (Just TestControl) (mkCtx noInput { typedText = ["!"] }))))
+          `shouldBe` []
+
+      it "does not show a cursor when focused and disabled" $
+        drawnTexts (snd (runUI (disableWhen True (textInput TestControl "hello" id)) (withFocus (Just TestControl) (mkCtx noInput))))
+          `shouldNotContain` ["hello|"]
+
   describe "checkbox" $ do
     controlBehaviourSpec runCheckboxControl boxPoint
 
@@ -292,6 +320,15 @@ spec = do
 
       it "does not dispatch when Enter is pressed while unfocused" $
         getCommands (runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput { keyEvents = [KeyEvent KeyReturn []] })))
+          `shouldBe` []
+
+    describe "disabled" $ do
+      it "does not dispatch when clicked while disabled" $
+        getCommands (snd (runUI (disableWhen True (checkbox TestControl LabelControl "test label" False id)) (mkCheckboxCtx (mouseAt boxPoint ButtonReleased []))))
+          `shouldBe` []
+
+      it "does not dispatch when Enter is pressed while disabled" $
+        getCommands (snd (runUI (disableWhen True (checkbox TestControl LabelControl "test label" False id)) (withFocus (Just TestControl) (mkCheckboxCtx noInput { keyEvents = [KeyEvent KeyReturn []] }))))
           `shouldBe` []
 
     describe "rendering" $ do
@@ -372,4 +409,13 @@ spec = do
       it "is not clicked when Tab and Enter are pressed simultaneously" $
         fst (runUI (button TestControl "label")
           (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyTab [], KeyEvent KeyReturn []] })))
+          `shouldBe` False
+
+    describe "disabled" $ do
+      it "is not activated by a click when disabled" $
+        fst (runUI (disableWhen True (button TestControl "label")) (mkCtx (mouseAt (Point 50 50) ButtonReleased [])))
+          `shouldBe` False
+
+      it "is not activated by Enter when disabled" $
+        fst (runUI (disableWhen True (button TestControl "label")) (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] })))
           `shouldBe` False
