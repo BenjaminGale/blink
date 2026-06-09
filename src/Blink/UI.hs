@@ -7,7 +7,6 @@ module Blink.UI
   , getRect
   , getMousePos
   , getLeftButton
-  , getHovered
   , isHovered
   , isPressed
   , setHovered
@@ -171,11 +170,8 @@ getStyle eid = do
         ]
   pure $ fromMaybe (normal styles) (asum candidates)
 
-getHovered :: UI e c (Maybe e)
-getHovered = gets ctxHoveredElement
-
 isHovered :: Eq e => e -> UI e c Bool
-isHovered eid = (== Just eid) <$> getHovered
+isHovered eid = (== Just eid) <$> gets ctxHoveredElement
 
 isPressed :: Eq e => e -> UI e c Bool
 isPressed eid = do
@@ -271,7 +267,7 @@ applyFocus eid = do
   isDisabl     <- isDisabled
   when (not isDisabl) $ do
     currentFocus <- getFocus
-    isHit        <- (== Just eid) <$> getHovered
+    isHit        <- isHovered eid
     btn          <- getLeftButton
     let nothingIsFocused  = isNothing currentFocus
         isRequestingFocus = currentFocus == Just eid

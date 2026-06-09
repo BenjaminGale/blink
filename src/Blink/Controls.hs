@@ -56,7 +56,7 @@ checkbox boxId labelId text checked mkCmd = do
     case borderColour s of
       Just c  -> strokeRect c (borderWidth s)
       Nothing -> pure ()
-  isHit    <- (== Just boxId) <$> getHovered
+  isHit    <- isHovered boxId
   btn      <- getLeftButton
   input    <- getInput
   isDisabl <- isDisabled
@@ -69,7 +69,7 @@ button eid txt = do
   control eid $ do
     style <- getStyle eid
     drawText (textColour style) (textAlign style) txt
-  isHit    <- (== Just eid) <$> getHovered
+  isHit    <- isHovered eid
   hasFocus <- isFocused eid
   btn      <- getLeftButton
   input    <- getInput
