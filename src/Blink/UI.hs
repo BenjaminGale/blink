@@ -18,8 +18,8 @@ module Blink.UI
   , clearFocus
   , getInput
   , consumeKey
-  , getPreviousControl
-  , setPreviousControl
+  , getPreviousTabStop
+  , setPreviousTabStop
   , getStyleSet
   , getStyle
   , isDisabled
@@ -38,7 +38,7 @@ module Blink.UI
   , getCommands
   ) where
 
-import Control.Monad (when)
+import Control.Monad (when, unless)
 import Data.List (find)
 import Data.Maybe (isNothing, isJust, fromJust)
 import Data.Text (Text)
@@ -65,7 +65,7 @@ data UIContext e c = UIContext
   , ctxDrawCommands :: [DrawCommand]
   , ctxHoveredElement :: Maybe e
   , ctxFocusState :: FocusState e
-  , ctxPreviousControl :: Maybe e
+  , ctxPreviousTabStop :: Maybe e
   , ctxCommands :: [c]
   , ctxDisabled :: Bool
   , ctxThemeChangeRequested :: Bool
@@ -100,7 +100,7 @@ emptyUIContext bounds input thm = UIContext
   , ctxDrawCommands = []
   , ctxHoveredElement = Nothing
   , ctxFocusState = FocusState { focusedElement = Nothing, focusedThisFrame = False }
-  , ctxPreviousControl = Nothing
+  , ctxPreviousTabStop = Nothing
   , ctxCommands = []
   , ctxDisabled = False
   , ctxThemeChangeRequested = False
@@ -140,11 +140,11 @@ consumeKey k = modify $ \ctx ->
   let input = ctxInput ctx
   in ctx { ctxInput = input { keyEvents = filter (\e -> key e /= k) (keyEvents input) } }
 
-getPreviousControl :: UI e c (Maybe e)
-getPreviousControl = gets ctxPreviousControl
+getPreviousTabStop :: UI e c (Maybe e)
+getPreviousTabStop = gets ctxPreviousTabStop
 
-setPreviousControl :: e -> UI e c ()
-setPreviousControl eid = modify $ \ctx -> ctx { ctxPreviousControl = Just eid }
+setPreviousTabStop :: e -> UI e c ()
+setPreviousTabStop eid = modify $ \ctx -> ctx { ctxPreviousTabStop = Just eid }
 
 getTheme :: UI e c (Theme e)
 getTheme = gets ctxTheme
@@ -281,7 +281,7 @@ applyTabNavigation :: (Eq e, Ord e) => e -> UI e c ()
 applyTabNavigation eid = do
   hasFocus <- isFocused eid
   input    <- getInput
-  prevCtrl <- getPreviousControl
+  prevCtrl <- getPreviousTabStop
   let tabKey          = find (\e -> key e == KeyTab) (keyEvents input)
       tabPressed      = maybe False (\e -> Shift `notElem` modifiers e) tabKey
       shiftTabPressed = maybe False (\e -> Shift `elem`    modifiers e) tabKey
@@ -291,6 +291,8 @@ applyTabNavigation eid = do
   when (hasFocus && shiftTabPressed && isJust prevCtrl) $ do
     setFocus (fromJust prevCtrl)
     consumeKey KeyTab
+  isDisabl <- isDisabled
+  unless isDisabl $ setPreviousTabStop eid
 
 renderWithStyle :: Ord e => e -> UI e c () -> UI e c ()
 renderWithStyle eid content = do
@@ -314,6 +316,4 @@ control eid content = do
   applyHover eid bgRect
   applyFocus eid
   applyTabNavigation eid
-  isDisabl <- isDisabled
-  when (not isDisabl) $ setPreviousControl eid
   renderWithStyle eid content

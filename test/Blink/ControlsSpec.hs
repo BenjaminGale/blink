@@ -168,7 +168,7 @@ controlBehaviourSpec run hitPoint = do
         `shouldBe` Nothing
 
     it "passes focus to the previous control when Shift+Tab is pressed" $
-      getFocused (run (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyTab [Shift]] }) { ctxPreviousControl = Just OtherControl }))
+      getFocused (run (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyTab [Shift]] }) { ctxPreviousTabStop = Just OtherControl }))
         `shouldBe` Just OtherControl
 
   describe "hover detection" $ do
@@ -195,8 +195,8 @@ controlBehaviourSpec run hitPoint = do
       ctxHoveredElement (disabledRun (mkCtx (mouseAt hitPoint ButtonUp [])))
         `shouldBe` Nothing
 
-    it "is not recorded as the previous control" $
-      ctxPreviousControl (disabledRun (mkCtx noInput))
+    it "is not recorded as the previous tab stop" $
+      ctxPreviousTabStop (disabledRun (mkCtx noInput))
         `shouldBe` Nothing
 
 -- | Background and border rendering tests. Only applicable to single controls
