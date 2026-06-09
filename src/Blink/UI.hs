@@ -8,7 +8,9 @@ module Blink.UI
   , getMousePos
   , getLeftButton
   , isHovered
+  , isClicked
   , isPressed
+  , isKeyPressed
   , setHovered
   , isFocused
   , setFocus
@@ -172,11 +174,23 @@ getStyle eid = do
 isHovered :: Eq e => e -> UI e c Bool
 isHovered eid = (== Just eid) <$> gets ctxHoveredElement
 
+isClicked :: Eq e => e -> UI e c Bool
+isClicked eid = do
+  isHov <- isHovered eid
+  btn   <- getLeftButton
+  pure (isHov && btn == ButtonReleased)
+
 isPressed :: Eq e => e -> UI e c Bool
 isPressed eid = do
   isHov <- isHovered eid
-  btn <- getLeftButton
-  pure $ isHov && btn == ButtonDown
+  btn   <- getLeftButton
+  pure (isHov && btn == ButtonDown)
+
+isKeyPressed :: Eq e => e -> Key -> UI e c Bool
+isKeyPressed eid k = do
+  hasFoc <- isFocused eid
+  pressed <- any (\e -> key e == k) . keyEvents <$> getInput
+  pure (hasFoc && pressed)
 
 setHovered :: e -> UI e c ()
 setHovered eid = modify $ \ctx -> ctx { ctxHoveredElement = Just eid }

@@ -12,11 +12,18 @@ import Control.Monad (when)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Blink.Geometry (Alignment (..), Rectangle (..))
-import Blink.Input (ButtonState (..), Key (..), KeyEvent (..), InputState (..))
+import Blink.Input (Key (..), KeyEvent (..), InputState (..))
 import Blink.Layout (RectConstraint (..), Constraint (..), BoxConfig (..), hBox, defaultBoxConfig)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
 import Blink.UI
+
+isActivated :: (Eq e, Ord e) => e -> UI e c Bool
+isActivated eid = do
+  clicked    <- isClicked eid
+  enterPress <- isKeyPressed eid KeyReturn
+  disabled   <- isDisabled
+  return (not disabled && (clicked || enterPress))
 
 -- | Read-only text display.
 -- TODO: truncate with ellipsis when text overflows the control bounds
@@ -49,34 +56,22 @@ checkbox boxId labelId text checked mkCmd = do
     [ (RectConstraint (Exactly 20) (Exactly 20) MiddleLeft, boxControl)
     , (RectConstraint Fill         Fill         MiddleLeft, label labelId text)
     ]
-  hasFocus <- isFocused boxId
+  activated <- isActivated boxId
+  hasFocus  <- isFocused boxId
   when hasFocus $ do
     styleSet <- getStyleSet boxId
     let s = styleSetFocused styleSet
     case styleBorderColour s of
       Just c  -> strokeRect c (styleBorderWidth s)
       Nothing -> pure ()
-  isHit    <- isHovered boxId
-  btn      <- getLeftButton
-  input    <- getInput
-  isDisabl <- isDisabled
-  let wasClicked = isHit && btn == ButtonReleased
-      activated  = hasFocus && any (\e -> key e == KeyReturn) (keyEvents input)
-  when ((wasClicked || activated) && not isDisabl) $ dispatch (mkCmd (not checked))
+  when activated $ dispatch (mkCmd (not checked))
 
 button :: (Eq e, Ord e) => e -> Text -> UI e c Bool
 button eid txt = do
   control eid $ do
     style <- getStyle eid
     drawText (styleTextColour style) (styleTextAlign style) txt
-  isHit    <- isHovered eid
-  hasFocus <- isFocused eid
-  btn      <- getLeftButton
-  input    <- getInput
-  isDisabl <- isDisabled
-  let wasClicked = isHit && btn == ButtonReleased
-      activated  = hasFocus && any (\e -> key e == KeyReturn) (keyEvents input)
-  return ((wasClicked || activated) && not isDisabl)
+  isActivated eid
 
 textInput :: (Eq e, Ord e) => e -> Text -> (Text -> c) -> UI e c ()
 textInput eid value mkCmd = do
