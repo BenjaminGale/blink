@@ -22,7 +22,7 @@ module Blink.UI
   , setPreviousControl
   , getStyleSet
   , getStyle
-  , layout
+  , withBounds
   , fillRect
   , strokeRect
   , drawText
@@ -189,8 +189,8 @@ setFocusWhen False _   = pure ()
 clearFocus :: UI e c ()
 clearFocus = modify $ \ctx -> ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = Nothing } }
 
-layout :: Rectangle -> UI e c a -> UI e c a
-layout r (UI f) = UI $ \ctx ->
+withBounds :: Rectangle -> UI e c a -> UI e c a
+withBounds r (UI f) = UI $ \ctx ->
   let (a, ctx') = f (ctx { ctxBounds = r })
   in (a, ctx' { ctxBounds = ctxBounds ctx })
 
@@ -236,7 +236,7 @@ regionHit = do
 
 applyHover :: (Eq e, Ord e) => e -> Rectangle -> UI e c ()
 applyHover eid bgRect = do
-  isHit <- layout bgRect regionHit
+  isHit <- withBounds bgRect regionHit
   when isHit $ setHovered eid
 
 applyFocus :: (Eq e, Ord e) => e -> UI e c ()
@@ -272,11 +272,11 @@ renderWithStyle eid content = do
       contentRect = insetRect (padding style) bgRect
   case background style of
     RGBA _ _ _ 0 -> pure ()
-    c            -> layout bgRect $ fillRect c
+    c            -> withBounds bgRect $ fillRect c
   case borderColour style of
-    Just c  -> layout bgRect $ strokeRect c (borderWidth style)
+    Just c  -> withBounds bgRect $ strokeRect c (borderWidth style)
     Nothing -> pure ()
-  layout contentRect $ clipToCurrent content
+  withBounds contentRect $ clipToCurrent content
 
 control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ()
 control eid content = do

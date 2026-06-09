@@ -60,7 +60,7 @@ import Data.List (sortBy)
 import Data.Ord  (comparing)
 
 import Blink.Geometry (Alignment (..), Rectangle (..), Size (..), alignRect, insetRect, uniform)
-import Blink.UI (UI, clipToCurrent, getRect, layout)
+import Blink.UI (UI, clipToCurrent, getRect, withBounds)
 import Data.Maybe (fromMaybe)
 
 {- | Describes how a child should be sized along a single axis.
@@ -146,7 +146,7 @@ layoutWithConstraint rc ui = do
   r <- getRect
   let w = preferredSize (rcWidth rc) (rectWidth r)
       h = preferredSize (rcHeight rc) (rectHeight r)
-  layout (alignRect (rcAlignment rc) r (Rectangle 0 0 w h)) ui
+  withBounds (alignRect (rcAlignment rc) r (Rectangle 0 0 w h)) ui
 
 -- | Arranges children left-to-right. Each child is paired with a
 --   'RectConstraint' governing its width and, when 'boxFillCross' is 'False',
@@ -189,11 +189,11 @@ box mainC mainLen crossLen mainOrig crossOrig mkSize mkSlot setCrossC cfg childr
       slotSize  = mkSize totalMain (crossLen ca)
       cb        = alignRect (boxAlignment cfg) ca (Rectangle 0 0 (sizeWidth slotSize) (sizeHeight slotSize))
       origins   = scanl (\o s -> o + s + sp) (mainOrig cb) slotMains
-  layout ca $ clipToCurrent $
+  withBounds ca $ clipToCurrent $
     mapM_ (\(mo, ms, (rc, ui)) ->
       let slotRect    = mkSlot mo (crossOrig cb) ms (crossLen cb)
           effectiveRc = if boxFillCross cfg then setCrossC Fill rc else rc
-      in layout slotRect $ layoutWithConstraint effectiveRc ui
+      in withBounds slotRect $ layoutWithConstraint effectiveRc ui
       ) (zip3 origins slotMains children)
 
 -- | Returns the preferred size for a 'Constraint' given the amount of available space.
