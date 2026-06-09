@@ -9,10 +9,11 @@ module Blink.Controls
   ) where
 
 import Control.Monad (when)
+import Data.List (foldl')
 import Data.Text (Text)
 import qualified Data.Text as T
 import Blink.Geometry (Alignment (..), Rectangle (..))
-import Blink.Input (Key (..), KeyEvent (..), InputState (..))
+import Blink.Input (Key (..), InputState (..))
 import Blink.Layout (RectConstraint (..), Constraint (..), BoxConfig (..), hBox, defaultBoxConfig)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
@@ -74,20 +75,18 @@ button eid txt = do
   isActivated eid
 
 textInput :: (Eq e, Ord e) => e -> Text -> (Text -> c) -> UI e c ()
-textInput eid value mkCmd = do
-  control eid $ do
-    style    <- getStyle eid
-    hasFocus <- isFocused eid
-    isDisabl <- isDisabled
-    let displayed = if hasFocus && not isDisabl then value <> "|" else value
-    drawText (styleTextColour style) (styleTextAlign style) displayed
-  hasFocus <- isFocused eid
-  isDisabl <- isDisabled
-  when (hasFocus && not isDisabl) $ do
+textInput eid value mkCmd = control eid $ do
+  style     <- getStyle eid
+  hasFocus  <- isFocused eid
+  isDisabl  <- isDisabled
+  backspace <- isKeyPressed eid KeyBackspace
+  let displayed = if hasFocus && not isDisabl then value <> "|" else value
+  drawText (styleTextColour style) (styleTextAlign style) displayed
+  when hasFocus $ whenEnabled $ do
     input <- getInput
-    let withTyped    = foldl (<>) value (typedText input)
-        hasBackspace = any (\e -> key e == KeyBackspace) (keyEvents input)
-        result       = if hasBackspace && not (T.null withTyped)
-                       then T.init withTyped
-                       else withTyped
-    when (result /= value) $ dispatch (mkCmd result)
+    let withTyped = foldl' (<>) value (typedText input)
+        result    = if backspace && not (T.null withTyped)
+                    then T.init withTyped
+                    else withTyped
+    when (result /= value) $ do
+      dispatch (mkCmd result)

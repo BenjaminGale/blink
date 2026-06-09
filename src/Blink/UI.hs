@@ -24,6 +24,7 @@ module Blink.UI
   , getStyle
   , isDisabled
   , disableWhen
+  , whenEnabled
   , withBounds
   , fillRect
   , strokeRect
