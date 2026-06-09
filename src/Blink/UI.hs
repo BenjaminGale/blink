@@ -38,9 +38,11 @@ module Blink.UI
   , getCommands
   ) where
 
-import Control.Monad (when, unless)
+import Control.Monad (when, unless, guard)
+import Data.Foldable (asum)
+import Data.Functor (($>))
 import Data.List (find)
-import Data.Maybe (isNothing, isJust, fromJust)
+import Data.Maybe (isNothing, isJust, fromJust, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -156,19 +158,18 @@ getStyleSet eid = do
 
 getStyle :: Ord e => e -> UI e c Style
 getStyle eid = do
-  styles   <- getStyleSet eid
-  isDisabl <- isDisabled
-  if isDisabl
-    then pure (disabled styles)
-    else do
-      isHov <- isHovered eid
-      isFoc <- isFocused eid
-      isPrs <- isPressed eid
-      pure $
-        if isPrs then pressed styles
-        else if isHov then hovered styles
-        else if isFoc then focused styles
-        else normal styles
+  styles <- getStyleSet eid
+  isDis  <- isDisabled
+  isHov  <- isHovered eid
+  isFoc  <- isFocused eid
+  isPrs  <- isPressed eid
+  let candidates =
+        [ guard isDis $> disabled styles
+        , guard isPrs $> pressed  styles
+        , guard isHov $> hovered  styles
+        , guard isFoc $> focused  styles
+        ]
+  pure $ fromMaybe (normal styles) (asum candidates)
 
 getHovered :: UI e c (Maybe e)
 getHovered = gets ctxHoveredElement
