@@ -14,7 +14,7 @@ import Blink.Geometry (Alignment (..))
 import Blink.Input (ButtonState (..), Key (..), KeyEvent (..), InputState (..))
 import Blink.Layout (RectConstraint (..), Constraint (..), BoxConfig (..), hBox, defaultBoxConfig)
 import Blink.Rendering (TextAlign (..))
-import Blink.Style (Style (..))
+import Blink.Style (Style (..), StyleSet (..))
 import Blink.UI
 
 -- | Read-only text display.
@@ -39,9 +39,15 @@ checkbox boxId labelId text checked mkCmd = do
     [ (RectConstraint (Exactly 20) (Exactly 20) MiddleLeft, boxControl)
     , (RectConstraint Fill         Fill         MiddleLeft, label labelId text)
     ]
-  isHit    <- (== Just boxId) <$> getHovered
   hasFocus <- isFocused boxId
-  btn      <- getLeftButton
+  when hasFocus $ do
+    styleSet <- getStyleSet boxId
+    let s = focused styleSet
+    case borderColour s of
+      Just c  -> strokeRect c (borderWidth s)
+      Nothing -> pure ()
+  isHit <- (== Just boxId) <$> getHovered
+  btn   <- getLeftButton
   input    <- getInput
   let wasClicked = isHit && btn == ButtonReleased
       activated  = hasFocus && any (\e -> key e == KeyReturn) (keyEvents input)

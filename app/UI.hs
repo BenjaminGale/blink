@@ -98,7 +98,7 @@ checkboxBoxStyle = StyleSet
   { normal   = base { background = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.600 0.600 0.620 1) }
   , hovered  = base { background = RGBA 0.97 0.97 0.97 1, borderColour = Just (RGBA 0.400 0.400 0.420 1) }
   , pressed  = base { background = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.102 0.435 0.831 1) }
-  , focused  = base { background = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.102 0.435 0.831 1) }
+  , focused  = base { background = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.600 0.600 0.620 1) }
   , disabled = base { background = RGBA 0.95 0.95 0.95 1, textColour   = RGBA 0.682 0.682 0.698 1 }
   }
   where
