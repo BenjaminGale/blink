@@ -22,6 +22,42 @@ data AppState = AppState
   , isChecked3  :: Bool
   }
 
+-- Palette
+accent :: Colour
+accent = RGBA 0.102 0.435 0.831 1
+accentDark :: Colour
+accentDark = RGBA 0.071 0.306 0.584 1
+accentLight :: Colour
+accentLight = RGBA 0.667 0.769 0.941 1
+textPrimary :: Colour
+textPrimary = RGBA 0.11 0.11 0.12 1
+textOnAccent :: Colour
+textOnAccent = RGBA 1.0 1.0 1.0 1
+textMuted :: Colour
+textMuted = RGBA 0.682 0.682 0.698 1
+borderDefault :: Colour
+borderDefault = RGBA 0.600 0.600 0.620 1
+borderHover :: Colour
+borderHover = RGBA 0.400 0.400 0.420 1
+surfaceButton :: Colour
+surfaceButton = RGBA 0.878 0.878 0.898 1
+surfaceButtonHover :: Colour
+surfaceButtonHover = RGBA 0.800 0.800 0.824 1
+surfaceButtonDisabled :: Colour
+surfaceButtonDisabled = RGBA 0.898 0.898 0.910 1
+surfaceInput :: Colour
+surfaceInput = RGBA 1.0 1.0 1.0 1
+surfaceInputHover :: Colour
+surfaceInputHover = RGBA 0.97 0.97 0.97 1
+surfaceInputDisabled :: Colour
+surfaceInputDisabled = RGBA 0.95 0.95 0.95 1
+
+-- Metrics
+controlMargin :: Insets
+controlMargin = uniform 3
+controlPadding :: Insets
+controlPadding = uniform 6
+
 demoTheme :: Theme Element
 demoTheme = Theme
   { elementStyles = Map.fromList
@@ -38,38 +74,38 @@ demoTheme = Theme
 
 btnStyle :: StyleSet
 btnStyle = StyleSet
-  { normal   = base { background = RGBA 0.878 0.878 0.898 1, textColour = RGBA 0.11 0.11 0.12 1, borderColour = Just (RGBA 0.600 0.600 0.620 1) }
-  , hovered  = base { background = RGBA 0.800 0.800 0.824 1, textColour = RGBA 0.11 0.11 0.12 1, borderColour = Just (RGBA 0.400 0.400 0.420 1) }
-  , pressed  = base { background = RGBA 0.102 0.435 0.831 1, textColour = RGBA 1.0   1.0  1.0  1, borderColour = Just (RGBA 0.071 0.306 0.584 1) }
-  , focused  = base { background = RGBA 0.667 0.769 0.941 1, textColour = RGBA 0.11 0.11 0.12 1, borderColour = Just (RGBA 0.102 0.435 0.831 1) }
-  , disabled = base { background = RGBA 0.898 0.898 0.910 1, textColour = RGBA 0.682 0.682 0.698 1 }
+  { normal   = base { background = surfaceButton,         textColour = textPrimary,  borderColour = Just borderDefault }
+  , hovered  = base { background = surfaceButtonHover,    textColour = textPrimary,  borderColour = Just borderHover }
+  , pressed  = base { background = accent,                textColour = textOnAccent, borderColour = Just accentDark }
+  , focused  = base { background = accentLight,           textColour = textPrimary,  borderColour = Just accent }
+  , disabled = base { background = surfaceButtonDisabled, textColour = textMuted }
   }
   where
     base = Style
       { background   = RGBA 0 0 0 1
       , textColour   = RGBA 0 0 0 1
       , textAlign    = AlignCenter
-      , margin       = uniform 3
-      , padding      = uniform 6
+      , margin       = controlMargin
+      , padding      = controlPadding
       , borderColour = Nothing
       , borderWidth  = 0
       }
 
 textInputStyle :: StyleSet
 textInputStyle = StyleSet
-  { normal   = base { background = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.600 0.600 0.620 1) }
-  , hovered  = base { background = RGBA 0.97 0.97 0.97 1, borderColour = Just (RGBA 0.400 0.400 0.420 1) }
-  , pressed  = base { background = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.102 0.435 0.831 1) }
-  , focused  = base { background = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.102 0.435 0.831 1) }
-  , disabled = base { background = RGBA 0.95 0.95 0.95 1, textColour   = RGBA 0.682 0.682 0.698 1 }
+  { normal   = base { background = surfaceInput,         borderColour = Just borderDefault }
+  , hovered  = base { background = surfaceInputHover,    borderColour = Just borderHover }
+  , pressed  = base { background = surfaceInput,         borderColour = Just accent }
+  , focused  = base { background = surfaceInput,         borderColour = Just accent }
+  , disabled = base { background = surfaceInputDisabled, textColour   = textMuted }
   }
   where
     base = Style
       { background   = RGBA 0 0 0 1
-      , textColour   = RGBA 0.11 0.11 0.12 1
+      , textColour   = textPrimary
       , textAlign    = AlignLeft
-      , margin       = uniform 3
-      , padding      = uniform 6
+      , margin       = controlMargin
+      , padding      = controlPadding
       , borderColour = Nothing
       , borderWidth  = 1
       }
@@ -80,12 +116,12 @@ labelStyle = StyleSet
   , hovered  = base
   , pressed  = base
   , focused  = base
-  , disabled = base { textColour = RGBA 0.682 0.682 0.698 1 }
+  , disabled = base { textColour = textMuted }
   }
   where
     base = Style
       { background   = RGBA 0 0 0 0
-      , textColour   = RGBA 0.11 0.11 0.12 1
+      , textColour   = textPrimary
       , textAlign    = AlignLeft
       , margin       = uniform 0
       , padding      = uniform 0
@@ -95,18 +131,18 @@ labelStyle = StyleSet
 
 checkboxBoxStyle :: StyleSet
 checkboxBoxStyle = StyleSet
-  { normal   = base { background = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.600 0.600 0.620 1) }
-  , hovered  = base { background = RGBA 0.97 0.97 0.97 1, borderColour = Just (RGBA 0.400 0.400 0.420 1) }
-  , pressed  = base { background = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.102 0.435 0.831 1) }
-  , focused  = base { background = RGBA 1.0  1.0  1.0  1, borderColour = Just (RGBA 0.600 0.600 0.620 1) }
-  , disabled = base { background = RGBA 0.95 0.95 0.95 1, textColour   = RGBA 0.682 0.682 0.698 1 }
+  { normal   = base { background = surfaceInput,         borderColour = Just borderDefault }
+  , hovered  = base { background = surfaceInputHover,    borderColour = Just borderHover }
+  , pressed  = base { background = surfaceInput,         borderColour = Just accent }
+  , focused  = base { background = surfaceInput,         borderColour = Just borderDefault }
+  , disabled = base { background = surfaceInputDisabled, textColour   = textMuted }
   }
   where
     base = Style
       { background   = RGBA 0 0 0 1
-      , textColour   = RGBA 0.11 0.11 0.12 1
+      , textColour   = textPrimary
       , textAlign    = AlignCenter
-      , margin       = uniform 3
+      , margin       = controlMargin
       , padding      = uniform 2
       , borderColour = Nothing
       , borderWidth  = 1
