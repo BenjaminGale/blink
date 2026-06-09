@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (button, checkbox, textInput)
+import Blink.Controls (button, checkbox, progressBar, textInput)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -205,6 +205,9 @@ backgroundAndBorderSpec run = do
     ctxDrawCommands (runWithBorder (mkCtx noInput))
       `shouldContain` [StrokeRect bgRect testBorderColour 1]
 
+runProgressBar :: Double -> WidgetRunner ()
+runProgressBar value ctx = snd $ runUI (progressBar TestControl value) ctx
+
 runButton :: WidgetRunner ()
 runButton ctx = snd $ runUI (button TestControl "label") ctx
 
@@ -312,6 +315,31 @@ spec = do
       it "does not draw a focus ring when unfocused" $
         ctxDrawCommands (runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput) { ctxTheme = focusBorderTheme }))
           `shouldNotContain` [StrokeRect controlRect testBorderColour 1]
+
+  describe "progressBar" $ do
+    describe "background and border" $ backgroundAndBorderSpec (runProgressBar 0.5)
+
+    describe "rendering" $ do
+      it "fills the correct proportion of the content area at 0.5" $
+        ctxDrawCommands (runProgressBar 0.5 (mkCtx noInput))
+          `shouldContain` [FillRect (Rectangle 15 15 35 70) testColour]
+
+      it "fills the full content area at 1.0" $
+        ctxDrawCommands (runProgressBar 1.0 (mkCtx noInput))
+          `shouldContain` [FillRect contentRect testColour]
+
+      it "fills zero width at 0.0" $
+        ctxDrawCommands (runProgressBar 0.0 (mkCtx noInput))
+          `shouldContain` [FillRect (Rectangle 15 15 0 70) testColour]
+
+    describe "clamping" $ do
+      it "clamps values above 1.0 to full width" $
+        ctxDrawCommands (runProgressBar 1.5 (mkCtx noInput))
+          `shouldContain` [FillRect contentRect testColour]
+
+      it "clamps values below 0.0 to zero width" $
+        ctxDrawCommands (runProgressBar (-0.5) (mkCtx noInput))
+          `shouldContain` [FillRect (Rectangle 15 15 0 70) testColour]
 
   describe "button" $ do
     controlBehaviourSpec runButton (Point 50 50)

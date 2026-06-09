@@ -4,13 +4,14 @@ module Blink.Controls
   ( button
   , checkbox
   , label
+  , progressBar
   , textInput
   ) where
 
 import Control.Monad (when)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Geometry (Alignment (..))
+import Blink.Geometry (Alignment (..), Rectangle (..))
 import Blink.Input (ButtonState (..), Key (..), KeyEvent (..), InputState (..))
 import Blink.Layout (RectConstraint (..), Constraint (..), BoxConfig (..), hBox, defaultBoxConfig)
 import Blink.Rendering (TextAlign (..))
@@ -25,6 +26,15 @@ label :: (Eq e, Ord e) => e -> Text -> UI e c ()
 label eid text = renderWithStyle eid $ do
   style <- getStyle eid
   drawText (textColour style) (textAlign style) text
+
+-- | A read-only progress indicator. Value is clamped to [0, 1].
+progressBar :: (Eq e, Ord e) => e -> Double -> UI e c ()
+progressBar eid value = renderWithStyle eid $ do
+  style <- getStyle eid
+  r     <- getRect
+  let clamped  = max 0 (min 1 value)
+      fillRect' = r { rectWidth = rectWidth r * clamped }
+  withBounds fillRect' $ fillRect (textColour style)
 
 -- | A togglable checkbox with an adjacent label.
 -- TODO: box size should derive from the font/line-height rather than being fixed

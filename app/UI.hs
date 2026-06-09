@@ -9,17 +9,20 @@ data Element = Btn Int | TextInput1
              | CheckboxBox1 | CheckboxLabel1
              | CheckboxBox2 | CheckboxLabel2
              | CheckboxBox3 | CheckboxLabel3
+             | ProgressBar1
   deriving (Eq, Ord)
 
 data Command = Clicked Int | TextChanged Text
              | Checkbox1Toggled Bool | Checkbox2Toggled Bool | Checkbox3Toggled Bool
+             | ProgressIncrease | ProgressDecrease
 
 data AppState = AppState
-  { lastClicked :: Maybe Int
-  , inputText   :: Text
-  , isChecked1  :: Bool
-  , isChecked2  :: Bool
-  , isChecked3  :: Bool
+  { lastClicked   :: Maybe Int
+  , inputText     :: Text
+  , isChecked1    :: Bool
+  , isChecked2    :: Bool
+  , isChecked3    :: Bool
+  , progressValue :: Double
   }
 
 -- Palette
@@ -61,7 +64,8 @@ controlPadding = uniform 6
 demoTheme :: Theme Element
 demoTheme = Theme
   { elementStyles = Map.fromList
-      [ (TextInput1,     textInputStyle)
+      [ (ProgressBar1,   progressBarStyle)
+      , (TextInput1,     textInputStyle)
       , (CheckboxBox1,   checkboxBoxStyle)
       , (CheckboxBox2,   checkboxBoxStyle)
       , (CheckboxBox3,   checkboxBoxStyle)
@@ -129,6 +133,25 @@ labelStyle = StyleSet
       , borderWidth  = 0
       }
 
+progressBarStyle :: StyleSet
+progressBarStyle = StyleSet
+  { normal   = base
+  , hovered  = base
+  , pressed  = base
+  , focused  = base
+  , disabled = base { textColour = textMuted }
+  }
+  where
+    base = Style
+      { background   = RGBA 0.878 0.878 0.898 1
+      , textColour   = accent
+      , textAlign    = AlignLeft
+      , margin       = controlMargin
+      , padding      = uniform 0
+      , borderColour = Nothing
+      , borderWidth  = 0
+      }
+
 checkboxBoxStyle :: StyleSet
 checkboxBoxStyle = StyleSet
   { normal   = base { background = surfaceInput,         borderColour = Just borderDefault }
@@ -150,7 +173,7 @@ checkboxBoxStyle = StyleSet
 
 demoApp :: App Element AppState Command
 demoApp = App
-  { startUp = pure (AppState Nothing "" False False False)
+  { startUp = pure (AppState Nothing "" False False False 0.5)
   , theme   = demoTheme
   , view    = demoView
   , update  = demoUpdate
@@ -211,6 +234,19 @@ row5 s = withBg (RGBA 0.95 0.87 0.95 1) $
          checkbox CheckboxBox3 CheckboxLabel3 "Notifications"  (isChecked3 s) Checkbox3Toggled)
     ]
 
+-- Row 6: progress bar with +/- buttons
+row6 :: AppState -> UI Element Command ()
+row6 s = withBg (RGBA 0.87 0.95 0.95 1) $
+  hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4 })
+    [ (RectConstraint (Exactly 30) (Exactly 30) MiddleLeft, do
+         clicked <- button (Btn 11) "-"
+         if clicked then dispatch ProgressDecrease else pure ())
+    , (RectConstraint Fill         (Exactly 20) MiddleLeft, progressBar ProgressBar1 (progressValue s))
+    , (RectConstraint (Exactly 30) (Exactly 30) MiddleLeft, do
+         clicked <- button (Btn 12) "+"
+         if clicked then dispatch ProgressIncrease else pure ())
+    ]
+
 demoView :: AppState -> UI Element Command ()
 demoView s = vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
   [ (RectConstraint Fill (Exactly 50) TopLeft, row1)
@@ -218,6 +254,7 @@ demoView s = vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
   , (RectConstraint Fill (Exactly 80) TopLeft, row3)
   , (RectConstraint Fill (Exactly 50) TopLeft, row4 s)
   , (RectConstraint Fill (Exactly 50) TopLeft, row5 s)
+  , (RectConstraint Fill (Exactly 50) TopLeft, row6 s)
   ]
 
 demoUpdate :: Command -> Update AppState Command ()
@@ -226,3 +263,5 @@ demoUpdate (TextChanged t)       = modify $ \s -> s { inputText = t }
 demoUpdate (Checkbox1Toggled v)  = modify $ \s -> s { isChecked1 = v }
 demoUpdate (Checkbox2Toggled v)  = modify $ \s -> s { isChecked2 = v }
 demoUpdate (Checkbox3Toggled v)  = modify $ \s -> s { isChecked3 = v }
+demoUpdate ProgressIncrease      = modify $ \s -> s { progressValue = min 1 (progressValue s + 0.1) }
+demoUpdate ProgressDecrease      = modify $ \s -> s { progressValue = max 0 (progressValue s - 0.1) }
