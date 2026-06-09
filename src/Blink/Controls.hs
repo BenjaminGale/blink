@@ -76,7 +76,7 @@ checkboxMark boxId checked mkCmd = control boxId $ do
   when activated $ dispatch (mkCmd (not checked))
 
 checkboxLabel :: Style -> Text -> UI e c ()
-checkboxLabel style text = drawText (styleTextColour style) (styleTextAlign style) text
+checkboxLabel style text = drawText (styleTextColour style) AlignLeft text
 
 -- | A togglable checkbox with an adjacent label. Dispatches @mkCmd (not checked)@
 -- when activated by a click or the Enter key.

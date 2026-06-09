@@ -24,71 +24,70 @@ data App e s c = App
   * @c@ is the command type — how the view signals state changes back to the
     application (see "Blink.UI").
 
-= Update
+= Backend integration
 
-'App.update' maps each command to an 'Update' action (see "Blink.Update").
-Commands produced during a frame are applied in dispatch order; the resulting
-state is used from the next frame onward.
+'BlinkHandle' is the interface the backend uses each frame. Obtain one via
+'configureContinuous' or 'configureEventDriven', then drive the loop yourself:
 
-= Backend
+@
+loop handle state = do
+  waitForPlatformEvents
+  input  <- collectFrameInput
+  result <- stepFrame handle input state
+  case result of
+    Continue draws state' -> render draws >> loop handle state'
+    Quit     draws _      -> render draws
+@
 
-'Backend' is a thin platform abstraction over a windowing system. It supplies
-event collection, a close signal, window dimensions, and a draw-list renderer.
-'FrameMode' controls how the draw list is produced each iteration.
+= Configuration
 
-= Frame mode
+  * 'configureContinuous'  — for backends that redraw every frame regardless of
+    input (e.g. game-style loops). Draw commands from the first render pass are
+    submitted immediately.
+  * 'configureEventDriven' — for backends that block on events. After processing
+    commands, a second render pass runs on the updated state so the displayed
+    frame always reflects the latest state. The 'IO ()' callback is invoked when
+    async work completes, allowing the backend to unblock its event wait (e.g.
+    @glfwPostEmptyEvent@).
 
-  * 'EventDriven' — after processing the view's commands, a second render pass
-    runs on the updated state so the displayed frame always reflects the latest
-    state. Preferred for most applications.
-  * 'Continuous' — the draw list from the first pass is submitted immediately.
-    Use when the view is redrawn every frame regardless of input.
+= Text measurement
 
-= Running the loop
-
-'runApp' calls 'startUp', builds the initial context, then drives the render
-loop until the backend's 'shouldClose' returns 'True'.
+'TextMeasurer' is provided at configure time and made available to the UI monad
+for cursor positioning and layout. Construct one from your platform's font API
+and pass it to 'configureContinuous' or 'configureEventDriven'.
 -}
 module Blink.App
   ( -- * Application
     App (..)
-  , runApp
-    -- * Backend
-  , Backend (..)
-  , FrameMode (..)
+    -- * Handle
+  , BlinkHandle (..)
+    -- * Configuration
+  , configureContinuous
+  , configureEventDriven
+    -- * Frame types
+  , FrameInput (..)
+  , FrameResult (..)
+    -- * Text measurement
+  , TextMeasurer (..)
+  , FontSpec (..)
+  , FontMetrics (..)
   ) where
 
+import Control.Concurrent (forkIO)
+import Data.IORef
+import Data.Text (Text)
+
+import Blink.Geometry (Point, Size, rectOrigin, resizeRect)
+import Blink.Input (ButtonState, KeyEvent, InputState (..))
 import Blink.Rendering (DrawCommand)
-import Blink.Geometry (Point (..), Size (..), rectOrigin, resizeRect)
-import Blink.Input (ButtonState (..), InputState (..))
 import Blink.Style (Theme)
-import Blink.UI (FocusState (..), UI, UIContext (..), emptyUIContext, nextFrameContext, runUI, getDrawCommands, getCommands, ctxThemeChangeRequested)
-import Blink.Update (Update, execCommands)
-import Control.Monad (unless)
-
--- | Controls how the draw list for each frame is produced.
-data FrameMode
-  = EventDriven
-    -- ^ After processing the view's commands, runs a second render pass on the
-    -- updated state. The frame displayed always reflects the latest state.
-  | Continuous
-    -- ^ Submits the draw list from the first render pass immediately. Suitable
-    -- for continuously-animated content that redraws every frame.
-
--- | Platform abstraction over the windowing system. Implement one per target
--- platform (e.g. GLFW, SDL).
-data Backend = Backend
-  { collectEvents :: IO InputState
-    -- ^ Gather mouse, button, and keyboard events for the current frame.
-  , shouldClose :: IO Bool
-    -- ^ Return 'True' to exit the render loop.
-  , windowSize :: IO Size
-    -- ^ The current dimensions of the window's drawing area.
-  , render :: [DrawCommand] -> IO ()
-    -- ^ Submit a frame's draw list to the renderer.
-  , frameMode :: FrameMode
-    -- ^ Whether to use event-driven or continuous rendering.
-  }
+import Blink.UI
+  ( UI, UIContext (..), FocusState (..)
+  , emptyUIContext, nextFrameContext
+  , runUI, getDrawCommands, getCommands
+  , ctxThemeChangeRequested
+  )
+import Blink.Update (Update, runUpdate)
 
 -- | Describes a complete Blink application.
 --
@@ -102,46 +101,176 @@ data App e s c = App
     -- allowing the theme to change in response to state changes.
   , view :: s -> UI e c ()
     -- ^ Renders the current state as a 'UI' tree. Called once or twice per
-    -- frame depending on the 'FrameMode'.
+    -- frame depending on the render mode.
   , update :: c -> Update s c ()
     -- ^ Handles a command dispatched by the view, returning an 'Update' action
     -- that transforms the state. Applied to each command in dispatch order.
   }
 
--- | Initialises the application and enters the render loop, driving the
--- backend until 'shouldClose' returns 'True'.
-runApp :: Backend -> App e s c -> IO ()
-runApp backend app = do
-  state <- startUp app
-  let initialCtx = emptyUIContext
-        rectOrigin
-        (InputState (Point 0 0) ButtonUp [] [])
-        (Blink.App.theme app state)
-  loop backend app state initialCtx
+-- | All per-frame inputs from the platform, assembled by the backend.
+data FrameInput = FrameInput
+  { mousePosition :: Point
+  , mouseButton   :: ButtonState
+  , keyEvents     :: [KeyEvent]
+  , typedText     :: [Text]
+  , windowSize    :: Size
+  , quitRequested :: Bool
+  }
 
-loop :: Backend -> App e s c -> s -> UIContext e c -> IO ()
-loop backend app state ctx = do
-  events <- collectEvents backend
-  close <- shouldClose backend
-  unless close $ do
-      size <- windowSize backend
-      let winRect = resizeRect size rectOrigin
-          frameCtx = (nextFrameContext winRect events ctx) { ctxTheme = Blink.App.theme app state }
-          processedCtx = snd $ runUI (view app state) frameCtx
-          focusState = ctxFocusState processedCtx
-          nextFocus = if focusedThisFrame focusState then focusedElement focusState else Nothing
-          state' = execCommands (update app) (getCommands processedCtx) state
-          (drawCalls', nextCtx) = case frameMode backend of
-            EventDriven ->
-              let newTheme = if ctxThemeChangeRequested processedCtx
-                               then Blink.App.theme app state'
-                               else ctxTheme processedCtx
-                  freshCtx = (nextFrameContext winRect (events { keyEvents = [], typedText = [] }) processedCtx)
-                    { ctxFocusState = focusState { focusedElement = nextFocus }
-                    , ctxTheme = newTheme
-                    }
-                  renderedCtx = snd $ runUI (view app state') freshCtx
-              in (getDrawCommands renderedCtx, renderedCtx { ctxFocusState = focusState { focusedElement = nextFocus } })
-            Continuous -> (getDrawCommands processedCtx, processedCtx { ctxFocusState = focusState { focusedElement = nextFocus } })
-      render backend drawCalls'
-      loop backend app state' nextCtx
+-- | The result of processing a single frame. Draw commands are always included
+-- so the backend can render the final frame before exiting on 'Quit'.
+data FrameResult s
+  = Continue [DrawCommand] s
+  | Quit     [DrawCommand] s
+
+-- | The interface the backend uses each frame.
+data BlinkHandle s = BlinkHandle
+  { initState :: IO s
+    -- ^ Produces the initial application state.
+  , stepFrame :: FrameInput -> s -> IO (FrameResult s)
+    -- ^ Processes one frame: drains the async queue, runs the view and update
+    -- cycle, forks any async effects, and returns draw commands with new state.
+  }
+
+-- | Identifies a font for text measurement.
+data FontSpec = FontSpec
+  { fontPath :: FilePath
+  , fontSize :: Int
+  } deriving (Eq, Ord, Show)
+
+-- | Font-level metrics independent of content.
+data FontMetrics = FontMetrics
+  { lineHeight :: Float
+  , ascender   :: Float
+  , descender  :: Float
+  }
+
+-- | Text measurement operations provided by the backend at configure time.
+data TextMeasurer = TextMeasurer
+  { measureFont  :: FontSpec -> IO FontMetrics
+    -- ^ Font-level metrics; used to determine control height before content is known.
+  , measureText  :: Text -> FontSpec -> IO Size
+    -- ^ Total bounds of a string; used for layout.
+  , charOffset   :: Text -> FontSpec -> Int -> IO Float
+    -- ^ X offset at a character index; used for cursor positioning.
+  , charAtOffset :: Text -> FontSpec -> Float -> IO Int
+    -- ^ Character index at a pixel offset; used for mouse hit testing.
+  }
+
+-- | Produces a 'BlinkHandle' for a continuous render backend. The draw list
+-- from the first render pass is submitted immediately each frame.
+configureContinuous :: App e s c -> TextMeasurer -> IO (BlinkHandle s)
+configureContinuous app _measurer = do
+  asyncQueue <- newIORef []
+  ctxRef     <- newIORef Nothing
+  pure BlinkHandle
+    { initState = startUp app
+    , stepFrame = doStep False app asyncQueue ctxRef (pure ())
+    }
+
+-- | Produces a 'BlinkHandle' for an event-driven backend. After processing
+-- commands, a second render pass runs on the updated state. The 'IO ()' callback
+-- is called when async work completes so the backend can unblock its event wait.
+configureEventDriven :: App e s c -> IO () -> TextMeasurer -> IO (BlinkHandle s)
+configureEventDriven app notify _measurer = do
+  asyncQueue <- newIORef []
+  ctxRef     <- newIORef Nothing
+  pure BlinkHandle
+    { initState = startUp app
+    , stepFrame = doStep True app asyncQueue ctxRef notify
+    }
+
+doStep
+  :: Bool
+  -> App e s c
+  -> IORef [c]
+  -> IORef (Maybe (UIContext e c))
+  -> IO ()
+  -> FrameInput
+  -> s
+  -> IO (FrameResult s)
+doStep eventDriven app asyncQueue ctxRef notify fi state = do
+  let winRect    = resizeRect (windowSize fi) rectOrigin
+      inputState = toInputState fi
+
+  mCtx <- readIORef ctxRef
+  let ctx = case mCtx of
+        Nothing -> emptyUIContext winRect inputState (theme app state)
+        Just c  -> (nextFrameContext winRect inputState c)
+                     { ctxTheme = theme app state }
+
+  -- Drain the async command queue (oldest first)
+  asyncCmds <- atomicModifyIORef asyncQueue (\q -> ([], reverse q))
+
+  -- First render pass
+  let ((), processedCtx) = runUI (view app state) ctx
+
+  -- Collect and process all commands
+  let uiCmds  = getCommands processedCtx
+      allCmds = asyncCmds ++ uiCmds
+      (state', effects) = runCommands (update app) allCmds state
+
+  -- Fork async effects; each result is enqueued and the callback is invoked
+  mapM_ (forkEffect asyncQueue notify) effects
+
+  -- Determine stable focus from the first pass
+  let focusState = ctxFocusState processedCtx
+      nextFocus  = if focusedThisFrame focusState
+                   then focusedElement focusState
+                   else Nothing
+
+  -- Produce draw commands and the context to persist for the next frame
+  (drawCmds, nextCtx) <-
+    if eventDriven
+      then do
+        let newTheme     = if ctxThemeChangeRequested processedCtx
+                           then theme app state'
+                           else ctxTheme processedCtx
+            clearedInput = clearKeyEvents inputState
+            freshCtx     = (nextFrameContext winRect clearedInput processedCtx)
+              { ctxFocusState = focusState { focusedElement = nextFocus }
+              , ctxTheme      = newTheme
+              }
+            ((), renderedCtx) = runUI (view app state') freshCtx
+            storedCtx         = renderedCtx
+              { ctxFocusState = focusState { focusedElement = nextFocus } }
+        pure (getDrawCommands renderedCtx, storedCtx)
+      else
+        pure
+          ( getDrawCommands processedCtx
+          , processedCtx { ctxFocusState = focusState { focusedElement = nextFocus } }
+          )
+
+  writeIORef ctxRef (Just nextCtx)
+
+  pure $ if quitRequested fi
+    then Quit drawCmds state'
+    else Continue drawCmds state'
+
+-- | Convert a 'FrameInput' to the 'InputState' the UI monad uses internally.
+-- Uses positional matching to sidestep overlapping field names.
+toInputState :: FrameInput -> InputState
+toInputState (FrameInput mp mb kes txt _ _) = InputState mp mb kes txt
+
+-- | Clear keyboard and text events from an 'InputState' for the second render
+-- pass in event-driven mode.
+clearKeyEvents :: InputState -> InputState
+clearKeyEvents (InputState mp lb _ _) = InputState mp lb [] []
+
+-- | Run a list of commands through the update function, collecting the final
+-- state and any async effects produced along the way.
+runCommands :: (c -> Update s c ()) -> [c] -> s -> (s, [IO c])
+runCommands updateFn cmds s0 = foldl step (s0, []) cmds
+  where
+    step (s, effs) cmd =
+      let ((), s', newEffects) = runUpdate (updateFn cmd) s
+      in (s', effs ++ newEffects)
+
+-- | Fork an async effect: run the action, enqueue the result, then notify.
+forkEffect :: IORef [c] -> IO () -> IO c -> IO ()
+forkEffect queue notify action = do
+  _ <- forkIO $ do
+    cmd <- action
+    atomicModifyIORef' queue (\q -> (cmd : q, ()))
+    notify
+  pure ()

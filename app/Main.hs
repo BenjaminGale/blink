@@ -13,66 +13,87 @@ import qualified Data.Text as T
 import Data.Word (Word8)
 import Foreign.C.Types (CInt)
 
-fontPath :: FilePath
-fontPath = "assets/fonts/Inter-Regular.ttf"
+demoFontPath :: FilePath
+demoFontPath = "assets/fonts/Inter-Regular.ttf"
 
 main :: IO ()
 main = do
   SDL.initializeAll
   Font.initialize
-  window <- SDL.createWindow "blink" SDL.defaultWindow { SDL.windowResizable = True }
+  window   <- SDL.createWindow "blink" SDL.defaultWindow { SDL.windowResizable = True }
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
-  font <- Font.load fontPath 14
+  font     <- Font.load demoFontPath 14
   SDL.Raw.startTextInput
 
-  quitRef <- newIORef False
   buttonRef <- newIORef ButtonUp
 
-  let backend = Backend
-        { collectEvents = do
-            first <- SDL.waitEvent
-            rest  <- SDL.pollEvents
+  -- demoApp uses no async effects so the notify callback is never invoked;
+  -- a real event-driven backend would call SDL.pushEvent here to unblock waitEvent.
+  let notify   = pure () :: IO ()
+      measurer = noOpMeasurer
 
-            let events = first : rest
+      renderFrame calls = do
+        SDL.rendererDrawColor renderer $= SDL.V4 229 229 234 255
+        SDL.clear renderer
+        clipRef <- newIORef ([] :: [SDL.Rectangle CInt])
+        mapM_ (submitDrawCommand renderer font clipRef) calls
+        SDL.present renderer
 
-            writeIORef quitRef (SDL.QuitEvent `elem` map SDL.eventPayload events)
+  handle <- configureEventDriven demoApp notify measurer
+  state0  <- initState handle
 
-            btn <- readIORef buttonRef
-            let btn' = foldl updateButton btn events
-                keys  = concatMap toKeyEvents events
-                chars = concatMap toTypedText events
-            writeIORef buttonRef (nextFrameButton btn')
-            mousePos <- SDL.getAbsoluteMouseLocation
-            return InputState
-              { mousePosition = sdlPoint mousePos
-              , leftButton    = btn'
-              , keyEvents     = keys
-              , typedText     = chars
-              }
-
-        , shouldClose = readIORef quitRef
-
-        , windowSize = do
-            SDL.V2 w h <- SDL.get (SDL.windowSize window)
-            return (Size (fromIntegral w) (fromIntegral h))
-
-        , frameMode = EventDriven
-
-        , render = \calls -> do
-            SDL.rendererDrawColor renderer $= SDL.V4 229 229 234 255
-            SDL.clear renderer
-            clipRef <- newIORef ([] :: [SDL.Rectangle CInt])
-            mapM_ (submitDrawCommand renderer font clipRef) calls
-            SDL.present renderer
-        }
-
-  runApp backend demoApp
+  loop handle buttonRef renderFrame window state0
 
   Font.free font
   SDL.destroyRenderer renderer
   SDL.destroyWindow window
   Font.quit
   SDL.quit
+
+loop
+  :: BlinkHandle s
+  -> IORef ButtonState
+  -> ([DrawCommand] -> IO ())
+  -> SDL.Window
+  -> s
+  -> IO ()
+loop handle buttonRef renderFrame window state = do
+  first <- SDL.waitEvent
+  rest  <- SDL.pollEvents
+  let events = first : rest
+
+  btn <- readIORef buttonRef
+  let btn'   = foldl updateButton btn events
+      keys   = concatMap toKeyEvents events
+      chars  = concatMap toTypedText events
+      isQuit = SDL.QuitEvent `elem` map SDL.eventPayload events
+  writeIORef buttonRef (nextFrameButton btn')
+
+  mousePos         <- SDL.getAbsoluteMouseLocation
+  SDL.V2 winW winH <- SDL.get (SDL.windowSize window)
+
+  -- Use positional constructor to avoid ambiguity with InputState field names
+  let fi = FrameInput
+             (sdlPoint mousePos)
+             btn'
+             keys
+             chars
+             (Size (fromIntegral winW) (fromIntegral winH))
+             isQuit
+
+  result <- stepFrame handle fi state
+  case result of
+    Continue draws state' -> renderFrame draws >> loop handle buttonRef renderFrame window state'
+    Quit     draws _      -> renderFrame draws
+
+-- | A no-op 'TextMeasurer' for backends that do not yet use text measurement.
+noOpMeasurer :: TextMeasurer
+noOpMeasurer = TextMeasurer
+  { measureFont  = \_ -> pure (FontMetrics 0 0 0)
+  , measureText  = \_ _ -> pure (Size 0 0)
+  , charOffset   = \_ _ _ -> pure 0
+  , charAtOffset = \_ _ _ -> pure 0
+  }
 
 updateButton :: ButtonState -> SDL.Event -> ButtonState
 updateButton current e = case SDL.eventPayload e of
@@ -85,7 +106,7 @@ updateButton current e = case SDL.eventPayload e of
 
 nextFrameButton :: ButtonState -> ButtonState
 nextFrameButton ButtonReleased = ButtonUp
-nextFrameButton s = s
+nextFrameButton s              = s
 
 toKeyEvents :: SDL.Event -> [KeyEvent]
 toKeyEvents e = case SDL.eventPayload e of
@@ -130,7 +151,7 @@ submitDrawCommand renderer font _ (DrawText r text (RGBA red green blue _) align
   SDL.destroyTexture texture
 submitDrawCommand renderer _ clipRef (PushClip r) = do
   stack <- readIORef clipRef
-  let new = toSDLRect r
+  let new     = toSDLRect r
       clipped = case stack of
         []        -> new
         (top : _) -> intersectRect top new
