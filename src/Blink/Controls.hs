@@ -31,7 +31,7 @@ label eid text = renderControl eid $ do
 progressBar :: (Eq e, Ord e) => e -> Double -> UI e c ()
 progressBar eid value = renderControl eid $ do
   style <- getStyle eid
-  r     <- getRect
+  r     <- getBounds
   let clamped  = max 0 (min 1 value)
       fillRect' = r { rectWidth = rectWidth r * clamped }
   withBounds fillRect' $ fillRect (textColour style)

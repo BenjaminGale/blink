@@ -4,7 +4,7 @@ module Blink.UI
   , UI (..)
   , emptyUIContext
   , nextFrameContext
-  , getRect
+  , getBounds
   , getMousePos
   , getLeftButton
   , isHovered
@@ -123,8 +123,8 @@ gets f = UI $ \ctx -> (f ctx, ctx)
 modify :: (UIContext e c -> UIContext e c) -> UI e c ()
 modify f = UI $ \ctx -> ((), f ctx)
 
-getRect :: UI e c Rectangle
-getRect = gets ctxBounds
+getBounds :: UI e c Rectangle
+getBounds = gets ctxBounds
 
 getMousePos :: UI e c Point
 getMousePos = mousePosition <$> getInput
@@ -215,22 +215,22 @@ draw cmd = modify $ \ctx -> ctx { ctxDrawCommands = cmd : ctxDrawCommands ctx }
 
 fillRect :: Colour -> UI e c ()
 fillRect colour = do
-  r <- getRect
+  r <- getBounds
   draw $ FillRect r colour
 
 strokeRect :: Colour -> Double -> UI e c ()
 strokeRect colour width = do
-  r <- getRect
+  r <- getBounds
   draw $ StrokeRect r colour width
 
 drawText :: Colour -> TextAlign -> Text -> UI e c ()
 drawText colour align text = do
-  r <- getRect
+  r <- getBounds
   draw $ DrawText r text colour align
 
 clipToCurrent :: UI e c a -> UI e c a
 clipToCurrent action = do
-  r <- getRect
+  r <- getBounds
   draw $ PushClip r
   result <- action
   draw PopClip
@@ -250,7 +250,7 @@ getCommands = reverse . ctxCommands
 
 regionHit :: UI e c Bool
 regionHit = do
-  r <- getRect
+  r <- getBounds
   containsPoint r <$> getMousePos
 
 applyHover :: (Eq e, Ord e) => e -> UI e c ()
@@ -258,7 +258,7 @@ applyHover eid = do
   isDisabl <- isDisabled
   when (not isDisabl) $ do
     s <- getStyle eid
-    r <- getRect
+    r <- getBounds
     let bgRect = insetRect (margin s) r
     isHit <- withBounds bgRect regionHit
     when isHit $ setHovered eid
@@ -295,7 +295,7 @@ applyTabNavigation eid = do
 renderControl :: Ord e => e -> UI e c () -> UI e c ()
 renderControl eid content = do
   style <- getStyle eid
-  r     <- getRect
+  r     <- getBounds
   let bgRect      = insetRect (margin style) r
       contentRect = insetRect (padding style) bgRect
   when (isOpaque (background style)) $ do

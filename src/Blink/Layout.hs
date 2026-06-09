@@ -60,7 +60,7 @@ import Data.List (sortBy)
 import Data.Ord  (comparing)
 
 import Blink.Geometry (Alignment (..), Rectangle (..), Size (..), alignRect, insetRect, uniform)
-import Blink.UI (UI, clipToCurrent, getRect, withBounds)
+import Blink.UI (UI, clipToCurrent, getBounds, withBounds)
 import Data.Maybe (fromMaybe)
 
 {- | Describes how a child should be sized along a single axis.
@@ -143,7 +143,7 @@ defaultBoxConfig = BoxConfig
 -- @
 layoutWithConstraint :: RectConstraint -> UI e c a -> UI e c a
 layoutWithConstraint rc ui = do
-  r <- getRect
+  r <- getBounds
   let w = preferredSize (rcWidth rc) (rectWidth r)
       h = preferredSize (rcHeight rc) (rectHeight r)
   withBounds (alignRect (rcAlignment rc) r (Rectangle 0 0 w h)) ui
@@ -179,7 +179,7 @@ box
   -> [(RectConstraint, UI e c ())]
   -> UI e c ()
 box mainC mainLen crossLen mainOrig crossOrig mkSize mkSlot setCrossC cfg children = do
-  r <- getRect
+  r <- getBounds
   let ca        = insetRect (uniform (boxMargin cfg)) r
       n         = length children
       sp        = boxSpacing cfg
