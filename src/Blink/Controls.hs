@@ -23,13 +23,13 @@ import Blink.UI
 -- TODO: clicking a label could transfer focus to an associated control (htmlFor-style)
 -- TODO: hover could show a tooltip for truncated text
 label :: (Eq e, Ord e) => e -> Text -> UI e c ()
-label eid text = renderWithStyle eid $ do
+label eid text = renderControl eid $ do
   style <- getStyle eid
   drawText (textColour style) (textAlign style) text
 
 -- | A read-only progress indicator. Value is clamped to [0, 1].
 progressBar :: (Eq e, Ord e) => e -> Double -> UI e c ()
-progressBar eid value = renderWithStyle eid $ do
+progressBar eid value = renderControl eid $ do
   style <- getStyle eid
   r     <- getRect
   let clamped  = max 0 (min 1 value)

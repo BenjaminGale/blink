@@ -31,7 +31,7 @@ module Blink.UI
   , dispatch
   , changeTheme
   , control
-  , renderWithStyle
+  , renderControl
   , getDrawCommands
   , getCommands
   ) where
@@ -43,7 +43,7 @@ import Data.List (find)
 import Data.Maybe (isNothing, isJust, fromJust, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
-import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
+import Blink.Rendering (Colour (..), isOpaque, TextAlign (..), DrawCommand (..))
 import Blink.Geometry (Point, Rectangle, containsPoint, insetRect)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
@@ -292,18 +292,19 @@ applyTabNavigation eid = do
   isDisabl <- isDisabled
   unless isDisabl $ setPreviousTabStop eid
 
-renderWithStyle :: Ord e => e -> UI e c () -> UI e c ()
-renderWithStyle eid content = do
+renderControl :: Ord e => e -> UI e c () -> UI e c ()
+renderControl eid content = do
   style <- getStyle eid
   r     <- getRect
   let bgRect      = insetRect (margin style) r
       contentRect = insetRect (padding style) bgRect
-  case background style of
-    RGBA _ _ _ 0 -> pure ()
-    c            -> withBounds bgRect $ fillRect c
+  when (isOpaque (background style)) $ do
+    withBounds bgRect $ do
+      fillRect (background style)
   case borderColour style of
-    Just c  -> withBounds bgRect $ strokeRect c (borderWidth style)
-    Nothing -> pure ()
+    Just c  -> withBounds bgRect $ do
+      strokeRect c (borderWidth style)
+    Nothing -> return ()
   withBounds contentRect $ clipToCurrent content
 
 control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ()
@@ -311,4 +312,4 @@ control eid content = do
   applyHover eid
   applyFocus eid
   applyTabNavigation eid
-  renderWithStyle eid content
+  renderControl eid content

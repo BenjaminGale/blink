@@ -1,5 +1,6 @@
 module Blink.Rendering
   ( Colour (..)
+  , isOpaque
   , TextAlign (..)
   , DrawCommand (..)
   ) where
@@ -9,6 +10,9 @@ import Blink.Geometry (Rectangle)
 
 data Colour = RGBA Double Double Double Double
   deriving (Eq, Show)
+
+isOpaque :: Colour -> Bool
+isOpaque (RGBA _ _ _ a) = a /= 0
 
 data TextAlign = AlignLeft | AlignCenter | AlignRight
   deriving (Eq, Show)

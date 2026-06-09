@@ -132,6 +132,24 @@ checkboxTheme :: Theme TestElement
 checkboxTheme = testTheme
   { elementStyles = Map.fromList [(TestControl, zeroMarginStyleSet), (OtherControl, testStyleSet)] }
 
+transparentBgWithBorderStyle :: Style
+transparentBgWithBorderStyle = testStyleWithBorder { background = RGBA 0 0 0 0 }
+
+transparentBgWithBorderStyleSet :: StyleSet
+transparentBgWithBorderStyleSet = StyleSet
+  { normal   = transparentBgWithBorderStyle
+  , hovered  = transparentBgWithBorderStyle
+  , pressed  = transparentBgWithBorderStyle
+  , focused  = transparentBgWithBorderStyle
+  , disabled = transparentBgWithBorderStyle
+  }
+
+transparentBgWithBorderTheme :: Theme TestElement
+transparentBgWithBorderTheme = Theme
+  { elementStyles = Map.fromList [(TestControl, transparentBgWithBorderStyleSet), (OtherControl, transparentBgWithBorderStyleSet)]
+  , defaultStyle  = transparentBgWithBorderStyleSet
+  }
+
 focusBorderStyleSet :: StyleSet
 focusBorderStyleSet = testStyleSet { focused = testStyleWithBorder }
 
@@ -223,6 +241,11 @@ backgroundAndBorderSpec run = do
   it "draws a border when borderColour is set" $
     ctxDrawCommands (runWithBorder (mkCtx noInput))
       `shouldContain` [StrokeRect bgRect testBorderColour 1]
+
+  it "draws a border even when the background is transparent" $
+    let runWithTransparentBgAndBorder ctx = run (ctx { ctxTheme = transparentBgWithBorderTheme })
+    in ctxDrawCommands (runWithTransparentBgAndBorder (mkCtx noInput))
+         `shouldContain` [StrokeRect bgRect testBorderColour 1]
 
 runProgressBar :: Double -> WidgetRunner ()
 runProgressBar value ctx = snd $ runUI (progressBar TestControl value) ctx
