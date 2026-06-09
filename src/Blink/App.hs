@@ -24,10 +24,26 @@ data App e s c = App
   * @c@ is the command type — how the view signals state changes back to the
     application (see "Blink.UI").
 
+= Configuration
+
+Pass an 'App' to 'configureContinuous' or 'configureEventDriven' to obtain a
+'BlinkHandle'. Choose based on how the backend's render loop is driven:
+
+  * 'configureContinuous'  — for backends that redraw every frame regardless of
+    input (e.g. game-style loops). Draw commands from the first render pass are
+    submitted immediately each frame.
+  * 'configureEventDriven' — for backends that block on events. After processing
+    commands, a second render pass runs on the updated state so the displayed
+    frame always reflects the latest state. The 'IO ()' callback is invoked when
+    async work completes, allowing the backend to unblock its event wait (e.g.
+    @glfwPostEmptyEvent@).
+
 = Backend integration
 
-'BlinkHandle' is the interface the backend uses each frame. Obtain one via
-'configureContinuous' or 'configureEventDriven', then drive the loop yourself:
+'BlinkHandle' is the interface the backend uses each frame. Call 'initState'
+once to obtain the initial application state, then drive the render loop by
+calling 'stepFrame' each iteration with a 'FrameInput' assembled from platform
+events:
 
 @
 loop handle state = do
@@ -39,31 +55,36 @@ loop handle state = do
     Quit     draws _      -> render draws
 @
 
-= Configuration
+Draw commands are included in both 'Continue' and 'Quit' so the backend can
+render the final frame before exiting.
 
-  * 'configureContinuous'  — for backends that redraw every frame regardless of
-    input (e.g. game-style loops). Draw commands from the first render pass are
-    submitted immediately.
-  * 'configureEventDriven' — for backends that block on events. After processing
-    commands, a second render pass runs on the updated state so the displayed
-    frame always reflects the latest state. The 'IO ()' callback is invoked when
-    async work completes, allowing the backend to unblock its event wait (e.g.
-    @glfwPostEmptyEvent@).
+= Quit flow
+
+Set 'quitRequested' in 'FrameInput' when the platform detects a close signal
+(e.g. the window's close button). 'stepFrame' returns 'Quit' on the same frame.
+
+= Async updates
+
+'Blink.Update.effect' queues an @IO c@ action. 'stepFrame' forks each queued
+action, posts the resulting command @c@ to an internal queue, and calls the
+async notification callback so the backend can unblock its event wait.
+Async commands are drained at the start of the next 'stepFrame' call, before
+UI-driven commands, and flow through the normal 'update' cycle.
 
 = Text measurement
 
-'TextMeasurer' is provided at configure time and made available to the UI monad
-for cursor positioning and layout. Construct one from your platform's font API
-and pass it to 'configureContinuous' or 'configureEventDriven'.
+'TextMeasurer' is provided at configure time for cursor positioning and layout.
+Construct one from your platform's font API and pass it to 'configureContinuous'
+or 'configureEventDriven'.
 -}
 module Blink.App
   ( -- * Application
     App (..)
-    -- * Handle
-  , BlinkHandle (..)
     -- * Configuration
   , configureContinuous
   , configureEventDriven
+    -- * Handle
+  , BlinkHandle (..)
     -- * Frame types
   , FrameInput (..)
   , FrameResult (..)
@@ -103,58 +124,8 @@ data App e s c = App
     -- ^ Renders the current state as a 'UI' tree. Called once or twice per
     -- frame depending on the render mode.
   , update :: c -> Update s c ()
-    -- ^ Handles a command dispatched by the view, returning an 'Update' action
-    -- that transforms the state. Applied to each command in dispatch order.
-  }
-
--- | All per-frame inputs from the platform, assembled by the backend.
-data FrameInput = FrameInput
-  { mousePosition :: Point
-  , mouseButton   :: ButtonState
-  , keyEvents     :: [KeyEvent]
-  , typedText     :: [Text]
-  , windowSize    :: Size
-  , quitRequested :: Bool
-  }
-
--- | The result of processing a single frame. Draw commands are always included
--- so the backend can render the final frame before exiting on 'Quit'.
-data FrameResult s
-  = Continue [DrawCommand] s
-  | Quit     [DrawCommand] s
-
--- | The interface the backend uses each frame.
-data BlinkHandle s = BlinkHandle
-  { initState :: IO s
-    -- ^ Produces the initial application state.
-  , stepFrame :: FrameInput -> s -> IO (FrameResult s)
-    -- ^ Processes one frame: drains the async queue, runs the view and update
-    -- cycle, forks any async effects, and returns draw commands with new state.
-  }
-
--- | Identifies a font for text measurement.
-data FontSpec = FontSpec
-  { fontPath :: FilePath
-  , fontSize :: Int
-  } deriving (Eq, Ord, Show)
-
--- | Font-level metrics independent of content.
-data FontMetrics = FontMetrics
-  { lineHeight :: Float
-  , ascender   :: Float
-  , descender  :: Float
-  }
-
--- | Text measurement operations provided by the backend at configure time.
-data TextMeasurer = TextMeasurer
-  { measureFont  :: FontSpec -> IO FontMetrics
-    -- ^ Font-level metrics; used to determine control height before content is known.
-  , measureText  :: Text -> FontSpec -> IO Size
-    -- ^ Total bounds of a string; used for layout.
-  , charOffset   :: Text -> FontSpec -> Int -> IO Float
-    -- ^ X offset at a character index; used for cursor positioning.
-  , charAtOffset :: Text -> FontSpec -> Float -> IO Int
-    -- ^ Character index at a pixel offset; used for mouse hit testing.
+    -- ^ Handles a command dispatched by the view. Applied to each command in
+    -- dispatch order; async commands are processed before UI-driven ones.
   }
 
 -- | Produces a 'BlinkHandle' for a continuous render backend. The draw list
@@ -179,6 +150,81 @@ configureEventDriven app notify _measurer = do
     { initState = startUp app
     , stepFrame = doStep True app asyncQueue ctxRef notify
     }
+
+-- | The interface the backend uses each frame. Obtain via 'configureContinuous'
+-- or 'configureEventDriven'.
+data BlinkHandle s = BlinkHandle
+  { initState :: IO s
+    -- ^ Produces the initial application state. Call once before entering the
+    -- render loop.
+  , stepFrame :: FrameInput -> s -> IO (FrameResult s)
+    -- ^ Processes one frame: drains the async command queue, runs the view,
+    -- applies all commands through 'update', forks any async effects, and
+    -- returns draw commands paired with the new state.
+  }
+
+-- | All per-frame inputs from the platform, assembled by the backend each
+-- iteration before calling 'stepFrame'.
+data FrameInput = FrameInput
+  { mousePosition :: Point
+    -- ^ Cursor position in window coordinates.
+  , mouseButton   :: ButtonState
+    -- ^ State of the primary (left) mouse button.
+  , keyEvents     :: [KeyEvent]
+    -- ^ Keyboard events for this frame.
+  , typedText     :: [Text]
+    -- ^ Text input events for this frame, in the order they were received.
+  , windowSize    :: Size
+    -- ^ Current dimensions of the window's drawing area.
+  , quitRequested :: Bool
+    -- ^ Set to 'True' when the platform signals that the window should close.
+    -- 'stepFrame' returns 'Quit' on the same frame this is first set.
+  }
+
+-- | The result of processing a single frame.
+data FrameResult s
+  = Continue [DrawCommand] s
+    -- ^ Normal frame. Render the draw commands and loop with the new state.
+  | Quit [DrawCommand] s
+    -- ^ The application has quit. Render the draw commands (the final frame)
+    -- then exit the loop.
+
+-- | Identifies a font for text measurement.
+data FontSpec = FontSpec
+  { fontPath :: FilePath
+    -- ^ Path to the font file.
+  , fontSize :: Int
+    -- ^ Point size.
+  } deriving (Eq, Ord, Show)
+
+-- | Font-level metrics that do not depend on the string content. Retrieved via
+-- 'TextMeasurer.measureFont'.
+data FontMetrics = FontMetrics
+  { lineHeight :: Float
+    -- ^ Distance between consecutive baselines.
+  , ascender   :: Float
+    -- ^ Distance from the baseline to the top of the tallest glyph.
+  , descender  :: Float
+    -- ^ Distance from the baseline to the bottom of the deepest descender.
+    -- Typically negative.
+  }
+
+-- | Text measurement operations provided by the backend at configure time.
+-- All operations are in @IO@ because they may invoke the platform's font
+-- renderer.
+data TextMeasurer = TextMeasurer
+  { measureFont  :: FontSpec -> IO FontMetrics
+    -- ^ Returns font-level metrics. Used during layout to determine control
+    -- height before the content string is known.
+  , measureText  :: Text -> FontSpec -> IO Size
+    -- ^ Returns the total bounding box of a string. Used for layout.
+  , charOffset   :: Text -> FontSpec -> Int -> IO Float
+    -- ^ Returns the x offset (in pixels) at a given character index, measured
+    -- from the start of the string. Used for cursor positioning.
+  , charAtOffset :: Text -> FontSpec -> Float -> IO Int
+    -- ^ Returns the character index closest to a given x offset. Used for
+    -- mapping a mouse click position back to a character index.
+  }
 
 doStep
   :: Bool
@@ -247,18 +293,14 @@ doStep eventDriven app asyncQueue ctxRef notify fi state = do
     then Quit drawCmds state'
     else Continue drawCmds state'
 
--- | Convert a 'FrameInput' to the 'InputState' the UI monad uses internally.
--- Uses positional matching to sidestep overlapping field names.
+-- Uses positional matching to sidestep overlapping field names with InputState.
 toInputState :: FrameInput -> InputState
 toInputState (FrameInput mp mb kes txt _ _) = InputState mp mb kes txt
 
--- | Clear keyboard and text events from an 'InputState' for the second render
--- pass in event-driven mode.
+-- Clears keyboard and text events for the second render pass in event-driven mode.
 clearKeyEvents :: InputState -> InputState
 clearKeyEvents (InputState mp lb _ _) = InputState mp lb [] []
 
--- | Run a list of commands through the update function, collecting the final
--- state and any async effects produced along the way.
 runCommands :: (c -> Update s c ()) -> [c] -> s -> (s, [IO c])
 runCommands updateFn cmds s0 = foldl step (s0, []) cmds
   where
@@ -266,7 +308,6 @@ runCommands updateFn cmds s0 = foldl step (s0, []) cmds
       let ((), s', newEffects) = runUpdate (updateFn cmd) s
       in (s', effs ++ newEffects)
 
--- | Fork an async effect: run the action, enqueue the result, then notify.
 forkEffect :: IORef [c] -> IO () -> IO c -> IO ()
 forkEffect queue notify action = do
   _ <- forkIO $ do
