@@ -13,7 +13,7 @@ import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 
-data TestElement = TestControl | LabelControl | OtherControl
+data TestElement = TestControl | OtherControl
   deriving (Eq, Ord, Show)
 
 testColour :: Colour
@@ -261,10 +261,10 @@ runTextInput value ctx = snd $ runUI (textInput TestControl value id) ctx
 
 -- Forces checkboxTheme so the 20×20 box slot is hittable regardless of mkCtx's theme.
 runCheckboxControl :: WidgetRunner Bool
-runCheckboxControl ctx = snd $ runUI (checkbox TestControl LabelControl "test label" False id) (ctx { ctxTheme = checkboxTheme })
+runCheckboxControl ctx = snd $ runUI (checkbox TestControl "test label" False id) (ctx { ctxTheme = checkboxTheme })
 
 runCheckbox :: Bool -> UIContext TestElement Bool -> UIContext TestElement Bool
-runCheckbox checked ctx = snd $ runUI (checkbox TestControl LabelControl "test label" checked id) ctx
+runCheckbox checked ctx = snd $ runUI (checkbox TestControl "test label" checked id) ctx
 
 mkCheckboxCtx :: InputState -> UIContext TestElement Bool
 mkCheckboxCtx input = emptyUIContext controlRect input checkboxTheme
@@ -347,11 +347,11 @@ spec = do
 
     describe "disabled" $ do
       it "does not dispatch when clicked while disabled" $
-        getCommands (snd (runUI (disableWhen True (checkbox TestControl LabelControl "test label" False id)) (mkCheckboxCtx (mouseAt boxPoint ButtonReleased []))))
+        getCommands (snd (runUI (disableWhen True (checkbox TestControl "test label" False id)) (mkCheckboxCtx (mouseAt boxPoint ButtonReleased []))))
           `shouldBe` []
 
       it "does not dispatch when Enter is pressed while disabled" $
-        getCommands (snd (runUI (disableWhen True (checkbox TestControl LabelControl "test label" False id)) (withFocus (Just TestControl) (mkCheckboxCtx noInput { keyEvents = [KeyEvent KeyReturn []] }))))
+        getCommands (snd (runUI (disableWhen True (checkbox TestControl "test label" False id)) (withFocus (Just TestControl) (mkCheckboxCtx noInput { keyEvents = [KeyEvent KeyReturn []] }))))
           `shouldBe` []
 
     describe "rendering" $ do

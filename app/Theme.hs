@@ -8,9 +8,7 @@ import Blink
 import qualified Data.Map.Strict as Map
 
 data Element = Btn Int | TextInput1
-             | CheckboxBox1 | CheckboxLabel1
-             | CheckboxBox2 | CheckboxLabel2
-             | CheckboxBox3 | CheckboxLabel3
+             | CheckboxBox1 | CheckboxBox2 | CheckboxBox3
              | ProgressBar1
   deriving (Eq, Ord)
 
@@ -114,25 +112,6 @@ mkTextInputStyle p = StyleSet
       , styleBorderWidth  = 1
       }
 
-mkLabelStyle :: Palette -> StyleSet
-mkLabelStyle p = StyleSet
-  { styleSetNormal   = base
-  , styleSetHovered  = base
-  , styleSetPressed  = base
-  , styleSetFocused  = base
-  , styleSetDisabled = base { styleTextColour = palTextMuted p }
-  }
-  where
-    base = Style
-      { styleBackground   = RGBA 0 0 0 0
-      , styleTextColour   = palTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleMargin       = uniform 0
-      , stylePadding      = uniform 0
-      , styleBorderColour = Nothing
-      , styleBorderWidth  = 0
-      }
-
 mkProgressBarStyle :: Palette -> StyleSet
 mkProgressBarStyle p = StyleSet
   { styleSetNormal   = base
@@ -179,9 +158,7 @@ mkTheme p = Theme
       , (CheckboxBox1,   mkCheckboxBoxStyle p)
       , (CheckboxBox2,   mkCheckboxBoxStyle p)
       , (CheckboxBox3,   mkCheckboxBoxStyle p)
-      , (CheckboxLabel1, mkLabelStyle p)
-      , (CheckboxLabel2, mkLabelStyle p)
-      , (CheckboxLabel3, mkLabelStyle p)
+
       ]
   , themeDefaultStyle = mkBtnStyle p
   }

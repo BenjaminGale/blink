@@ -51,15 +51,19 @@ checkboxMark boxId checked mkCmd = control boxId $ do
   when checked   $ drawText (styleTextColour style) AlignCenter "✓"
   when activated $ dispatch (mkCmd (not checked))
 
+checkboxLabel :: Style -> Text -> UI e c ()
+checkboxLabel style text = drawText (styleTextColour style) (styleTextAlign style) text
+
 -- | A togglable checkbox with an adjacent label.
 -- TODO: box size should derive from the font/line-height rather than being fixed
 -- TODO: clicking the label should also toggle the checkbox (see label's focus-association TODO)
 -- TODO: Space key should activate when KeySpace is added to the Key type
-checkbox :: (Eq e, Ord e) => e -> e -> Text -> Bool -> (Bool -> c) -> UI e c ()
-checkbox boxId labelId text checked mkCmd = do
+checkbox :: (Eq e, Ord e) => e -> Text -> Bool -> (Bool -> c) -> UI e c ()
+checkbox boxId text checked mkCmd = do
+  style <- getStyle boxId
   hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
     [ (RectConstraint (Exactly 20) (Exactly 20) MiddleLeft, checkboxMark boxId checked mkCmd)
-    , (RectConstraint Fill Fill MiddleLeft, label labelId text)
+    , (RectConstraint Fill Fill MiddleLeft, checkboxLabel style text)
     ]
   whenFocused boxId $ do
     styleSet <- getStyleSet boxId

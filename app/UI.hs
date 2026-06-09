@@ -75,13 +75,13 @@ row5 :: Bool -> AppState -> UI Element Command ()
 row5 dark s = fillRect (rowBg dark (RGBA 0.165 0.133 0.176 1) (RGBA 0.95 0.87 0.95 1)) >>
   hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
     [ (RectConstraint (Exactly 160) (Exactly 30) MiddleLeft,
-         checkbox CheckboxBox1 CheckboxLabel1 "Enable editing"  (isChecked1 s) Checkbox1Toggled)
+         checkbox CheckboxBox1 "Enable editing"  (isChecked1 s) Checkbox1Toggled)
     , (RectConstraint (Exactly 160) (Exactly 30) MiddleLeft,
          disableWhen (not (isChecked1 s)) $
-           checkbox CheckboxBox2 CheckboxLabel2 "Dark mode"     (isChecked2 s) Checkbox2Toggled)
+           checkbox CheckboxBox2 "Dark mode"     (isChecked2 s) Checkbox2Toggled)
     , (RectConstraint (Exactly 160) (Exactly 30) MiddleLeft,
          disableWhen (not (isChecked1 s)) $
-           checkbox CheckboxBox3 CheckboxLabel3 "Notifications" (isChecked3 s) Checkbox3Toggled)
+           checkbox CheckboxBox3 "Notifications" (isChecked3 s) Checkbox3Toggled)
     ]
 
 -- Row 6: progress bar with +/- buttons
