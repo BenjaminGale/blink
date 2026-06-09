@@ -253,10 +253,13 @@ regionHit = do
   r <- getRect
   containsPoint r <$> getMousePos
 
-applyHover :: (Eq e, Ord e) => e -> Rectangle -> UI e c ()
-applyHover eid bgRect = do
+applyHover :: (Eq e, Ord e) => e -> UI e c ()
+applyHover eid = do
   isDisabl <- isDisabled
   when (not isDisabl) $ do
+    s <- getStyle eid
+    r <- getRect
+    let bgRect = insetRect (margin s) r
     isHit <- withBounds bgRect regionHit
     when isHit $ setHovered eid
 
@@ -305,10 +308,7 @@ renderWithStyle eid content = do
 
 control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ()
 control eid content = do
-  s <- getStyle eid
-  r <- getRect
-  let bgRect = insetRect (margin s) r
-  applyHover eid bgRect
+  applyHover eid
   applyFocus eid
   applyTabNavigation eid
   renderWithStyle eid content
