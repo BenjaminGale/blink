@@ -10,27 +10,27 @@ import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Geometry (Insets (..))
 
 data Style = Style
-  { background   :: Colour
-  , textColour   :: Colour
-  , textAlign    :: TextAlign
-  , margin       :: Insets
-  , padding      :: Insets
-  , borderColour :: Maybe Colour
-  , borderWidth  :: Double
+  { styleBackground   :: Colour
+  , styleTextColour   :: Colour
+  , styleTextAlign    :: TextAlign
+  , styleMargin       :: Insets
+  , stylePadding      :: Insets
+  , styleBorderColour :: Maybe Colour
+  , styleBorderWidth  :: Double
   }
 
 data StyleSet = StyleSet
-  { normal   :: Style
-  , hovered  :: Style
-  , pressed  :: Style
-  , focused  :: Style
-  , disabled :: Style
+  { styleSetNormal   :: Style
+  , styleSetHovered  :: Style
+  , styleSetPressed  :: Style
+  , styleSetFocused  :: Style
+  , styleSetDisabled :: Style
   }
 
 data Theme e = Theme
-  { elementStyles :: Map.Map e StyleSet
-  , defaultStyle  :: StyleSet
+  { themeElementStyles :: Map.Map e StyleSet
+  , themeDefaultStyle  :: StyleSet
   }
 
 emptyTheme :: StyleSet -> Theme e
-emptyTheme def = Theme { elementStyles = Map.empty, defaultStyle = def }
+emptyTheme def = Theme { themeElementStyles = Map.empty, themeDefaultStyle = def }

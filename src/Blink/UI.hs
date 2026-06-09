@@ -152,7 +152,7 @@ getTheme = gets ctxTheme
 getStyleSet :: Ord e => e -> UI e c StyleSet
 getStyleSet eid = do
   t <- getTheme
-  pure $ Map.findWithDefault (defaultStyle t) eid (elementStyles t)
+  pure $ Map.findWithDefault (themeDefaultStyle t) eid (themeElementStyles t)
 
 getStyle :: Ord e => e -> UI e c Style
 getStyle eid = do
@@ -162,12 +162,12 @@ getStyle eid = do
   isFoc  <- isFocused eid
   isPrs  <- isPressed eid
   let candidates =
-        [ guard isDis $> disabled styles
-        , guard isPrs $> pressed  styles
-        , guard isHov $> hovered  styles
-        , guard isFoc $> focused  styles
+        [ guard isDis $> styleSetDisabled styles
+        , guard isPrs $> styleSetPressed  styles
+        , guard isHov $> styleSetHovered  styles
+        , guard isFoc $> styleSetFocused  styles
         ]
-  pure $ fromMaybe (normal styles) (asum candidates)
+  pure $ fromMaybe (styleSetNormal styles) (asum candidates)
 
 isHovered :: Eq e => e -> UI e c Bool
 isHovered eid = (== Just eid) <$> gets ctxHoveredElement
@@ -264,7 +264,7 @@ applyHover eid = do
   whenEnabled $ do
     s <- getStyle eid
     r <- getBounds
-    let bgRect = insetRect (margin s) r
+    let bgRect = insetRect (styleMargin s) r
     isHit <- withBounds bgRect regionHit
     when isHit $ do
       setHovered eid
@@ -301,14 +301,14 @@ renderControl :: Ord e => e -> UI e c () -> UI e c ()
 renderControl eid content = do
   style <- getStyle eid
   r     <- getBounds
-  let bgRect      = insetRect (margin style) r
-      contentRect = insetRect (padding style) bgRect
-  when (isOpaque (background style)) $ do
+  let bgRect      = insetRect (styleMargin style) r
+      contentRect = insetRect (stylePadding style) bgRect
+  when (isOpaque (styleBackground style)) $ do
     withBounds bgRect $ do
-      fillRect (background style)
-  case borderColour style of
+      fillRect (styleBackground style)
+  case styleBorderColour style of
     Just c  -> withBounds bgRect $ do
-      strokeRect c (borderWidth style)
+      strokeRect c (styleBorderWidth style)
     Nothing -> return ()
   withBounds contentRect $ clipToCurrent content
 

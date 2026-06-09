@@ -78,102 +78,102 @@ controlPadding = uniform 6
 
 mkBtnStyle :: Palette -> StyleSet
 mkBtnStyle p = StyleSet
-  { normal   = base { background = palSurfaceButton p,         textColour = palTextPrimary p,  borderColour = Just (palBorderDefault p) }
-  , hovered  = base { background = palSurfaceButtonHover p,    textColour = palTextPrimary p,  borderColour = Just (palBorderHover p) }
-  , pressed  = base { background = palAccent p,                textColour = palTextOnAccent p, borderColour = Just (palAccentDark p) }
-  , focused  = base { background = palAccentLight p,           textColour = palTextPrimary p,  borderColour = Just (palAccent p) }
-  , disabled = base { background = palSurfaceButtonDisabled p, textColour = palTextMuted p }
+  { styleSetNormal   = base { styleBackground = palSurfaceButton p,         styleTextColour = palTextPrimary p,  styleBorderColour = Just (palBorderDefault p) }
+  , styleSetHovered  = base { styleBackground = palSurfaceButtonHover p,    styleTextColour = palTextPrimary p,  styleBorderColour = Just (palBorderHover p) }
+  , styleSetPressed  = base { styleBackground = palAccent p,                styleTextColour = palTextOnAccent p, styleBorderColour = Just (palAccentDark p) }
+  , styleSetFocused  = base { styleBackground = palAccentLight p,           styleTextColour = palTextPrimary p,  styleBorderColour = Just (palAccent p) }
+  , styleSetDisabled = base { styleBackground = palSurfaceButtonDisabled p, styleTextColour = palTextMuted p }
   }
   where
     base = Style
-      { background   = RGBA 0 0 0 1
-      , textColour   = RGBA 0 0 0 1
-      , textAlign    = AlignCenter
-      , margin       = controlMargin
-      , padding      = controlPadding
-      , borderColour = Nothing
-      , borderWidth  = 0
+      { styleBackground   = RGBA 0 0 0 1
+      , styleTextColour   = RGBA 0 0 0 1
+      , styleTextAlign    = AlignCenter
+      , styleMargin       = controlMargin
+      , stylePadding      = controlPadding
+      , styleBorderColour = Nothing
+      , styleBorderWidth  = 0
       }
 
 mkTextInputStyle :: Palette -> StyleSet
 mkTextInputStyle p = StyleSet
-  { normal   = base { background = palSurfaceInput p,         borderColour = Just (palBorderDefault p) }
-  , hovered  = base { background = palSurfaceInputHover p,    borderColour = Just (palBorderHover p) }
-  , pressed  = base { background = palSurfaceInput p,         borderColour = Just (palAccent p) }
-  , focused  = base { background = palSurfaceInput p,         borderColour = Just (palAccent p) }
-  , disabled = base { background = palSurfaceInputDisabled p, textColour   = palTextMuted p }
+  { styleSetNormal   = base { styleBackground = palSurfaceInput p,         styleBorderColour = Just (palBorderDefault p) }
+  , styleSetHovered  = base { styleBackground = palSurfaceInputHover p,    styleBorderColour = Just (palBorderHover p) }
+  , styleSetPressed  = base { styleBackground = palSurfaceInput p,         styleBorderColour = Just (palAccent p) }
+  , styleSetFocused  = base { styleBackground = palSurfaceInput p,         styleBorderColour = Just (palAccent p) }
+  , styleSetDisabled = base { styleBackground = palSurfaceInputDisabled p, styleTextColour   = palTextMuted p }
   }
   where
     base = Style
-      { background   = RGBA 0 0 0 1
-      , textColour   = palTextPrimary p
-      , textAlign    = AlignLeft
-      , margin       = controlMargin
-      , padding      = controlPadding
-      , borderColour = Nothing
-      , borderWidth  = 1
+      { styleBackground   = RGBA 0 0 0 1
+      , styleTextColour   = palTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleMargin       = controlMargin
+      , stylePadding      = controlPadding
+      , styleBorderColour = Nothing
+      , styleBorderWidth  = 1
       }
 
 mkLabelStyle :: Palette -> StyleSet
 mkLabelStyle p = StyleSet
-  { normal   = base
-  , hovered  = base
-  , pressed  = base
-  , focused  = base
-  , disabled = base { textColour = palTextMuted p }
+  { styleSetNormal   = base
+  , styleSetHovered  = base
+  , styleSetPressed  = base
+  , styleSetFocused  = base
+  , styleSetDisabled = base { styleTextColour = palTextMuted p }
   }
   where
     base = Style
-      { background   = RGBA 0 0 0 0
-      , textColour   = palTextPrimary p
-      , textAlign    = AlignLeft
-      , margin       = uniform 0
-      , padding      = uniform 0
-      , borderColour = Nothing
-      , borderWidth  = 0
+      { styleBackground   = RGBA 0 0 0 0
+      , styleTextColour   = palTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleMargin       = uniform 0
+      , stylePadding      = uniform 0
+      , styleBorderColour = Nothing
+      , styleBorderWidth  = 0
       }
 
 mkProgressBarStyle :: Palette -> StyleSet
 mkProgressBarStyle p = StyleSet
-  { normal   = base
-  , hovered  = base
-  , pressed  = base
-  , focused  = base
-  , disabled = base { textColour = palTextMuted p }
+  { styleSetNormal   = base
+  , styleSetHovered  = base
+  , styleSetPressed  = base
+  , styleSetFocused  = base
+  , styleSetDisabled = base { styleTextColour = palTextMuted p }
   }
   where
     base = Style
-      { background   = palProgressTrack p
-      , textColour   = palAccent p
-      , textAlign    = AlignLeft
-      , margin       = controlMargin
-      , padding      = uniform 0
-      , borderColour = Nothing
-      , borderWidth  = 0
+      { styleBackground   = palProgressTrack p
+      , styleTextColour   = palAccent p
+      , styleTextAlign    = AlignLeft
+      , styleMargin       = controlMargin
+      , stylePadding      = uniform 0
+      , styleBorderColour = Nothing
+      , styleBorderWidth  = 0
       }
 
 mkCheckboxBoxStyle :: Palette -> StyleSet
 mkCheckboxBoxStyle p = StyleSet
-  { normal   = base { background = palSurfaceInput p,         borderColour = Just (palBorderDefault p) }
-  , hovered  = base { background = palSurfaceInputHover p,    borderColour = Just (palBorderHover p) }
-  , pressed  = base { background = palSurfaceInput p,         borderColour = Just (palAccent p) }
-  , focused  = base { background = palSurfaceInput p,         borderColour = Just (palBorderDefault p) }
-  , disabled = base { background = palSurfaceInputDisabled p, textColour   = palTextMuted p }
+  { styleSetNormal   = base { styleBackground = palSurfaceInput p,         styleBorderColour = Just (palBorderDefault p) }
+  , styleSetHovered  = base { styleBackground = palSurfaceInputHover p,    styleBorderColour = Just (palBorderHover p) }
+  , styleSetPressed  = base { styleBackground = palSurfaceInput p,         styleBorderColour = Just (palAccent p) }
+  , styleSetFocused  = base { styleBackground = palSurfaceInput p,         styleBorderColour = Just (palBorderDefault p) }
+  , styleSetDisabled = base { styleBackground = palSurfaceInputDisabled p, styleTextColour   = palTextMuted p }
   }
   where
     base = Style
-      { background   = RGBA 0 0 0 1
-      , textColour   = palTextPrimary p
-      , textAlign    = AlignCenter
-      , margin       = controlMargin
-      , padding      = uniform 2
-      , borderColour = Nothing
-      , borderWidth  = 1
+      { styleBackground   = RGBA 0 0 0 1
+      , styleTextColour   = palTextPrimary p
+      , styleTextAlign    = AlignCenter
+      , styleMargin       = controlMargin
+      , stylePadding      = uniform 2
+      , styleBorderColour = Nothing
+      , styleBorderWidth  = 1
       }
 
 mkTheme :: Palette -> Theme Element
 mkTheme p = Theme
-  { elementStyles = Map.fromList
+  { themeElementStyles = Map.fromList
       [ (ProgressBar1,   mkProgressBarStyle p)
       , (TextInput1,     mkTextInputStyle p)
       , (CheckboxBox1,   mkCheckboxBoxStyle p)
@@ -183,7 +183,7 @@ mkTheme p = Theme
       , (CheckboxLabel2, mkLabelStyle p)
       , (CheckboxLabel3, mkLabelStyle p)
       ]
-  , defaultStyle = mkBtnStyle p
+  , themeDefaultStyle = mkBtnStyle p
   }
 
 lightTheme :: Theme Element

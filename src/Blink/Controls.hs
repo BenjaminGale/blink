@@ -25,7 +25,7 @@ import Blink.UI
 label :: (Eq e, Ord e) => e -> Text -> UI e c ()
 label eid text = renderControl eid $ do
   style <- getStyle eid
-  drawText (textColour style) (textAlign style) text
+  drawText (styleTextColour style) (styleTextAlign style) text
 
 -- | A read-only progress indicator. Value is clamped to [0, 1].
 progressBar :: (Eq e, Ord e) => e -> Double -> UI e c ()
@@ -34,7 +34,7 @@ progressBar eid value = renderControl eid $ do
   r     <- getBounds
   let clamped  = max 0 (min 1 value)
       fillRect' = r { rectWidth = rectWidth r * clamped }
-  withBounds fillRect' $ fillRect (textColour style)
+  withBounds fillRect' $ fillRect (styleTextColour style)
 
 -- | A togglable checkbox with an adjacent label.
 -- TODO: box size should derive from the font/line-height rather than being fixed
@@ -44,7 +44,7 @@ checkbox :: (Eq e, Ord e) => e -> e -> Text -> Bool -> (Bool -> c) -> UI e c ()
 checkbox boxId labelId text checked mkCmd = do
   let boxControl = control boxId $ do
         style <- getStyle boxId
-        when checked $ drawText (textColour style) AlignCenter "✓"
+        when checked $ drawText (styleTextColour style) AlignCenter "✓"
   hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
     [ (RectConstraint (Exactly 20) (Exactly 20) MiddleLeft, boxControl)
     , (RectConstraint Fill         Fill         MiddleLeft, label labelId text)
@@ -52,9 +52,9 @@ checkbox boxId labelId text checked mkCmd = do
   hasFocus <- isFocused boxId
   when hasFocus $ do
     styleSet <- getStyleSet boxId
-    let s = focused styleSet
-    case borderColour s of
-      Just c  -> strokeRect c (borderWidth s)
+    let s = styleSetFocused styleSet
+    case styleBorderColour s of
+      Just c  -> strokeRect c (styleBorderWidth s)
       Nothing -> pure ()
   isHit    <- isHovered boxId
   btn      <- getLeftButton
@@ -68,7 +68,7 @@ button :: (Eq e, Ord e) => e -> Text -> UI e c Bool
 button eid txt = do
   control eid $ do
     style <- getStyle eid
-    drawText (textColour style) (textAlign style) txt
+    drawText (styleTextColour style) (styleTextAlign style) txt
   isHit    <- isHovered eid
   hasFocus <- isFocused eid
   btn      <- getLeftButton
@@ -85,7 +85,7 @@ textInput eid value mkCmd = do
     hasFocus <- isFocused eid
     isDisabl <- isDisabled
     let displayed = if hasFocus && not isDisabl then value <> "|" else value
-    drawText (textColour style) (textAlign style) displayed
+    drawText (styleTextColour style) (styleTextAlign style) displayed
   hasFocus <- isFocused eid
   isDisabl <- isDisabled
   when (hasFocus && not isDisabl) $ do

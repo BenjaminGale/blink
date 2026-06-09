@@ -21,28 +21,28 @@ testColour = RGBA 0 0 0 1
 
 testStyle :: Style
 testStyle = Style
-  { background   = testColour
-  , textColour   = testColour
-  , textAlign    = AlignCenter
-  , margin       = uniform 10
-  , padding      = uniform 5
-  , borderColour = Nothing
-  , borderWidth  = 0
+  { styleBackground   = testColour
+  , styleTextColour   = testColour
+  , styleTextAlign    = AlignCenter
+  , styleMargin       = uniform 10
+  , stylePadding      = uniform 5
+  , styleBorderColour = Nothing
+  , styleBorderWidth  = 0
   }
 
 testStyleSet :: StyleSet
 testStyleSet = StyleSet
-  { normal   = testStyle
-  , hovered  = testStyle
-  , pressed  = testStyle
-  , focused  = testStyle
-  , disabled = testStyle
+  { styleSetNormal   = testStyle
+  , styleSetHovered  = testStyle
+  , styleSetPressed  = testStyle
+  , styleSetFocused  = testStyle
+  , styleSetDisabled = testStyle
   }
 
 testTheme :: Theme TestElement
 testTheme = Theme
-  { elementStyles = Map.fromList [(TestControl, testStyleSet), (OtherControl, testStyleSet)]
-  , defaultStyle  = testStyleSet
+  { themeElementStyles = Map.fromList [(TestControl, testStyleSet), (OtherControl, testStyleSet)]
+  , themeDefaultStyle  = testStyleSet
   }
 
 controlRect :: Rectangle
@@ -96,66 +96,66 @@ testBorderColour :: Colour
 testBorderColour = RGBA 1 0 0 1
 
 testStyleWithBorder :: Style
-testStyleWithBorder = testStyle { borderColour = Just testBorderColour, borderWidth = 1 }
+testStyleWithBorder = testStyle { styleBorderColour = Just testBorderColour, styleBorderWidth = 1 }
 
 testStyleSetWithBorder :: StyleSet
 testStyleSetWithBorder = StyleSet
-  { normal   = testStyleWithBorder
-  , hovered  = testStyleWithBorder
-  , pressed  = testStyleWithBorder
-  , focused  = testStyleWithBorder
-  , disabled = testStyleWithBorder
+  { styleSetNormal   = testStyleWithBorder
+  , styleSetHovered  = testStyleWithBorder
+  , styleSetPressed  = testStyleWithBorder
+  , styleSetFocused  = testStyleWithBorder
+  , styleSetDisabled = testStyleWithBorder
   }
 
 testThemeWithBorder :: Theme TestElement
 testThemeWithBorder = Theme
-  { elementStyles = Map.fromList [(TestControl, testStyleSetWithBorder), (OtherControl, testStyleSetWithBorder)]
-  , defaultStyle  = testStyleSetWithBorder
+  { themeElementStyles = Map.fromList [(TestControl, testStyleSetWithBorder), (OtherControl, testStyleSetWithBorder)]
+  , themeDefaultStyle  = testStyleSetWithBorder
   }
 
 -- Zero-margin theme for checkbox: the box occupies a 20×20 slot at Rectangle 0 40 20 20
 -- (MiddleLeft, Exactly 20×20 in a 100×100 rect). Without this, margin=10 collapses the
 -- bgRect to zero and hover detection never fires.
 zeroMarginStyle :: Style
-zeroMarginStyle = testStyle { margin = uniform 0, padding = uniform 0 }
+zeroMarginStyle = testStyle { styleMargin = uniform 0, stylePadding = uniform 0 }
 
 zeroMarginStyleSet :: StyleSet
 zeroMarginStyleSet = StyleSet
-  { normal   = zeroMarginStyle
-  , hovered  = zeroMarginStyle
-  , pressed  = zeroMarginStyle
-  , focused  = zeroMarginStyle
-  , disabled = zeroMarginStyle
+  { styleSetNormal   = zeroMarginStyle
+  , styleSetHovered  = zeroMarginStyle
+  , styleSetPressed  = zeroMarginStyle
+  , styleSetFocused  = zeroMarginStyle
+  , styleSetDisabled = zeroMarginStyle
   }
 
 checkboxTheme :: Theme TestElement
 checkboxTheme = testTheme
-  { elementStyles = Map.fromList [(TestControl, zeroMarginStyleSet), (OtherControl, testStyleSet)] }
+  { themeElementStyles = Map.fromList [(TestControl, zeroMarginStyleSet), (OtherControl, testStyleSet)] }
 
 transparentBgWithBorderStyle :: Style
-transparentBgWithBorderStyle = testStyleWithBorder { background = RGBA 0 0 0 0 }
+transparentBgWithBorderStyle = testStyleWithBorder { styleBackground = RGBA 0 0 0 0 }
 
 transparentBgWithBorderStyleSet :: StyleSet
 transparentBgWithBorderStyleSet = StyleSet
-  { normal   = transparentBgWithBorderStyle
-  , hovered  = transparentBgWithBorderStyle
-  , pressed  = transparentBgWithBorderStyle
-  , focused  = transparentBgWithBorderStyle
-  , disabled = transparentBgWithBorderStyle
+  { styleSetNormal   = transparentBgWithBorderStyle
+  , styleSetHovered  = transparentBgWithBorderStyle
+  , styleSetPressed  = transparentBgWithBorderStyle
+  , styleSetFocused  = transparentBgWithBorderStyle
+  , styleSetDisabled = transparentBgWithBorderStyle
   }
 
 transparentBgWithBorderTheme :: Theme TestElement
 transparentBgWithBorderTheme = Theme
-  { elementStyles = Map.fromList [(TestControl, transparentBgWithBorderStyleSet), (OtherControl, transparentBgWithBorderStyleSet)]
-  , defaultStyle  = transparentBgWithBorderStyleSet
+  { themeElementStyles = Map.fromList [(TestControl, transparentBgWithBorderStyleSet), (OtherControl, transparentBgWithBorderStyleSet)]
+  , themeDefaultStyle  = transparentBgWithBorderStyleSet
   }
 
 focusBorderStyleSet :: StyleSet
-focusBorderStyleSet = testStyleSet { focused = testStyleWithBorder }
+focusBorderStyleSet = testStyleSet { styleSetFocused = testStyleWithBorder }
 
 focusBorderTheme :: Theme TestElement
 focusBorderTheme = testTheme
-  { elementStyles = Map.fromList [(TestControl, focusBorderStyleSet)] }
+  { themeElementStyles = Map.fromList [(TestControl, focusBorderStyleSet)] }
 
 isStrokeRect :: DrawCommand -> Bool
 isStrokeRect (StrokeRect {}) = True

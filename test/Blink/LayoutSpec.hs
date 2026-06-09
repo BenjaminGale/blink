@@ -23,28 +23,28 @@ noInput = InputState
 
 emptyStyle :: Style
 emptyStyle = Style
-  { background   = RGBA 0 0 0 1
-  , textColour   = RGBA 0 0 0 1
-  , textAlign    = AlignCenter
-  , margin       = uniform 0
-  , padding      = uniform 0
-  , borderColour = Nothing
-  , borderWidth  = 0
+  { styleBackground   = RGBA 0 0 0 1
+  , styleTextColour   = RGBA 0 0 0 1
+  , styleTextAlign    = AlignCenter
+  , styleMargin       = uniform 0
+  , stylePadding      = uniform 0
+  , styleBorderColour = Nothing
+  , styleBorderWidth  = 0
   }
 
 emptyStyleSet :: StyleSet
 emptyStyleSet = StyleSet
-  { normal   = emptyStyle
-  , hovered  = emptyStyle
-  , pressed  = emptyStyle
-  , focused  = emptyStyle
-  , disabled = emptyStyle
+  { styleSetNormal   = emptyStyle
+  , styleSetHovered  = emptyStyle
+  , styleSetPressed  = emptyStyle
+  , styleSetFocused  = emptyStyle
+  , styleSetDisabled = emptyStyle
   }
 
 emptyTheme :: Theme ()
 emptyTheme = Theme
-  { elementStyles = Map.empty
-  , defaultStyle  = emptyStyleSet
+  { themeElementStyles = Map.empty
+  , themeDefaultStyle  = emptyStyleSet
   }
 
 testColour :: Colour
