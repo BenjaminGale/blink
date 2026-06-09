@@ -210,30 +210,30 @@ disableWhen True (UI f) = UI $ \ctx ->
   in (a, ctx' { ctxDisabled = ctxDisabled ctx })
 disableWhen False action = action
 
-emit :: DrawCommand -> UI e c ()
-emit cmd = modify $ \ctx -> ctx { ctxDrawCommands = cmd : ctxDrawCommands ctx }
+draw :: DrawCommand -> UI e c ()
+draw cmd = modify $ \ctx -> ctx { ctxDrawCommands = cmd : ctxDrawCommands ctx }
 
 fillRect :: Colour -> UI e c ()
 fillRect colour = do
   r <- getRect
-  emit $ FillRect r colour
+  draw $ FillRect r colour
 
 strokeRect :: Colour -> Double -> UI e c ()
 strokeRect colour width = do
   r <- getRect
-  emit $ StrokeRect r colour width
+  draw $ StrokeRect r colour width
 
 drawText :: Colour -> TextAlign -> Text -> UI e c ()
 drawText colour align text = do
   r <- getRect
-  emit $ DrawText r text colour align
+  draw $ DrawText r text colour align
 
 clipToCurrent :: UI e c a -> UI e c a
 clipToCurrent action = do
   r <- getRect
-  emit $ PushClip r
+  draw $ PushClip r
   result <- action
-  emit PopClip
+  draw PopClip
   return result
 
 dispatch :: c -> UI e c ()
