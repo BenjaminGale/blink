@@ -22,7 +22,7 @@ import Blink.UI
 -- TODO: clicking a label could transfer focus to an associated control (htmlFor-style)
 -- TODO: hover could show a tooltip for truncated text
 label :: (Eq e, Ord e) => e -> Text -> UI e c ()
-label eid text = control eid $ do
+label eid text = renderWithStyle eid $ do
   style <- getStyle eid
   drawText (textColour style) (textAlign style) text
 

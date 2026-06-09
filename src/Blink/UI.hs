@@ -30,6 +30,7 @@ module Blink.UI
   , regionHit
   , dispatch
   , control
+  , renderWithStyle
   , getDrawCommands
   , getCommands
   ) where
@@ -263,17 +264,12 @@ applyTabNavigation eid = do
     setFocus (fromJust prevCtrl)
     consumeKey KeyTab
 
-control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ()
-control eid content = do
-  s <- getStyle eid
-  r <- getRect
-  let bgRect      = insetRect (margin s) r
-      contentRect = insetRect (padding s) bgRect
-  applyHover eid bgRect
-  applyFocus eid
-  applyTabNavigation eid
-  setPreviousControl eid
+renderWithStyle :: Ord e => e -> UI e c () -> UI e c ()
+renderWithStyle eid content = do
   style <- getStyle eid
+  r     <- getRect
+  let bgRect      = insetRect (margin style) r
+      contentRect = insetRect (padding style) bgRect
   case background style of
     RGBA _ _ _ 0 -> pure ()
     c            -> layout bgRect $ fillRect c
@@ -281,3 +277,14 @@ control eid content = do
     Just c  -> layout bgRect $ strokeRect c (borderWidth style)
     Nothing -> pure ()
   layout contentRect $ clipToCurrent content
+
+control :: (Eq e, Ord e) => e -> UI e c () -> UI e c ()
+control eid content = do
+  s <- getStyle eid
+  r <- getRect
+  let bgRect = insetRect (margin s) r
+  applyHover eid bgRect
+  applyFocus eid
+  applyTabNavigation eid
+  setPreviousControl eid
+  renderWithStyle eid content
