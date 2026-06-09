@@ -5,7 +5,8 @@ import Control.Monad (forM_)
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls (button)
+import Data.Text (Text)
+import Blink.Controls (button, textInput)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -53,13 +54,13 @@ bgRect = insetRect (uniform 10) controlRect
 contentRect :: Rectangle
 contentRect = insetRect (uniform 5) bgRect
 
-mkCtx :: InputState -> UIContext TestElement ()
+mkCtx :: InputState -> UIContext TestElement c
 mkCtx input = emptyUIContext controlRect input testTheme
 
-withFocus :: Maybe TestElement -> UIContext TestElement () -> UIContext TestElement ()
+withFocus :: Maybe TestElement -> UIContext TestElement c -> UIContext TestElement c
 withFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = e } }
 
-getFocused :: UIContext TestElement () -> Maybe TestElement
+getFocused :: UIContext TestElement c -> Maybe TestElement
 getFocused = focusedElement . ctxFocusState
 
 noInput :: InputState
@@ -116,16 +117,11 @@ isStrokeRect :: DrawCommand -> Bool
 isStrokeRect (StrokeRect {}) = True
 isStrokeRect _               = False
 
-type WidgetRunner = UIContext TestElement () -> UIContext TestElement ()
+type WidgetRunner c = UIContext TestElement c -> UIContext TestElement c
 
-runButton :: WidgetRunner
-runButton ctx = snd $ runUI (button TestControl "label") ctx
-
-runWithBorder :: UIContext TestElement () -> UIContext TestElement ()
-runWithBorder ctx = snd $ runUI (button TestControl "label") ctx { ctxTheme = testThemeWithBorder }
-
-controlBehaviourSpec :: WidgetRunner -> Spec
+controlBehaviourSpec :: WidgetRunner c -> Spec
 controlBehaviourSpec run = do
+  let runWithBorder ctx = run (ctx { ctxTheme = testThemeWithBorder })
   describe "focus" $ do
     it "receives focus when nothing else is focused" $
       getFocused (run (mkCtx noInput))
@@ -140,18 +136,13 @@ controlBehaviourSpec run = do
         `shouldBe` Just TestControl
 
   describe "tab navigation" $ do
-    it "loses focus when Tab is pressed" $
+    it "passes focus to the next control when Tab is pressed" $
       getFocused (run (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyTab []] })))
         `shouldBe` Nothing
 
     it "passes focus to the previous control when Shift+Tab is pressed" $
       getFocused (run (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyTab [Shift]] }) { ctxPreviousControl = Just OtherControl }))
         `shouldBe` Just OtherControl
-
-    it "is not activated when focus moves to the next control" $
-      fst (runUI (button TestControl "label")
-        (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyTab [], KeyEvent KeyReturn []] })))
-        `shouldBe` False
 
   describe "hover detection" $ do
     forM_ insidePoints $ \(desc, pt) ->
@@ -164,7 +155,7 @@ controlBehaviourSpec run = do
         ctxHoveredElement (run (mkCtx (mouseAt pt ButtonUp [])))
           `shouldBe` Nothing
 
-  describe "rendering" $ do
+  describe "background and border" $ do
     it "does not draw a background in the margin area" $
       ctxDrawCommands (run (mkCtx noInput))
         `shouldNotContain` [FillRect controlRect testColour]
@@ -185,25 +176,81 @@ controlBehaviourSpec run = do
       ctxDrawCommands (runWithBorder (mkCtx noInput))
         `shouldContain` [StrokeRect bgRect testBorderColour 1]
 
-spec :: Spec
-spec = describe "button" $ do
-  controlBehaviourSpec runButton
+runButton :: WidgetRunner ()
+runButton ctx = snd $ runUI (button TestControl "label") ctx
 
-  describe "click behaviour" $ do
-    forM_ insidePoints $ \(desc, pt) ->
-      it ("is clicked when the mouse is released " <> desc) $
-        fst (runUI (button TestControl "label") (mkCtx (mouseAt pt ButtonReleased [])))
+runTextInputControl :: WidgetRunner Text
+runTextInputControl ctx = snd $ runUI (textInput TestControl "" id) ctx
+
+runTextInput :: Text -> UIContext TestElement Text -> UIContext TestElement Text
+runTextInput value ctx = snd $ runUI (textInput TestControl value id) ctx
+
+drawnTexts :: UIContext e c -> [Text]
+drawnTexts ctx = [t | DrawText _ t _ _ <- getDrawCommands ctx]
+
+spec :: Spec
+spec = do
+  describe "textInput" $ do
+    controlBehaviourSpec runTextInputControl
+
+    describe "rendering" $ do
+      it "displays the value without a cursor when unfocused" $
+        drawnTexts (runTextInput "hello" (withFocus (Just OtherControl) (mkCtx noInput)))
+          `shouldContain` ["hello"]
+
+      it "displays the value with a cursor when focused" $
+        drawnTexts (runTextInput "hello" (withFocus (Just TestControl) (mkCtx noInput)))
+          `shouldContain` ["hello|"]
+
+    describe "text editing" $ do
+      it "appends typed characters to the value" $
+        getCommands (runTextInput "hello" (withFocus (Just TestControl) (mkCtx noInput { typedText = ["!"] })))
+          `shouldBe` ["hello!"]
+
+      it "removes the last character on backspace" $
+        getCommands (runTextInput "hello" (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyBackspace []] })))
+          `shouldBe` ["hell"]
+
+      it "does not dispatch when backspace is pressed on an empty value" $
+        getCommands (runTextInput "" (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyBackspace []] })))
+          `shouldBe` []
+
+      it "does not dispatch when there is no input" $
+        getCommands (runTextInput "hello" (withFocus (Just TestControl) (mkCtx noInput)))
+          `shouldBe` []
+
+      it "does not process input when unfocused" $
+        getCommands (runTextInput "hello" (withFocus (Just OtherControl) (mkCtx noInput { typedText = ["!"], keyEvents = [KeyEvent KeyBackspace []] })))
+          `shouldBe` []
+
+  describe "button" $ do
+    controlBehaviourSpec runButton
+
+    describe "rendering" $ do
+      it "draws the label" $
+        drawnTexts (runButton (mkCtx noInput))
+          `shouldContain` ["label"]
+
+    describe "click behaviour" $ do
+      forM_ insidePoints $ \(desc, pt) ->
+        it ("is clicked when the mouse is released " <> desc) $
+          fst (runUI (button TestControl "label") (mkCtx (mouseAt pt ButtonReleased [])))
+            `shouldBe` True
+
+      forM_ outsidePoints $ \(desc, pt) ->
+        it ("is not clicked when the mouse is released " <> desc) $
+          fst (runUI (button TestControl "label") (mkCtx (mouseAt pt ButtonReleased [])))
+            `shouldBe` False
+
+      it "is clicked when Enter is pressed and the button has focus" $
+        fst (runUI (button TestControl "label") (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] }))
           `shouldBe` True
 
-    forM_ outsidePoints $ \(desc, pt) ->
-      it ("is not clicked when the mouse is released " <> desc) $
-        fst (runUI (button TestControl "label") (mkCtx (mouseAt pt ButtonReleased [])))
+      it "is not clicked when Enter is pressed and the button does not have focus" $
+        fst (runUI (button TestControl "label") (withFocus (Just OtherControl) (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] })))
           `shouldBe` False
 
-    it "is clicked when Enter is pressed and the button has focus" $
-      fst (runUI (button TestControl "label") (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] }))
-        `shouldBe` True
-
-    it "is not clicked when Enter is pressed and the button does not have focus" $
-      fst (runUI (button TestControl "label") (withFocus (Just OtherControl) (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] })))
-        `shouldBe` False
+      it "is not clicked when Tab and Enter are pressed simultaneously" $
+        fst (runUI (button TestControl "label")
+          (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyTab [], KeyEvent KeyReturn []] })))
+          `shouldBe` False
