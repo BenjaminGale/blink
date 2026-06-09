@@ -10,7 +10,7 @@ import Blink.Rendering (DrawCommand)
 import Blink.Geometry (Point (..), Size (..), rectOrigin, resizeRect)
 import Blink.Input (ButtonState (..), InputState (..))
 import Blink.Style (Theme)
-import Blink.UI (FocusState (..), UI, UIContext (..), emptyUIContext, nextFrameContext, runUI, getDrawCommands, getCommands)
+import Blink.UI (FocusState (..), UI, UIContext (..), emptyUIContext, nextFrameContext, runUI, getDrawCommands, getCommands, ctxThemeChangeRequested)
 import Blink.Update (Update, execCommands)
 import Control.Monad (unless)
 
@@ -26,7 +26,7 @@ data Backend = Backend
 
 data App e s c = App
   { startUp :: IO s
-  , theme :: Theme e
+  , theme :: s -> Theme e
   , view :: s -> UI e c ()
   , update :: c -> Update s c ()
   }
@@ -37,7 +37,7 @@ runApp backend app = do
   let initialCtx = emptyUIContext
         rectOrigin
         (InputState (Point 0 0) ButtonUp [] [])
-        (Blink.App.theme app)
+        (Blink.App.theme app state)
   loop backend app state initialCtx
 
 loop :: Backend -> App e s c -> s -> UIContext e c -> IO ()
@@ -47,14 +47,20 @@ loop backend app state ctx = do
   unless close $ do
       size <- windowSize backend
       let winRect = resizeRect size rectOrigin
-          processedCtx = snd $ runUI (view app state) (nextFrameContext winRect events ctx)
+          frameCtx = (nextFrameContext winRect events ctx) { ctxTheme = Blink.App.theme app state }
+          processedCtx = snd $ runUI (view app state) frameCtx
           focusState = ctxFocusState processedCtx
           nextFocus = if focusedThisFrame focusState then focusedElement focusState else Nothing
           state' = execCommands (update app) (getCommands processedCtx) state
           (drawCalls', nextCtx) = case frameMode backend of
             EventDriven ->
-              let freshCtx = (nextFrameContext winRect (events { keyEvents = [], typedText = [] }) processedCtx)
-                    { ctxFocusState = focusState { focusedElement = nextFocus } }
+              let newTheme = if ctxThemeChangeRequested processedCtx
+                               then Blink.App.theme app state'
+                               else ctxTheme processedCtx
+                  freshCtx = (nextFrameContext winRect (events { keyEvents = [], typedText = [] }) processedCtx)
+                    { ctxFocusState = focusState { focusedElement = nextFocus }
+                    , ctxTheme = newTheme
+                    }
                   renderedCtx = snd $ runUI (view app state') freshCtx
               in (getDrawCommands renderedCtx, renderedCtx { ctxFocusState = focusState { focusedElement = nextFocus } })
             Continuous -> (getDrawCommands processedCtx, processedCtx { ctxFocusState = focusState { focusedElement = nextFocus } })

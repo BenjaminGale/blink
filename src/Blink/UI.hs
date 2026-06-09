@@ -31,6 +31,7 @@ module Blink.UI
   , clipToCurrent
   , regionHit
   , dispatch
+  , changeTheme
   , control
   , renderWithStyle
   , getDrawCommands
@@ -67,6 +68,7 @@ data UIContext e c = UIContext
   , ctxPreviousControl :: Maybe e
   , ctxCommands :: [c]
   , ctxDisabled :: Bool
+  , ctxThemeChangeRequested :: Bool
   }
 
 newtype UI e c a = UI { runUI :: UIContext e c -> (a, UIContext e c) }
@@ -101,6 +103,7 @@ emptyUIContext bounds input thm = UIContext
   , ctxPreviousControl = Nothing
   , ctxCommands = []
   , ctxDisabled = False
+  , ctxThemeChangeRequested = False
   }
 
 nextFrameContext :: Rectangle -> InputState -> UIContext e c -> UIContext e c
@@ -110,7 +113,8 @@ nextFrameContext bounds input ctx = ctx
   , ctxDrawCommands    = []
   , ctxHoveredElement  = Nothing
   , ctxFocusState      = (ctxFocusState ctx) { focusedThisFrame = False }
-  , ctxCommands = []
+  , ctxCommands             = []
+  , ctxThemeChangeRequested = False
   }
 
 gets :: (UIContext e c -> a) -> UI e c a
@@ -239,6 +243,9 @@ clipToCurrent action = do
 
 dispatch :: c -> UI e c ()
 dispatch cmd = modify $ \ctx -> ctx { ctxCommands = cmd : ctxCommands ctx }
+
+changeTheme :: UI e c ()
+changeTheme = modify $ \ctx -> ctx { ctxThemeChangeRequested = True }
 
 getDrawCommands :: UIContext e c -> [DrawCommand]
 getDrawCommands = reverse . ctxDrawCommands

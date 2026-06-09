@@ -33,7 +33,7 @@ library
 executable demo
     import: defaults
     main-is: Main.hs
-    other-modules: UI
+    other-modules: UI, Theme
     build-depends:
         blink,
         sdl2,
