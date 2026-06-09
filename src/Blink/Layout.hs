@@ -3,27 +3,49 @@ Module: Blink.Layout
 
 = How layout works
 
-Every control in Blink is /greedy/ by default: it fills the rectangle it is
-given. The layout system is how you control what rectangle that is.
+Every UI component in Blink receives a bounding rectangle and occupies it
+entirely by default. The layout system controls what rectangle each component
+receives.
 
-The fundamental primitive is 'layoutWithConstraints'. It takes a
-'RectConstraint' — describing the desired width, height, and alignment — and
-a UI action, and runs that action in a rectangle computed from the constraint
-rather than the full available space:
+= Single control layout
+
+Since components are greedy, 'layoutWithConstraints' is the escape hatch for
+sizing and aligning a single component within its parent bounds. A
+'RectConstraint' specifies a 'Constraint' on each axis — controlling how much
+of the parent space the component takes up — and an 'Alignment' controlling
+where it sits within that space.
 
 @
 layoutWithConstraints (RectConstraint (Exactly 120) (Exactly 32) Center) $
   button MyBtn "Click me"
 @
 
-This renders the button at 120×32 pixels, centred in whatever space is
-available, regardless of how large that space is.
+This renders the button at 120×32 pixels, centred in whatever space the parent
+provides, regardless of how large that space is.
 
-= Arranging multiple children
+= Box layout
 
-'hBox' and 'vBox' arrange a list of children horizontally or vertically. Each
-child is paired with its own 'RectConstraint', so children can have different
-sizes:
+'hBox' lays out its children in a single horizontal row; 'vBox' lays them out
+in a single vertical column. If a margin is set, children are laid out within
+that inset.
+
+Both share the same layout algorithm. The axis along which children are stacked
+is called the /main axis/; the perpendicular axis is the /cross axis/.
+
+  * The panel fills its available space, minus an optional margin.
+  * Children are laid out in a line with optional gaps between them.
+  * Fixed-size children take exactly the space they ask for.
+  * Flexible children share whatever space is left over equally.
+  * If a flexible child has a maximum size and its share would exceed it, it
+    takes only its maximum and the remainder is shared among the others.
+  * The group is aligned within the content area according to 'boxAlignment'.
+    When children are smaller than the content area this controls where the
+    whitespace goes; when they overflow it controls which side clips.
+  * Once each child's space is allocated, 'layoutWithConstraints' positions
+    the child within its slot.
+  * By default children are stretched to fill the panel on the cross axis;
+    this can be disabled to let each child control its own size on that axis.
+  * Children are clipped to the panel's content area.
 
 @
 hBox (defaultBoxConfig { boxSpacing = 4 })
@@ -36,23 +58,18 @@ hBox (defaultBoxConfig { boxSpacing = 4 })
 Here the two outer buttons are fixed at 80px wide; the centre button expands
 to fill whatever space remains. The 'Fill' height constraint in each child
 means height is determined by the panel, not the child.
-
-= Sizing behaviour on the cross axis
-
-By default ('boxFillCross' = 'True') all children are stretched to the full
-cross-axis extent of the panel — children in an 'hBox' are as tall as the
-panel, and children in a 'vBox' are as wide. Set 'boxFillCross' to 'False' to
-let each child size and align itself on the cross axis using its own
-'RectConstraint' instead.
 -}
 module Blink.Layout
-  ( Constraint (..)
+  ( -- * Single control layout
+    layoutWithConstraints
   , RectConstraint (..)
-  , BoxConfig (..)
+  , Constraint (..)
+    -- * Box layout
   , hBox
   , vBox
+  , BoxConfig (..)
   , defaultBoxConfig
-  , layoutWithConstraints
+    -- * Utilities
   , preferredSize
   ) where
 
@@ -63,12 +80,7 @@ import Blink.Geometry (Alignment (..), Rectangle (..), alignRect, insetRect, uni
 import Blink.UI (UI, clipToCurrent, getBounds, withBounds)
 import Data.Maybe (fromMaybe)
 
-{- | Describes how a child should be sized along a single axis.
-
-When multiple expandable children share the same axis, the surplus space is
-divided equally among them. If a child hits its ceiling during this pass, the
-remaining surplus is redistributed across the uncapped children.
--}
+-- | Describes how a child should be sized along a single axis.
 data Constraint
   = Exactly Double
     -- ^ A fixed size. The available space is ignored.
@@ -77,9 +89,9 @@ data Constraint
   | AtLeast Double
     -- ^ Expands to fill available space, but never smaller than the given minimum.
   | AtMost Double
-    -- ^ Fills available space up to the given maximum.
+    -- ^ Expands to fill available space, but never larger than the given maximum. Has no minimum — can shrink to zero.
   | Between Double Double
-    -- ^ Fills available space clamped between the given minimum and maximum.
+    -- ^ Expands to fill available space clamped between the given minimum and maximum.
   deriving (Eq, Show)
 
 -- | Per-child sizing and alignment within a layout panel slot.
@@ -93,26 +105,16 @@ data RectConstraint = RectConstraint
     --   slot on one or both axes.
   }
 
-{- | Configuration shared by 'hBox' and 'vBox'.
-
-The panel itself is always greedy — it fills its available rectangle. These
-fields control spacing, margin, and how children are arranged within that space.
-
-When 'boxFillCross' is 'True', each child stretches to fill the full cross-axis
-extent of the panel (height for 'hBox', width for 'vBox'), overriding the
-child's cross constraint and alignment. When 'False', the child's
-'RectConstraint' governs the cross axis.
-
-The panel clips its children to its content area.
--}
+-- | Configuration shared by 'hBox' and 'vBox'.
 data BoxConfig = BoxConfig
   { boxSpacing    :: Double
     -- ^ Gap in pixels between consecutive children on the main axis.
   , boxMargin     :: Double
     -- ^ Uniform inset applied to all four sides of the panel before layout.
   , boxAlignment  :: Alignment
-    -- ^ Positions the content block within the content area when the total
-    --   child size is less than the available space on the main axis.
+    -- ^ Positions the content block within the content area on the main axis.
+    --   Controls where whitespace falls when children are smaller than the
+    --   content area, and which side clips when they overflow.
   , boxFillCross  :: Bool
     -- ^ Whether children stretch to fill the full cross-axis extent.
   }
@@ -131,11 +133,10 @@ defaultBoxConfig = BoxConfig
   , boxFillCross = True
   }
 
--- | Resolves both axes of a 'RectConstraint' against the current rectangle,
---   sizes the child accordingly, and positions it using 'rcAlignment'.
---
---   Controls are greedy by default; wrap them with this function at the call
---   site to opt in to constraint-based sizing:
+-- | Sizes and positions a component within its parent bounds according to a
+--   'RectConstraint'. Used directly to constrain a single component, and used
+--   internally by 'hBox' and 'vBox' to position each child within its
+--   allocated slot.
 --
 -- @
 -- layoutWithConstraints (RectConstraint (Exactly 120) (Exactly 32) Center) $
@@ -228,8 +229,18 @@ box ax cfg children = do
 -- 200.0
 -- >>> preferredSize (AtLeast 50) 200
 -- 200.0
+-- >>> preferredSize (AtLeast 50) 20
+-- 50.0
 -- >>> preferredSize (AtMost 150) 200
 -- 150.0
+-- >>> preferredSize (AtMost 150) 100
+-- 100.0
+-- >>> preferredSize (Between 50 150) 200
+-- 150.0
+-- >>> preferredSize (Between 50 150) 100
+-- 100.0
+-- >>> preferredSize (Between 50 150) 20
+-- 50.0
 preferredSize :: Constraint -> Double -> Double
 preferredSize (Exactly w)     _         = w
 preferredSize Fill            available  = available
