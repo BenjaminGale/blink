@@ -15,10 +15,10 @@ import Blink.UI
 
 noInput :: InputState
 noInput = InputState
-  { mousePosition = Point 0 0
-  , leftButton    = ButtonUp
-  , keyEvents     = ([] :: [KeyEvent])
-  , typedText     = []
+  { inputMousePosition = Point 0 0
+  , inputLeftButton    = ButtonUp
+  , inputKeyEvents     = ([] :: [KeyEvent])
+  , inputTypedText     = []
   }
 
 emptyStyle :: Style

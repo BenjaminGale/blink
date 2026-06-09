@@ -261,11 +261,11 @@ getBounds = gets ctxBounds
 
 -- | The current mouse cursor position in window coordinates.
 getMousePos :: UI e c Point
-getMousePos = mousePosition <$> getInput
+getMousePos = inputMousePosition <$> getInput
 
 -- | The current state of the primary (left) mouse button.
 getLeftButton :: UI e c ButtonState
-getLeftButton = leftButton <$> getInput
+getLeftButton = inputLeftButton <$> getInput
 
 -- | The raw input state for the current frame.
 getInput :: UI e c InputState
@@ -276,7 +276,7 @@ getInput = gets ctxInput
 consumeKey :: Key -> UI e c ()
 consumeKey k = modify $ \ctx ->
   let input = ctxInput ctx
-  in ctx { ctxInput = input { keyEvents = filter (\e -> key e /= k) (keyEvents input) } }
+  in ctx { ctxInput = input { inputKeyEvents = filter (\e -> key e /= k) (inputKeyEvents input) } }
 
 -- | The element that was the most recent tab stop before the current one,
 -- used by 'control' to implement Shift-Tab navigation.
@@ -342,7 +342,7 @@ whenFocused eid action = isFocused eid >>= \f -> when f action
 isKeyPressed :: Eq e => e -> Key -> UI e c Bool
 isKeyPressed eid k = do
   hasFoc <- isFocused eid
-  pressed <- any (\e -> key e == k) . keyEvents <$> getInput
+  pressed <- any (\e -> key e == k) . inputKeyEvents <$> getInput
   pure (hasFoc && pressed)
 
 -- | Registers the element as the current hover target. Typically called
@@ -478,7 +478,7 @@ applyTabNavigation eid = do
   hasFocus <- isFocused eid
   input    <- getInput
   prevCtrl <- getPreviousTabStop
-  let tabKey          = find (\e -> key e == KeyTab) (keyEvents input)
+  let tabKey          = find (\e -> key e == KeyTab) (inputKeyEvents input)
       tabPressed      = maybe False (\e -> Shift `notElem` modifiers e) tabKey
       shiftTabPressed = maybe False (\e -> Shift `elem`    modifiers e) tabKey
   when (hasFocus && tabPressed) $ do

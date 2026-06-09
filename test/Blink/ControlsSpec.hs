@@ -65,18 +65,18 @@ getFocused = focusedElement . ctxFocusState
 
 noInput :: InputState
 noInput = InputState
-  { mousePosition = Point 200 200
-  , leftButton    = ButtonUp
-  , keyEvents     = []
-  , typedText     = []
+  { inputMousePosition = Point 200 200
+  , inputLeftButton    = ButtonUp
+  , inputKeyEvents     = []
+  , inputTypedText     = []
   }
 
 mouseAt :: Point -> ButtonState -> [KeyEvent] -> InputState
 mouseAt pos btn keys = InputState
-  { mousePosition = pos
-  , leftButton    = btn
-  , keyEvents     = keys
-  , typedText     = []
+  { inputMousePosition = pos
+  , inputLeftButton    = btn
+  , inputKeyEvents     = keys
+  , inputTypedText     = []
   }
 
 insidePoints :: [(String, Point)]
@@ -182,11 +182,11 @@ controlBehaviourSpec run hitPoint = do
 
   describe "tab navigation" $ do
     it "passes focus to the next control when Tab is pressed" $
-      getFocused (run (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyTab []] })))
+      getFocused (run (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab []] })))
         `shouldBe` Nothing
 
     it "passes focus to the previous control when Shift+Tab is pressed" $
-      getFocused (run (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyTab [Shift]] }) { ctxPreviousTabStop = Just OtherControl }))
+      getFocused (run (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab [Shift]] }) { ctxPreviousTabStop = Just OtherControl }))
         `shouldBe` Just OtherControl
 
   describe "hover detection" $ do
@@ -293,15 +293,15 @@ spec = do
 
     describe "text editing" $ do
       it "appends typed characters to the value" $
-        getCommands (runTextInput "hello" (withFocus (Just TestControl) (mkCtx noInput { typedText = ["!"] })))
+        getCommands (runTextInput "hello" (withFocus (Just TestControl) (mkCtx noInput { inputTypedText = ["!"] })))
           `shouldBe` ["hello!"]
 
       it "removes the last character on backspace" $
-        getCommands (runTextInput "hello" (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyBackspace []] })))
+        getCommands (runTextInput "hello" (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyBackspace []] })))
           `shouldBe` ["hell"]
 
       it "does not dispatch when backspace is pressed on an empty value" $
-        getCommands (runTextInput "" (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyBackspace []] })))
+        getCommands (runTextInput "" (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyBackspace []] })))
           `shouldBe` []
 
       it "does not dispatch when there is no input" $
@@ -309,12 +309,12 @@ spec = do
           `shouldBe` []
 
       it "does not process input when unfocused" $
-        getCommands (runTextInput "hello" (withFocus (Just OtherControl) (mkCtx noInput { typedText = ["!"], keyEvents = [KeyEvent KeyBackspace []] })))
+        getCommands (runTextInput "hello" (withFocus (Just OtherControl) (mkCtx noInput { inputTypedText = ["!"], inputKeyEvents = [KeyEvent KeyBackspace []] })))
           `shouldBe` []
 
     describe "disabled" $ do
       it "does not process input when disabled" $
-        getCommands (snd (runUI (disableWhen True (textInput TestControl "hello" id)) (withFocus (Just TestControl) (mkCtx noInput { typedText = ["!"] }))))
+        getCommands (snd (runUI (disableWhen True (textInput TestControl "hello" id)) (withFocus (Just TestControl) (mkCtx noInput { inputTypedText = ["!"] }))))
           `shouldBe` []
 
       it "does not show a cursor when focused and disabled" $
@@ -334,7 +334,7 @@ spec = do
           `shouldBe` [False]
 
       it "dispatches toggle when Enter is pressed while focused" $
-        getCommands (runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput { keyEvents = [KeyEvent KeyReturn []] })))
+        getCommands (runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
           `shouldBe` [True]
 
       it "does not dispatch when clicked outside the box" $
@@ -342,7 +342,7 @@ spec = do
           `shouldBe` []
 
       it "does not dispatch when Enter is pressed while unfocused" $
-        getCommands (runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput { keyEvents = [KeyEvent KeyReturn []] })))
+        getCommands (runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
           `shouldBe` []
 
     describe "disabled" $ do
@@ -351,7 +351,7 @@ spec = do
           `shouldBe` []
 
       it "does not dispatch when Enter is pressed while disabled" $
-        getCommands (snd (runUI (disableWhen True (checkbox TestControl "test label" False id)) (withFocus (Just TestControl) (mkCheckboxCtx noInput { keyEvents = [KeyEvent KeyReturn []] }))))
+        getCommands (snd (runUI (disableWhen True (checkbox TestControl "test label" False id)) (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))))
           `shouldBe` []
 
     describe "rendering" $ do
@@ -422,16 +422,16 @@ spec = do
             `shouldBe` False
 
       it "is clicked when Enter is pressed and the button has focus" $
-        fst (runUI (button TestControl "label") (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] }))
+        fst (runUI (button TestControl "label") (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
           `shouldBe` True
 
       it "is not clicked when Enter is pressed and the button does not have focus" $
-        fst (runUI (button TestControl "label") (withFocus (Just OtherControl) (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] })))
+        fst (runUI (button TestControl "label") (withFocus (Just OtherControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
           `shouldBe` False
 
       it "is not clicked when Tab and Enter are pressed simultaneously" $
         fst (runUI (button TestControl "label")
-          (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyTab [], KeyEvent KeyReturn []] })))
+          (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab [], KeyEvent KeyReturn []] })))
           `shouldBe` False
 
     describe "disabled" $ do
@@ -440,5 +440,5 @@ spec = do
           `shouldBe` False
 
       it "is not activated by Enter when disabled" $
-        fst (runUI (disableWhen True (button TestControl "label")) (withFocus (Just TestControl) (mkCtx noInput { keyEvents = [KeyEvent KeyReturn []] })))
+        fst (runUI (disableWhen True (button TestControl "label")) (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
           `shouldBe` False

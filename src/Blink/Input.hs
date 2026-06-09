@@ -27,8 +27,8 @@ data KeyEvent = KeyEvent
   } deriving (Eq, Show)
 
 data InputState = InputState
-  { mousePosition :: Point
-  , leftButton    :: ButtonState
-  , keyEvents     :: [KeyEvent]
-  , typedText     :: [Text]
+  { inputMousePosition :: Point
+  , inputLeftButton    :: ButtonState
+  , inputKeyEvents     :: [KeyEvent]
+  , inputTypedText     :: [Text]
   } deriving (Eq, Show)

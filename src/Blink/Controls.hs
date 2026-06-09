@@ -116,7 +116,7 @@ textInput eid value mkCmd = control eid $ do
   drawText (styleTextColour style) (styleTextAlign style) displayed
   when hasFocus $ whenEnabled $ do
     input <- getInput
-    let withTyped = foldl' (<>) value (typedText input)
+    let withTyped = foldl' (<>) value (inputTypedText input)
         result    = if backspace && not (T.null withTyped)
                     then T.init withTyped
                     else withTyped
