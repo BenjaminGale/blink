@@ -10,7 +10,6 @@ module Blink.UI
   , isHovered
   , isPressed
   , setHovered
-  , getFocus
   , isFocused
   , setFocus
   , setFocusWhen
