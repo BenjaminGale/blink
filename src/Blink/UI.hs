@@ -253,20 +253,25 @@ regionHit = do
   r <- getBounds
   containsPoint r <$> getMousePos
 
+whenEnabled :: UI e c () -> UI e c ()
+whenEnabled ui = do
+  isDisabl <- isDisabled
+  unless isDisabl $ do
+    ui
+
 applyHover :: (Eq e, Ord e) => e -> UI e c ()
 applyHover eid = do
-  isDisabl <- isDisabled
-  when (not isDisabl) $ do
+  whenEnabled $ do
     s <- getStyle eid
     r <- getBounds
     let bgRect = insetRect (margin s) r
     isHit <- withBounds bgRect regionHit
-    when isHit $ setHovered eid
+    when isHit $ do
+      setHovered eid
 
 applyFocus :: (Eq e, Ord e) => e -> UI e c ()
 applyFocus eid = do
-  isDisabl     <- isDisabled
-  when (not isDisabl) $ do
+  whenEnabled $ do
     currentFocus <- getFocus
     isHit        <- isHovered eid
     btn          <- getLeftButton
@@ -289,8 +294,8 @@ applyTabNavigation eid = do
   when (hasFocus && shiftTabPressed && isJust prevCtrl) $ do
     setFocus (fromJust prevCtrl)
     consumeKey KeyTab
-  isDisabl <- isDisabled
-  unless isDisabl $ setPreviousTabStop eid
+  whenEnabled $ do
+    setPreviousTabStop eid
 
 renderControl :: Ord e => e -> UI e c () -> UI e c ()
 renderControl eid content = do
