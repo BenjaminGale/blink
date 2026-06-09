@@ -191,8 +191,7 @@ setFocus :: e -> UI e c ()
 setFocus eid = modify $ \ctx -> ctx { ctxFocusState = FocusState { focusedElement = Just eid, focusedThisFrame = True } }
 
 setFocusWhen :: Bool -> e -> UI e c ()
-setFocusWhen True eid  = setFocus eid
-setFocusWhen False _   = pure ()
+setFocusWhen b eid = when b (setFocus eid)
 
 clearFocus :: UI e c ()
 clearFocus = modify $ \ctx -> ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = Nothing } }
