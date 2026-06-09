@@ -25,6 +25,7 @@ module Blink.UI
   , isDisabled
   , disableWhen
   , whenEnabled
+  , whenFocused
   , withBounds
   , fillRect
   , strokeRect
@@ -186,6 +187,9 @@ isPressed eid = do
   isHov <- isHovered eid
   btn   <- getLeftButton
   pure (isHov && btn == ButtonDown)
+
+whenFocused :: Eq e => e -> UI e c () -> UI e c ()
+whenFocused eid action = isFocused eid >>= \f -> when f action
 
 isKeyPressed :: Eq e => e -> Key -> UI e c Bool
 isKeyPressed eid k = do

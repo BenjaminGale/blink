@@ -44,28 +44,29 @@ progressBar eid value = renderControl eid $ do
       fillRect' = r { rectWidth = rectWidth r * clamped }
   withBounds fillRect' $ fillRect (styleTextColour style)
 
+checkboxMark :: (Eq e, Ord e) => e -> Bool -> (Bool -> c) -> UI e c ()
+checkboxMark boxId checked mkCmd = control boxId $ do
+  style     <- getStyle boxId
+  activated <- isActivated boxId
+  when checked   $ drawText (styleTextColour style) AlignCenter "✓"
+  when activated $ dispatch (mkCmd (not checked))
+
 -- | A togglable checkbox with an adjacent label.
 -- TODO: box size should derive from the font/line-height rather than being fixed
 -- TODO: clicking the label should also toggle the checkbox (see label's focus-association TODO)
 -- TODO: Space key should activate when KeySpace is added to the Key type
 checkbox :: (Eq e, Ord e) => e -> e -> Text -> Bool -> (Bool -> c) -> UI e c ()
 checkbox boxId labelId text checked mkCmd = do
-  let boxControl = control boxId $ do
-        style <- getStyle boxId
-        when checked $ drawText (styleTextColour style) AlignCenter "✓"
   hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
-    [ (RectConstraint (Exactly 20) (Exactly 20) MiddleLeft, boxControl)
-    , (RectConstraint Fill         Fill         MiddleLeft, label labelId text)
+    [ (RectConstraint (Exactly 20) (Exactly 20) MiddleLeft, checkboxMark boxId checked mkCmd)
+    , (RectConstraint Fill Fill MiddleLeft, label labelId text)
     ]
-  activated <- isActivated boxId
-  hasFocus  <- isFocused boxId
-  when hasFocus $ do
+  whenFocused boxId $ do
     styleSet <- getStyleSet boxId
     let s = styleSetFocused styleSet
     case styleBorderColour s of
       Just c  -> strokeRect c (styleBorderWidth s)
       Nothing -> pure ()
-  when activated $ dispatch (mkCmd (not checked))
 
 button :: (Eq e, Ord e) => e -> Text -> UI e c Bool
 button eid txt = do
