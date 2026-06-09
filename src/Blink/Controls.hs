@@ -1,10 +1,34 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
+{- |
+Module: Blink.Controls
+
+Standard UI controls built on top of "Blink.UI". Each control takes an element
+ID of type @e@ used for styling and interaction tracking; see "Blink.UI" for an
+explanation of element IDs, commands, and the render loop.
+
+= Value-callback pattern
+
+Stateful controls receive the current value and a function that wraps an
+updated value in an application command, dispatched whenever the user makes a
+change:
+
+@
+textInput NameField currentName NameChanged
+-- dispatches: NameChanged newValue
+@
+
+The application retrieves 'NameChanged' via 'getCommands', stores the new
+value, and passes it back to the control on the next frame. This keeps all
+state outside the UI tree.
+-}
 module Blink.Controls
-  ( button
-  , checkbox
-  , label
+  ( -- * Display
+    label
   , progressBar
+    -- * Input
+  , button
+  , checkbox
   , textInput
   ) where
 
@@ -26,16 +50,16 @@ isActivated eid = do
   disabled   <- isDisabled
   return (not disabled && (clicked || enterPress))
 
--- | Read-only text display.
--- TODO: truncate with ellipsis when text overflows the control bounds
--- TODO: clicking a label could transfer focus to an associated control (htmlFor-style)
--- TODO: hover could show a tooltip for truncated text
+-- | Read-only text display. Renders @text@ within the element's content
+-- rectangle using the active style. Does not participate in interaction or
+-- keyboard navigation.
 label :: (Eq e, Ord e) => e -> Text -> UI e c ()
 label eid text = renderControl eid $ do
   style <- getStyle eid
   drawText (styleTextColour style) (styleTextAlign style) text
 
--- | A read-only progress indicator. Value is clamped to [0, 1].
+-- | Read-only progress indicator. @value@ is clamped to @[0, 1]@ and rendered
+-- as a filled bar scaled to that fraction of the content width.
 progressBar :: (Eq e, Ord e) => e -> Double -> UI e c ()
 progressBar eid value = renderControl eid $ do
   style <- getStyle eid
@@ -54,10 +78,8 @@ checkboxMark boxId checked mkCmd = control boxId $ do
 checkboxLabel :: Style -> Text -> UI e c ()
 checkboxLabel style text = drawText (styleTextColour style) (styleTextAlign style) text
 
--- | A togglable checkbox with an adjacent label.
--- TODO: box size should derive from the font/line-height rather than being fixed
--- TODO: clicking the label should also toggle the checkbox (see label's focus-association TODO)
--- TODO: Space key should activate when KeySpace is added to the Key type
+-- | A togglable checkbox with an adjacent label. Dispatches @mkCmd (not checked)@
+-- when activated by a click or the Enter key.
 checkbox :: (Eq e, Ord e) => e -> Text -> Bool -> (Bool -> c) -> UI e c ()
 checkbox boxId text checked mkCmd = do
   style <- getStyle boxId
@@ -72,6 +94,8 @@ checkbox boxId text checked mkCmd = do
       Just c  -> strokeRect c (styleBorderWidth s)
       Nothing -> pure ()
 
+-- | A clickable button labelled @txt@. Returns 'True' on the frame the button
+-- is activated — by a left-click or by pressing Enter while focused.
 button :: (Eq e, Ord e) => e -> Text -> UI e c Bool
 button eid txt = do
   control eid $ do
@@ -79,6 +103,9 @@ button eid txt = do
     drawText (styleTextColour style) (styleTextAlign style) txt
   isActivated eid
 
+-- | A single-line text entry field. Displays a cursor when focused. Dispatches
+-- @mkCmd newValue@ when the text changes via typed characters or Backspace. The
+-- application is responsible for storing and passing back @value@ each frame.
 textInput :: (Eq e, Ord e) => e -> Text -> (Text -> c) -> UI e c ()
 textInput eid value mkCmd = control eid $ do
   style     <- getStyle eid
