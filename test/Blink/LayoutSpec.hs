@@ -113,8 +113,8 @@ spec = describe "layout" $ do
       it "limits to its maximum when space exceeds it" $
         preferredSize (Between 20 80) 100 `shouldBe` 80
 
-  describe "layoutWithConstraint" $ do
-    let run rct = runLayout hBounds (layoutWithConstraint rct fill)
+  describe "layoutWithConstraints" $ do
+    let run rct = runLayout hBounds (layoutWithConstraints rct fill)
 
     describe "width constraints" $ do
       it "Exactly gives the child its exact width" $

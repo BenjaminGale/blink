@@ -6,13 +6,13 @@ Module: Blink.Layout
 Every control in Blink is /greedy/ by default: it fills the rectangle it is
 given. The layout system is how you control what rectangle that is.
 
-The fundamental primitive is 'layoutWithConstraint'. It takes a
+The fundamental primitive is 'layoutWithConstraints'. It takes a
 'RectConstraint' — describing the desired width, height, and alignment — and
 a UI action, and runs that action in a rectangle computed from the constraint
 rather than the full available space:
 
 @
-layoutWithConstraint (RectConstraint (Exactly 120) (Exactly 32) Center) $
+layoutWithConstraints (RectConstraint (Exactly 120) (Exactly 32) Center) $
   button MyBtn "Click me"
 @
 
@@ -52,7 +52,7 @@ module Blink.Layout
   , hBox
   , vBox
   , defaultBoxConfig
-  , layoutWithConstraint
+  , layoutWithConstraints
   , preferredSize
   ) where
 
@@ -138,11 +138,11 @@ defaultBoxConfig = BoxConfig
 --   site to opt in to constraint-based sizing:
 --
 -- @
--- layoutWithConstraint (RectConstraint (Exactly 120) (Exactly 32) Center) $
+-- layoutWithConstraints (RectConstraint (Exactly 120) (Exactly 32) Center) $
 --   button MyBtn "OK"
 -- @
-layoutWithConstraint :: RectConstraint -> UI e c a -> UI e c a
-layoutWithConstraint rc ui = do
+layoutWithConstraints :: RectConstraint -> UI e c a -> UI e c a
+layoutWithConstraints rc ui = do
   r <- getBounds
   let w = preferredSize (rcWidth rc) (rectWidth r)
       h = preferredSize (rcHeight rc) (rectHeight r)
@@ -217,7 +217,7 @@ box ax cfg children = do
     mapM_ (\(mo, ms, (rc, ui)) ->
       let slotRect    = makeSlot ax mo (crossOrigin ax cb) ms (crossLength ax cb)
           effectiveRc = if boxFillCross cfg then fillCross ax rc else rc
-      in withBounds slotRect $ layoutWithConstraint effectiveRc ui
+      in withBounds slotRect $ layoutWithConstraints effectiveRc ui
       ) (zip3 origins slotMains children)
 
 -- | Returns the preferred size for a 'Constraint' given the amount of available space.
