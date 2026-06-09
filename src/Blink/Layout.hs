@@ -59,7 +59,7 @@ module Blink.Layout
 import Data.List (sortBy)
 import Data.Ord  (comparing)
 
-import Blink.Geometry (Alignment (..), Rectangle (..), Size (..), alignRect, insetRect, uniform)
+import Blink.Geometry (Alignment (..), Rectangle (..), alignRect, insetRect, uniform)
 import Blink.UI (UI, clipToCurrent, getBounds, withBounds)
 import Data.Maybe (fromMaybe)
 
@@ -148,51 +148,75 @@ layoutWithConstraint rc ui = do
       h = preferredSize (rcHeight rc) (rectHeight r)
   withBounds (alignRect (rcAlignment rc) r (Rectangle 0 0 w h)) ui
 
+-- | Abstracts over the two layout orientations so that 'box' can be written
+--   once. Each field encodes the axis-specific behaviour; 'horizontal' and
+--   'vertical' are the only two values.
+data Axis = Axis
+  { mainConstraint :: RectConstraint -> Constraint
+    -- ^ Extracts the child's constraint along the main axis.
+  , mainLength     :: Rectangle -> Double
+    -- ^ Length of a rectangle along the main axis.
+  , crossLength    :: Rectangle -> Double
+    -- ^ Length of a rectangle along the cross axis.
+  , mainOrigin     :: Rectangle -> Double
+    -- ^ Origin of a rectangle along the main axis.
+  , crossOrigin    :: Rectangle -> Double
+    -- ^ Origin of a rectangle along the cross axis.
+  , makeSlot       :: Double -> Double -> Double -> Double -> Rectangle
+    -- ^ Builds a slot rectangle from @(mainOrigin, crossOrigin, mainLen, crossLen)@.
+  , fillCross      :: RectConstraint -> RectConstraint
+    -- ^ Overrides the child's cross-axis constraint with 'Fill'.
+  }
+
+horizontal :: Axis
+horizontal = Axis
+  { mainConstraint = rcWidth
+  , mainLength     = rectWidth
+  , crossLength    = rectHeight
+  , mainOrigin     = rectX
+  , crossOrigin    = rectY
+  , makeSlot       = Rectangle
+  , fillCross      = \rc -> rc { rcHeight = Fill }
+  }
+
+vertical :: Axis
+vertical = Axis
+  { mainConstraint = rcHeight
+  , mainLength     = rectHeight
+  , crossLength    = rectWidth
+  , mainOrigin     = rectY
+  , crossOrigin    = rectX
+  , makeSlot       = \mo co ms cs -> Rectangle co mo cs ms
+  , fillCross      = \rc -> rc { rcWidth = Fill }
+  }
+
 -- | Arranges children left-to-right. Each child is paired with a
 --   'RectConstraint' governing its width and, when 'boxFillCross' is 'False',
 --   its height and vertical alignment.
 hBox :: BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
-hBox = box rcWidth rectWidth rectHeight rectX rectY
-           (\m cr -> Size m cr)
-           (\mo co ms cs -> Rectangle mo co ms cs)
-           (\c rc -> rc { rcHeight = c })
+hBox = box horizontal
 
 -- | Arranges children top-to-bottom. Each child is paired with a
 --   'RectConstraint' governing its height and, when 'boxFillCross' is 'False',
 --   its width and horizontal alignment.
 vBox :: BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
-vBox = box rcHeight rectHeight rectWidth rectY rectX
-           (\m cr -> Size cr m)
-           (\mo co ms cs -> Rectangle co mo cs ms)
-           (\c rc -> rc { rcWidth = c })
+vBox = box vertical
 
-box
-  :: (RectConstraint -> Constraint)
-  -> (Rectangle -> Double)
-  -> (Rectangle -> Double)
-  -> (Rectangle -> Double)
-  -> (Rectangle -> Double)
-  -> (Double -> Double -> Size)
-  -> (Double -> Double -> Double -> Double -> Rectangle)
-  -> (Constraint -> RectConstraint -> RectConstraint)
-  -> BoxConfig
-  -> [(RectConstraint, UI e c ())]
-  -> UI e c ()
-box mainC mainLen crossLen mainOrig crossOrig mkSize mkSlot setCrossC cfg children = do
+box :: Axis -> BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
+box ax cfg children = do
   r <- getBounds
   let ca        = insetRect (uniform (boxMargin cfg)) r
       n         = length children
       sp        = boxSpacing cfg
-      availMain = mainLen ca - sp * fromIntegral (max 0 (n - 1))
-      slotMains = preferredSizes availMain (map (mainC . fst) children)
+      availMain = mainLength ax ca - sp * fromIntegral (max 0 (n - 1))
+      slotMains = preferredSizes availMain (map (mainConstraint ax . fst) children)
       totalMain = sum slotMains + sp * fromIntegral (max 0 (n - 1))
-      slotSize  = mkSize totalMain (crossLen ca)
-      cb        = alignRect (boxAlignment cfg) ca (Rectangle 0 0 (sizeWidth slotSize) (sizeHeight slotSize))
-      origins   = scanl (\o s -> o + s + sp) (mainOrig cb) slotMains
+      cb        = alignRect (boxAlignment cfg) ca (makeSlot ax 0 0 totalMain (crossLength ax ca))
+      origins   = scanl (\o s -> o + s + sp) (mainOrigin ax cb) slotMains
   withBounds ca $ clipToCurrent $
     mapM_ (\(mo, ms, (rc, ui)) ->
-      let slotRect    = mkSlot mo (crossOrig cb) ms (crossLen cb)
-          effectiveRc = if boxFillCross cfg then setCrossC Fill rc else rc
+      let slotRect    = makeSlot ax mo (crossOrigin ax cb) ms (crossLength ax cb)
+          effectiveRc = if boxFillCross cfg then fillCross ax rc else rc
       in withBounds slotRect $ layoutWithConstraint effectiveRc ui
       ) (zip3 origins slotMains children)
 
