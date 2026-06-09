@@ -69,6 +69,7 @@ module Blink.Layout
   , vBox
   , BoxConfig (..)
   , defaultBoxConfig
+  , boxTotalSpacing
     -- * Utilities
   , preferredSize
   ) where
@@ -132,6 +133,11 @@ defaultBoxConfig = BoxConfig
   , boxAlignment = TopLeft
   , boxFillCross = True
   }
+
+-- | Total space consumed by all gaps between @n@ children — the sum of
+--   @(n - 1)@ spacings.
+boxTotalSpacing :: BoxConfig -> Int -> Double
+boxTotalSpacing cfg n = boxSpacing cfg * fromIntegral (max 0 (n - 1))
 
 -- | Sizes and positions a component within its parent bounds according to a
 --   'RectConstraint'. Used directly to constrain a single component, and used
@@ -206,20 +212,23 @@ vBox = box vertical
 box :: Axis -> BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
 box ax cfg children = do
   r <- getBounds
-  let ca        = insetRect (uniform (boxMargin cfg)) r
-      n         = length children
-      sp        = boxSpacing cfg
-      availMain = mainLength ax ca - sp * fromIntegral (max 0 (n - 1))
-      slotMains = preferredSizes availMain (map (mainConstraint ax . fst) children)
-      totalMain = sum slotMains + sp * fromIntegral (max 0 (n - 1))
-      cb        = alignRect (boxAlignment cfg) ca (makeSlot ax 0 0 totalMain (crossLength ax ca))
-      origins   = scanl (\o s -> o + s + sp) (mainOrigin ax cb) slotMains
-  withBounds ca $ clipToCurrent $
-    mapM_ (\(mo, ms, (rc, ui)) ->
-      let slotRect    = makeSlot ax mo (crossOrigin ax cb) ms (crossLength ax cb)
-          effectiveRc = if boxFillCross cfg then fillCross ax rc else rc
-      in withBounds slotRect $ layoutWithConstraints effectiveRc ui
-      ) (zip3 origins slotMains children)
+  let contentArea  = insetRect (uniform (boxMargin cfg)) r
+      totalSpacing = boxTotalSpacing cfg (length children)
+      availSpace   = mainLength ax contentArea - totalSpacing
+      slotSizes    = preferredSizes availSpace (map (mainConstraint ax . fst) children)
+      crossOrig    = crossOrigin ax contentArea
+      crossLen     = crossLength ax contentArea
+      contentBlock = alignRect (boxAlignment cfg) contentArea
+                       (makeSlot ax 0 0 (sum slotSizes + totalSpacing) crossLen)
+      slotOrigins  = scanl (\o s -> o + s + boxSpacing cfg) (mainOrigin ax contentBlock) slotSizes
+      placeChild (slotOrigin, slotSize, (rc, ui)) =
+        let slotRect    = makeSlot ax slotOrigin crossOrig slotSize crossLen
+            effectiveRc = if boxFillCross cfg then fillCross ax rc else rc
+        in withBounds slotRect $ layoutWithConstraints effectiveRc ui
+
+  withBounds contentArea $ do
+    clipToCurrent $ do
+      mapM_ placeChild (zip3 slotOrigins slotSizes children)
 
 -- | Returns the preferred size for a 'Constraint' given the amount of available space.
 --
