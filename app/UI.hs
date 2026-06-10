@@ -102,7 +102,6 @@ row6 dark s = fillRect (rowBg dark (RGBA 0.118 0.165 0.176 1) (RGBA 0.87 0.95 0.
 
 demoView :: UI Element (StandardControls Element) AppState ()
 demoView = do
-  changeTheme
   s <- getAppState
   let dark = isChecked2 s
   when dark $ fillRect (RGBA 0.082 0.102 0.129 1)

@@ -180,8 +180,6 @@ module Blink.UI
   , isDisabled
   , disableWhen
   , whenEnabled
-    -- * Theme switching
-  , changeTheme
     -- * Building controls
   , control
   , renderControl
@@ -233,7 +231,6 @@ data UIContext e u s = UIContext
   , ctxDispatches :: [s -> s]
   , ctxAsyncJobs :: [s -> IO (s -> s)]
   , ctxDisabled :: Bool
-  , ctxThemeChangeRequested :: Bool
   }
 
 -- | The UI monad. A pure state-threading computation that reads from a
@@ -283,7 +280,6 @@ emptyUIContext bounds input thm uiState appState = UIContext
   , ctxDispatches = []
   , ctxAsyncJobs = []
   , ctxDisabled = False
-  , ctxThemeChangeRequested = False
   }
 
 -- | Advances the context to the next frame. Resets per-frame state (draw
@@ -309,7 +305,6 @@ nextFrameContext bounds input ctx = ctx
       }
   , ctxDispatches = []
   , ctxAsyncJobs = []
-  , ctxThemeChangeRequested = False
   }
 
 gets :: (UIContext e u s -> a) -> UI e u s a
@@ -518,11 +513,6 @@ dispatch f = modify $ \ctx -> ctx { ctxDispatches = f : ctxDispatches ctx }
 -- job returns is applied to whatever state exists when it finishes.
 dispatchAsync :: (s -> IO (s -> s)) -> UI e u s ()
 dispatchAsync job = modify $ \ctx -> ctx { ctxAsyncJobs = job : ctxAsyncJobs ctx }
-
--- | Signals that the application has requested a theme switch. The host checks
--- 'ctxThemeChangeRequested' after the frame and acts accordingly.
-changeTheme :: UI e u s ()
-changeTheme = modify $ \ctx -> ctx { ctxThemeChangeRequested = True }
 
 -- | Extracts the draw commands produced during the frame, in submission order.
 getDrawCommands :: UIContext e u s -> [DrawCommand]
