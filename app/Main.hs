@@ -100,8 +100,10 @@ updateButton current e = case SDL.eventPayload e of
   SDL.MouseButtonEvent d
     | SDL.mouseButtonEventButton d == SDL.ButtonLeft ->
         case SDL.mouseButtonEventMotion d of
-          SDL.Pressed  -> ButtonDown
           SDL.Released -> ButtonReleased
+          SDL.Pressed  -> case current of
+            ButtonReleased -> ButtonReleased  -- preserve a release seen earlier this frame
+            _              -> ButtonDown
   _ -> current
 
 nextFrameButton :: ButtonState -> ButtonState

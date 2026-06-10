@@ -30,15 +30,18 @@ module Blink.Controls
   , button
   , checkbox
   , textInput
+    -- * Scroll
+  , ScrollBarPart (..)
+  , scrollBar
   ) where
 
 import Control.Monad (when)
 import Data.List (foldl')
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Geometry (Alignment (..), Rectangle (..))
+import Blink.Geometry (Alignment (..), Orientation (..), Point (..), Rectangle (..), insetRect)
 import Blink.Input (Key (..), InputState (..))
-import Blink.Layout (RectConstraint (..), Constraint (..), BoxConfig (..), hBox, defaultBoxConfig)
+import Blink.Layout (RectConstraint (..), Constraint (..), BoxConfig (..), hBox, vBox, defaultBoxConfig)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
 import Blink.UI
@@ -122,3 +125,92 @@ textInput eid value mkCmd = control eid $ do
                     else withTyped
     when (result /= value) $ do
       dispatch (mkCmd result)
+
+-- | Sub-parts of a 'scrollBar', used as the inner tag when building the
+-- control's element IDs via a tagging function:
+--
+-- @
+-- data Element = ... | VScroll ScrollBarPart
+-- scrollBar VScroll Vertical pos ratio ScrollMoved
+-- @
+data ScrollBarPart
+  = ScrollTrack
+  | ScrollThumb
+  | ScrollDecrBtn
+  | ScrollIncrBtn
+  deriving (Eq, Ord, Show)
+
+-- | A scrollbar with decrement\/increment buttons flanking a draggable thumb.
+-- @pos@ is the current scroll position in @[0, 1]@; @thumbRatio@ is the
+-- fraction of the track the thumb fills (visible \/ total), also in @[0, 1]@.
+-- Dispatches @mkCmd newPos@ when the user drags the track or clicks a button.
+-- Button clicks step by @thumbRatio@; dragging centres the thumb on the cursor.
+scrollBar :: (Eq e, Ord e)
+          => (ScrollBarPart -> e)
+          -> Orientation
+          -> Double
+          -> Double
+          -> (Double -> c)
+          -> UI e c ()
+scrollBar mkId ori pos thumbRatio mkCmd = do
+  bounds <- getBounds
+  let p    = max 0 (min 1 pos)
+      r    = max 0 (min 1 thumbRatio)
+      btnC = case ori of
+        Vertical   -> RectConstraint Fill (Exactly (rectWidth bounds))  TopLeft
+        Horizontal -> RectConstraint (Exactly (rectHeight bounds)) Fill TopLeft
+  layoutFn defaultBoxConfig
+    [ (btnC,                              decrBtn p r)
+    , (RectConstraint Fill Fill TopLeft,  track p r)
+    , (btnC,                              incrBtn p r)
+    ]
+  where
+    layoutFn = case ori of
+      Vertical   -> vBox
+      Horizontal -> hBox
+
+    (decrSym, incrSym) = case ori of
+      Vertical   -> ("▲", "▼")
+      Horizontal -> ("◀", "▶")
+
+    decrBtn p r = do
+      clicked <- button (mkId ScrollDecrBtn) decrSym
+      when clicked $ dispatch (mkCmd (max 0 (p - r)))
+
+    incrBtn p r = do
+      clicked <- button (mkId ScrollIncrBtn) incrSym
+      when clicked $ dispatch (mkCmd (min 1 (p + r)))
+
+    track p r = do
+      slotBounds <- getBounds
+      styleSet   <- getStyleSet (mkId ScrollTrack)
+      let norm        = styleSetNormal styleSet
+          bgRect      = insetRect (styleMargin norm) slotBounds
+          contentRect = insetRect (stylePadding norm) bgRect
+          thumbR      = scrollThumbRect ori p r contentRect
+      control (mkId ScrollTrack) $
+        withBounds thumbR $ renderControl (mkId ScrollThumb) $ pure ()
+      pressed <- isPressed (mkId ScrollTrack)
+      when pressed $ do
+        mousePos <- getMousePos
+        dispatch (mkCmd (scrollPosFromMouse ori r contentRect mousePos))
+
+scrollThumbRect :: Orientation -> Double -> Double -> Rectangle -> Rectangle
+scrollThumbRect Vertical pos ratio r =
+  let h = rectHeight r * ratio
+  in r { rectY = rectY r + (rectHeight r - h) * pos, rectHeight = h }
+scrollThumbRect Horizontal pos ratio r =
+  let w = rectWidth r * ratio
+  in r { rectX = rectX r + (rectWidth r - w) * pos, rectWidth = w }
+
+scrollPosFromMouse :: Orientation -> Double -> Rectangle -> Point -> Double
+scrollPosFromMouse Vertical ratio r mouse =
+  let thumbH = rectHeight r * ratio
+      range  = rectHeight r - thumbH
+  in if range <= 0 then 0
+     else max 0 (min 1 ((pointY mouse - rectY r - thumbH / 2) / range))
+scrollPosFromMouse Horizontal ratio r mouse =
+  let thumbW = rectWidth r * ratio
+      range  = rectWidth r - thumbW
+  in if range <= 0 then 0
+     else max 0 (min 1 ((pointX mouse - rectX r - thumbW / 2) / range))

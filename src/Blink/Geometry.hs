@@ -3,6 +3,7 @@ module Blink.Geometry
   , Size (..)
   , Rectangle (..)
   , Alignment (..)
+  , Orientation (..)
   , Insets (..)
   , uniform
   , insetRect
@@ -53,6 +54,9 @@ data Alignment
   | MiddleLeft | Center       | MiddleRight
   | BottomLeft | BottomCenter | BottomRight
   deriving (Eq, Ord, Show, Bounded, Enum)
+
+data Orientation = Horizontal | Vertical
+  deriving (Eq, Ord, Show)
 
 data Align1D = AlignStart | AlignCenter | AlignEnd
 

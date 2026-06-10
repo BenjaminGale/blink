@@ -10,6 +10,8 @@ import qualified Data.Map.Strict as Map
 data Element = Btn Int | TextInput1
              | CheckboxBox1 | CheckboxBox2 | CheckboxBox3
              | ProgressBar1
+             | ScrollBar1 ScrollBarPart
+             | ScrollBar2 ScrollBarPart
   deriving (Eq, Ord)
 
 data Palette = Palette
@@ -150,15 +152,56 @@ mkCheckboxBoxStyle p = StyleSet
       , styleBorderWidth  = 1
       }
 
+mkScrollTrackStyle :: Palette -> StyleSet
+mkScrollTrackStyle p = StyleSet
+  { styleSetNormal   = base
+  , styleSetHovered  = base
+  , styleSetPressed  = base
+  , styleSetFocused  = base { styleBorderColour = Just (palAccent p) }
+  , styleSetDisabled = base { styleBackground = palSurfaceButtonDisabled p }
+  }
+  where
+    base = Style
+      { styleBackground   = palProgressTrack p
+      , styleTextColour   = palTextPrimary p
+      , styleTextAlign    = AlignCenter
+      , styleMargin       = uniform 0
+      , stylePadding      = uniform 2
+      , styleBorderColour = Nothing
+      , styleBorderWidth  = 1
+      }
+
+mkScrollThumbStyle :: Palette -> StyleSet
+mkScrollThumbStyle p = StyleSet
+  { styleSetNormal   = base { styleBackground = palAccent p }
+  , styleSetHovered  = base { styleBackground = palAccentDark p }
+  , styleSetPressed  = base { styleBackground = palAccentDark p }
+  , styleSetFocused  = base { styleBackground = palAccent p }
+  , styleSetDisabled = base { styleBackground = palTextMuted p }
+  }
+  where
+    base = Style
+      { styleBackground   = palAccent p
+      , styleTextColour   = palTextOnAccent p
+      , styleTextAlign    = AlignCenter
+      , styleMargin       = uniform 0
+      , stylePadding      = uniform 0
+      , styleBorderColour = Nothing
+      , styleBorderWidth  = 0
+      }
+
 mkTheme :: Palette -> Theme Element
 mkTheme p = Theme
   { themeElementStyles = Map.fromList
-      [ (ProgressBar1,   mkProgressBarStyle p)
-      , (TextInput1,     mkTextInputStyle p)
-      , (CheckboxBox1,   mkCheckboxBoxStyle p)
-      , (CheckboxBox2,   mkCheckboxBoxStyle p)
-      , (CheckboxBox3,   mkCheckboxBoxStyle p)
-
+      [ (ProgressBar1,              mkProgressBarStyle p)
+      , (TextInput1,                mkTextInputStyle p)
+      , (CheckboxBox1,              mkCheckboxBoxStyle p)
+      , (CheckboxBox2,              mkCheckboxBoxStyle p)
+      , (CheckboxBox3,              mkCheckboxBoxStyle p)
+      , (ScrollBar1 ScrollTrack,    mkScrollTrackStyle p)
+      , (ScrollBar1 ScrollThumb,    mkScrollThumbStyle p)
+      , (ScrollBar2 ScrollTrack,    mkScrollTrackStyle p)
+      , (ScrollBar2 ScrollThumb,    mkScrollThumbStyle p)
       ]
   , themeDefaultStyle = mkBtnStyle p
   }
