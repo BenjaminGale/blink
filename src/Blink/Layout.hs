@@ -148,7 +148,7 @@ boxTotalSpacing cfg n = boxSpacing cfg * fromIntegral (max 0 (n - 1))
 -- layoutWithConstraints (RectConstraint (Exactly 120) (Exactly 32) Center) $
 --   button MyBtn "OK"
 -- @
-layoutWithConstraints :: RectConstraint -> UI e c a -> UI e c a
+layoutWithConstraints :: RectConstraint -> UI e u c a -> UI e u c a
 layoutWithConstraints rc ui = do
   r <- getBounds
   let w = preferredSize (rcWidth rc) (rectWidth r)
@@ -200,16 +200,16 @@ vertical = Axis
 -- | Arranges children left-to-right. Each child is paired with a
 --   'RectConstraint' governing its width and, when 'boxFillCross' is 'False',
 --   its height and vertical alignment.
-hBox :: BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
+hBox :: BoxConfig -> [(RectConstraint, UI e u c ())] -> UI e u c ()
 hBox = box horizontal
 
 -- | Arranges children top-to-bottom. Each child is paired with a
 --   'RectConstraint' governing its height and, when 'boxFillCross' is 'False',
 --   its width and horizontal alignment.
-vBox :: BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
+vBox :: BoxConfig -> [(RectConstraint, UI e u c ())] -> UI e u c ()
 vBox = box vertical
 
-box :: Axis -> BoxConfig -> [(RectConstraint, UI e c ())] -> UI e c ()
+box :: Axis -> BoxConfig -> [(RectConstraint, UI e u c ())] -> UI e u c ()
 box ax cfg children = do
   r <- getBounds
   let contentArea  = insetRect (uniform (boxMargin cfg)) r

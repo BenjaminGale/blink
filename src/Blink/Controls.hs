@@ -21,6 +21,45 @@ textInput NameField currentName NameChanged
 The application retrieves 'NameChanged' via 'getCommands', stores the new
 value, and passes it back to the control on the next frame. This keeps all
 state outside the UI tree.
+
+= Builder pattern
+
+Controls whose state is presentational rather than application data — a
+scrollbar's position, for example — manage it themselves through a 'Field'
+into the user-supplied UI state record (see "Blink.UI"). These controls are
+exported as @fooBuilder@ functions taking the 'Field' as their first argument,
+so an application configures each instance once by partial application:
+
+@
+vScrollBar = scrollBarBuilder (Field vScroll (\\v u -> u { vScroll = v })) VScroll
+@
+
+The application's update function never sees this state change hands.
+
+== Per-instance state from a map
+
+Binding each instance to a dedicated record field, as above, suits a fixed
+handful of controls. When many controls of the same kind share one map in the
+UI state record, a single wrapper serves all of them: build the 'Field' on the
+fly from the same tagging function the control already takes, keying the map
+by a representative element such as @mkId ScrollTrack@.
+
+@
+data MyUIState = MyUIState { scrollPositions :: Map Element Double }
+
+scrollFieldFor :: Element -> Field MyUIState Double
+scrollFieldFor eid = Field
+  (Map.findWithDefault 0 eid . scrollPositions)
+  (\\v u -> u { scrollPositions = Map.insert eid v (scrollPositions u) })
+
+scrollBar :: (ScrollBarPart -> Element) -> Orientation -> Double -> UI Element MyUIState Command ()
+scrollBar mkId = scrollBarBuilder (scrollFieldFor (mkId ScrollTrack)) mkId
+@
+
+Every call site — @scrollBar VScroll Vertical 0.3@, @scrollBar HScroll
+Horizontal 0.3@ — then gets its own slot in the map automatically. The
+getter's @findWithDefault@ supplies the initial position, so absent keys read
+as 0 and the map populates lazily on first write.
 -}
 module Blink.Controls
   ( -- * Display
@@ -32,7 +71,7 @@ module Blink.Controls
   , textInput
     -- * Scroll
   , ScrollBarPart (..)
-  , scrollBar
+  , scrollBarBuilder
   ) where
 
 import Control.Monad (when)
@@ -46,7 +85,7 @@ import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
 import Blink.UI
 
-isActivated :: (Eq e, Ord e) => e -> UI e c Bool
+isActivated :: (Eq e, Ord e) => e -> UI e u c Bool
 isActivated eid = do
   clicked    <- isClicked eid
   enterPress <- isKeyPressed eid KeyReturn
@@ -56,14 +95,14 @@ isActivated eid = do
 -- | Read-only text display. Renders @text@ within the element's content
 -- rectangle using the active style. Does not participate in interaction or
 -- keyboard navigation.
-label :: (Eq e, Ord e) => e -> Text -> UI e c ()
+label :: (Eq e, Ord e) => e -> Text -> UI e u c ()
 label eid text = renderControl eid $ do
   style <- getStyle eid
   drawText (styleTextColour style) (styleTextAlign style) text
 
 -- | Read-only progress indicator. @value@ is clamped to @[0, 1]@ and rendered
 -- as a filled bar scaled to that fraction of the content width.
-progressBar :: (Eq e, Ord e) => e -> Double -> UI e c ()
+progressBar :: (Eq e, Ord e) => e -> Double -> UI e u c ()
 progressBar eid value = renderControl eid $ do
   style <- getStyle eid
   r     <- getBounds
@@ -71,19 +110,19 @@ progressBar eid value = renderControl eid $ do
       fillRect' = r { rectWidth = rectWidth r * clamped }
   withBounds fillRect' $ fillRect (styleTextColour style)
 
-checkboxMark :: (Eq e, Ord e) => e -> Bool -> (Bool -> c) -> UI e c ()
+checkboxMark :: (Eq e, Ord e) => e -> Bool -> (Bool -> c) -> UI e u c ()
 checkboxMark boxId checked mkCmd = control boxId $ do
   style     <- getStyle boxId
   activated <- isActivated boxId
   when checked   $ drawText (styleTextColour style) AlignCenter "✓"
   when activated $ dispatch (mkCmd (not checked))
 
-checkboxLabel :: Style -> Text -> UI e c ()
+checkboxLabel :: Style -> Text -> UI e u c ()
 checkboxLabel style text = drawText (styleTextColour style) AlignLeft text
 
 -- | A togglable checkbox with an adjacent label. Dispatches @mkCmd (not checked)@
 -- when activated by a click or the Enter key.
-checkbox :: (Eq e, Ord e) => e -> Text -> Bool -> (Bool -> c) -> UI e c ()
+checkbox :: (Eq e, Ord e) => e -> Text -> Bool -> (Bool -> c) -> UI e u c ()
 checkbox boxId text checked mkCmd = do
   style <- getStyle boxId
   hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
@@ -99,7 +138,7 @@ checkbox boxId text checked mkCmd = do
 
 -- | A clickable button labelled @txt@. Returns 'True' on the frame the button
 -- is activated — by a left-click or by pressing Enter while focused.
-button :: (Eq e, Ord e) => e -> Text -> UI e c Bool
+button :: (Eq e, Ord e) => e -> Text -> UI e u c Bool
 button eid txt = do
   control eid $ do
     style <- getStyle eid
@@ -109,7 +148,7 @@ button eid txt = do
 -- | A single-line text entry field. Displays a cursor when focused. Dispatches
 -- @mkCmd newValue@ when the text changes via typed characters or Backspace. The
 -- application is responsible for storing and passing back @value@ each frame.
-textInput :: (Eq e, Ord e) => e -> Text -> (Text -> c) -> UI e c ()
+textInput :: (Eq e, Ord e) => e -> Text -> (Text -> c) -> UI e u c ()
 textInput eid value mkCmd = control eid $ do
   style     <- getStyle eid
   hasFocus  <- isFocused eid
@@ -126,12 +165,12 @@ textInput eid value mkCmd = control eid $ do
     when (result /= value) $ do
       dispatch (mkCmd result)
 
--- | Sub-parts of a 'scrollBar', used as the inner tag when building the
+-- | Sub-parts of a scrollbar, used as the inner tag when building the
 -- control's element IDs via a tagging function:
 --
 -- @
 -- data Element = ... | VScroll ScrollBarPart
--- scrollBar VScroll Vertical pos ratio ScrollMoved
+-- scrollBarBuilder posField VScroll Vertical ratio
 -- @
 data ScrollBarPart
   = ScrollTrack
@@ -141,19 +180,19 @@ data ScrollBarPart
   deriving (Eq, Ord, Show)
 
 -- | A scrollbar with decrement\/increment buttons flanking a draggable thumb.
--- @pos@ is the current scroll position in @[0, 1]@; @thumbRatio@ is the
+-- @posField@ is a 'Field' into the UI state record holding the scroll position
+-- in @[0, 1]@; the control reads and writes it itself. @thumbRatio@ is the
 -- fraction of the track the thumb fills (visible \/ total), also in @[0, 1]@.
--- Dispatches @mkCmd newPos@ when the user drags the track or clicks a button.
 -- Button clicks step by @thumbRatio@; dragging centres the thumb on the cursor.
-scrollBar :: (Eq e, Ord e)
-          => (ScrollBarPart -> e)
-          -> Orientation
-          -> Double
-          -> Double
-          -> (Double -> c)
-          -> UI e c ()
-scrollBar mkId ori pos thumbRatio mkCmd = do
+scrollBarBuilder :: (Eq e, Ord e)
+                 => Field u Double
+                 -> (ScrollBarPart -> e)
+                 -> Orientation
+                 -> Double
+                 -> UI e u c ()
+scrollBarBuilder posField mkId ori thumbRatio = do
   bounds <- getBounds
+  pos    <- useField posField
   let p    = max 0 (min 1 pos)
       r    = max 0 (min 1 thumbRatio)
       btnC = case ori of
@@ -175,11 +214,11 @@ scrollBar mkId ori pos thumbRatio mkCmd = do
 
     decrBtn p r = do
       clicked <- button (mkId ScrollDecrBtn) decrSym
-      when clicked $ dispatch (mkCmd (max 0 (p - r)))
+      when clicked $ setField posField (max 0 (p - r))
 
     incrBtn p r = do
       clicked <- button (mkId ScrollIncrBtn) incrSym
-      when clicked $ dispatch (mkCmd (min 1 (p + r)))
+      when clicked $ setField posField (min 1 (p + r))
 
     track p r = do
       slotBounds <- getBounds
@@ -193,7 +232,7 @@ scrollBar mkId ori pos thumbRatio mkCmd = do
       pressed <- isPressed (mkId ScrollTrack)
       when pressed $ do
         mousePos <- getMousePos
-        dispatch (mkCmd (scrollPosFromMouse ori r contentRect mousePos))
+        setField posField (scrollPosFromMouse ori r contentRect mousePos)
 
 scrollThumbRect :: Orientation -> Double -> Double -> Rectangle -> Rectangle
 scrollThumbRect Vertical pos ratio r =

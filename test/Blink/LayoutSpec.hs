@@ -50,12 +50,12 @@ emptyTheme = Theme
 testColour :: Colour
 testColour = RGBA 0 0 0 1
 
-fill :: UI () () ()
+fill :: UI () () () ()
 fill = fillRect testColour
 
-runLayout :: Rectangle -> UI () () () -> [Rectangle]
+runLayout :: Rectangle -> UI () () () () -> [Rectangle]
 runLayout bounds ui =
-  let ctx        = emptyUIContext bounds noInput emptyTheme
+  let ctx        = emptyUIContext bounds noInput emptyTheme ()
       (_, ctx')  = runUI ui ctx
   in [r | FillRect r _ <- getDrawCommands ctx']
 

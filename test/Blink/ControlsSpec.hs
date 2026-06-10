@@ -6,8 +6,8 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (button, checkbox, progressBar, textInput)
-import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform)
+import Blink.Controls (ScrollBarPart (..), button, checkbox, progressBar, scrollBarBuilder, textInput)
+import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
@@ -54,13 +54,13 @@ bgRect = insetRect (uniform 10) controlRect
 contentRect :: Rectangle
 contentRect = insetRect (uniform 5) bgRect
 
-mkCtx :: InputState -> UIContext TestElement c
-mkCtx input = emptyUIContext controlRect input testTheme
+mkCtx :: InputState -> UIContext TestElement () c
+mkCtx input = emptyUIContext controlRect input testTheme ()
 
-withFocus :: Maybe TestElement -> UIContext TestElement c -> UIContext TestElement c
+withFocus :: Maybe TestElement -> UIContext TestElement () c -> UIContext TestElement () c
 withFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = e } }
 
-getFocused :: UIContext TestElement c -> Maybe TestElement
+getFocused :: UIContext TestElement () c -> Maybe TestElement
 getFocused = focusedElement . ctxFocusState
 
 noInput :: InputState
@@ -161,7 +161,7 @@ isStrokeRect :: DrawCommand -> Bool
 isStrokeRect (StrokeRect {}) = True
 isStrokeRect _               = False
 
-type WidgetRunner c = UIContext TestElement c -> UIContext TestElement c
+type WidgetRunner c = UIContext TestElement () c -> UIContext TestElement () c
 
 -- | Shared focus, tab, and hover tests for any widget whose primary interactive
 --   element is TestControl. Pass a point inside the control's hittable area.
@@ -256,25 +256,45 @@ runButton ctx = snd $ runUI (button TestControl "label") ctx
 runTextInputControl :: WidgetRunner Text
 runTextInputControl ctx = snd $ runUI (textInput TestControl "" id) ctx
 
-runTextInput :: Text -> UIContext TestElement Text -> UIContext TestElement Text
+runTextInput :: Text -> UIContext TestElement () Text -> UIContext TestElement () Text
 runTextInput value ctx = snd $ runUI (textInput TestControl value id) ctx
 
 -- Forces checkboxTheme so the 20×20 box slot is hittable regardless of mkCtx's theme.
 runCheckboxControl :: WidgetRunner Bool
 runCheckboxControl ctx = snd $ runUI (checkbox TestControl "test label" False id) (ctx { ctxTheme = checkboxTheme })
 
-runCheckbox :: Bool -> UIContext TestElement Bool -> UIContext TestElement Bool
+runCheckbox :: Bool -> UIContext TestElement () Bool -> UIContext TestElement () Bool
 runCheckbox checked ctx = snd $ runUI (checkbox TestControl "test label" checked id) ctx
 
-mkCheckboxCtx :: InputState -> UIContext TestElement Bool
-mkCheckboxCtx input = emptyUIContext controlRect input checkboxTheme
+mkCheckboxCtx :: InputState -> UIContext TestElement () Bool
+mkCheckboxCtx input = emptyUIContext controlRect input checkboxTheme ()
 
 -- Center of the box bgRect (Rectangle 0 40 20 20) with zero-margin theme
 boxPoint :: Point
 boxPoint = Point 10 50
 
-drawnTexts :: UIContext e c -> [Text]
+drawnTexts :: UIContext e u c -> [Text]
 drawnTexts ctx = [t | DrawText _ t _ _ <- getDrawCommands ctx]
+
+-- scrollBarBuilder setup: the element type is ScrollBarPart itself (mkId = id)
+-- and the UI state is the bare position, accessed through an identity Field.
+posField :: Field Double Double
+posField = Field id const
+
+scrollTheme :: Theme ScrollBarPart
+scrollTheme = Theme
+  { themeElementStyles = Map.empty
+  , themeDefaultStyle = zeroMarginStyleSet
+  }
+
+-- 20×200 vertical scrollbar with a 0.25 thumb ratio: buttons at y 0–20 and
+-- 180–200, track at y 20–180.
+scrollRect :: Rectangle
+scrollRect = Rectangle 0 0 20 200
+
+runScrollBar :: Double -> InputState -> UIContext ScrollBarPart Double ()
+runScrollBar pos input =
+  snd $ runUI (scrollBarBuilder posField id Vertical 0.25) (emptyUIContext scrollRect input scrollTheme pos)
 
 spec :: Spec
 spec = do
@@ -375,6 +395,34 @@ spec = do
       it "does not draw a focus ring when unfocused" $
         ctxDrawCommands (runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput) { ctxTheme = focusBorderTheme }))
           `shouldNotContain` [StrokeRect controlRect testBorderColour 1]
+
+  describe "scrollBarBuilder" $ do
+    describe "button stepping" $ do
+      it "steps forward by the thumb ratio when the increment button is clicked" $
+        ctxUIState (runScrollBar 0.5 (mouseAt (Point 10 190) ButtonReleased []))
+          `shouldBe` 0.75
+
+      it "steps back by the thumb ratio when the decrement button is clicked" $
+        ctxUIState (runScrollBar 0.5 (mouseAt (Point 10 10) ButtonReleased []))
+          `shouldBe` 0.25
+
+      it "clamps to 1 when stepping forward near the end" $
+        ctxUIState (runScrollBar 0.9 (mouseAt (Point 10 190) ButtonReleased []))
+          `shouldBe` 1
+
+      it "clamps to 0 when stepping back near the start" $
+        ctxUIState (runScrollBar 0.1 (mouseAt (Point 10 10) ButtonReleased []))
+          `shouldBe` 0
+
+    describe "track dragging" $ do
+      it "centres the thumb on the cursor while the track is pressed" $
+        ctxUIState (runScrollBar 0 (mouseAt (Point 10 100) ButtonDown []))
+          `shouldBe` 0.5
+
+    describe "without interaction" $ do
+      it "leaves the position unchanged" $
+        ctxUIState (runScrollBar 0.5 noInput)
+          `shouldBe` 0.5
 
   describe "progressBar" $ do
     describe "background and border" $ backgroundAndBorderSpec (runProgressBar 0.5)

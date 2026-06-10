@@ -9,11 +9,12 @@ the UI is a pure function of state, and the only way to change state is by
 handling commands dispatched by the UI.
 
 @
-data App e s c = App
-  { startUp :: IO s            -- ^ produce the initial state
-  , theme   :: s -> Theme e    -- ^ derive the active theme
-  , view    :: s -> UI e c ()  -- ^ render the current state
-  , update  :: c -> Update s c () -- ^ handle a dispatched command
+data App e s u c = App
+  { startUp        :: IO s              -- ^ produce the initial state
+  , initialUIState :: u                 -- ^ initial UI state record
+  , theme          :: s -> Theme e      -- ^ derive the active theme
+  , view           :: s -> UI e u c ()  -- ^ render the current state
+  , update         :: c -> Update s c () -- ^ handle a dispatched command
   }
 @
 
@@ -21,6 +22,9 @@ data App e s c = App
     (see "Blink.UI").
   * @s@ is the application state, owned entirely by the host; the UI tree
     receives it as a read-only argument and never mutates it directly.
+  * @u@ is the UI state record — presentation state owned by the controls
+    themselves (scroll positions and the like), persisted across frames inside
+    the 'UIContext'. Use @()@ when no control needs it (see "Blink.UI").
   * @c@ is the command type — how the view signals state changes back to the
     application (see "Blink.UI").
 
@@ -112,15 +116,20 @@ import Blink.Update (Update, runUpdate)
 
 -- | Describes a complete Blink application.
 --
--- @e@ is the element type, @s@ the application state, and @c@ the command
--- type. See "Blink.UI" for an explanation of element IDs and commands.
-data App e s c = App
+-- @e@ is the element type, @s@ the application state, @u@ the UI state
+-- record, and @c@ the command type. See "Blink.UI" for an explanation of
+-- element IDs, UI state, and commands.
+data App e s u c = App
   { startUp :: IO s
     -- ^ Produces the initial application state before the render loop begins.
+  , initialUIState :: u
+    -- ^ The UI state record as it should be on the first frame. Controls
+    -- read and write it through 'Blink.UI.Field's; it persists across frames
+    -- inside the 'UIContext'.
   , theme :: s -> Theme e
     -- ^ Derives the active 'Theme' from the current state. Called each frame,
     -- allowing the theme to change in response to state changes.
-  , view :: s -> UI e c ()
+  , view :: s -> UI e u c ()
     -- ^ Renders the current state as a 'UI' tree. Called once or twice per
     -- frame depending on the render mode.
   , update :: c -> Update s c ()
@@ -130,7 +139,7 @@ data App e s c = App
 
 -- | Produces a 'BlinkHandle' for a continuous render backend. The draw list
 -- from the first render pass is submitted immediately each frame.
-configureContinuous :: App e s c -> TextMeasurer -> IO (BlinkHandle s)
+configureContinuous :: App e s u c -> TextMeasurer -> IO (BlinkHandle s)
 configureContinuous app _measurer = do
   asyncQueue <- newIORef []
   ctxRef     <- newIORef Nothing
@@ -142,7 +151,7 @@ configureContinuous app _measurer = do
 -- | Produces a 'BlinkHandle' for an event-driven backend. After processing
 -- commands, a second render pass runs on the updated state. The 'IO ()' callback
 -- is called when async work completes so the backend can unblock its event wait.
-configureEventDriven :: App e s c -> IO () -> TextMeasurer -> IO (BlinkHandle s)
+configureEventDriven :: App e s u c -> IO () -> TextMeasurer -> IO (BlinkHandle s)
 configureEventDriven app notify _measurer = do
   asyncQueue <- newIORef []
   ctxRef     <- newIORef Nothing
@@ -228,9 +237,9 @@ data TextMeasurer = TextMeasurer
 
 doStep
   :: Bool
-  -> App e s c
+  -> App e s u c
   -> IORef [c]
-  -> IORef (Maybe (UIContext e c))
+  -> IORef (Maybe (UIContext e u c))
   -> IO ()
   -> FrameInput
   -> s
@@ -241,7 +250,7 @@ doStep eventDriven app asyncQueue ctxRef notify fi state = do
 
   mCtx <- readIORef ctxRef
   let ctx = case mCtx of
-        Nothing -> emptyUIContext winRect inputState (theme app state)
+        Nothing -> emptyUIContext winRect inputState (theme app state) (initialUIState app)
         Just c  -> (nextFrameContext winRect inputState c)
                      { ctxTheme = theme app state }
 

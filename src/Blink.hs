@@ -25,13 +25,16 @@ loop handle state = do
 
 = Type parameters
 
-Every 'App' is parameterised over three types:
+Every 'App' is parameterised over four types:
 
   * @e@ — the /element type/, a sum type with one constructor per interactive
     control. Used to look up styles from the 'Theme' and to route keyboard
     focus. See "Blink.UI".
   * @s@ — the /application state/, owned entirely by the host and passed
     read-only to 'view' each frame.
+  * @u@ — the /UI state record/, presentation state owned by the controls
+    themselves (scroll positions and the like) and accessed through 'Field's.
+    Use @()@ when no control needs it. See "Blink.UI".
   * @c@ — the /command type/, values dispatched by the UI and handled by
     'update' to produce the next state. See "Blink.Update".
 
