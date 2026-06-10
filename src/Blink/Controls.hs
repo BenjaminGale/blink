@@ -79,7 +79,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Blink.Geometry (Alignment (..), Orientation (..), Point (..), Rectangle (..), insetRect)
 import Blink.Input (Key (..), InputState (..))
-import Blink.Layout (RectConstraint (..), Constraint (..), BoxConfig (..), hBox, vBox, defaultBoxConfig)
+import Blink.Layout (Layout (..), Length (..), BoxConfig (..), hBox, vBox, defaultBoxConfig)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
 import Blink.UI
@@ -151,8 +151,8 @@ checkbox :: (Eq e, Ord e) => e -> Text -> Bool -> (Bool -> s -> s) -> UI e u s (
 checkbox boxId text checked onToggle = do
   style <- getStyle boxId
   hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
-    [ (RectConstraint (Exactly 20) (Exactly 20) MiddleLeft, checkboxMark boxId checked onToggle)
-    , (RectConstraint Fill Fill MiddleLeft, checkboxLabel style text)
+    [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, checkboxMark boxId checked onToggle)
+    , (Layout Fill Fill MiddleLeft, checkboxLabel style text)
     ]
   whenFocused boxId $ do
     styleSet <- getStyleSet boxId
@@ -222,12 +222,12 @@ scrollBar mkId ori thumbRatio = do
   let p    = max 0 (min 1 pos)
       r    = max 0 (min 1 thumbRatio)
       btnC = case ori of
-        Vertical   -> RectConstraint Fill (Exactly (rectWidth bounds))  TopLeft
-        Horizontal -> RectConstraint (Exactly (rectHeight bounds)) Fill TopLeft
+        Vertical   -> Layout Fill (Exactly (rectWidth bounds))  TopLeft
+        Horizontal -> Layout (Exactly (rectHeight bounds)) Fill TopLeft
   layoutFn defaultBoxConfig
-    [ (btnC,                              decrBtn p r)
-    , (RectConstraint Fill Fill TopLeft,  track p r)
-    , (btnC,                              incrBtn p r)
+    [ (btnC, decrBtn p r)
+    , (Layout Fill Fill TopLeft, track p r)
+    , (btnC, incrBtn p r)
     ]
   where
     trackId = mkId ScrollTrack

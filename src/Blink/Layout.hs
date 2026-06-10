@@ -62,8 +62,8 @@ means height is determined by the panel, not the child.
 module Blink.Layout
   ( -- * Single control layout
     layoutWithConstraints
-  , RectConstraint (..)
-  , Constraint (..)
+  , Layout (..)
+  , Length (..)
     -- * Box layout
   , hBox
   , vBox
@@ -82,7 +82,7 @@ import Blink.UI (UI, clipToCurrent, getBounds, withBounds)
 import Data.Maybe (fromMaybe)
 
 -- | Describes how a child should be sized along a single axis.
-data Constraint
+data Length
   = Exactly Double
     -- ^ A fixed size. The available space is ignored.
   | Fill
@@ -96,12 +96,12 @@ data Constraint
   deriving (Eq, Show)
 
 -- | Per-child sizing and alignment within a layout panel slot.
-data RectConstraint = RectConstraint
-  { rcWidth     :: Constraint
+data Layout = Layout
+  { layoutWidth :: Length
     -- ^ Constraint applied to the child's width.
-  , rcHeight    :: Constraint
+  , layoutHeight :: Length
     -- ^ Constraint applied to the child's height.
-  , rcAlignment :: Alignment
+  , layoutAlignment :: Alignment
     -- ^ How the child is positioned within its slot when it does not fill the
     --   slot on one or both axes.
   }
@@ -148,18 +148,18 @@ boxTotalSpacing cfg n = boxSpacing cfg * fromIntegral (max 0 (n - 1))
 -- layoutWithConstraints (RectConstraint (Exactly 120) (Exactly 32) Center) $
 --   button MyBtn "OK"
 -- @
-layoutWithConstraints :: RectConstraint -> UI e u s a -> UI e u s a
+layoutWithConstraints :: Layout -> UI e u s a -> UI e u s a
 layoutWithConstraints rc ui = do
   r <- getBounds
-  let w = preferredSize (rcWidth rc) (rectWidth r)
-      h = preferredSize (rcHeight rc) (rectHeight r)
-  withBounds (alignRect (rcAlignment rc) r (Rectangle 0 0 w h)) ui
+  let w = preferredSize (layoutWidth rc) (rectWidth r)
+      h = preferredSize (layoutHeight rc) (rectHeight r)
+  withBounds (alignRect (layoutAlignment rc) r (Rectangle 0 0 w h)) ui
 
 -- | Abstracts over the two layout orientations so that 'box' can be written
 --   once. Each field encodes the axis-specific behaviour; 'horizontal' and
 --   'vertical' are the only two values.
 data Axis = Axis
-  { mainConstraint :: RectConstraint -> Constraint
+  { mainConstraint :: Layout -> Length
     -- ^ Extracts the child's constraint along the main axis.
   , mainLength     :: Rectangle -> Double
     -- ^ Length of a rectangle along the main axis.
@@ -171,45 +171,45 @@ data Axis = Axis
     -- ^ Origin of a rectangle along the cross axis.
   , makeSlot       :: Double -> Double -> Double -> Double -> Rectangle
     -- ^ Builds a slot rectangle from @(mainOrigin, crossOrigin, mainLen, crossLen)@.
-  , fillCross      :: RectConstraint -> RectConstraint
+  , fillCross      :: Layout -> Layout
     -- ^ Overrides the child's cross-axis constraint with 'Fill'.
   }
 
 horizontal :: Axis
 horizontal = Axis
-  { mainConstraint = rcWidth
+  { mainConstraint = layoutWidth
   , mainLength     = rectWidth
   , crossLength    = rectHeight
   , mainOrigin     = rectX
   , crossOrigin    = rectY
   , makeSlot       = Rectangle
-  , fillCross      = \rc -> rc { rcHeight = Fill }
+  , fillCross      = \rc -> rc { layoutHeight = Fill }
   }
 
 vertical :: Axis
 vertical = Axis
-  { mainConstraint = rcHeight
+  { mainConstraint = layoutHeight
   , mainLength     = rectHeight
   , crossLength    = rectWidth
   , mainOrigin     = rectY
   , crossOrigin    = rectX
   , makeSlot       = \mo co ms cs -> Rectangle co mo cs ms
-  , fillCross      = \rc -> rc { rcWidth = Fill }
+  , fillCross      = \rc -> rc { layoutWidth = Fill }
   }
 
 -- | Arranges children left-to-right. Each child is paired with a
 --   'RectConstraint' governing its width and, when 'boxFillCross' is 'False',
 --   its height and vertical alignment.
-hBox :: BoxConfig -> [(RectConstraint, UI e u s ())] -> UI e u s ()
+hBox :: BoxConfig -> [(Layout, UI e u s ())] -> UI e u s ()
 hBox = box horizontal
 
 -- | Arranges children top-to-bottom. Each child is paired with a
 --   'RectConstraint' governing its height and, when 'boxFillCross' is 'False',
 --   its width and horizontal alignment.
-vBox :: BoxConfig -> [(RectConstraint, UI e u s ())] -> UI e u s ()
+vBox :: BoxConfig -> [(Layout, UI e u s ())] -> UI e u s ()
 vBox = box vertical
 
-box :: Axis -> BoxConfig -> [(RectConstraint, UI e u s ())] -> UI e u s ()
+box :: Axis -> BoxConfig -> [(Layout, UI e u s ())] -> UI e u s ()
 box ax cfg children = do
   r <- getBounds
   let contentArea  = insetRect (uniform (boxMargin cfg)) r
@@ -250,34 +250,34 @@ box ax cfg children = do
 -- 100.0
 -- >>> preferredSize (Between 50 150) 20
 -- 50.0
-preferredSize :: Constraint -> Double -> Double
+preferredSize :: Length -> Double -> Double
 preferredSize (Exactly w)     _         = w
 preferredSize Fill            available  = available
 preferredSize (AtLeast w)     available  = max w available
 preferredSize (AtMost w)      available  = min w available
 preferredSize (Between lo hi) available  = max lo (min hi available)
 
-preferredSizes :: Double -> [Constraint] -> [Double]
+preferredSizes :: Double -> [Length] -> [Double]
 preferredSizes available constraints =
   let mins    = map minLength constraints
       surplus = max 0 (available - sum mins)
   in zipWith (+) mins (distributeSurplusSpace surplus constraints)
 
-minLength :: Constraint -> Double
+minLength :: Length -> Double
 minLength (Exactly w)    = w
 minLength Fill           = 0
 minLength (AtLeast w)    = w
 minLength (AtMost _)     = 0
 minLength (Between l _)  = l
 
-canExpand :: Constraint -> Bool
+canExpand :: Length -> Bool
 canExpand (Exactly _) = False
 canExpand _           = True
 
 -- Computes how much extra space (above each constraint's minimum) each slot
 -- receives, distributing surplus equally and redistributing any space left
 -- over from slots that hit their cap.
-distributeSurplusSpace :: Double -> [Constraint] -> [Double]
+distributeSurplusSpace :: Double -> [Length] -> [Double]
 distributeSurplusSpace surplus constraints =
   let flexible = sortBy (comparing snd) [(i, cap c) | (i, c) <- zip [0..] constraints, canExpand c]
       shares   = go surplus flexible

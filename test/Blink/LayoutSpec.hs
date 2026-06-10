@@ -17,7 +17,7 @@ noInput :: InputState
 noInput = InputState
   { inputMousePosition = Point 0 0
   , inputLeftButton    = ButtonUp
-  , inputKeyEvents     = ([] :: [KeyEvent])
+  , inputKeyEvents     = [] :: [KeyEvent]
   , inputTypedText     = []
   }
 
@@ -64,14 +64,14 @@ runLayout bounds ui =
 cfg :: BoxConfig
 cfg = BoxConfig { boxSpacing = 0, boxMargin = 0, boxAlignment = TopLeft, boxFillCross = True }
 
-runHBox :: Rectangle -> BoxConfig -> [RectConstraint] -> [Rectangle]
+runHBox :: Rectangle -> BoxConfig -> [Layout] -> [Rectangle]
 runHBox bounds c rcs = runLayout bounds $ hBox c [(r, fill) | r <- rcs]
 
-runVBox :: Rectangle -> BoxConfig -> [RectConstraint] -> [Rectangle]
+runVBox :: Rectangle -> BoxConfig -> [Layout] -> [Rectangle]
 runVBox bounds c rcs = runLayout bounds $ vBox c [(r, fill) | r <- rcs]
 
-rc :: Constraint -> Constraint -> Alignment -> RectConstraint
-rc = RectConstraint
+rc :: Length -> Length -> Alignment -> Layout
+rc = Layout
 
 hBounds :: Rectangle
 hBounds = Rectangle 0 0 200 100
