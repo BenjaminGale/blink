@@ -143,7 +143,7 @@ checkboxMark boxId checked onToggle = control boxId $ do
   when activated $ dispatch (onToggle (not checked))
 
 checkboxLabel :: Style -> Text -> UI e u s ()
-checkboxLabel style text = drawText (styleTextColour style) AlignLeft text
+checkboxLabel style = drawText (styleTextColour style) AlignLeft
 
 -- | A togglable checkbox with an adjacent label. Dispatches the state modifier
 -- @onToggle (not checked)@ when activated by a click or the Enter key.
