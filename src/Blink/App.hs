@@ -102,12 +102,12 @@ import Data.IORef
 import Data.List (foldl')
 import Data.Text (Text)
 
-import Blink.Geometry (Point, Size, rectOrigin, resizeRect)
+import Blink.Geometry (Point, Rectangle, Size, rectOrigin, resizeRect)
 import Blink.Input (ButtonState, KeyEvent, InputState (..))
 import Blink.Rendering (DrawCommand)
 import Blink.Style (Theme)
 import Blink.UI
-  ( UI, UIContext (..), FocusState (..)
+  ( UI, UIContext (..)
   , emptyUIContext, nextFrameContext
   , runUI, getDrawCommands, applyDispatches, getAsyncJobs
   )
@@ -138,11 +138,10 @@ data App e u s = App
 -- from the first render pass is submitted immediately each frame.
 configureContinuous :: App e u s -> TextMeasurer -> IO (BlinkHandle s)
 configureContinuous app _measurer = do
-  asyncQueue <- newIORef []
-  ctxRef     <- newIORef Nothing
+  refs <- AppRefs <$> newIORef [] <*> newIORef Nothing
   pure BlinkHandle
     { initState = startUp app
-    , stepFrame = doStep False app asyncQueue ctxRef (pure ())
+    , stepFrame = doStepContinuous app refs
     }
 
 -- | Produces a 'BlinkHandle' for an event-driven backend. After applying the
@@ -151,11 +150,10 @@ configureContinuous app _measurer = do
 -- unblock its event wait.
 configureEventDriven :: App e u s -> IO () -> TextMeasurer -> IO (BlinkHandle s)
 configureEventDriven app notify _measurer = do
-  asyncQueue <- newIORef []
-  ctxRef     <- newIORef Nothing
+  refs <- AppRefs <$> newIORef [] <*> newIORef Nothing
   pure BlinkHandle
     { initState = startUp app
-    , stepFrame = doStep True app asyncQueue ctxRef notify
+    , stepFrame = doStepEventDriven app refs notify
     }
 
 -- | The interface the backend uses each frame. Obtain via 'configureContinuous'
@@ -233,75 +231,72 @@ data TextMeasurer = TextMeasurer
     -- mapping a mouse click position back to a character index.
   }
 
-doStep
-  :: Bool
-  -> App e u s
-  -> IORef [s -> s]
-  -> IORef (Maybe (UIContext e u s))
+-- Mutable state shared across frames, allocated once at configure time.
+data AppRefs e u s = AppRefs
+  { refsAsyncQueue :: IORef [s -> s]
+    -- Modifiers posted by completed async jobs, waiting to be applied at the
+    -- start of the next frame. Accumulated in LIFO order; reversed on drain.
+  , refsCtx        :: IORef (Maybe (UIContext e u s))
+    -- The UIContext carried over from the previous frame. 'Nothing' on the
+    -- first frame, causing 'runFrame' to build a fresh context via
+    -- 'emptyUIContext'.
+  }
+
+buildCtx :: App e u s -> Rectangle -> InputState -> s -> Maybe (UIContext e u s) -> UIContext e u s
+buildCtx app winRect inputState state mCtx =
+  case mCtx of
+    Nothing -> emptyUIContext winRect inputState (theme app state) (initialUIState app) state
+    Just c -> (nextFrameContext winRect inputState c)
+      { ctxTheme    = theme app state
+      , ctxAppState = state
+      }
+
+runFrame
+  :: App e u s
+  -> AppRefs e u s
   -> IO ()
   -> FrameInput
   -> s
-  -> IO (FrameResult s)
-doStep eventDriven app asyncQueue ctxRef notify fi state0 = do
-  let winRect = resizeRect (windowSize fi) rectOrigin
-      inputState = toInputState fi
+  -> IO (UIContext e u s, s)
+runFrame app refs notify input prevState = do
+  let winRect    = resizeRect (windowSize input) rectOrigin
+      inputState = toInputState input
 
-  -- Apply modifiers posted by completed async jobs (oldest first)
-  asyncMods <- atomicModifyIORef asyncQueue (\q -> ([], reverse q))
-  let state = foldl' (flip ($)) state0 asyncMods
+  asyncMods <- atomicModifyIORef (refsAsyncQueue refs) (\q -> ([], reverse q))
+  let state = foldl' (flip ($)) prevState asyncMods
 
-  mCtx <- readIORef ctxRef
-  let ctx = case mCtx of
-        Nothing -> emptyUIContext winRect inputState (theme app state) (initialUIState app) state
-        Just c -> (nextFrameContext winRect inputState c)
-          { ctxTheme = theme app state
-          , ctxAppState = state
-          }
+  mCtx <- readIORef (refsCtx refs)
+  let ctx  = buildCtx app winRect inputState state mCtx
+      ((), ctx') = runUI (view app) ctx
+      state'     = applyDispatches ctx'
 
-  -- First render pass
-  let ((), processedCtx) = runUI (view app) ctx
+  mapM_ (forkJob (refsAsyncQueue refs) notify state') (getAsyncJobs ctx')
 
-  -- Apply the modifiers dispatched during the frame
-  let state' = applyDispatches processedCtx
+  pure (ctx', state')
 
-  -- Fork async jobs with the post-dispatch state; each completed job's
-  -- modifier is enqueued and the callback is invoked
-  mapM_ (forkJob asyncQueue notify state') (getAsyncJobs processedCtx)
+doStepContinuous :: App e u s -> AppRefs e u s -> FrameInput -> s -> IO (FrameResult s)
+doStepContinuous app refs input prevState = do
+  (ctx', state') <- runFrame app refs (pure ()) input prevState
+  writeIORef (refsCtx refs) (Just ctx')
+  pure $ toResult input (getDrawCommands ctx') state'
 
-  -- Determine stable focus from the first pass
-  let focusState = ctxFocusState processedCtx
-      nextFocus = if focusedThisFrame focusState
-                  then focusedElement focusState
-                  else Nothing
+doStepEventDriven :: App e u s -> AppRefs e u s -> IO () -> FrameInput -> s -> IO (FrameResult s)
+doStepEventDriven app refs notify input prevState = do
+  (firstPassCtx, state') <- runFrame app refs notify input prevState
+  let winRect    = resizeRect (windowSize input) rectOrigin
+      inputState = toInputState input
+      freshCtx   = (nextFrameContext winRect (clearKeyEvents inputState) firstPassCtx)
+        { ctxTheme    = theme app state'
+        , ctxAppState = state'
+        }
+      ((), renderedCtx) = runUI (view app) freshCtx
+  writeIORef (refsCtx refs) (Just renderedCtx)
+  pure $ toResult input (getDrawCommands renderedCtx) state'
 
-  -- Produce draw commands and the context to persist for the next frame
-  (drawCmds, nextCtx) <-
-    if eventDriven
-      then do
-        let newTheme = if ctxThemeChangeRequested processedCtx
-                       then theme app state'
-                       else ctxTheme processedCtx
-            clearedInput = clearKeyEvents inputState
-            freshCtx = (nextFrameContext winRect clearedInput processedCtx)
-              { ctxFocusState = focusState { focusedElement = nextFocus }
-              , ctxTheme = newTheme
-              , ctxAppState = state'
-              }
-            ((), renderedCtx) = runUI (view app) freshCtx
-            storedCtx = renderedCtx
-              { ctxFocusState = focusState { focusedElement = nextFocus } }
-        pure (getDrawCommands renderedCtx, storedCtx)
-      else
-        pure
-          ( getDrawCommands processedCtx
-          , processedCtx { ctxFocusState = focusState { focusedElement = nextFocus } }
-          )
-
-  writeIORef ctxRef (Just nextCtx)
-
-  pure $ if quitRequested fi
-    then Quit drawCmds state'
-    else Continue drawCmds state'
+toResult :: FrameInput -> [DrawCommand] -> s -> FrameResult s
+toResult input draws state
+  | quitRequested input = Quit draws state
+  | otherwise           = Continue draws state
 
 -- Uses positional matching to sidestep overlapping field names with InputState.
 toInputState :: FrameInput -> InputState

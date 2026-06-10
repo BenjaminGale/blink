@@ -296,8 +296,17 @@ nextFrameContext bounds input ctx = ctx
   , ctxInput = input
   , ctxDrawCommands = []
   , ctxHoveredElement = Nothing
-  , ctxCapturedElement = if inputLeftButton input == ButtonDown then ctxCapturedElement ctx else Nothing
-  , ctxFocusState = (ctxFocusState ctx) { focusedThisFrame = False }
+  , ctxCapturedElement =
+      if inputLeftButton input == ButtonDown
+      then ctxCapturedElement ctx
+      else Nothing
+  , ctxFocusState = FocusState
+      { focusedElement   =
+          if focusedThisFrame (ctxFocusState ctx)
+          then focusedElement (ctxFocusState ctx)
+          else Nothing
+      , focusedThisFrame = False
+      }
   , ctxDispatches = []
   , ctxAsyncJobs = []
   , ctxThemeChangeRequested = False
