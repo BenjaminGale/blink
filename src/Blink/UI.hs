@@ -159,6 +159,8 @@ module Blink.UI
   , setHovered
   , isClicked
   , isPressed
+  , captureElement
+  , isCapturedBy
     -- * Focus and keyboard navigation
   , isFocused
   , setFocus
@@ -221,6 +223,7 @@ data UIContext e s c = UIContext
   , ctxTheme :: Theme e
   , ctxDrawCommands :: [DrawCommand]
   , ctxHoveredElement :: Maybe e
+  , ctxCapturedElement :: Maybe e
   , ctxFocusState :: FocusState e
   , ctxPreviousTabStop :: Maybe e
   , ctxUIState :: s
@@ -267,6 +270,7 @@ emptyUIContext bounds input thm uiState = UIContext
   , ctxTheme = thm
   , ctxDrawCommands = []
   , ctxHoveredElement = Nothing
+  , ctxCapturedElement = Nothing
   , ctxFocusState = FocusState { focusedElement = Nothing, focusedThisFrame = False }
   , ctxPreviousTabStop = Nothing
   , ctxUIState = uiState
@@ -281,11 +285,12 @@ emptyUIContext bounds input thm uiState = UIContext
 -- tab-stop bookkeeping).
 nextFrameContext :: Rectangle -> InputState -> UIContext e s c -> UIContext e s c
 nextFrameContext bounds input ctx = ctx
-  { ctxBounds          = bounds
-  , ctxInput           = input
-  , ctxDrawCommands    = []
-  , ctxHoveredElement  = Nothing
-  , ctxFocusState      = (ctxFocusState ctx) { focusedThisFrame = False }
+  { ctxBounds           = bounds
+  , ctxInput            = input
+  , ctxDrawCommands     = []
+  , ctxHoveredElement   = Nothing
+  , ctxCapturedElement  = if inputLeftButton input == ButtonDown then ctxCapturedElement ctx else Nothing
+  , ctxFocusState       = (ctxFocusState ctx) { focusedThisFrame = False }
   , ctxCommands             = []
   , ctxThemeChangeRequested = False
   }
@@ -401,6 +406,16 @@ isPressed eid = do
   isHov <- isHovered eid
   btn   <- getLeftButton
   pure (isHov && btn == ButtonDown)
+
+-- | Claims mouse capture for the given element. While captured, 'isCapturedBy'
+-- returns 'True' even when the mouse moves outside the element's bounds.
+-- Capture is released automatically when the left button is no longer held.
+captureElement :: e -> UI e s c ()
+captureElement eid = modify $ \ctx -> ctx { ctxCapturedElement = Just eid }
+
+-- | 'True' when the given element holds mouse capture.
+isCapturedBy :: Eq e => e -> UI e s c Bool
+isCapturedBy eid = (== Just eid) <$> gets ctxCapturedElement
 
 -- | Runs an action only when the given element holds keyboard focus.
 whenFocused :: Eq e => e -> UI e s c () -> UI e s c ()

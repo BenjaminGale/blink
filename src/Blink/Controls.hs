@@ -229,8 +229,10 @@ scrollBarBuilder posField mkId ori thumbRatio = do
           thumbR      = scrollThumbRect ori p r contentRect
       control (mkId ScrollTrack) $
         withBounds thumbR $ renderControl (mkId ScrollThumb) $ pure ()
-      pressed <- isPressed (mkId ScrollTrack)
-      when pressed $ do
+      pressed  <- isPressed (mkId ScrollTrack)
+      captured <- isCapturedBy (mkId ScrollTrack)
+      when pressed $ captureElement (mkId ScrollTrack)
+      when (pressed || captured) $ do
         mousePos <- getMousePos
         setField posField (scrollPosFromMouse ori r contentRect mousePos)
 

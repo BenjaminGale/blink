@@ -419,6 +419,18 @@ spec = do
         ctxUIState (runScrollBar 0 (mouseAt (Point 10 100) ButtonDown []))
           `shouldBe` 0.5
 
+      it "continues tracking when the mouse moves off the track while the button is held" $
+        let frame1     = runScrollBar 0 (mouseAt (Point 10 100) ButtonDown [])
+            frame2     = snd $ runUI (scrollBarBuilder posField id Vertical 0.25)
+                                     (nextFrameContext scrollRect (mouseAt (Point 200 40) ButtonDown []) frame1)
+        in ctxUIState frame2 `shouldBe` 0.0
+
+      it "stops tracking when the button is released after dragging off the track" $
+        let frame1     = runScrollBar 0 (mouseAt (Point 10 100) ButtonDown [])
+            frame2     = snd $ runUI (scrollBarBuilder posField id Vertical 0.25)
+                                     (nextFrameContext scrollRect (mouseAt (Point 200 40) ButtonUp []) frame1)
+        in ctxUIState frame2 `shouldBe` 0.5
+
     describe "without interaction" $ do
       it "leaves the position unchanged" $
         ctxUIState (runScrollBar 0.5 noInput)
