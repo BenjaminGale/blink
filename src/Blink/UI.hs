@@ -532,7 +532,8 @@ getAsyncJobs = reverse . ctxAsyncJobs
 regionHit :: UI e u s Bool
 regionHit = do
   r <- getBounds
-  containsPoint r <$> getMousePos
+  p <- getMousePos
+  return $ containsPoint p r
 
 -- | Skips its argument entirely when the current sub-tree is disabled.
 whenEnabled :: UI e u s () -> UI e u s ()

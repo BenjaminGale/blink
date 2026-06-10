@@ -84,8 +84,8 @@ align1D AlignStart  origin _            _       = origin
 align1D AlignCenter origin containerLen itemLen = origin + (containerLen - itemLen) / 2
 align1D AlignEnd    origin containerLen itemLen = origin + containerLen - itemLen
 
-containsPoint :: Rectangle -> Point -> Bool
-containsPoint r p =
+containsPoint :: Point -> Rectangle -> Bool
+containsPoint p r =
   pointX p >= rectX r && pointX p <= rectX r + rectWidth r &&
   pointY p >= rectY r && pointY p <= rectY r + rectHeight r
 

@@ -86,11 +86,11 @@ spec = describe "geometry" $ do
 
     forM_ interiorAndBoundaryPoints $ \(desc, pt) ->
       it ("contains " <> desc) $
-        containsPoint testRect pt `shouldBe` True
+        containsPoint pt testRect `shouldBe` True
 
     forM_ exteriorPoints $ \(desc, pt) ->
       it ("does not contain " <> desc) $
-        containsPoint testRect pt `shouldBe` False
+        containsPoint pt testRect `shouldBe` False
 
   describe "alignRect" $ do
     let container = Rectangle 10 20 100 60
