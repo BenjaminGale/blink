@@ -26,7 +26,6 @@ library
         Blink.Layout
         Blink.Rendering
         Blink.Style
-        Blink.Update
         Blink.UI
     hs-source-dirs: src
 
@@ -49,6 +48,7 @@ test-suite blink-tests
         Blink.ControlsSpec
         Blink.GeometrySpec
         Blink.LayoutSpec
+        Blink.UISpec
     build-depends:
         blink,
         hspec

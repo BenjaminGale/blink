@@ -55,8 +55,8 @@ fill = fillRect testColour
 
 runLayout :: Rectangle -> UI () () () () -> [Rectangle]
 runLayout bounds ui =
-  let ctx        = emptyUIContext bounds noInput emptyTheme ()
-      (_, ctx')  = runUI ui ctx
+  let ctx = emptyUIContext bounds noInput emptyTheme () ()
+      (_, ctx') = runUI ui ctx
   in [r | FillRect r _ <- getDrawCommands ctx']
 
 -- hBox / vBox helpers

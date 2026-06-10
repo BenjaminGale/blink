@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ScrollBarPart (..), button, checkbox, progressBar, scrollBarBuilder, textInput)
+import Blink.Controls (ScrollBarPart (..), ScrollState (..), StandardControls (..), button, checkbox, progressBar, scrollBar, textInput)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -54,14 +54,18 @@ bgRect = insetRect (uniform 10) controlRect
 contentRect :: Rectangle
 contentRect = insetRect (uniform 5) bgRect
 
-mkCtx :: InputState -> UIContext TestElement () c
-mkCtx input = emptyUIContext controlRect input testTheme ()
+mkCtx :: InputState -> UIContext TestElement () ()
+mkCtx input = emptyUIContext controlRect input testTheme () ()
 
-withFocus :: Maybe TestElement -> UIContext TestElement () c -> UIContext TestElement () c
+withFocus :: Maybe TestElement -> UIContext TestElement () s -> UIContext TestElement () s
 withFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = e } }
 
-getFocused :: UIContext TestElement () c -> Maybe TestElement
+getFocused :: UIContext TestElement () s -> Maybe TestElement
 getFocused = focusedElement . ctxFocusState
+
+-- The number of state modifiers queued during the frame.
+dispatchCount :: UIContext e u s -> Int
+dispatchCount = length . ctxDispatches
 
 noInput :: InputState
 noInput = InputState
@@ -161,11 +165,11 @@ isStrokeRect :: DrawCommand -> Bool
 isStrokeRect (StrokeRect {}) = True
 isStrokeRect _               = False
 
-type WidgetRunner c = UIContext TestElement () c -> UIContext TestElement () c
+type WidgetRunner = UIContext TestElement () () -> UIContext TestElement () ()
 
 -- | Shared focus, tab, and hover tests for any widget whose primary interactive
 --   element is TestControl. Pass a point inside the control's hittable area.
-controlBehaviourSpec :: WidgetRunner c -> Point -> Spec
+controlBehaviourSpec :: WidgetRunner -> Point -> Spec
 controlBehaviourSpec run hitPoint = do
   describe "focus" $ do
     it "receives focus when nothing else is focused" $
@@ -219,7 +223,7 @@ controlBehaviourSpec run hitPoint = do
 
 -- | Background and border rendering tests. Only applicable to single controls
 --   that fill controlRect directly (not composite widgets).
-backgroundAndBorderSpec :: WidgetRunner c -> Spec
+backgroundAndBorderSpec :: WidgetRunner -> Spec
 backgroundAndBorderSpec run = do
   let runWithBorder ctx = run (ctx { ctxTheme = testThemeWithBorder })
   it "does not draw a background in the margin area" $
@@ -247,39 +251,47 @@ backgroundAndBorderSpec run = do
     in ctxDrawCommands (runWithTransparentBgAndBorder (mkCtx noInput))
          `shouldContain` [StrokeRect bgRect testBorderColour 1]
 
-runProgressBar :: Double -> WidgetRunner ()
+runProgressBar :: Double -> WidgetRunner
 runProgressBar value ctx = snd $ runUI (progressBar TestControl value) ctx
 
-runButton :: WidgetRunner ()
+runButton :: WidgetRunner
 runButton ctx = snd $ runUI (button TestControl "label") ctx
 
-runTextInputControl :: WidgetRunner Text
-runTextInputControl ctx = snd $ runUI (textInput TestControl "" id) ctx
+runTextInputControl :: WidgetRunner
+runTextInputControl ctx = snd $ runUI (textInput TestControl "" (\_ s -> s)) ctx
+
+-- Text editing tests use the entered text itself as the application state.
+mkTextCtx :: Text -> InputState -> UIContext TestElement () Text
+mkTextCtx value input = emptyUIContext controlRect input testTheme () value
 
 runTextInput :: Text -> UIContext TestElement () Text -> UIContext TestElement () Text
-runTextInput value ctx = snd $ runUI (textInput TestControl value id) ctx
+runTextInput value ctx = snd $ runUI (textInput TestControl value (\t _ -> t)) ctx
 
 -- Forces checkboxTheme so the 20×20 box slot is hittable regardless of mkCtx's theme.
-runCheckboxControl :: WidgetRunner Bool
-runCheckboxControl ctx = snd $ runUI (checkbox TestControl "test label" False id) (ctx { ctxTheme = checkboxTheme })
+runCheckboxControl :: WidgetRunner
+runCheckboxControl ctx = snd $ runUI (checkbox TestControl "test label" False (\_ s -> s)) (ctx { ctxTheme = checkboxTheme })
 
-runCheckbox :: Bool -> UIContext TestElement () Bool -> UIContext TestElement () Bool
-runCheckbox checked ctx = snd $ runUI (checkbox TestControl "test label" checked id) ctx
+-- Toggle tests record the dispatched value in a Maybe Bool application state.
+runCheckbox :: Bool -> UIContext TestElement () (Maybe Bool) -> UIContext TestElement () (Maybe Bool)
+runCheckbox checked ctx = snd $ runUI (checkbox TestControl "test label" checked (\v _ -> Just v)) ctx
 
-mkCheckboxCtx :: InputState -> UIContext TestElement () Bool
-mkCheckboxCtx input = emptyUIContext controlRect input checkboxTheme ()
+mkCheckboxCtx :: InputState -> UIContext TestElement () (Maybe Bool)
+mkCheckboxCtx input = emptyUIContext controlRect input checkboxTheme () Nothing
 
 -- Center of the box bgRect (Rectangle 0 40 20 20) with zero-margin theme
 boxPoint :: Point
 boxPoint = Point 10 50
 
-drawnTexts :: UIContext e u c -> [Text]
+drawnTexts :: UIContext e u s -> [Text]
 drawnTexts ctx = [t | DrawText _ t _ _ <- getDrawCommands ctx]
 
--- scrollBarBuilder setup: the element type is ScrollBarPart itself (mkId = id)
--- and the UI state is the bare position, accessed through an identity Field.
-posField :: Field Double Double
-posField = Field id const
+-- scrollBar setup: the element type is ScrollBarPart itself (mkId = id) and
+-- the UI state is a StandardControls holding the position keyed by ScrollTrack.
+scrollControls :: Double -> StandardControls ScrollBarPart
+scrollControls pos = StandardControls (Map.singleton ScrollTrack (ScrollState pos))
+
+scrollPos :: UIContext ScrollBarPart (StandardControls ScrollBarPart) () -> Double
+scrollPos = scrollPosition . Map.findWithDefault (ScrollState 0) ScrollTrack . scScrollStates . ctxUIState
 
 scrollTheme :: Theme ScrollBarPart
 scrollTheme = Theme
@@ -292,9 +304,9 @@ scrollTheme = Theme
 scrollRect :: Rectangle
 scrollRect = Rectangle 0 0 20 200
 
-runScrollBar :: Double -> InputState -> UIContext ScrollBarPart Double ()
+runScrollBar :: Double -> InputState -> UIContext ScrollBarPart (StandardControls ScrollBarPart) ()
 runScrollBar pos input =
-  snd $ runUI (scrollBarBuilder posField id Vertical 0.25) (emptyUIContext scrollRect input scrollTheme pos)
+  snd $ runUI (scrollBar id Vertical 0.25) (emptyUIContext scrollRect input scrollTheme (scrollControls pos) ())
 
 spec :: Spec
 spec = do
@@ -304,41 +316,41 @@ spec = do
 
     describe "rendering" $ do
       it "displays the value without a cursor when unfocused" $
-        drawnTexts (runTextInput "hello" (withFocus (Just OtherControl) (mkCtx noInput)))
+        drawnTexts (runTextInput "hello" (withFocus (Just OtherControl) (mkTextCtx "hello" noInput)))
           `shouldContain` ["hello"]
 
       it "displays the value with a cursor when focused" $
-        drawnTexts (runTextInput "hello" (withFocus (Just TestControl) (mkCtx noInput)))
+        drawnTexts (runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput)))
           `shouldContain` ["hello|"]
 
     describe "text editing" $ do
       it "appends typed characters to the value" $
-        getCommands (runTextInput "hello" (withFocus (Just TestControl) (mkCtx noInput { inputTypedText = ["!"] })))
-          `shouldBe` ["hello!"]
+        applyDispatches (runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] })))
+          `shouldBe` "hello!"
 
       it "removes the last character on backspace" $
-        getCommands (runTextInput "hello" (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyBackspace []] })))
-          `shouldBe` ["hell"]
+        applyDispatches (runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] })))
+          `shouldBe` "hell"
 
       it "does not dispatch when backspace is pressed on an empty value" $
-        getCommands (runTextInput "" (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyBackspace []] })))
-          `shouldBe` []
+        dispatchCount (runTextInput "" (withFocus (Just TestControl) (mkTextCtx "" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] })))
+          `shouldBe` 0
 
       it "does not dispatch when there is no input" $
-        getCommands (runTextInput "hello" (withFocus (Just TestControl) (mkCtx noInput)))
-          `shouldBe` []
+        dispatchCount (runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput)))
+          `shouldBe` 0
 
       it "does not process input when unfocused" $
-        getCommands (runTextInput "hello" (withFocus (Just OtherControl) (mkCtx noInput { inputTypedText = ["!"], inputKeyEvents = [KeyEvent KeyBackspace []] })))
-          `shouldBe` []
+        dispatchCount (runTextInput "hello" (withFocus (Just OtherControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"], inputKeyEvents = [KeyEvent KeyBackspace []] })))
+          `shouldBe` 0
 
     describe "disabled" $ do
       it "does not process input when disabled" $
-        getCommands (snd (runUI (disableWhen True (textInput TestControl "hello" id)) (withFocus (Just TestControl) (mkCtx noInput { inputTypedText = ["!"] }))))
-          `shouldBe` []
+        dispatchCount (snd (runUI (disableWhen True (textInput TestControl "hello" (\t _ -> t))) (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] }))))
+          `shouldBe` 0
 
       it "does not show a cursor when focused and disabled" $
-        drawnTexts (snd (runUI (disableWhen True (textInput TestControl "hello" id)) (withFocus (Just TestControl) (mkCtx noInput))))
+        drawnTexts (snd (runUI (disableWhen True (textInput TestControl "hello" (\t _ -> t))) (withFocus (Just TestControl) (mkTextCtx "hello" noInput))))
           `shouldNotContain` ["hello|"]
 
   describe "checkbox" $ do
@@ -346,33 +358,33 @@ spec = do
 
     describe "toggle behaviour" $ do
       it "dispatches True when the box is clicked while unchecked" $
-        getCommands (runCheckbox False (mkCheckboxCtx (mouseAt boxPoint ButtonReleased [])))
-          `shouldBe` [True]
+        applyDispatches (runCheckbox False (mkCheckboxCtx (mouseAt boxPoint ButtonReleased [])))
+          `shouldBe` Just True
 
       it "dispatches False when the box is clicked while checked" $
-        getCommands (runCheckbox True (mkCheckboxCtx (mouseAt boxPoint ButtonReleased [])))
-          `shouldBe` [False]
+        applyDispatches (runCheckbox True (mkCheckboxCtx (mouseAt boxPoint ButtonReleased [])))
+          `shouldBe` Just False
 
       it "dispatches toggle when Enter is pressed while focused" $
-        getCommands (runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
-          `shouldBe` [True]
+        applyDispatches (runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
+          `shouldBe` Just True
 
       it "does not dispatch when clicked outside the box" $
-        getCommands (runCheckbox False (mkCheckboxCtx (mouseAt (Point 50 50) ButtonReleased [])))
-          `shouldBe` []
+        applyDispatches (runCheckbox False (mkCheckboxCtx (mouseAt (Point 50 50) ButtonReleased [])))
+          `shouldBe` Nothing
 
       it "does not dispatch when Enter is pressed while unfocused" $
-        getCommands (runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
-          `shouldBe` []
+        applyDispatches (runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
+          `shouldBe` Nothing
 
     describe "disabled" $ do
       it "does not dispatch when clicked while disabled" $
-        getCommands (snd (runUI (disableWhen True (checkbox TestControl "test label" False id)) (mkCheckboxCtx (mouseAt boxPoint ButtonReleased []))))
-          `shouldBe` []
+        applyDispatches (snd (runUI (disableWhen True (checkbox TestControl "test label" False (\v _ -> Just v))) (mkCheckboxCtx (mouseAt boxPoint ButtonReleased []))))
+          `shouldBe` Nothing
 
       it "does not dispatch when Enter is pressed while disabled" $
-        getCommands (snd (runUI (disableWhen True (checkbox TestControl "test label" False id)) (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))))
-          `shouldBe` []
+        applyDispatches (snd (runUI (disableWhen True (checkbox TestControl "test label" False (\v _ -> Just v))) (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))))
+          `shouldBe` Nothing
 
     describe "rendering" $ do
       it "draws the checkmark when checked" $
@@ -396,44 +408,44 @@ spec = do
         ctxDrawCommands (runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput) { ctxTheme = focusBorderTheme }))
           `shouldNotContain` [StrokeRect controlRect testBorderColour 1]
 
-  describe "scrollBarBuilder" $ do
+  describe "scrollBar" $ do
     describe "button stepping" $ do
       it "steps forward by the thumb ratio when the increment button is clicked" $
-        ctxUIState (runScrollBar 0.5 (mouseAt (Point 10 190) ButtonReleased []))
+        scrollPos (runScrollBar 0.5 (mouseAt (Point 10 190) ButtonReleased []))
           `shouldBe` 0.75
 
       it "steps back by the thumb ratio when the decrement button is clicked" $
-        ctxUIState (runScrollBar 0.5 (mouseAt (Point 10 10) ButtonReleased []))
+        scrollPos (runScrollBar 0.5 (mouseAt (Point 10 10) ButtonReleased []))
           `shouldBe` 0.25
 
       it "clamps to 1 when stepping forward near the end" $
-        ctxUIState (runScrollBar 0.9 (mouseAt (Point 10 190) ButtonReleased []))
+        scrollPos (runScrollBar 0.9 (mouseAt (Point 10 190) ButtonReleased []))
           `shouldBe` 1
 
       it "clamps to 0 when stepping back near the start" $
-        ctxUIState (runScrollBar 0.1 (mouseAt (Point 10 10) ButtonReleased []))
+        scrollPos (runScrollBar 0.1 (mouseAt (Point 10 10) ButtonReleased []))
           `shouldBe` 0
 
     describe "track dragging" $ do
       it "centres the thumb on the cursor while the track is pressed" $
-        ctxUIState (runScrollBar 0 (mouseAt (Point 10 100) ButtonDown []))
+        scrollPos (runScrollBar 0 (mouseAt (Point 10 100) ButtonDown []))
           `shouldBe` 0.5
 
       it "continues tracking when the mouse moves off the track while the button is held" $
-        let frame1     = runScrollBar 0 (mouseAt (Point 10 100) ButtonDown [])
-            frame2     = snd $ runUI (scrollBarBuilder posField id Vertical 0.25)
-                                     (nextFrameContext scrollRect (mouseAt (Point 200 40) ButtonDown []) frame1)
-        in ctxUIState frame2 `shouldBe` 0.0
+        let frame1 = runScrollBar 0 (mouseAt (Point 10 100) ButtonDown [])
+            frame2 = snd $ runUI (scrollBar id Vertical 0.25)
+                                 (nextFrameContext scrollRect (mouseAt (Point 200 40) ButtonDown []) frame1)
+        in scrollPos frame2 `shouldBe` 0.0
 
       it "stops tracking when the button is released after dragging off the track" $
-        let frame1     = runScrollBar 0 (mouseAt (Point 10 100) ButtonDown [])
-            frame2     = snd $ runUI (scrollBarBuilder posField id Vertical 0.25)
-                                     (nextFrameContext scrollRect (mouseAt (Point 200 40) ButtonUp []) frame1)
-        in ctxUIState frame2 `shouldBe` 0.5
+        let frame1 = runScrollBar 0 (mouseAt (Point 10 100) ButtonDown [])
+            frame2 = snd $ runUI (scrollBar id Vertical 0.25)
+                                 (nextFrameContext scrollRect (mouseAt (Point 200 40) ButtonUp []) frame1)
+        in scrollPos frame2 `shouldBe` 0.5
 
     describe "without interaction" $ do
       it "leaves the position unchanged" $
-        ctxUIState (runScrollBar 0.5 noInput)
+        scrollPos (runScrollBar 0.5 noInput)
           `shouldBe` 0.5
 
   describe "progressBar" $ do

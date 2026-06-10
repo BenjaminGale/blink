@@ -4,16 +4,16 @@ Module: Blink.UI
 = The UI monad
 
 'UI' is the core abstraction in Blink: a state-threading computation
-parameterised over an /element type/ @e@, a /UI state type/ @s@, and a
-/command type/ @c@.
+parameterised over an /element type/ @e@, a /UI state type/ @u@, and an
+/application state type/ @s@.
 
 @
-newtype UI e s c a = UI { runUI :: UIContext e s c -> (a, UIContext e s c) }
+newtype UI e u s a = UI { runUI :: UIContext e u s -> (a, UIContext e u s) }
 @
 
 Composing 'UI' actions with '>>=', '>>' and 'mapM_' builds a UI tree. Each
 node in the tree reads from the shared 'UIContext' (bounds, input, theme, focus
-state) and may append draw commands or application commands to it.
+state) and may append draw commands to it or queue application state changes.
 
 = Element identity
 
@@ -21,7 +21,7 @@ Every interactive control is identified by a value of type @e@, typically a
 sum type with one constructor per control:
 
 @
-data MyElem = OkButton | CancelButton | NameField
+data MyElem = OkButton | CancelButton | NameInput
   deriving (Eq, Ord)
 @
 
@@ -29,38 +29,36 @@ Element IDs are used to look up styles from the active 'Theme', to track hover
 and press state within a frame, and to route keyboard events to the focused
 control.
 
-= Commands
+= Application state
 
-Controls communicate with the application by /dispatching/ values of type @c@.
-'dispatch' appends a command; 'getCommands' retrieves them in order after the
-frame completes.
-
-@
-data MyCmd = Submit | Cancel | NameChanged Text
-@
+The application state @s@ lives in the context alongside the UI state.
+'getAppState' reads the value the frame started with. Changes are queued
+rather than applied immediately: 'dispatch' appends a modifier that the host
+applies once the frame completes, so 'getAppState' later in the same frame
+still sees the pre-dispatch value. 'dispatchAsync' queues an IO job that the
+host forks after the frame; the modifier it returns is applied to whatever
+state exists when the job completes.
 
 = UI state
 
 Some controls carry presentation state that is no business of the
-application's update function — a scrollbar's position, a text input's cursor
-index. This state lives in a single user-supplied record of type @s@, stored
-in the 'UIContext' and preserved across frames:
+application — a scrollbar's position, a text input's cursor index. This state
+lives in a single user-supplied record of type @u@, stored in the 'UIContext'
+and preserved across frames:
 
 @
 data MyUIState = MyUIState { sidebarScroll :: Double }
 @
 
-A control is granted access to its slice of the record through a 'Field' — a
-first-class getter\/setter pair. The control reads the current value with
-'useField' and writes updates back with 'setField'; the application never sees
-the traffic. Applications with no stateful controls use @()@.
-
-@
-scrollBar = scrollBarBuilder (Field sidebarScroll (\\v s -> s { sidebarScroll = v }))
-@
+A control reads the record with 'getUIState' and writes updates back with
+'modifyUIState'; the application never sees the traffic. Unlike application
+state, UI state changes take effect immediately: later reads in the same
+frame see the new value. Applications with no stateful controls use @()@.
 
 The record may hold whatever the application's controls need, including maps
-keyed by element ID for state shared by a family of controls.
+keyed by element ID for state shared by a family of controls. The standard
+controls bundle their state in "Blink.Controls"' @StandardControls@ record,
+which can serve as @u@ directly.
 
 = The render loop
 
@@ -69,8 +67,9 @@ Each frame follows the same three steps:
   1. Build a fresh 'UIContext' with 'emptyUIContext' (first frame) or advance an
      existing one with 'nextFrameContext'.
   2. Run the UI tree via 'runUI'.
-  3. Pass the resulting context to 'getDrawCommands' and 'getCommands' to obtain
-     the renderer input and application events.
+  3. Pass the resulting context to 'getDrawCommands' to obtain the renderer
+     input, and to 'applyDispatches' and 'getAsyncJobs' to advance the
+     application state.
 
 = Drawing
 
@@ -136,12 +135,15 @@ module Blink.UI
   , emptyUIContext
   , nextFrameContext
   , getDrawCommands
-  , getCommands
+  , applyDispatches
+  , getAsyncJobs
+    -- * Application state
+  , getAppState
+  , dispatch
+  , dispatchAsync
     -- * UI state
-  , Field (..)
-  , useField
-  , setField
-  , modifyField
+  , getUIState
+  , modifyUIState
     -- * Bounds
   , getBounds
   , withBounds
@@ -178,8 +180,7 @@ module Blink.UI
   , isDisabled
   , disableWhen
   , whenEnabled
-    -- * Commands
-  , dispatch
+    -- * Theme switching
   , changeTheme
     -- * Building controls
   , control
@@ -189,7 +190,7 @@ module Blink.UI
 import Control.Monad (when, unless, guard)
 import Data.Foldable (asum)
 import Data.Functor (($>))
-import Data.List (find)
+import Data.List (find, foldl')
 import Data.Maybe (isNothing, isJust, fromJust, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
@@ -210,14 +211,15 @@ data FocusState e = FocusState
 
 -- | The frame context threaded through every 'UI' computation. Carries the
 -- current bounds, input state, active theme, accumulated draw commands, focus
--- state, UI state, and queued application commands. Construct with
--- 'emptyUIContext' or 'nextFrameContext'; extract results with
--- 'getDrawCommands' and 'getCommands'.
+-- state, UI state, and the application state with its queued modifiers.
+-- Construct with 'emptyUIContext' or 'nextFrameContext'; extract results with
+-- 'getDrawCommands', 'applyDispatches', and 'getAsyncJobs'.
 --
 -- [@e@] Element identity type — identifies focusable\/hoverable controls.
--- [@s@] UI state type — holds per-control presentation state across frames.
--- [@c@] Command type — values dispatched to the application via 'dispatch'.
-data UIContext e s c = UIContext
+-- [@u@] UI state type — holds per-control presentation state across frames.
+-- [@s@] Application state type — read with 'getAppState', modified via
+-- 'dispatch' and 'dispatchAsync'.
+data UIContext e u s = UIContext
   { ctxBounds :: Rectangle
   , ctxInput :: InputState
   , ctxTheme :: Theme e
@@ -226,36 +228,39 @@ data UIContext e s c = UIContext
   , ctxCapturedElement :: Maybe e
   , ctxFocusState :: FocusState e
   , ctxPreviousTabStop :: Maybe e
-  , ctxUIState :: s
-  , ctxCommands :: [c]
+  , ctxUIState :: u
+  , ctxAppState :: s
+  , ctxDispatches :: [s -> s]
+  , ctxAsyncJobs :: [s -> IO (s -> s)]
   , ctxDisabled :: Bool
   , ctxThemeChangeRequested :: Bool
   }
 
 -- | The UI monad. A pure state-threading computation that reads from a
--- 'UIContext' and emits draw commands and application commands as a side
--- effect. Use the 'Functor', 'Applicative', and 'Monad' instances to compose
--- UI trees. See 'control' and "Blink.Controls" for higher-level building blocks.
+-- 'UIContext' and emits draw commands and application state modifiers as a
+-- side effect. Use the 'Functor', 'Applicative', and 'Monad' instances to
+-- compose UI trees. See 'control' and "Blink.Controls" for higher-level
+-- building blocks.
 --
 -- [@e@] Element identity type.
--- [@s@] UI state type.
--- [@c@] Command type.
+-- [@u@] UI state type.
+-- [@s@] Application state type.
 -- [@a@] Result type.
-newtype UI e s c a = UI { runUI :: UIContext e s c -> (a, UIContext e s c) }
+newtype UI e u s a = UI { runUI :: UIContext e u s -> (a, UIContext e u s) }
 
-instance Functor (UI e s c) where
+instance Functor (UI e u s) where
   fmap f (UI g) = UI $ \ctx ->
     let (a, ctx') = g ctx
     in (f a, ctx')
 
-instance Applicative (UI e s c) where
+instance Applicative (UI e u s) where
   pure a = UI $ \ctx -> (a, ctx)
   UI f <*> UI x = UI $ \ctx ->
     let (g, ctx') = f ctx
         (a, ctx'') = x ctx'
     in (g a, ctx'')
 
-instance Monad (UI e s c) where
+instance Monad (UI e u s) where
   return = pure
   UI x >>= f = UI $ \ctx ->
     let (a, ctx') = x ctx
@@ -263,8 +268,8 @@ instance Monad (UI e s c) where
     in g ctx'
 
 -- | Constructs the initial 'UIContext' for the first frame.
-emptyUIContext :: Rectangle -> InputState -> Theme e -> s -> UIContext e s c
-emptyUIContext bounds input thm uiState = UIContext
+emptyUIContext :: Rectangle -> InputState -> Theme e -> u -> s -> UIContext e u s
+emptyUIContext bounds input thm uiState appState = UIContext
   { ctxBounds = bounds
   , ctxInput = input
   , ctxTheme = thm
@@ -274,107 +279,91 @@ emptyUIContext bounds input thm uiState = UIContext
   , ctxFocusState = FocusState { focusedElement = Nothing, focusedThisFrame = False }
   , ctxPreviousTabStop = Nothing
   , ctxUIState = uiState
-  , ctxCommands = []
+  , ctxAppState = appState
+  , ctxDispatches = []
+  , ctxAsyncJobs = []
   , ctxDisabled = False
   , ctxThemeChangeRequested = False
   }
 
 -- | Advances the context to the next frame. Resets per-frame state (draw
--- commands, hover element, application commands, and the focus-visited flag)
--- while preserving cross-frame state (theme, focus element, UI state, and
--- tab-stop bookkeeping).
-nextFrameContext :: Rectangle -> InputState -> UIContext e s c -> UIContext e s c
+-- commands, hover element, queued dispatches and async jobs, and the
+-- focus-visited flag) while preserving cross-frame state (theme, focus
+-- element, UI state, application state, and tab-stop bookkeeping).
+nextFrameContext :: Rectangle -> InputState -> UIContext e u s -> UIContext e u s
 nextFrameContext bounds input ctx = ctx
-  { ctxBounds           = bounds
-  , ctxInput            = input
-  , ctxDrawCommands     = []
-  , ctxHoveredElement   = Nothing
-  , ctxCapturedElement  = if inputLeftButton input == ButtonDown then ctxCapturedElement ctx else Nothing
-  , ctxFocusState       = (ctxFocusState ctx) { focusedThisFrame = False }
-  , ctxCommands             = []
+  { ctxBounds = bounds
+  , ctxInput = input
+  , ctxDrawCommands = []
+  , ctxHoveredElement = Nothing
+  , ctxCapturedElement = if inputLeftButton input == ButtonDown then ctxCapturedElement ctx else Nothing
+  , ctxFocusState = (ctxFocusState ctx) { focusedThisFrame = False }
+  , ctxDispatches = []
+  , ctxAsyncJobs = []
   , ctxThemeChangeRequested = False
   }
 
-gets :: (UIContext e s c -> a) -> UI e s c a
+gets :: (UIContext e u s -> a) -> UI e u s a
 gets f = UI $ \ctx -> (f ctx, ctx)
 
-modify :: (UIContext e s c -> UIContext e s c) -> UI e s c ()
+modify :: (UIContext e u s -> UIContext e u s) -> UI e u s ()
 modify f = UI $ \ctx -> ((), f ctx)
 
--- | A first-class record field: a getter\/setter pair granting a control
--- access to its slice of the user-supplied UI state record @s@. Stateful
--- controls take a 'Field' as their first argument so that applications can
--- configure them once by partial application:
---
--- @
--- scrollBar = scrollBarBuilder (Field sidebarScroll (\\v s -> s { sidebarScroll = v }))
--- @
---
--- [@s@] UI state record type.
--- [@a@] Type of the field being accessed.
-data Field s a = Field
-  { fieldGet :: s -> a
-  , fieldSet :: a -> s -> s
-  }
+-- | The UI state record @u@, as accumulated so far this frame.
+getUIState :: UI e u s u
+getUIState = gets ctxUIState
 
--- | Reads the field's current value from the UI state.
-useField :: Field s a -> UI e s c a
-useField f = gets (fieldGet f . ctxUIState)
-
--- | Writes a new value for the field into the UI state.
-setField :: Field s a -> a -> UI e s c ()
-setField f a = modify $ \ctx -> ctx { ctxUIState = fieldSet f a (ctxUIState ctx) }
-
--- | Applies a function to the field's current value.
-modifyField :: Field s a -> (a -> a) -> UI e s c ()
-modifyField f g = useField f >>= setField f . g
+-- | Applies a function to the UI state record. Unlike 'dispatch', the change
+-- takes effect immediately: later reads in the same frame see the new value.
+modifyUIState :: (u -> u) -> UI e u s ()
+modifyUIState f = modify $ \ctx -> ctx { ctxUIState = f (ctxUIState ctx) }
 
 -- | The current layout rectangle. Set by the layout system via 'withBounds'.
-getBounds :: UI e s c Rectangle
+getBounds :: UI e u s Rectangle
 getBounds = gets ctxBounds
 
 -- | The current mouse cursor position in window coordinates.
-getMousePos :: UI e s c Point
+getMousePos :: UI e u s Point
 getMousePos = inputMousePosition <$> getInput
 
 -- | The current state of the primary (left) mouse button.
-getLeftButton :: UI e s c ButtonState
+getLeftButton :: UI e u s ButtonState
 getLeftButton = inputLeftButton <$> getInput
 
 -- | The raw input state for the current frame.
-getInput :: UI e s c InputState
+getInput :: UI e u s InputState
 getInput = gets ctxInput
 
 -- | Removes all events for the given key from the current frame's key queue,
 -- preventing other controls from handling the same keypress.
-consumeKey :: Key -> UI e s c ()
+consumeKey :: Key -> UI e u s ()
 consumeKey k = modify $ \ctx ->
   let input = ctxInput ctx
   in ctx { ctxInput = input { inputKeyEvents = filter (\e -> key e /= k) (inputKeyEvents input) } }
 
 -- | The element that was the most recent tab stop before the current one,
 -- used by 'control' to implement Shift-Tab navigation.
-getPreviousTabStop :: UI e s c (Maybe e)
+getPreviousTabStop :: UI e u s (Maybe e)
 getPreviousTabStop = gets ctxPreviousTabStop
 
 -- | Records the current element as the previous tab stop. Called automatically
 -- by 'control'; call manually when building custom focusable controls.
-setPreviousTabStop :: e -> UI e s c ()
+setPreviousTabStop :: e -> UI e u s ()
 setPreviousTabStop eid = modify $ \ctx -> ctx { ctxPreviousTabStop = Just eid }
 
-getTheme :: UI e s c (Theme e)
+getTheme :: UI e u s (Theme e)
 getTheme = gets ctxTheme
 
 -- | Returns all style variants for the given element. Falls back to the theme's
 -- default style when no element-specific style is registered.
-getStyleSet :: Ord e => e -> UI e s c StyleSet
+getStyleSet :: Ord e => e -> UI e u s StyleSet
 getStyleSet eid = do
   t <- getTheme
   pure $ Map.findWithDefault (themeDefaultStyle t) eid (themeElementStyles t)
 
 -- | Resolves the active 'Style' for an element given its current interaction
 -- state. Priority: disabled > pressed > hovered > focused > normal.
-getStyle :: Ord e => e -> UI e s c Style
+getStyle :: Ord e => e -> UI e u s Style
 getStyle eid = do
   styles <- getStyleSet eid
   isDis  <- isDisabled
@@ -390,18 +379,18 @@ getStyle eid = do
   pure $ fromMaybe (styleSetNormal styles) (asum candidates)
 
 -- | 'True' when the given element is the current hover target.
-isHovered :: Eq e => e -> UI e s c Bool
+isHovered :: Eq e => e -> UI e u s Bool
 isHovered eid = (== Just eid) <$> gets ctxHoveredElement
 
 -- | 'True' when the element is hovered and the left button was just released.
-isClicked :: Eq e => e -> UI e s c Bool
+isClicked :: Eq e => e -> UI e u s Bool
 isClicked eid = do
   isHov <- isHovered eid
   btn   <- getLeftButton
   pure (isHov && btn == ButtonReleased)
 
 -- | 'True' when the element is hovered and the left button is held down.
-isPressed :: Eq e => e -> UI e s c Bool
+isPressed :: Eq e => e -> UI e u s Bool
 isPressed eid = do
   isHov <- isHovered eid
   btn   <- getLeftButton
@@ -410,20 +399,20 @@ isPressed eid = do
 -- | Claims mouse capture for the given element. While captured, 'isCapturedBy'
 -- returns 'True' even when the mouse moves outside the element's bounds.
 -- Capture is released automatically when the left button is no longer held.
-captureElement :: e -> UI e s c ()
+captureElement :: e -> UI e u s ()
 captureElement eid = modify $ \ctx -> ctx { ctxCapturedElement = Just eid }
 
 -- | 'True' when the given element holds mouse capture.
-isCapturedBy :: Eq e => e -> UI e s c Bool
+isCapturedBy :: Eq e => e -> UI e u s Bool
 isCapturedBy eid = (== Just eid) <$> gets ctxCapturedElement
 
 -- | Runs an action only when the given element holds keyboard focus.
-whenFocused :: Eq e => e -> UI e s c () -> UI e s c ()
+whenFocused :: Eq e => e -> UI e u s () -> UI e u s ()
 whenFocused eid action = isFocused eid >>= \f -> when f action
 
 -- | 'True' when the element holds focus and a key event for @k@ is present
 -- in the current frame's input queue.
-isKeyPressed :: Eq e => e -> Key -> UI e s c Bool
+isKeyPressed :: Eq e => e -> Key -> UI e u s Bool
 isKeyPressed eid k = do
   hasFoc <- isFocused eid
   pressed <- any (\e -> key e == k) . inputKeyEvents <$> getInput
@@ -431,72 +420,72 @@ isKeyPressed eid k = do
 
 -- | Registers the element as the current hover target. Typically called
 -- automatically by 'control' after a 'regionHit' check.
-setHovered :: e -> UI e s c ()
+setHovered :: e -> UI e u s ()
 setHovered eid = modify $ \ctx -> ctx { ctxHoveredElement = Just eid }
 
-getFocus :: UI e s c (Maybe e)
+getFocus :: UI e u s (Maybe e)
 getFocus = gets (focusedElement . ctxFocusState)
 
 -- | 'True' when the given element holds keyboard focus.
-isFocused :: Eq e => e -> UI e s c Bool
+isFocused :: Eq e => e -> UI e u s Bool
 isFocused eid = (== Just eid) <$> getFocus
 
 -- | Transfers keyboard focus to the given element.
-setFocus :: e -> UI e s c ()
+setFocus :: e -> UI e u s ()
 setFocus eid = modify $ \ctx -> ctx { ctxFocusState = FocusState { focusedElement = Just eid, focusedThisFrame = True } }
 
 -- | Transfers keyboard focus to the given element when the condition is 'True'.
-setFocusWhen :: Bool -> e -> UI e s c ()
+setFocusWhen :: Bool -> e -> UI e u s ()
 setFocusWhen b eid = when b (setFocus eid)
 
 -- | Removes keyboard focus from all elements.
-clearFocus :: UI e s c ()
+clearFocus :: UI e u s ()
 clearFocus = modify $ \ctx -> ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = Nothing } }
 
 -- | Runs a sub-tree within a different bounding rectangle. The previous bounds
 -- are restored when the sub-tree completes. Used by the layout system to
 -- assign each child its allocated slot.
-withBounds :: Rectangle -> UI e s c a -> UI e s c a
+withBounds :: Rectangle -> UI e u s a -> UI e u s a
 withBounds r (UI f) = UI $ \ctx ->
   let (a, ctx') = f (ctx { ctxBounds = r })
   in (a, ctx' { ctxBounds = ctxBounds ctx })
 
 -- | 'True' when the current sub-tree has been marked disabled.
-isDisabled :: UI e s c Bool
+isDisabled :: UI e u s Bool
 isDisabled = gets ctxDisabled
 
 -- | Marks a sub-tree as disabled when the condition is 'True'. The flag is
 -- restored to its previous value once the sub-tree completes.
-disableWhen :: Bool -> UI e s c a -> UI e s c a
+disableWhen :: Bool -> UI e u s a -> UI e u s a
 disableWhen True (UI f) = UI $ \ctx ->
   let (a, ctx') = f (ctx { ctxDisabled = True })
   in (a, ctx' { ctxDisabled = ctxDisabled ctx })
 disableWhen False action = action
 
-draw :: DrawCommand -> UI e s c ()
+draw :: DrawCommand -> UI e u s ()
 draw cmd = modify $ \ctx -> ctx { ctxDrawCommands = cmd : ctxDrawCommands ctx }
 
 -- | Fills the current bounds with a solid colour.
-fillRect :: Colour -> UI e s c ()
+fillRect :: Colour -> UI e u s ()
 fillRect colour = do
   r <- getBounds
   draw $ FillRect r colour
 
 -- | Strokes the border of the current bounds with the given colour and line width.
-strokeRect :: Colour -> Double -> UI e s c ()
+strokeRect :: Colour -> Double -> UI e u s ()
 strokeRect colour width = do
   r <- getBounds
   draw $ StrokeRect r colour width
 
 -- | Renders text within the current bounds using the given colour and alignment.
-drawText :: Colour -> TextAlign -> Text -> UI e s c ()
+drawText :: Colour -> TextAlign -> Text -> UI e u s ()
 drawText colour align text = do
   r <- getBounds
   draw $ DrawText r text colour align
 
 -- | Wraps a sub-tree in a clip region matching the current bounds. Draw
 -- commands produced by the sub-tree that fall outside the region are discarded.
-clipToCurrent :: UI e s c a -> UI e s c a
+clipToCurrent :: UI e u s a -> UI e u s a
 clipToCurrent action = do
   r <- getBounds
   draw $ PushClip r
@@ -504,39 +493,56 @@ clipToCurrent action = do
   draw PopClip
   return result
 
--- | Appends a command to the frame's command queue. Retrieve with 'getCommands'
--- after the frame completes.
-dispatch :: c -> UI e s c ()
-dispatch cmd = modify $ \ctx -> ctx { ctxCommands = cmd : ctxCommands ctx }
+-- | The application state as it was at the start of the frame. Modifiers
+-- queued with 'dispatch' do not affect the value seen by later calls in the
+-- same frame; changes become visible from the next frame onward.
+getAppState :: UI e u s s
+getAppState = gets ctxAppState
+
+-- | Queues a modifier to be applied to the application state once the frame
+-- completes. Modifiers are applied in dispatch order by 'applyDispatches'.
+dispatch :: (s -> s) -> UI e u s ()
+dispatch f = modify $ \ctx -> ctx { ctxDispatches = f : ctxDispatches ctx }
+
+-- | Queues an asynchronous job. The host forks the job once the frame
+-- completes, passing it the post-dispatch application state; the modifier the
+-- job returns is applied to whatever state exists when it finishes.
+dispatchAsync :: (s -> IO (s -> s)) -> UI e u s ()
+dispatchAsync job = modify $ \ctx -> ctx { ctxAsyncJobs = job : ctxAsyncJobs ctx }
 
 -- | Signals that the application has requested a theme switch. The host checks
 -- 'ctxThemeChangeRequested' after the frame and acts accordingly.
-changeTheme :: UI e s c ()
+changeTheme :: UI e u s ()
 changeTheme = modify $ \ctx -> ctx { ctxThemeChangeRequested = True }
 
 -- | Extracts the draw commands produced during the frame, in submission order.
-getDrawCommands :: UIContext e s c -> [DrawCommand]
+getDrawCommands :: UIContext e u s -> [DrawCommand]
 getDrawCommands = reverse . ctxDrawCommands
 
--- | Extracts the application commands dispatched during the frame, in the order
--- they were dispatched.
-getCommands :: UIContext e s c -> [c]
-getCommands = reverse . ctxCommands
+-- | Applies the modifiers queued with 'dispatch' during the frame to the
+-- frame's application state, in dispatch order.
+applyDispatches :: UIContext e u s -> s
+applyDispatches ctx = foldl' (flip ($)) (ctxAppState ctx) (reverse (ctxDispatches ctx))
+
+-- | Extracts the asynchronous jobs queued with 'dispatchAsync' during the
+-- frame, in dispatch order.
+getAsyncJobs :: UIContext e u s -> [s -> IO (s -> s)]
+getAsyncJobs = reverse . ctxAsyncJobs
 
 -- | 'True' when the mouse cursor is within the current bounds.
-regionHit :: UI e s c Bool
+regionHit :: UI e u s Bool
 regionHit = do
   r <- getBounds
   containsPoint r <$> getMousePos
 
 -- | Skips its argument entirely when the current sub-tree is disabled.
-whenEnabled :: UI e s c () -> UI e s c ()
+whenEnabled :: UI e u s () -> UI e u s ()
 whenEnabled ui = do
   isDisabl <- isDisabled
   unless isDisabl $ do
     ui
 
-applyHover :: (Eq e, Ord e) => e -> UI e s c ()
+applyHover :: (Eq e, Ord e) => e -> UI e u s ()
 applyHover eid = do
   whenEnabled $ do
     s <- getStyle eid
@@ -546,7 +552,7 @@ applyHover eid = do
     when isHit $ do
       setHovered eid
 
-applyFocus :: (Eq e, Ord e) => e -> UI e s c ()
+applyFocus :: (Eq e, Ord e) => e -> UI e u s ()
 applyFocus eid = do
   whenEnabled $ do
     currentFocus <- getFocus
@@ -557,7 +563,7 @@ applyFocus eid = do
         wasClicked        = isHit && btn == ButtonReleased
     setFocusWhen (nothingIsFocused || isRequestingFocus || wasClicked) eid
 
-applyTabNavigation :: (Eq e, Ord e) => e -> UI e s c ()
+applyTabNavigation :: (Eq e, Ord e) => e -> UI e u s ()
 applyTabNavigation eid = do
   hasFocus <- isFocused eid
   input    <- getInput
@@ -579,7 +585,7 @@ applyTabNavigation eid = do
 -- rectangle. Does not perform hover detection, focus management, or tab
 -- navigation — use this for display-only elements that should not participate
 -- in interaction. See 'control' for the interactive counterpart.
-renderControl :: Ord e => e -> UI e s c () -> UI e s c ()
+renderControl :: Ord e => e -> UI e u s () -> UI e u s ()
 renderControl eid content = do
   style <- getStyle eid
   r     <- getBounds
@@ -604,7 +610,7 @@ renderControl eid content = do
 --   style <- getStyle eid
 --   drawText (styleTextColour style) (styleTextAlign style) label
 -- @
-control :: (Eq e, Ord e) => e -> UI e s c () -> UI e s c ()
+control :: (Eq e, Ord e) => e -> UI e u s () -> UI e u s ()
 control eid content = do
   applyHover eid
   applyFocus eid

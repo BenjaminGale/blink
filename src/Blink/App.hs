@@ -4,29 +4,28 @@ Module: Blink.App
 
 = Application structure
 
-'App' describes a complete Blink application using an Elm-style architecture:
-the UI is a pure function of state, and the only way to change state is by
-handling commands dispatched by the UI.
+'App' describes a complete Blink application: the UI is a pure function of
+state, and the only way to change state is by queueing modifiers with
+'Blink.UI.dispatch' and 'Blink.UI.dispatchAsync'.
 
 @
-data App e s u c = App
-  { startUp        :: IO s              -- ^ produce the initial state
-  , initialUIState :: u                 -- ^ initial UI state record
-  , theme          :: s -> Theme e      -- ^ derive the active theme
-  , view           :: s -> UI e u c ()  -- ^ render the current state
-  , update         :: c -> Update s c () -- ^ handle a dispatched command
+data App e u s = App
+  { startUp :: IO s
+  , initialUIState :: u
+  , theme :: s -> Theme e
+  , view :: UI e u s ()
   }
 @
 
   * @e@ is the element type — a sum type identifying each interactive control
     (see "Blink.UI").
-  * @s@ is the application state, owned entirely by the host; the UI tree
-    receives it as a read-only argument and never mutates it directly.
   * @u@ is the UI state record — presentation state owned by the controls
     themselves (scroll positions and the like), persisted across frames inside
-    the 'UIContext'. Use @()@ when no control needs it (see "Blink.UI").
-  * @c@ is the command type — how the view signals state changes back to the
-    application (see "Blink.UI").
+    the 'UIContext'. Use 'Blink.Controls.StandardControls' when only the
+    standard controls need it (see "Blink.UI").
+  * @s@ is the application state, owned by the host. The UI tree reads it with
+    'Blink.UI.getAppState' and never mutates it directly; modifiers queued
+    with 'Blink.UI.dispatch' are applied once the frame completes.
 
 = Configuration
 
@@ -36,11 +35,11 @@ Pass an 'App' to 'configureContinuous' or 'configureEventDriven' to obtain a
   * 'configureContinuous'  — for backends that redraw every frame regardless of
     input (e.g. game-style loops). Draw commands from the first render pass are
     submitted immediately each frame.
-  * 'configureEventDriven' — for backends that block on events. After processing
-    commands, a second render pass runs on the updated state so the displayed
-    frame always reflects the latest state. The 'IO ()' callback is invoked when
-    async work completes, allowing the backend to unblock its event wait (e.g.
-    @glfwPostEmptyEvent@).
+  * 'configureEventDriven' — for backends that block on events. After applying
+    the frame's dispatched modifiers, a second render pass runs on the updated
+    state so the displayed frame always reflects the latest state. The 'IO ()'
+    callback is invoked when async work completes, allowing the backend to
+    unblock its event wait (e.g. @glfwPostEmptyEvent@).
 
 = Backend integration
 
@@ -69,11 +68,11 @@ Set 'quitRequested' in 'FrameInput' when the platform detects a close signal
 
 = Async updates
 
-'Blink.Update.effect' queues an @IO c@ action. 'stepFrame' forks each queued
-action, posts the resulting command @c@ to an internal queue, and calls the
-async notification callback so the backend can unblock its event wait.
-Async commands are drained at the start of the next 'stepFrame' call, before
-UI-driven commands, and flow through the normal 'update' cycle.
+'Blink.UI.dispatchAsync' queues a job @s -> IO (s -> s)@. 'stepFrame' forks
+each queued job with the frame's post-dispatch state, posts the modifier the
+job returns to an internal queue, and calls the async notification callback so
+the backend can unblock its event wait. Posted modifiers are applied at the
+start of the next 'stepFrame' call, before the render pass.
 
 = Text measurement
 
@@ -100,6 +99,7 @@ module Blink.App
 
 import Control.Concurrent (forkIO)
 import Data.IORef
+import Data.List (foldl')
 import Data.Text (Text)
 
 import Blink.Geometry (Point, Size, rectOrigin, resizeRect)
@@ -109,37 +109,34 @@ import Blink.Style (Theme)
 import Blink.UI
   ( UI, UIContext (..), FocusState (..)
   , emptyUIContext, nextFrameContext
-  , runUI, getDrawCommands, getCommands
-  , ctxThemeChangeRequested
+  , runUI, getDrawCommands, applyDispatches, getAsyncJobs
   )
-import Blink.Update (Update, runUpdate)
 
 -- | Describes a complete Blink application.
 --
--- @e@ is the element type, @s@ the application state, @u@ the UI state
--- record, and @c@ the command type. See "Blink.UI" for an explanation of
--- element IDs, UI state, and commands.
-data App e s u c = App
+-- @e@ is the element type, @u@ the UI state record, and @s@ the application
+-- state. See "Blink.UI" for an explanation of element IDs, UI state, and
+-- application state.
+data App e u s = App
   { startUp :: IO s
     -- ^ Produces the initial application state before the render loop begins.
   , initialUIState :: u
     -- ^ The UI state record as it should be on the first frame. Controls
-    -- read and write it through 'Blink.UI.Field's; it persists across frames
-    -- inside the 'UIContext'.
+    -- read and write it through 'Blink.UI.getUIState' and
+    -- 'Blink.UI.modifyUIState'; it persists across frames inside the
+    -- 'UIContext'.
   , theme :: s -> Theme e
     -- ^ Derives the active 'Theme' from the current state. Called each frame,
     -- allowing the theme to change in response to state changes.
-  , view :: s -> UI e u c ()
-    -- ^ Renders the current state as a 'UI' tree. Called once or twice per
+  , view :: UI e u s ()
+    -- ^ The UI tree. Reads the application state with 'Blink.UI.getAppState'
+    -- and queues changes with 'Blink.UI.dispatch'; run once or twice per
     -- frame depending on the render mode.
-  , update :: c -> Update s c ()
-    -- ^ Handles a command dispatched by the view. Applied to each command in
-    -- dispatch order; async commands are processed before UI-driven ones.
   }
 
 -- | Produces a 'BlinkHandle' for a continuous render backend. The draw list
 -- from the first render pass is submitted immediately each frame.
-configureContinuous :: App e s u c -> TextMeasurer -> IO (BlinkHandle s)
+configureContinuous :: App e u s -> TextMeasurer -> IO (BlinkHandle s)
 configureContinuous app _measurer = do
   asyncQueue <- newIORef []
   ctxRef     <- newIORef Nothing
@@ -148,10 +145,11 @@ configureContinuous app _measurer = do
     , stepFrame = doStep False app asyncQueue ctxRef (pure ())
     }
 
--- | Produces a 'BlinkHandle' for an event-driven backend. After processing
--- commands, a second render pass runs on the updated state. The 'IO ()' callback
--- is called when async work completes so the backend can unblock its event wait.
-configureEventDriven :: App e s u c -> IO () -> TextMeasurer -> IO (BlinkHandle s)
+-- | Produces a 'BlinkHandle' for an event-driven backend. After applying the
+-- frame's dispatched modifiers, a second render pass runs on the updated state.
+-- The 'IO ()' callback is called when async work completes so the backend can
+-- unblock its event wait.
+configureEventDriven :: App e u s -> IO () -> TextMeasurer -> IO (BlinkHandle s)
 configureEventDriven app notify _measurer = do
   asyncQueue <- newIORef []
   ctxRef     <- newIORef Nothing
@@ -167,9 +165,9 @@ data BlinkHandle s = BlinkHandle
     -- ^ Produces the initial application state. Call once before entering the
     -- render loop.
   , stepFrame :: FrameInput -> s -> IO (FrameResult s)
-    -- ^ Processes one frame: drains the async command queue, runs the view,
-    -- applies all commands through 'update', forks any async effects, and
-    -- returns draw commands paired with the new state.
+    -- ^ Processes one frame: applies modifiers posted by completed async
+    -- jobs, runs the view, applies the frame's dispatched modifiers, forks
+    -- any async jobs, and returns draw commands paired with the new state.
   }
 
 -- | All per-frame inputs from the platform, assembled by the backend each
@@ -237,57 +235,60 @@ data TextMeasurer = TextMeasurer
 
 doStep
   :: Bool
-  -> App e s u c
-  -> IORef [c]
-  -> IORef (Maybe (UIContext e u c))
+  -> App e u s
+  -> IORef [s -> s]
+  -> IORef (Maybe (UIContext e u s))
   -> IO ()
   -> FrameInput
   -> s
   -> IO (FrameResult s)
-doStep eventDriven app asyncQueue ctxRef notify fi state = do
-  let winRect    = resizeRect (windowSize fi) rectOrigin
+doStep eventDriven app asyncQueue ctxRef notify fi state0 = do
+  let winRect = resizeRect (windowSize fi) rectOrigin
       inputState = toInputState fi
+
+  -- Apply modifiers posted by completed async jobs (oldest first)
+  asyncMods <- atomicModifyIORef asyncQueue (\q -> ([], reverse q))
+  let state = foldl' (flip ($)) state0 asyncMods
 
   mCtx <- readIORef ctxRef
   let ctx = case mCtx of
-        Nothing -> emptyUIContext winRect inputState (theme app state) (initialUIState app)
-        Just c  -> (nextFrameContext winRect inputState c)
-                     { ctxTheme = theme app state }
-
-  -- Drain the async command queue (oldest first)
-  asyncCmds <- atomicModifyIORef asyncQueue (\q -> ([], reverse q))
+        Nothing -> emptyUIContext winRect inputState (theme app state) (initialUIState app) state
+        Just c -> (nextFrameContext winRect inputState c)
+          { ctxTheme = theme app state
+          , ctxAppState = state
+          }
 
   -- First render pass
-  let ((), processedCtx) = runUI (view app state) ctx
+  let ((), processedCtx) = runUI (view app) ctx
 
-  -- Collect and process all commands
-  let uiCmds  = getCommands processedCtx
-      allCmds = asyncCmds ++ uiCmds
-      (state', effects) = runCommands (update app) allCmds state
+  -- Apply the modifiers dispatched during the frame
+  let state' = applyDispatches processedCtx
 
-  -- Fork async effects; each result is enqueued and the callback is invoked
-  mapM_ (forkEffect asyncQueue notify) effects
+  -- Fork async jobs with the post-dispatch state; each completed job's
+  -- modifier is enqueued and the callback is invoked
+  mapM_ (forkJob asyncQueue notify state') (getAsyncJobs processedCtx)
 
   -- Determine stable focus from the first pass
   let focusState = ctxFocusState processedCtx
-      nextFocus  = if focusedThisFrame focusState
-                   then focusedElement focusState
-                   else Nothing
+      nextFocus = if focusedThisFrame focusState
+                  then focusedElement focusState
+                  else Nothing
 
   -- Produce draw commands and the context to persist for the next frame
   (drawCmds, nextCtx) <-
     if eventDriven
       then do
-        let newTheme     = if ctxThemeChangeRequested processedCtx
-                           then theme app state'
-                           else ctxTheme processedCtx
+        let newTheme = if ctxThemeChangeRequested processedCtx
+                       then theme app state'
+                       else ctxTheme processedCtx
             clearedInput = clearKeyEvents inputState
-            freshCtx     = (nextFrameContext winRect clearedInput processedCtx)
+            freshCtx = (nextFrameContext winRect clearedInput processedCtx)
               { ctxFocusState = focusState { focusedElement = nextFocus }
-              , ctxTheme      = newTheme
+              , ctxTheme = newTheme
+              , ctxAppState = state'
               }
-            ((), renderedCtx) = runUI (view app state') freshCtx
-            storedCtx         = renderedCtx
+            ((), renderedCtx) = runUI (view app) freshCtx
+            storedCtx = renderedCtx
               { ctxFocusState = focusState { focusedElement = nextFocus } }
         pure (getDrawCommands renderedCtx, storedCtx)
       else
@@ -310,17 +311,10 @@ toInputState (FrameInput mp mb kes txt _ _) = InputState mp mb kes txt
 clearKeyEvents :: InputState -> InputState
 clearKeyEvents (InputState mp lb _ _) = InputState mp lb [] []
 
-runCommands :: (c -> Update s c ()) -> [c] -> s -> (s, [IO c])
-runCommands updateFn cmds s0 = foldl step (s0, []) cmds
-  where
-    step (s, effs) cmd =
-      let ((), s', newEffects) = runUpdate (updateFn cmd) s
-      in (s', effs ++ newEffects)
-
-forkEffect :: IORef [c] -> IO () -> IO c -> IO ()
-forkEffect queue notify action = do
+forkJob :: IORef [s -> s] -> IO () -> s -> (s -> IO (s -> s)) -> IO ()
+forkJob queue notify s job = do
   _ <- forkIO $ do
-    cmd <- action
-    atomicModifyIORef' queue (\q -> (cmd : q, ()))
+    f <- job s
+    atomicModifyIORef' queue (\q -> (f : q, ()))
     notify
   pure ()

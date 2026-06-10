@@ -1,10 +1,10 @@
 {- |
 Module: Blink
 
-Blink is a retained-mode UI library built around an Elm-style architecture:
-the UI is a pure function of state, and state changes only through commands
-dispatched by the UI. Blink acts as a library — it does not own the main loop.
-The backend drives the loop and calls into Blink each frame.
+Blink is a retained-mode UI library: the UI is a pure function of state, and
+state changes only through modifiers dispatched by the UI. Blink acts as a
+library — it does not own the main loop. The backend drives the loop and calls
+into Blink each frame.
 
 = Architecture
 
@@ -25,18 +25,18 @@ loop handle state = do
 
 = Type parameters
 
-Every 'App' is parameterised over four types:
+Every 'App' is parameterised over three types:
 
   * @e@ — the /element type/, a sum type with one constructor per interactive
     control. Used to look up styles from the 'Theme' and to route keyboard
     focus. See "Blink.UI".
-  * @s@ — the /application state/, owned entirely by the host and passed
-    read-only to 'view' each frame.
   * @u@ — the /UI state record/, presentation state owned by the controls
-    themselves (scroll positions and the like) and accessed through 'Field's.
-    Use @()@ when no control needs it. See "Blink.UI".
-  * @c@ — the /command type/, values dispatched by the UI and handled by
-    'update' to produce the next state. See "Blink.Update".
+    themselves (scroll positions and the like) and accessed through
+    'getUIState' and 'modifyUIState'. Use 'StandardControls' when only the
+    standard controls need it. See "Blink.UI" and "Blink.Controls".
+  * @s@ — the /application state/, owned by the host, read by the UI tree via
+    'getAppState', and changed only through modifiers queued with 'dispatch'
+    and 'dispatchAsync'. See "Blink.UI".
 
 = Module guide
 
@@ -46,7 +46,6 @@ Every 'App' is parameterised over four types:
                        queries. Start here when building views.
   * "Blink.Controls" — Ready-made controls: buttons, text inputs, checkboxes,
                        progress bars, and labels.
-  * "Blink.Update"   — State updates and async effects.
   * "Blink.Layout"   — Box layout and constraint-based sizing.
   * "Blink.Style"    — Themes and per-state styles.
   * "Blink.Rendering"— The draw command list produced each frame.
@@ -60,7 +59,6 @@ module Blink
   , module Blink.Layout
   , module Blink.Rendering
   , module Blink.Style
-  , module Blink.Update
   , module Blink.UI
   ) where
 
@@ -71,5 +69,4 @@ import Blink.Input
 import Blink.Layout
 import Blink.Rendering
 import Blink.Style
-import Blink.Update
 import Blink.UI
