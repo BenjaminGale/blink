@@ -162,6 +162,7 @@ module Blink.UI
   , isClicked
   , isPressed
   , isDragging
+  , isActivatedBy
     -- * Focus and keyboard navigation
   , isFocused
   , setFocus
@@ -389,6 +390,16 @@ isPressed eid = do
   isHov <- isHovered eid
   btn   <- getLeftButton
   pure (isHov && btn == ButtonDown)
+
+-- | 'True' when the element is clicked or any of the given keys are pressed
+-- while it is focused, and the element is not disabled. Use this to implement
+-- the activation behaviour of interactive controls.
+isActivatedBy :: (Eq e, Ord e) => [Key] -> e -> UI e u s Bool
+isActivatedBy keys eid = do
+  clicked  <- isClicked eid
+  keyPress <- any id <$> mapM (isKeyPressed eid) keys
+  disabled <- isDisabled
+  pure (not disabled && (clicked || keyPress))
 
 -- | Derives the next frame's captured element from the current button state.
 -- Capture is carried forward while the button is held and survives through

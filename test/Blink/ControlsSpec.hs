@@ -374,6 +374,10 @@ spec = do
         applyDispatches (runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
           `shouldBe` Just True
 
+      it "dispatches toggle when Space is pressed while focused" $
+        applyDispatches (runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeySpace []] })))
+          `shouldBe` Just True
+
       it "does not dispatch when clicked outside the box" $
         applyDispatches (runCheckbox False (mkCheckboxCtx (mouseAt (Point 50 50) ButtonReleased [])))
           `shouldBe` Nothing

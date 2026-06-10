@@ -110,13 +110,6 @@ instance HasStandardControls e (StandardControls e) where
   getStandardControls = id
   setStandardControls sc _ = sc
 
-isActivated :: (Eq e, Ord e) => e -> UI e u s Bool
-isActivated eid = do
-  clicked    <- isClicked eid
-  enterPress <- isKeyPressed eid KeyReturn
-  disabled   <- isDisabled
-  return (not disabled && (clicked || enterPress))
-
 -- | Read-only text display. Renders @text@ within the element's content
 -- rectangle using the active style. Does not participate in interaction or
 -- keyboard navigation.
@@ -138,7 +131,7 @@ progressBar eid value = renderControl eid $ do
 checkboxMark :: (Eq e, Ord e) => e -> Bool -> (Bool -> s -> s) -> UI e u s ()
 checkboxMark boxId checked onToggle = control boxId $ do
   style     <- getStyle boxId
-  activated <- isActivated boxId
+  activated <- isActivatedBy [KeyReturn, KeySpace] boxId
   when checked   $ drawText (styleTextColour style) AlignCenter "✓"
   when activated $ dispatch (onToggle (not checked))
 
@@ -168,7 +161,7 @@ button eid txt = do
   control eid $ do
     style <- getStyle eid
     drawText (styleTextColour style) (styleTextAlign style) txt
-  isActivated eid
+  isActivatedBy [KeyReturn] eid
 
 -- | A single-line text entry field. Displays a cursor when focused. Dispatches
 -- the state modifier @onChange newValue@ when the text changes via typed
