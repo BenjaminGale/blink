@@ -184,7 +184,6 @@ module Blink.UI
   , renderControl
   ) where
 
-import Control.Applicative ((<|>))
 import Control.Monad (when, unless, guard)
 import Data.Foldable (asum)
 import Data.Functor (($>))
@@ -293,13 +292,7 @@ nextFrameContext bounds input ctx = ctx
   , ctxDrawCommands = []
   , ctxHoveredElement = Nothing
   , ctxCapturedElement = nextCapture (inputLeftButton input) (ctxCapturedElement ctx)
-  , ctxFocusState = FocusState
-      { focusedElement   =
-          if focusedThisFrame (ctxFocusState ctx)
-          then focusedElement (ctxFocusState ctx)
-          else Nothing
-      , focusedThisFrame = False
-      }
+  , ctxFocusState = nextFocusFrame (ctxFocusState ctx)
   , ctxDispatches = []
   , ctxAsyncJobs = []
   }
@@ -453,6 +446,16 @@ setFocusWhen b eid = when b (setFocus eid)
 -- | Removes keyboard focus from all elements.
 clearFocus :: UI e u s ()
 clearFocus = modify $ \ctx -> ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = Nothing } }
+
+-- | Advances a 'FocusState' to the next frame: carries focus forward if it
+-- was explicitly set this frame, otherwise clears it. Used by 'nextFrameContext'.
+nextFocusFrame :: FocusState e -> FocusState e
+nextFocusFrame fs = FocusState
+  { focusedElement   = if focusedThisFrame fs
+                       then focusedElement fs
+                       else Nothing
+  , focusedThisFrame = False
+  }
 
 -- | Runs a sub-tree within a different bounding rectangle. The previous bounds
 -- are restored when the sub-tree completes. Used by the layout system to
