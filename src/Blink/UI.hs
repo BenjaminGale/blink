@@ -161,8 +161,7 @@ module Blink.UI
   , setHovered
   , isClicked
   , isPressed
-  , captureElement
-  , isCapturedBy
+  , isDragging
     -- * Focus and keyboard navigation
   , isFocused
   , setFocus
@@ -185,6 +184,7 @@ module Blink.UI
   , renderControl
   ) where
 
+import Control.Applicative ((<|>))
 import Control.Monad (when, unless, guard)
 import Data.Foldable (asum)
 import Data.Functor (($>))
@@ -292,10 +292,7 @@ nextFrameContext bounds input ctx = ctx
   , ctxInput = input
   , ctxDrawCommands = []
   , ctxHoveredElement = Nothing
-  , ctxCapturedElement =
-      if inputLeftButton input == ButtonDown
-      then ctxCapturedElement ctx
-      else Nothing
+  , ctxCapturedElement = nextCapture (inputLeftButton input) (ctxCapturedElement ctx)
   , ctxFocusState = FocusState
       { focusedElement   =
           if focusedThisFrame (ctxFocusState ctx)
@@ -400,15 +397,21 @@ isPressed eid = do
   btn   <- getLeftButton
   pure (isHov && btn == ButtonDown)
 
--- | Claims mouse capture for the given element. While captured, 'isCapturedBy'
--- returns 'True' even when the mouse moves outside the element's bounds.
--- Capture is released automatically when the left button is no longer held.
-captureElement :: e -> UI e u s ()
-captureElement eid = modify $ \ctx -> ctx { ctxCapturedElement = Just eid }
+-- | Derives the next frame's captured element from the current button state.
+-- Capture is carried forward while the button is held and survives through
+-- ButtonReleased so that 'applyFocus' can distinguish a drag release (mouse
+-- on a different element) from a plain click. Cleared on ButtonUp.
+-- Acquisition — setting capture in the first place — happens in 'setHovered'.
+nextCapture :: ButtonState -> Maybe e -> Maybe e
+nextCapture ButtonDown    existing = existing
+nextCapture ButtonReleased existing = existing
+nextCapture _             _        = Nothing
 
--- | 'True' when the given element holds mouse capture.
-isCapturedBy :: Eq e => e -> UI e u s Bool
-isCapturedBy eid = (== Just eid) <$> gets ctxCapturedElement
+-- | 'True' on every frame that the given element is being dragged — from the
+-- initial press through to release.
+isDragging :: Eq e => e -> UI e u s Bool
+isDragging eid = (== Just eid) <$> gets ctxCapturedElement
+
 
 -- | Runs an action only when the given element holds keyboard focus.
 whenFocused :: Eq e => e -> UI e u s () -> UI e u s ()
@@ -422,10 +425,15 @@ isKeyPressed eid k = do
   pressed <- any (\e -> key e == k) . inputKeyEvents <$> getInput
   pure (hasFoc && pressed)
 
--- | Registers the element as the current hover target. Typically called
--- automatically by 'control' after a 'regionHit' check.
+-- | Registers the element as the current hover target. Also acquires mouse
+-- capture for it if the left button is currently down and nothing is captured
+-- yet, making this the first point of capture for that press.
 setHovered :: e -> UI e u s ()
-setHovered eid = modify $ \ctx -> ctx { ctxHoveredElement = Just eid }
+setHovered eid = modify $ \ctx ->
+  let ctx' = ctx { ctxHoveredElement = Just eid }
+  in if inputLeftButton (ctxInput ctx) == ButtonDown && isNothing (ctxCapturedElement ctx)
+     then ctx' { ctxCapturedElement = Just eid }
+     else ctx'
 
 getFocus :: UI e u s (Maybe e)
 getFocus = gets (focusedElement . ctxFocusState)
@@ -558,10 +566,15 @@ applyFocus eid = do
     currentFocus <- getFocus
     isHit        <- isHovered eid
     btn          <- getLeftButton
+    captured     <- gets ctxCapturedElement
     let nothingIsFocused  = isNothing currentFocus
         isRequestingFocus = currentFocus == Just eid
-        wasClicked        = isHit && btn == ButtonReleased
-    setFocusWhen (nothingIsFocused || isRequestingFocus || wasClicked) eid
+        -- A drag release is when the button is released over a different
+        -- element than the one that was captured. Focus should not transfer
+        -- in that case — the drag origin retains focus.
+        isDragRelease = btn == ButtonReleased && isJust captured && captured /= Just eid
+        wasClicked    = isHit && btn == ButtonReleased && not isDragRelease
+    setFocusWhen ((nothingIsFocused || isRequestingFocus || wasClicked) && not isDragRelease) eid
 
 applyTabNavigation :: (Eq e, Ord e) => e -> UI e u s ()
 applyTabNavigation eid = do

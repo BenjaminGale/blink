@@ -184,6 +184,11 @@ controlBehaviourSpec run hitPoint = do
       getFocused (run (withFocus (Just OtherControl) (mkCtx (mouseAt hitPoint ButtonReleased []))))
         `shouldBe` Just TestControl
 
+    it "does not steal focus when the mouse is released on it after dragging from another element" $
+      -- Simulate being mid-drag from OtherControl: capture is set to OtherControl on the release frame.
+      let ctx = (mkCtx (mouseAt hitPoint ButtonReleased [])) { ctxCapturedElement = Just OtherControl }
+      in getFocused (run ctx) `shouldBe` Nothing
+
   describe "tab navigation" $ do
     it "passes focus to the next control when Tab is pressed" $
       getFocused (run (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab []] })))

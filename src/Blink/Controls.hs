@@ -266,10 +266,8 @@ scrollBar mkId ori thumbRatio = do
           thumbR      = scrollThumbRect ori p r contentRect
       control trackId $
         withBounds thumbR $ renderControl (mkId ScrollThumb) $ pure ()
-      pressed  <- isPressed trackId
-      captured <- isCapturedBy trackId
-      when pressed $ captureElement trackId
-      when (pressed || captured) $ do
+      dragging <- isDragging trackId
+      when dragging $ do
         mousePos <- getMousePos
         writePos (scrollPosFromMouse ori r contentRect mousePos)
 

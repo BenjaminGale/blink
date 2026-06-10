@@ -76,3 +76,26 @@ spec = describe "application state primitives" $ do
     let ctx = snd (run (dispatch (+ 1) >> dispatchAsync (\s -> pure (const s))) (0 :: Int))
         ctx' = nextFrameContext testBounds noInput ctx
     in (applyDispatches ctx', length (getAsyncJobs ctx')) `shouldBe` (0, 0)
+
+  describe "nextFrameContext capture" $ do
+    let hovered ctx = ctx { ctxHoveredElement = Just () }
+        captured ctx = ctx { ctxCapturedElement = Just () }
+        buttonDown  = noInput { inputLeftButton = ButtonDown }
+        buttonRel   = noInput { inputLeftButton = ButtonReleased }
+
+    it "auto-acquires capture when an element is hovered while the button is down" $
+      -- Acquisition happens in setHovered during the frame, not via nextFrameContext.
+      let ctx = snd (runUI (setHovered ()) (emptyUIContext testBounds buttonDown emptyTheme () (0 :: Int)))
+      in ctxCapturedElement ctx `shouldBe` Just ()
+
+    it "carries existing capture forward on subsequent ButtonDown frames" $
+      let ctx = nextFrameContext testBounds buttonDown (captured (snd (run (pure ()) (0 :: Int))))
+      in ctxCapturedElement ctx `shouldBe` Just ()
+
+    it "carries capture through ButtonReleased so focus logic can inspect it" $
+      let ctx = nextFrameContext testBounds buttonRel (captured (snd (run (pure ()) (0 :: Int))))
+      in ctxCapturedElement ctx `shouldBe` Just ()
+
+    it "clears capture on ButtonUp" $
+      let ctx = nextFrameContext testBounds noInput (captured (snd (run (pure ()) (0 :: Int))))
+      in ctxCapturedElement ctx `shouldBe` Nothing
