@@ -152,6 +152,8 @@ module Blink.UI
   , strokeRect
   , drawText
   , clipToCurrent
+  , withBackground
+  , withBorder
     -- * Interaction
   , getInput
   , getMousePos
@@ -546,6 +548,21 @@ clipToCurrent action = do
   draw PopClip
   return result
 
+-- | Fills the current bounds with @colour@ then runs @content@ on top.
+-- Skips the fill when @colour@ is fully transparent.
+withBackground :: Colour -> UI e u s a -> UI e u s a
+withBackground colour content = do
+  when (isVisible colour) $ fillRect colour
+  content
+
+-- | Runs @content@, then strokes a border around the current bounds on top.
+-- Drawing the border after content ensures it is always visible over children.
+withBorder :: Colour -> Double -> UI e u s a -> UI e u s a
+withBorder colour width content = do
+  result <- content
+  strokeRect colour width
+  pure result
+
 -- | The application state as it was at the start of the frame. Modifiers
 -- queued with 'dispatch' do not affect the value seen by later calls in the
 -- same frame; changes become visible from the next frame onward.
@@ -668,14 +685,12 @@ renderControl eid content = do
   r     <- getBounds
   let bgRect      = insetRect (styleMargin style) r
       contentRect = insetRect (stylePadding style) bgRect
-  when (isVisible (styleBackground style)) $ do
-    withBounds bgRect $ do
-      fillRect (styleBackground style)
-  case styleBorderColour style of
-    Just c  -> withBounds bgRect $ do
-      strokeRect c (styleBorderWidth style)
-    Nothing -> return ()
-  withBounds contentRect $ clipToCurrent content
+      inner       = withBounds contentRect $ clipToCurrent content
+  withBounds bgRect $
+    withBackground (styleBackground style) $
+    case styleBorderColour style of
+      Just c  -> withBorder c (styleBorderWidth style) inner
+      Nothing -> inner
 
 -- | The standard entry point for interactive controls. Applies hover detection,
 -- focus management, and Tab\/Shift-Tab navigation, then delegates to
