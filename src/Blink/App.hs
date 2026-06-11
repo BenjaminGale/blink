@@ -283,7 +283,7 @@ runFrame app refs notify input prevState = do
   asyncMods <- atomicModifyIORef (refsAsyncQueue refs) (\q -> ([], reverse q))
   let state = foldl' (flip ($)) prevState asyncMods
 
-  delta <- computeDelta (refsLastFrame refs) (isAnimationTick input)
+  delta <- sampleDelta (refsLastFrame refs) (isAnimationTick input)
 
   mCtx <- readIORef (refsCtx refs)
   let ctx  = buildCtx app winRect inputState delta (isAnimationTick input) state mCtx
@@ -350,9 +350,9 @@ forkJob queue notify s job = do
     notify
   pure ()
 
-computeDelta :: IORef (Maybe Word64) -> Bool -> IO Float
-computeDelta _ False = pure 0
-computeDelta lastFrameRef True = do
+sampleDelta :: IORef (Maybe Word64) -> Bool -> IO Float
+sampleDelta _ False = pure 0
+sampleDelta lastFrameRef True = do
   now   <- getMonotonicTimeNSec
   mLast <- readIORef lastFrameRef
   writeIORef lastFrameRef (Just now)
