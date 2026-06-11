@@ -1,46 +1,71 @@
+{- |
+Primitive geometry types and operations used throughout Blink. All
+coordinates are in pixels, measured from a top-left origin with Y
+increasing downward.
+
+The four core types are 'Point', 'Size', 'Rectangle', and 'Insets'.
+'Rectangle' is the central type: most of the library passes bounding
+rectangles around to describe where components are drawn. 'Insets'
+describes four-sided offsets and is used to derive margin and padding
+rectangles from a base 'Rectangle' via 'insetRect'. 'Alignment'
+describes a 2D anchor position within a containing rectangle and is
+used with 'alignRect' to place a child rectangle inside a parent.
+-}
 module Blink.Geometry
-  ( Point (..)
+  ( -- * Types
+    Point (..)
   , Size (..)
   , Rectangle (..)
-  , Alignment (..)
   , Orientation (..)
+    -- * Insets
   , Insets (..)
   , uniform
   , insetRect
+    -- * Rectangle operations
   , rectOrigin
   , resizeRect
   , rectCentredAt
   , containsPoint
   , alignRect
+    -- * Alignment
+  , Alignment (..)
   ) where
 
+-- | A point in 2D screen space (pixels, top-left origin, Y increases downward).
 data Point = Point
   { pointX :: Double
   , pointY :: Double
   } deriving (Eq, Show)
 
+-- | The dimensions of a 2D region in pixels.
 data Size = Size
   { sizeWidth :: Double
   , sizeHeight :: Double
   } deriving (Eq, Show)
 
+-- | An axis-aligned rectangle in screen coordinates.
 data Rectangle = Rectangle
-  { rectX :: Double
-  , rectY :: Double
+  { rectX :: Double      -- ^ Left edge.
+  , rectY :: Double      -- ^ Top edge.
   , rectWidth :: Double
   , rectHeight :: Double
   } deriving (Eq, Show)
 
+-- | Four-sided inset distances in pixels. Apply with 'insetRect';
+-- construct uniform insets with 'uniform'.
 data Insets = Insets
-  { topInset :: Double
-  , rightInset :: Double
-  , bottomInset :: Double
-  , leftInset :: Double
+  { topInset :: Double    -- ^ Inset from the top edge.
+  , rightInset :: Double  -- ^ Inset from the right edge.
+  , bottomInset :: Double -- ^ Inset from the bottom edge.
+  , leftInset :: Double   -- ^ Inset from the left edge.
   } deriving (Eq, Show)
 
+-- | Creates 'Insets' with the same value on all four sides.
 uniform :: Double -> Insets
 uniform n = Insets { topInset = n, rightInset = n, bottomInset = n, leftInset = n }
 
+-- | Shrinks @r@ by @ins@ on each edge. Width and height are clamped to
+-- zero if the insets exceed the rectangle's dimensions.
 insetRect :: Insets -> Rectangle -> Rectangle
 insetRect ins r = Rectangle
   { rectX = rectX r + leftInset ins
@@ -49,17 +74,23 @@ insetRect ins r = Rectangle
   , rectHeight = max 0 (rectHeight r - topInset ins - bottomInset ins)
   }
 
+-- | A 2D anchor position within a containing rectangle. Passed to
+-- 'alignRect' to control where a child rectangle sits inside its parent.
 data Alignment
   = TopLeft    | TopCenter    | TopRight
   | MiddleLeft | Center       | MiddleRight
   | BottomLeft | BottomCenter | BottomRight
   deriving (Eq, Ord, Show, Bounded, Enum)
 
+-- | The axis along which a component is laid out or oriented.
 data Orientation = Horizontal | Vertical
   deriving (Eq, Ord, Show)
 
 data Align1D = AlignStart | AlignCenter | AlignEnd
 
+-- | Positions @rect@ within @container@ according to @alignment@.
+-- Returns @rect@ moved so that the named anchor point aligns with
+-- the corresponding position in @container@; dimensions are unchanged.
 alignRect :: Alignment -> Rectangle -> Rectangle -> Rectangle
 alignRect alignment container rect =
   moveRect (Point x y) rect
@@ -84,14 +115,18 @@ align1D AlignStart  origin _            _       = origin
 align1D AlignCenter origin containerLen itemLen = origin + (containerLen - itemLen) / 2
 align1D AlignEnd    origin containerLen itemLen = origin + containerLen - itemLen
 
+-- | 'True' when @p@ falls within (or on the boundary of) @r@.
 containsPoint :: Point -> Rectangle -> Bool
 containsPoint p r =
   pointX p >= rectX r && pointX p <= rectX r + rectWidth r &&
   pointY p >= rectY r && pointY p <= rectY r + rectHeight r
 
+-- | A zero rectangle: origin @(0, 0)@ with zero width and height.
 rectOrigin :: Rectangle
 rectOrigin = Rectangle 0 0 0 0
 
+-- | Replaces the width and height of @r@ with those of @s@,
+-- preserving the rectangle's origin.
 resizeRect :: Size -> Rectangle -> Rectangle
 resizeRect s r = r
   { rectWidth = sizeWidth s
@@ -104,6 +139,7 @@ moveRect p r = r
   , rectY = pointY p
   }
 
+-- | Moves @r@ so that its centre coincides with @p@, preserving its dimensions.
 rectCentredAt :: Point -> Rectangle -> Rectangle
 rectCentredAt p r =
   moveRect
