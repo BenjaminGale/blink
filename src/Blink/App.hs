@@ -305,10 +305,11 @@ doStepEventDriven app refs notify input prevState = do
   (firstPassCtx, state') <- runFrame app refs notify input prevState
   let winRect    = resizeRect (windowSize input) rectOrigin
       inputState = toInputState input
-      freshCtx   = (nextFrameContext winRect (clearKeyEvents inputState) firstPassCtx)
-        { ctxTheme    = theme app state'
-        , ctxAppState = state'
-        }
+      freshCtx   =
+          withAppState state'
+        . withTheme (theme app state')
+        . nextFrameContext winRect (clearKeyEvents inputState)
+        $ firstPassCtx
       ((), renderedCtx) = runUI (view app) freshCtx
   writeIORef (refsCtx refs) (Just renderedCtx)
   wasActive <- readIORef (refsAnimActive refs)
@@ -330,6 +331,12 @@ toInputState (FrameInput mp mb kes txt _ _ _) = InputState mp mb kes txt
 -- Clears keyboard and text events for the second render pass in event-driven mode.
 clearKeyEvents :: InputState -> InputState
 clearKeyEvents (InputState mp lb _ _) = InputState mp lb [] []
+
+withTheme :: Theme e -> UIContext e u s -> UIContext e u s
+withTheme t ctx = ctx { ctxTheme = t }
+
+withAppState :: s -> UIContext e u s -> UIContext e u s
+withAppState s ctx = ctx { ctxAppState = s }
 
 forkJob :: IORef [s -> s] -> IO () -> s -> (s -> IO (s -> s)) -> IO ()
 forkJob queue notify s job = do
