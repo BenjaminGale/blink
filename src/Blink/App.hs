@@ -42,19 +42,18 @@ Pass an 'App' to 'configureContinuous' or 'configureEventDriven' to obtain a
 
 = Backend integration
 
-'BlinkHandle' is the interface the backend uses each frame. Call 'initState'
-once to obtain the initial application state, then drive the render loop by
-calling 'stepFrame' each iteration with a 'FrameInput' assembled from platform
-events:
+'BlinkHandle' is the interface the backend uses each frame. Drive the render
+loop by calling 'stepFrame' each iteration with a 'FrameInput' assembled from
+platform events:
 
 @
-loop handle state = do
+loop handle = do
   waitForPlatformEvents
   input  <- collectFrameInput
-  result <- stepFrame handle input state
+  result <- stepFrame handle input
   case result of
-    Continue draws state' -> render draws >> loop handle state'
-    Quit     draws _      -> render draws
+    Continue draws _ -> render draws >> loop handle
+    Quit     draws _ -> render draws
 @
 
 Draw commands are included in both 'Continue' and 'Quit' so the backend can
@@ -104,8 +103,8 @@ import Data.Text (Text)
 import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
 
-import Blink.Geometry (Point, Rectangle, Size, rectFromSize)
-import Blink.Input (ButtonState, KeyEvent, InputState (..))
+import Blink.Geometry (Point (..), Rectangle, Size (..), rectFromSize)
+import Blink.Input (ButtonState (..), KeyEvent, InputState (..))
 import Blink.Rendering (DrawCommand)
 import Blink.Style (Theme)
 import Blink.UI
@@ -141,11 +140,14 @@ data App e u s = App
 -- from the first render pass is submitted immediately each frame.
 configureContinuous :: Eq e => App e u s -> TextMeasurer -> IO (BlinkHandle s)
 configureContinuous app _measurer = do
-  refs <- AppRefs <$> newIORef [] <*> newIORef Nothing <*> newIORef False <*> newIORef Nothing
-  pure BlinkHandle
-    { initState = startUp app
-    , stepFrame = doStepContinuous app refs
-    }
+  s <- startUp app
+  refs <- AppRefs
+    <$> newIORef []
+    <*> newIORef (emptyUIContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) (initialUIState app) s)
+    <*> newIORef s
+    <*> newIORef False
+    <*> newIORef Nothing
+  pure BlinkHandle { stepFrame = doStepContinuous app refs }
 
 -- | Produces a 'BlinkHandle' for an event-driven backend. After applying the
 -- frame's dispatched modifiers, a second render pass runs on the updated state.
@@ -153,19 +155,19 @@ configureContinuous app _measurer = do
 -- unblock its event wait.
 configureEventDriven :: Eq e => App e u s -> IO () -> TextMeasurer -> IO (BlinkHandle s)
 configureEventDriven app notify _measurer = do
-  refs <- AppRefs <$> newIORef [] <*> newIORef Nothing <*> newIORef False <*> newIORef Nothing
-  pure BlinkHandle
-    { initState = startUp app
-    , stepFrame = doStepEventDriven app refs notify
-    }
+  s <- startUp app
+  refs <- AppRefs
+    <$> newIORef []
+    <*> newIORef (emptyUIContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) (initialUIState app) s)
+    <*> newIORef s
+    <*> newIORef False
+    <*> newIORef Nothing
+  pure BlinkHandle { stepFrame = doStepEventDriven app refs notify }
 
 -- | The interface the backend uses each frame. Obtain via 'configureContinuous'
 -- or 'configureEventDriven'.
 data BlinkHandle s = BlinkHandle
-  { initState :: IO s
-    -- ^ Produces the initial application state. Call once before entering the
-    -- render loop.
-  , stepFrame :: FrameInput -> s -> IO (FrameResult s)
+  { stepFrame :: FrameInput -> IO (FrameResult s)
     -- ^ Processes one frame: applies modifiers posted by completed async
     -- jobs, runs the view, applies the frame's dispatched modifiers, forks
     -- any async jobs, and returns draw commands paired with the new state.
@@ -245,10 +247,10 @@ data AppRefs e u s = AppRefs
   { refsAsyncQueue :: IORef [s -> s]
     -- Modifiers posted by completed async jobs, waiting to be applied at the
     -- start of the next frame. Accumulated in LIFO order; reversed on drain.
-  , refsCtx        :: IORef (Maybe (UIContext e u s))
-    -- The UIContext carried over from the previous frame. 'Nothing' on the
-    -- first frame, causing 'runFrame' to build a fresh context via
-    -- 'emptyUIContext'.
+  , refsCtx        :: IORef (UIContext e u s)
+    -- The UIContext carried over from the previous frame.
+  , refsState      :: IORef s
+    -- The application state as of the end of the previous frame.
   , refsAnimActive :: IORef Bool
     -- Written at the end of each frame. The running ticker thread reads this
     -- to decide whether to continue looping or exit. A False->True edge
@@ -259,15 +261,13 @@ data AppRefs e u s = AppRefs
     -- sequentially, so no concurrent access concerns.
   }
 
-buildCtx :: Eq e => App e u s -> Rectangle -> InputState -> Float -> Bool -> s -> Maybe (UIContext e u s) -> UIContext e u s
-buildCtx app winRect inputState delta isAnimTick state mCtx =
+buildCtx :: Eq e => App e u s -> Rectangle -> InputState -> Float -> Bool -> s -> UIContext e u s -> UIContext e u s
+buildCtx app winRect inputState delta isAnimTick state prevCtx =
   let animState = AnimationState { animDelta = delta, animIsTick = isAnimTick }
-      ctx = case mCtx of
-        Nothing -> emptyUIContext winRect inputState (theme app state) (initialUIState app) state
-        Just c  -> (nextFrameContext winRect inputState c)
-          { ctxTheme    = theme app state
-          , ctxAppState = state
-          }
+      ctx = (nextFrameContext winRect inputState prevCtx)
+        { ctxTheme    = theme app state
+        , ctxAppState = state
+        }
   in ctx { ctxAnimation = animState }
 
 runFrame
@@ -276,35 +276,36 @@ runFrame
   -> AppRefs e u s
   -> IO ()
   -> FrameInput
-  -> s
   -> IO (UIContext e u s, s)
-runFrame app refs notify input prevState = do
+runFrame app refs notify input = do
   let winRect    = rectFromSize (windowSize input)
       inputState = toInputState input
 
   asyncMods <- atomicModifyIORef (refsAsyncQueue refs) (\q -> ([], reverse q))
+  prevState <- readIORef (refsState refs)
   let state = foldl' (flip ($)) prevState asyncMods
 
   delta <- sampleDelta (refsLastFrame refs) (isAnimationTick input)
 
-  mCtx <- readIORef (refsCtx refs)
-  let ctx  = buildCtx app winRect inputState delta (isAnimationTick input) state mCtx
+  prevCtx <- readIORef (refsCtx refs)
+  let ctx        = buildCtx app winRect inputState delta (isAnimationTick input) state prevCtx
       ((), ctx') = runUI (view app) ctx
       state'     = applyDispatches ctx'
 
+  writeIORef (refsState refs) state'
   mapM_ (forkJob (refsAsyncQueue refs) notify state') (getAsyncJobs ctx')
 
   pure (ctx', state')
 
-doStepContinuous :: Eq e => App e u s -> AppRefs e u s -> FrameInput -> s -> IO (FrameResult s)
-doStepContinuous app refs input prevState = do
-  (ctx', state') <- runFrame app refs (pure ()) input prevState
-  writeIORef (refsCtx refs) (Just ctx')
+doStepContinuous :: Eq e => App e u s -> AppRefs e u s -> FrameInput -> IO (FrameResult s)
+doStepContinuous app refs input = do
+  (ctx', state') <- runFrame app refs (pure ()) input
+  writeIORef (refsCtx refs) ctx'
   pure $ toResult input (getDrawCommands ctx') state'
 
-doStepEventDriven :: Eq e => App e u s -> AppRefs e u s -> IO () -> FrameInput -> s -> IO (FrameResult s)
-doStepEventDriven app refs notify input prevState = do
-  (firstPassCtx, state') <- runFrame app refs notify input prevState
+doStepEventDriven :: Eq e => App e u s -> AppRefs e u s -> IO () -> FrameInput -> IO (FrameResult s)
+doStepEventDriven app refs notify input = do
+  (firstPassCtx, state') <- runFrame app refs notify input
   let winRect    = rectFromSize (windowSize input)
       inputState = toInputState input
       freshCtx   =
@@ -313,7 +314,7 @@ doStepEventDriven app refs notify input prevState = do
         . nextFrameContext winRect (clearKeyEvents inputState)
         $ firstPassCtx
       ((), renderedCtx) = runUI (view app) freshCtx
-  writeIORef (refsCtx refs) (Just renderedCtx)
+  writeIORef (refsCtx refs) renderedCtx
   wasActive <- readIORef (refsAnimActive refs)
   let nowActive = ctxRequiresAnimation renderedCtx
   writeIORef (refsAnimActive refs) nowActive
@@ -325,6 +326,14 @@ toResult :: FrameInput -> [DrawCommand] -> s -> FrameResult s
 toResult input draws state
   | quitRequested input = Quit draws state
   | otherwise           = Continue draws state
+
+emptyInputState :: InputState
+emptyInputState = InputState
+  { inputMousePosition = Point 0 0
+  , inputLeftButton    = ButtonUp
+  , inputKeyEvents     = []
+  , inputTypedText     = []
+  }
 
 toInputState :: FrameInput -> InputState
 toInputState fi = InputState

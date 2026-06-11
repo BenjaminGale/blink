@@ -46,9 +46,8 @@ main = do
         SDL.present renderer
 
   handle <- configureEventDriven demoApp notify measurer
-  state0  <- initState handle
 
-  loop handle buttonRef renderFrame window mAnimEvent state0
+  loop handle buttonRef renderFrame window mAnimEvent
 
   Font.free font
   SDL.destroyRenderer renderer
@@ -62,9 +61,8 @@ loop
   -> ([DrawCommand] -> IO ())
   -> SDL.Window
   -> Maybe (SDL.RegisteredEventType ())
-  -> s
   -> IO ()
-loop handle buttonRef renderFrame window mAnimEvent state = do
+loop handle buttonRef renderFrame window mAnimEvent = do
   first <- SDL.waitEvent
   rest  <- SDL.pollEvents
   let events = first : rest
@@ -90,10 +88,10 @@ loop handle buttonRef renderFrame window mAnimEvent state = do
              isQuit
              isAnimTick
 
-  result <- stepFrame handle fi state
+  result <- stepFrame handle fi
   case result of
-    Continue draws state' -> renderFrame draws >> loop handle buttonRef renderFrame window mAnimEvent state'
-    Quit     draws _      -> renderFrame draws
+    Continue draws _ -> renderFrame draws >> loop handle buttonRef renderFrame window mAnimEvent
+    Quit     draws _ -> renderFrame draws
 
 isAnimationEvent :: SDL.RegisteredEventType () -> SDL.Event -> IO Bool
 isAnimationEvent et e = isJust <$> SDL.getRegisteredEvent et e
