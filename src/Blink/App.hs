@@ -324,9 +324,13 @@ toResult input draws state
   | quitRequested input = Quit draws state
   | otherwise           = Continue draws state
 
--- Uses positional matching to sidestep overlapping field names with InputState.
 toInputState :: FrameInput -> InputState
-toInputState (FrameInput mp mb kes txt _ _ _) = InputState mp mb kes txt
+toInputState fi = InputState
+  { mousePosition = mousePosition (fi :: FrameInput)
+  , mouseButton   = mouseButton   (fi :: FrameInput)
+  , keyEvents     = keyEvents     (fi :: FrameInput)
+  , typedText     = typedText     (fi :: FrameInput)
+  }
 
 -- Clears keyboard and text events for the second render pass in event-driven mode.
 clearKeyEvents :: InputState -> InputState
