@@ -259,14 +259,14 @@ data AppRefs e u s = AppRefs
 
 buildCtx :: Eq e => App e u s -> Rectangle -> InputState -> Float -> Bool -> s -> Maybe (UIContext e u s) -> UIContext e u s
 buildCtx app winRect inputState delta isAnimTick state mCtx =
-  case mCtx of
-    Nothing -> (emptyUIContext winRect inputState (theme app state) (initialUIState app) state)
-      { ctxAnimation = AnimationState { animDelta = delta, animIsTick = isAnimTick } }
-    Just c -> (nextFrameContext winRect inputState c)
-      { ctxTheme     = theme app state
-      , ctxAppState  = state
-      , ctxAnimation = AnimationState { animDelta = delta, animIsTick = isAnimTick }
-      }
+  let animState = AnimationState { animDelta = delta, animIsTick = isAnimTick }
+      ctx = case mCtx of
+        Nothing -> emptyUIContext winRect inputState (theme app state) (initialUIState app) state
+        Just c  -> (nextFrameContext winRect inputState c)
+          { ctxTheme    = theme app state
+          , ctxAppState = state
+          }
+  in ctx { ctxAnimation = animState }
 
 runFrame
   :: Eq e
