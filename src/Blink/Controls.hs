@@ -200,16 +200,16 @@ textInput :: (Eq e, Ord e) => e -> Text -> (Text -> s -> s) -> UI e u s ()
 textInput eid value onChange = control eid $ do
   style     <- getStyle eid
   hasFocus  <- isFocused eid
-  isDisabl  <- isDisabled
+  disabled  <- isDisabled
   backspace <- isKeyPressed eid KeyBackspace
-  let displayed = if hasFocus && not isDisabl then value <> "|" else value
+  let displayed = if hasFocus && not disabled then value <> "|" else value
   drawText (styleTextColour style) (styleTextAlign style) displayed
   when hasFocus $ whenEnabled $ do
     input <- getInput
-    let withTyped = foldl' (<>) value (inputTypedText input)
-        result    = if backspace && not (T.null withTyped)
-                    then T.init withTyped
-                    else withTyped
+    let appended = foldl' (<>) value (inputTypedText input)
+        result    = if backspace && not (T.null appended)
+                    then T.init appended
+                    else appended
     when (result /= value) $ do
       dispatch (onChange result)
 
@@ -241,15 +241,15 @@ scrollBar :: (Eq e, Ord e, HasStandardControls e u)
 scrollBar mkId ori thumbRatio = do
   bounds <- getBounds
   pos <- readPos
-  let p    = max 0 (min 1 pos)
-      r    = max 0 (min 1 thumbRatio)
-      btnC = case ori of
+  let pos'      = max 0 (min 1 pos)
+      ratio'    = max 0 (min 1 thumbRatio)
+      btnLayout = case ori of
         Vertical   -> Layout Fill (Exactly (rectWidth bounds))  TopLeft
         Horizontal -> Layout (Exactly (rectHeight bounds)) Fill TopLeft
   layoutFn defaultBoxConfig
-    [ (btnC, decrBtn p r)
-    , (Layout Fill Fill TopLeft, track p r)
-    , (btnC, incrBtn p r)
+    [ (btnLayout, decrBtn pos' ratio')
+    , (Layout Fill Fill TopLeft, track pos' ratio')
+    , (btnLayout, incrBtn pos' ratio')
     ]
   where
     trackId = mkId ScrollTrack
@@ -267,31 +267,34 @@ scrollBar mkId ori thumbRatio = do
       Vertical   -> vBox
       Horizontal -> hBox
 
-    (decrSym, incrSym) = case ori of
-      Vertical   -> ("▲", "▼")
-      Horizontal -> ("◀", "▶")
+    decrSym = case ori of
+      Vertical   -> "▲"
+      Horizontal -> "◀"
+    incrSym = case ori of
+      Vertical   -> "▼"
+      Horizontal -> "▶"
 
-    decrBtn p r = do
+    decrBtn pos' ratio' = do
       clicked <- button (mkId ScrollDecrBtn) decrSym
-      when clicked $ writePos (max 0 (p - r))
+      when clicked $ writePos (max 0 (pos' - ratio'))
 
-    incrBtn p r = do
+    incrBtn pos' ratio' = do
       clicked <- button (mkId ScrollIncrBtn) incrSym
-      when clicked $ writePos (min 1 (p + r))
+      when clicked $ writePos (min 1 (pos' + ratio'))
 
-    track p r = do
+    track pos' ratio' = do
       slotBounds <- getBounds
       styleSet   <- getStyleSet trackId
-      let norm        = styleSetNormal styleSet
-          bgRect      = insetRect (styleMargin norm) slotBounds
-          contentRect = insetRect (stylePadding norm) bgRect
-          thumbR      = scrollThumbRect ori p r contentRect
+      let normalStyle = styleSetNormal styleSet
+          bgRect      = insetRect (styleMargin normalStyle) slotBounds
+          contentRect = insetRect (stylePadding normalStyle) bgRect
+          thumbR      = scrollThumbRect ori pos' ratio' contentRect
       control trackId $
         withBounds thumbR $ renderControl (mkId ScrollThumb) $ pure ()
       dragging <- isDragging trackId
       when dragging $ do
         mousePos <- getMousePos
-        writePos (scrollPosFromMouse ori r contentRect mousePos)
+        writePos (scrollPosFromMouse ori ratio' contentRect mousePos)
 
 scrollThumbRect :: Orientation -> Double -> Double -> Rectangle -> Rectangle
 scrollThumbRect Vertical pos ratio r =
