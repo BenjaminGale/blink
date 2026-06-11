@@ -190,11 +190,11 @@ module Blink.UI
   , renderControl
   ) where
 
-import Control.Monad (when, unless, guard)
+import Control.Monad (when, unless, guard, forM_)
 import Data.Foldable (asum)
 import Data.Functor (($>))
 import Data.List (find, foldl')
-import Data.Maybe (isNothing, isJust, fromJust, fromMaybe)
+import Data.Maybe (isNothing, isJust, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..))
@@ -381,7 +381,7 @@ getTheme = gets ctxTheme
 getStyleSet :: Ord e => e -> UI e u s StyleSet
 getStyleSet eid = do
   t <- getTheme
-  pure $ Map.findWithDefault (themeDefaultStyle t) eid (themeElementStyles t)
+  return $ Map.findWithDefault (themeDefaultStyle t) eid (themeElementStyles t)
 
 -- | Resolves the active 'Style' for an element given its current interaction
 -- state. Priority: disabled > pressed > hovered > focused > normal.
@@ -398,7 +398,7 @@ getStyle eid = do
         , guard isHov $> styleSetHovered  styles
         , guard isFoc $> styleSetFocused  styles
         ]
-  pure $ fromMaybe (styleSetNormal styles) (asum candidates)
+  return $ fromMaybe (styleSetNormal styles) (asum candidates)
 
 -- | 'True' when the given element is the current hover target.
 isHovered :: Eq e => e -> UI e u s Bool
@@ -409,14 +409,14 @@ isClicked :: Eq e => e -> UI e u s Bool
 isClicked eid = do
   isHov <- isHovered eid
   btn   <- getLeftButton
-  pure (isHov && btn == ButtonReleased)
+  return (isHov && btn == ButtonReleased)
 
 -- | 'True' when the element is hovered and the left button is held down.
 isPressed :: Eq e => e -> UI e u s Bool
 isPressed eid = do
   isHov <- isHovered eid
   btn   <- getLeftButton
-  pure (isHov && btn == ButtonDown)
+  return (isHov && btn == ButtonDown)
 
 -- | 'True' when the element is clicked or any of the given keys are pressed
 -- while it is focused, and the element is not disabled. Use this to implement
@@ -424,9 +424,9 @@ isPressed eid = do
 isActivatedBy :: (Eq e, Ord e) => [Key] -> e -> UI e u s Bool
 isActivatedBy keys eid = do
   clicked  <- isClicked eid
-  keyPress <- any id <$> mapM (isKeyPressed eid) keys
+  keyPress <- or <$> mapM (isKeyPressed eid) keys
   disabled <- isDisabled
-  pure (not disabled && (clicked || keyPress))
+  return (not disabled && (clicked || keyPress))
 
 -- | Derives the next frame's captured element from the current button state.
 -- Capture is carried forward while the button is held and survives through
@@ -454,7 +454,7 @@ isKeyPressed :: Eq e => e -> Key -> UI e u s Bool
 isKeyPressed eid k = do
   hasFoc <- isFocused eid
   pressed <- any (\e -> key e == k) . inputKeyEvents <$> getInput
-  pure (hasFoc && pressed)
+  return (hasFoc && pressed)
 
 -- | Registers the element as the current hover target. Also acquires mouse
 -- capture for it if the left button is currently down and nothing is captured
@@ -587,9 +587,8 @@ regionHit = do
 -- | Skips its argument entirely when the current sub-tree is disabled.
 whenEnabled :: UI e u s () -> UI e u s ()
 whenEnabled ui = do
-  isDisabl <- isDisabled
-  unless isDisabl $ do
-    ui
+  disabled <- isDisabled
+  unless disabled ui
 
 applyHover :: (Eq e, Ord e) => e -> UI e u s ()
 applyHover eid = do
@@ -608,14 +607,16 @@ applyFocus eid = do
     isHit        <- isHovered eid
     btn          <- getLeftButton
     captured     <- gets ctxCapturedElement
-    let nothingIsFocused  = isNothing currentFocus
-        isRequestingFocus = currentFocus == Just eid
+    let nothingIsFocused = isNothing currentFocus
+        -- Re-claims focus each frame so nextFocusFrame does not treat this
+        -- element as stale when it is still present in the tree.
+        isRetainingFocus = currentFocus == Just eid
         -- A drag release is when the button is released over a different
         -- element than the one that was captured. Focus should not transfer
         -- in that case — the drag origin retains focus.
         isDragRelease = btn == ButtonReleased && isJust captured && captured /= Just eid
         wasClicked    = isHit && btn == ButtonReleased && not isDragRelease
-    setFocusWhen ((nothingIsFocused || isRequestingFocus || wasClicked) && not isDragRelease) eid
+    setFocusWhen ((nothingIsFocused || isRetainingFocus || wasClicked) && not isDragRelease) eid
 
 applyTabNavigation :: (Eq e, Ord e) => e -> UI e u s ()
 applyTabNavigation eid = do
@@ -628,9 +629,10 @@ applyTabNavigation eid = do
   when (hasFocus && tabPressed) $ do
     clearFocus
     consumeKey KeyTab
-  when (hasFocus && shiftTabPressed && isJust prevCtrl) $ do
-    setFocus (fromJust prevCtrl)
-    consumeKey KeyTab
+  when (hasFocus && shiftTabPressed) $
+    forM_ prevCtrl $ \prev -> do
+      setFocus prev
+      consumeKey KeyTab
   whenEnabled $ do
     setPreviousTabStop eid
 
