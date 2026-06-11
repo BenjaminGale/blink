@@ -46,6 +46,7 @@ test-suite blink-tests
     hs-source-dirs: test
     main-is: Main.hs
     other-modules:
+        Blink.AppSpec
         Blink.ControlsSpec
         Blink.GeometrySpec
         Blink.LayoutSpec
