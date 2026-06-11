@@ -13,7 +13,7 @@ import Blink.Geometry
   , containsPoint
   , insetRect
   , rectCentredAt
-  , rectOrigin
+  , rectFromSize
   , resizeRect
   , uniform
   )
@@ -42,9 +42,9 @@ spec = describe "geometry" $ do
     it "clamps height to zero when vertical insets exceed the rectangle height" $
       rectHeight (insetRect (uniform 60) (Rectangle 0 0 200 100)) `shouldBe` 0
 
-  describe "rectOrigin" $ do
-    it "is positioned at the origin with zero size" $
-      rectOrigin `shouldBe` Rectangle 0 0 0 0
+  describe "rectFromSize" $ do
+    it "creates a rectangle at the origin with the given dimensions" $
+      rectFromSize (Size 200 100) `shouldBe` Rectangle 0 0 200 100
 
   describe "resizeRect" $ do
     it "sets the new dimensions while preserving the position" $

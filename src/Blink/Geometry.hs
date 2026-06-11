@@ -22,7 +22,7 @@ module Blink.Geometry
   , uniform
   , insetRect
     -- * Rectangle operations
-  , rectOrigin
+  , rectFromSize
   , resizeRect
   , rectCentredAt
   , containsPoint
@@ -121,9 +121,9 @@ containsPoint p r =
   pointX p >= rectX r && pointX p <= rectX r + rectWidth r &&
   pointY p >= rectY r && pointY p <= rectY r + rectHeight r
 
--- | A zero rectangle: origin @(0, 0)@ with zero width and height.
-rectOrigin :: Rectangle
-rectOrigin = Rectangle 0 0 0 0
+-- | Creates a rectangle at the origin @(0, 0)@ with the given dimensions.
+rectFromSize :: Size -> Rectangle
+rectFromSize s = Rectangle 0 0 (sizeWidth s) (sizeHeight s)
 
 -- | Replaces the width and height of @r@ with those of @s@,
 -- preserving the rectangle's origin.

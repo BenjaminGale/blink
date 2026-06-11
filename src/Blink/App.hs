@@ -104,7 +104,7 @@ import Data.Text (Text)
 import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
 
-import Blink.Geometry (Point, Rectangle, Size, rectOrigin, resizeRect)
+import Blink.Geometry (Point, Rectangle, Size, rectFromSize)
 import Blink.Input (ButtonState, KeyEvent, InputState (..))
 import Blink.Rendering (DrawCommand)
 import Blink.Style (Theme)
@@ -279,7 +279,7 @@ runFrame
   -> s
   -> IO (UIContext e u s, s)
 runFrame app refs notify input prevState = do
-  let winRect    = resizeRect (windowSize input) rectOrigin
+  let winRect    = rectFromSize (windowSize input)
       inputState = toInputState input
 
   asyncMods <- atomicModifyIORef (refsAsyncQueue refs) (\q -> ([], reverse q))
@@ -305,7 +305,7 @@ doStepContinuous app refs input prevState = do
 doStepEventDriven :: Eq e => App e u s -> AppRefs e u s -> IO () -> FrameInput -> s -> IO (FrameResult s)
 doStepEventDriven app refs notify input prevState = do
   (firstPassCtx, state') <- runFrame app refs notify input prevState
-  let winRect    = resizeRect (windowSize input) rectOrigin
+  let winRect    = rectFromSize (windowSize input)
       inputState = toInputState input
       freshCtx   =
           withAppState state'
