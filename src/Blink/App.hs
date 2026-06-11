@@ -3,9 +3,9 @@ Module: Blink.App
 
 = Application structure
 
-'App' describes a complete Blink application: the UI is a pure function of
-state, and the only way to change state is by queueing modifiers with
-'Blink.UI.dispatch' and 'Blink.UI.dispatchAsync'.
+'App' bundles everything Blink needs to run: the startup action that
+produces the initial state, the starting UI state, a function from state
+to 'Theme', and the UI tree.
 
 @
 data App e u s = App
