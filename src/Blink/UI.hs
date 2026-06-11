@@ -197,7 +197,7 @@ import Data.List (find, foldl')
 import Data.Maybe (isNothing, isJust, fromJust, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
-import Blink.Rendering (Colour (..), isOpaque, TextAlign (..), DrawCommand (..))
+import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..))
 import Blink.Geometry (Point, Rectangle, containsPoint, insetRect)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
@@ -666,7 +666,7 @@ renderControl eid content = do
   r     <- getBounds
   let bgRect      = insetRect (styleMargin style) r
       contentRect = insetRect (stylePadding style) bgRect
-  when (isOpaque (styleBackground style)) $ do
+  when (isVisible (styleBackground style)) $ do
     withBounds bgRect $ do
       fillRect (styleBackground style)
   case styleBorderColour style of

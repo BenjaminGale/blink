@@ -10,7 +10,7 @@ and clipping is the intersection of all currently active clip regions.
 module Blink.Rendering
   ( -- * Colour
     Colour (..)
-  , isOpaque
+  , isVisible
     -- * Text alignment
   , TextAlign (..)
     -- * Draw commands
@@ -24,11 +24,11 @@ import Blink.Geometry (Rectangle)
 data Colour = RGBA Double Double Double Double
   deriving (Eq, Show)
 
--- | 'True' when the alpha component is non-zero — i.e. the colour
--- contributes at least some opacity. Used to skip rendering of fully
--- transparent fills.
-isOpaque :: Colour -> Bool
-isOpaque (RGBA _ _ _ a) = a /= 0
+-- | 'True' when the colour has a non-zero alpha component and will
+-- contribute visible output when rendered. Used to skip draw calls for
+-- fully transparent fills.
+isVisible :: Colour -> Bool
+isVisible (RGBA _ _ _ a) = a /= 0
 
 -- | Horizontal alignment of text within its bounding rectangle.
 data TextAlign = AlignLeft | AlignCenter | AlignRight
