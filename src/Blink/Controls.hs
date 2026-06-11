@@ -62,6 +62,7 @@ module Blink.Controls
     -- * Display
   , label
   , progressBar
+  , indeterminateProgressBar
     -- * Input
   , button
   , checkbox
@@ -92,13 +93,16 @@ newtype ScrollState = ScrollState { scrollPosition :: Double }
 -- ID. Serves directly as the UI state record @u@ for applications with no
 -- custom control state; see the module introduction for embedding it
 -- alongside custom state.
-newtype StandardControls e = StandardControls
+data StandardControls e = StandardControls
   { scScrollStates :: Map e ScrollState
+  , scAnimPhases   :: Map e Double
+    -- ^ Animation phase in @[0, 1)@ for each animated control instance,
+    -- keyed by element ID. Populated lazily on first write.
   }
 
 -- | A 'StandardControls' with no per-control state recorded yet.
 emptyStandardControls :: StandardControls e
-emptyStandardControls = StandardControls Map.empty
+emptyStandardControls = StandardControls Map.empty Map.empty
 
 -- | Grants the standard controls access to their state within the
 -- user-supplied UI state record @u@.
@@ -127,6 +131,31 @@ progressBar eid value = renderControl eid $ do
   let clamped  = max 0 (min 1 value)
       fillRect' = r { rectWidth = rectWidth r * clamped }
   withBounds fillRect' $ fillRect (styleTextColour style)
+
+-- | An indeterminate progress indicator that animates continuously. A band
+-- moves across the control's content width to indicate ongoing activity of
+-- unknown duration. The animation runs only on ticker frames; 'requiresAnimation'
+-- keeps the ticker active while the control is visible.
+indeterminateProgressBar :: (Eq e, Ord e, HasStandardControls e u) => e -> UI e u s ()
+indeterminateProgressBar eid = do
+  requiresAnimation
+  withAnimationFrame $ do
+    delta <- getAnimDelta
+    modifyUIState $ \u ->
+      let sc     = getStandardControls u
+          phase  = Map.findWithDefault 0 eid (scAnimPhases sc)
+          p      = phase + realToFrac delta * 0.5
+          phase' = p - fromIntegral (floor p :: Int)
+      in setStandardControls (sc { scAnimPhases = Map.insert eid phase' (scAnimPhases sc) }) u
+  renderControl eid $ do
+    r     <- getBounds
+    sc    <- getStandardControls <$> getUIState
+    style <- getStyle eid
+    let phase = Map.findWithDefault 0 eid (scAnimPhases sc)
+        bandW = rectWidth r * 0.3
+        left  = rectX r - bandW + (rectWidth r + bandW) * phase
+    withBounds (r { rectX = left, rectWidth = bandW }) $
+      fillRect (styleTextColour style)
 
 checkboxMark :: (Eq e, Ord e) => e -> Bool -> (Bool -> s -> s) -> UI e u s ()
 checkboxMark boxId checked onToggle = control boxId $ do

@@ -96,10 +96,13 @@ module Blink.App
   , FontMetrics (..)
   ) where
 
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO, threadDelay)
+import Control.Monad (when, void)
 import Data.IORef
 import Data.List (foldl')
 import Data.Text (Text)
+import Data.Word (Word64)
+import GHC.Clock (getMonotonicTimeNSec)
 
 import Blink.Geometry (Point, Rectangle, Size, rectOrigin, resizeRect)
 import Blink.Input (ButtonState, KeyEvent, InputState (..))
@@ -107,6 +110,7 @@ import Blink.Rendering (DrawCommand)
 import Blink.Style (Theme)
 import Blink.UI
   ( UI, UIContext (..)
+  , AnimationState (..)
   , emptyUIContext, nextFrameContext
   , runUI, getDrawCommands, applyDispatches, getAsyncJobs
   )
@@ -137,7 +141,7 @@ data App e u s = App
 -- from the first render pass is submitted immediately each frame.
 configureContinuous :: Eq e => App e u s -> TextMeasurer -> IO (BlinkHandle s)
 configureContinuous app _measurer = do
-  refs <- AppRefs <$> newIORef [] <*> newIORef Nothing
+  refs <- AppRefs <$> newIORef [] <*> newIORef Nothing <*> newIORef False <*> newIORef Nothing
   pure BlinkHandle
     { initState = startUp app
     , stepFrame = doStepContinuous app refs
@@ -149,7 +153,7 @@ configureContinuous app _measurer = do
 -- unblock its event wait.
 configureEventDriven :: Eq e => App e u s -> IO () -> TextMeasurer -> IO (BlinkHandle s)
 configureEventDriven app notify _measurer = do
-  refs <- AppRefs <$> newIORef [] <*> newIORef Nothing
+  refs <- AppRefs <$> newIORef [] <*> newIORef Nothing <*> newIORef False <*> newIORef Nothing
   pure BlinkHandle
     { initState = startUp app
     , stepFrame = doStepEventDriven app refs notify
@@ -180,9 +184,13 @@ data FrameInput = FrameInput
     -- ^ Text input events for this frame, in the order they were received.
   , windowSize    :: Size
     -- ^ Current dimensions of the window's drawing area.
-  , quitRequested :: Bool
+  , quitRequested   :: Bool
     -- ^ Set to 'True' when the platform signals that the window should close.
     -- 'stepFrame' returns 'Quit' on the same frame this is first set.
+  , isAnimationTick :: Bool
+    -- ^ Set to 'True' when this frame was triggered by the animation ticker
+    -- rather than a platform input event. The backend sets this by detecting
+    -- the registered animation event in the platform event queue.
   }
 
 -- | The result of processing a single frame.
@@ -239,15 +247,25 @@ data AppRefs e u s = AppRefs
     -- The UIContext carried over from the previous frame. 'Nothing' on the
     -- first frame, causing 'runFrame' to build a fresh context via
     -- 'emptyUIContext'.
+  , refsAnimActive :: IORef Bool
+    -- Written at the end of each frame. The running ticker thread reads this
+    -- to decide whether to continue looping or exit. A False->True edge
+    -- causes a new ticker thread to be forked.
+  , refsLastFrame  :: IORef (Maybe Word64)
+    -- Monotonic nanosecond timestamp of the previous frame, used to compute
+    -- the wall-clock delta. Only accessed inside 'runFrame', which is called
+    -- sequentially, so no concurrent access concerns.
   }
 
-buildCtx :: Eq e => App e u s -> Rectangle -> InputState -> s -> Maybe (UIContext e u s) -> UIContext e u s
-buildCtx app winRect inputState state mCtx =
+buildCtx :: Eq e => App e u s -> Rectangle -> InputState -> Float -> Bool -> s -> Maybe (UIContext e u s) -> UIContext e u s
+buildCtx app winRect inputState delta isAnimTick state mCtx =
   case mCtx of
-    Nothing -> emptyUIContext winRect inputState (theme app state) (initialUIState app) state
+    Nothing -> (emptyUIContext winRect inputState (theme app state) (initialUIState app) state)
+      { ctxAnimation = AnimationState { animDelta = delta, animIsTick = isAnimTick } }
     Just c -> (nextFrameContext winRect inputState c)
-      { ctxTheme    = theme app state
-      , ctxAppState = state
+      { ctxTheme     = theme app state
+      , ctxAppState  = state
+      , ctxAnimation = AnimationState { animDelta = delta, animIsTick = isAnimTick }
       }
 
 runFrame
@@ -265,8 +283,10 @@ runFrame app refs notify input prevState = do
   asyncMods <- atomicModifyIORef (refsAsyncQueue refs) (\q -> ([], reverse q))
   let state = foldl' (flip ($)) prevState asyncMods
 
+  delta <- computeDelta (refsLastFrame refs) (isAnimationTick input)
+
   mCtx <- readIORef (refsCtx refs)
-  let ctx  = buildCtx app winRect inputState state mCtx
+  let ctx  = buildCtx app winRect inputState delta (isAnimationTick input) state mCtx
       ((), ctx') = runUI (view app) ctx
       state'     = applyDispatches ctx'
 
@@ -291,6 +311,11 @@ doStepEventDriven app refs notify input prevState = do
         }
       ((), renderedCtx) = runUI (view app) freshCtx
   writeIORef (refsCtx refs) (Just renderedCtx)
+  wasActive <- readIORef (refsAnimActive refs)
+  let nowActive = ctxRequiresAnimation renderedCtx
+  writeIORef (refsAnimActive refs) nowActive
+  when (not wasActive && nowActive) $
+    forkAnimationTicker (refsAnimActive refs) notify
   pure $ toResult input (getDrawCommands renderedCtx) state'
 
 toResult :: FrameInput -> [DrawCommand] -> s -> FrameResult s
@@ -300,7 +325,7 @@ toResult input draws state
 
 -- Uses positional matching to sidestep overlapping field names with InputState.
 toInputState :: FrameInput -> InputState
-toInputState (FrameInput mp mb kes txt _ _) = InputState mp mb kes txt
+toInputState (FrameInput mp mb kes txt _ _ _) = InputState mp mb kes txt
 
 -- Clears keyboard and text events for the second render pass in event-driven mode.
 clearKeyEvents :: InputState -> InputState
@@ -313,3 +338,23 @@ forkJob queue notify s job = do
     atomicModifyIORef' queue (\q -> (f : q, ()))
     notify
   pure ()
+
+computeDelta :: IORef (Maybe Word64) -> Bool -> IO Float
+computeDelta _ False = pure 0
+computeDelta lastFrameRef True = do
+  now   <- getMonotonicTimeNSec
+  mLast <- readIORef lastFrameRef
+  writeIORef lastFrameRef (Just now)
+  pure $ case mLast of
+    Nothing   -> 0
+    Just prev -> min 0.1 $ fromIntegral (now - prev) / 1.0e9
+
+forkAnimationTicker :: IORef Bool -> IO () -> IO ()
+forkAnimationTicker animActive notify = void $ forkIO loop
+  where
+    loop = do
+      threadDelay 16667
+      active <- readIORef animActive
+      when active $ do
+        notify
+        loop

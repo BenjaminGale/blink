@@ -11,13 +11,12 @@ data AppState = AppState
   , inputText :: Text
   , isChecked1 :: Bool
   , isChecked2 :: Bool
-  , isChecked3 :: Bool
-  , progressValue :: Double
+  , animating :: Bool
   }
 
 demoApp :: App Element (StandardControls Element) AppState
 demoApp = App
-  { startUp = pure (AppState Nothing "" False False False 0.5)
+  { startUp = pure (AppState Nothing "" False False False)
   , initialUIState = emptyStandardControls
   , theme = \s -> if isChecked2 s then darkTheme else lightTheme
   , view = demoView
@@ -73,31 +72,28 @@ row4 dark s = fillRect (rowBg dark (RGBA 0.176 0.165 0.118 1) (RGBA 0.95 0.95 0.
     [ (Layout Fill (Exactly 30) MiddleLeft,
          textInput TextInput1 (inputText s) (\t st -> st { inputText = t })) ]
 
--- Row 5: checkboxes — the first checkbox enables/disables the rest
+-- Row 5: checkboxes — the first checkbox enables/disables editing controls
 row5 :: Bool -> AppState -> UI Element (StandardControls Element) AppState ()
 row5 dark s = fillRect (rowBg dark (RGBA 0.165 0.133 0.176 1) (RGBA 0.95 0.87 0.95 1)) >>
   hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
     [ (Layout (Exactly 160) (Exactly 30) MiddleLeft,
-         checkbox CheckboxBox1 "Enable editing"  (isChecked1 s) (\v st -> st { isChecked1 = v }))
+         checkbox CheckboxBox1 "Enable editing" (isChecked1 s) (\v st -> st { isChecked1 = v }))
     , (Layout (Exactly 160) (Exactly 30) MiddleLeft,
          disableWhen (not (isChecked1 s)) $
-           checkbox CheckboxBox2 "Dark mode"     (isChecked2 s) (\v st -> st { isChecked2 = v }))
+           checkbox CheckboxBox2 "Dark mode"    (isChecked2 s) (\v st -> st { isChecked2 = v }))
     , (Layout (Exactly 160) (Exactly 30) MiddleLeft,
          disableWhen (not (isChecked1 s)) $
-           checkbox CheckboxBox3 "Notifications" (isChecked3 s) (\v st -> st { isChecked3 = v }))
+           checkbox CheckboxBox3 "Animate"      (animating s)  (\v st -> st { animating = v }))
     ]
 
--- Row 6: progress bar with +/- buttons
+-- Row 6: indeterminate progress bar, running while Animate is checked
 row6 :: Bool -> AppState -> UI Element (StandardControls Element) AppState ()
 row6 dark s = fillRect (rowBg dark (RGBA 0.118 0.165 0.176 1) (RGBA 0.87 0.95 0.95 1)) >>
-  hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4 })
-    [ (Layout (Exactly 30) (Exactly 30) MiddleLeft, do
-         clicked <- button (Btn 11) "-"
-         when clicked $ dispatch (\st -> st { progressValue = max 0 (progressValue st - 0.1) }))
-    , (Layout Fill         (Exactly 20) MiddleLeft, progressBar ProgressBar1 (progressValue s))
-    , (Layout (Exactly 30) (Exactly 30) MiddleLeft, do
-         clicked <- button (Btn 12) "+"
-         when clicked $ dispatch (\st -> st { progressValue = min 1 (progressValue st + 0.1) }))
+  hBox (defaultBoxConfig { boxMargin = 4 })
+    [ (Layout Fill (Exactly 20) MiddleLeft,
+         if animating s
+           then indeterminateProgressBar ProgressBar1
+           else progressBar ProgressBar1 0)
     ]
 
 demoView :: UI Element (StandardControls Element) AppState ()
@@ -111,6 +107,6 @@ demoView = do
     , (Layout Fill (Exactly 80) TopLeft, row3 dark)
     , (Layout Fill (Exactly 50) TopLeft, disableWhen (not (isChecked1 s)) $ row4 dark s)
     , (Layout Fill (Exactly 50) TopLeft, row5 dark s)
-    , (Layout Fill (Exactly 50) TopLeft, disableWhen (not (isChecked1 s)) $ row6 dark s)
+    , (Layout Fill (Exactly 50) TopLeft, row6 dark s)
     , (Layout Fill (Exactly 20) TopLeft, hScrollBar Horizontal 0.3)
     ]

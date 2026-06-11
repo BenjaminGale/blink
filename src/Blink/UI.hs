@@ -180,6 +180,11 @@ module Blink.UI
   , isDisabled
   , disableWhen
   , whenEnabled
+    -- * Animation
+  , AnimationState (..)
+  , requiresAnimation
+  , withAnimationFrame
+  , getAnimDelta
     -- * Building controls
   , control
   , renderControl
@@ -196,6 +201,18 @@ import Blink.Rendering (Colour (..), isOpaque, TextAlign (..), DrawCommand (..))
 import Blink.Geometry (Point, Rectangle, containsPoint, insetRect)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
+
+-- | Per-frame animation state threaded through the 'UIContext'. Set by the
+-- backend at the start of each frame; read by 'withAnimationFrame' and
+-- 'getAnimDelta'.
+data AnimationState = AnimationState
+  { animDelta  :: Float
+    -- ^ Wall-clock seconds elapsed since the previous frame, clamped to
+    -- 100 ms. Zero on the first frame.
+  , animIsTick :: Bool
+    -- ^ 'True' when this frame was triggered by the animation ticker rather
+    -- than a platform input event.
+  }
 
 -- | Tracks which element holds keyboard focus and whether it was visited
 -- during the current frame's render pass.
@@ -231,6 +248,13 @@ data UIContext e u s = UIContext
   , ctxDispatches :: [s -> s]
   , ctxAsyncJobs :: [s -> IO (s -> s)]
   , ctxDisabled :: Bool
+  , ctxAnimation :: AnimationState
+    -- ^ Per-frame animation state: wall-clock delta and tick flag. Set by the
+    -- backend at the start of each frame via 'buildCtx'.
+  , ctxRequiresAnimation :: Bool
+    -- ^ Set to 'True' by any component calling 'requiresAnimation'. Read at
+    -- the end of the frame to decide whether to keep the ticker active.
+    -- Reset to 'False' at the start of each frame by 'nextFrameContext'.
   }
 
 -- | The UI monad. A pure state-threading computation that reads from a
@@ -280,6 +304,8 @@ emptyUIContext bounds input thm uiState appState = UIContext
   , ctxDispatches = []
   , ctxAsyncJobs = []
   , ctxDisabled = False
+  , ctxAnimation = AnimationState { animDelta = 0, animIsTick = False }
+  , ctxRequiresAnimation = False
   }
 
 -- | Advances the context to the next frame. Resets per-frame state (draw
@@ -296,6 +322,7 @@ nextFrameContext bounds input ctx = ctx
   , ctxFocusState = nextFocusFrame (ctxFocusState ctx)
   , ctxDispatches = []
   , ctxAsyncJobs = []
+  , ctxRequiresAnimation = False
   }
 
 gets :: (UIContext e u s -> a) -> UI e u s a
@@ -606,6 +633,27 @@ applyTabNavigation eid = do
     consumeKey KeyTab
   whenEnabled $ do
     setPreviousTabStop eid
+
+-- | Signals that animation should continue running. Call unconditionally on
+-- every frame from any component that needs animation, including frames not
+-- triggered by the ticker. Keeps 'refsAnimActive' set so the ticker does not
+-- go quiet while the component is visible.
+requiresAnimation :: UI e u s ()
+requiresAnimation = modify $ \ctx -> ctx { ctxRequiresAnimation = True }
+
+-- | Runs @action@ only on frames triggered by the animation ticker. On frames
+-- triggered by mouse movement, keyboard input, or other platform events, this
+-- is a no-op. Pair with 'requiresAnimation' so the ticker keeps firing.
+withAnimationFrame :: UI e u s () -> UI e u s ()
+withAnimationFrame action = do
+  isTick <- gets (animIsTick . ctxAnimation)
+  when isTick action
+
+-- | Wall-clock seconds elapsed since the previous frame, clamped to 100 ms.
+-- Zero on the first frame. Use inside 'withAnimationFrame' to advance
+-- animation state by the correct amount regardless of ticker jitter.
+getAnimDelta :: UI e u s Float
+getAnimDelta = gets (animDelta . ctxAnimation)
 
 -- | Style-aware rendering for a control. Applies the element's margin, draws
 -- its background and border, and runs @content@ within the padded content

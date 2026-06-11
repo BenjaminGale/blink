@@ -78,8 +78,7 @@ spec = describe "application state primitives" $ do
     in (applyDispatches ctx', length (getAsyncJobs ctx')) `shouldBe` (0, 0)
 
   describe "nextFrameContext capture" $ do
-    let hovered ctx = ctx { ctxHoveredElement = Just () }
-        captured ctx = ctx { ctxCapturedElement = Just () }
+    let captured ctx = ctx { ctxCapturedElement = Just () }
         buttonDown  = noInput { inputLeftButton = ButtonDown }
         buttonRel   = noInput { inputLeftButton = ButtonReleased }
 

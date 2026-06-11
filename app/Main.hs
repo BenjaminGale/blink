@@ -7,7 +7,10 @@ import SDL (($=))
 import qualified SDL
 import qualified SDL.Font as Font
 import qualified SDL.Raw
+import Control.Monad (void)
 import Data.IORef
+import Data.Maybe (isJust)
+import Foreign.Ptr (nullPtr)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Word (Word8)
@@ -25,11 +28,14 @@ main = do
   font     <- Font.load demoFontPath 14
   SDL.Raw.startTextInput
 
-  buttonRef <- newIORef ButtonUp
+  buttonRef  <- newIORef ButtonUp
+  mAnimEvent <- SDL.registerEvent
+                  (\_ _ -> pure (Just ()))
+                  (\_ -> pure (SDL.RegisteredEventData Nothing 0 nullPtr nullPtr))
 
-  -- demoApp uses no async effects so the notify callback is never invoked;
-  -- a real event-driven backend would call SDL.pushEvent here to unblock waitEvent.
-  let notify   = pure () :: IO ()
+  let notify   = case mAnimEvent of
+                   Just et -> void $ SDL.pushRegisteredEvent et ()
+                   Nothing -> pure ()
       measurer = noOpMeasurer
 
       renderFrame calls = do
@@ -42,7 +48,7 @@ main = do
   handle <- configureEventDriven demoApp notify measurer
   state0  <- initState handle
 
-  loop handle buttonRef renderFrame window state0
+  loop handle buttonRef renderFrame window mAnimEvent state0
 
   Font.free font
   SDL.destroyRenderer renderer
@@ -55,18 +61,20 @@ loop
   -> IORef ButtonState
   -> ([DrawCommand] -> IO ())
   -> SDL.Window
+  -> Maybe (SDL.RegisteredEventType ())
   -> s
   -> IO ()
-loop handle buttonRef renderFrame window state = do
+loop handle buttonRef renderFrame window mAnimEvent state = do
   first <- SDL.waitEvent
   rest  <- SDL.pollEvents
   let events = first : rest
 
   btn <- readIORef buttonRef
-  let btn'   = foldl updateButton btn events
-      keys   = concatMap toKeyEvents events
-      chars  = concatMap toTypedText events
+  let btn'  = foldl updateButton btn events
+      keys  = concatMap toKeyEvents events
+      chars = concatMap toTypedText events
       isQuit = SDL.QuitEvent `elem` map SDL.eventPayload events
+  isAnimTick <- maybe (pure False) (\et -> fmap or $ mapM (isAnimationEvent et) events) mAnimEvent
   writeIORef buttonRef (nextFrameButton btn')
 
   mousePos         <- SDL.getAbsoluteMouseLocation
@@ -80,11 +88,15 @@ loop handle buttonRef renderFrame window state = do
              chars
              (Size (fromIntegral winW) (fromIntegral winH))
              isQuit
+             isAnimTick
 
   result <- stepFrame handle fi state
   case result of
-    Continue draws state' -> renderFrame draws >> loop handle buttonRef renderFrame window state'
+    Continue draws state' -> renderFrame draws >> loop handle buttonRef renderFrame window mAnimEvent state'
     Quit     draws _      -> renderFrame draws
+
+isAnimationEvent :: SDL.RegisteredEventType () -> SDL.Event -> IO Bool
+isAnimationEvent et e = isJust <$> SDL.getRegisteredEvent et e
 
 -- | A no-op 'TextMeasurer' for backends that do not yet use text measurement.
 noOpMeasurer :: TextMeasurer
