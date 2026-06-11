@@ -326,15 +326,15 @@ toResult input draws state
 
 toInputState :: FrameInput -> InputState
 toInputState fi = InputState
-  { mousePosition = mousePosition (fi :: FrameInput)
-  , mouseButton   = mouseButton   (fi :: FrameInput)
-  , keyEvents     = keyEvents     (fi :: FrameInput)
-  , typedText     = typedText     (fi :: FrameInput)
+  { inputMousePosition = mousePosition fi
+  , inputLeftButton    = mouseButton fi
+  , inputKeyEvents     = keyEvents fi
+  , inputTypedText     = typedText fi
   }
 
 -- Clears keyboard and text events for the second render pass in event-driven mode.
 clearKeyEvents :: InputState -> InputState
-clearKeyEvents (InputState mp lb _ _) = InputState mp lb [] []
+clearKeyEvents is = is { inputKeyEvents = [], inputTypedText = [] }
 
 withTheme :: Theme e -> UIContext e u s -> UIContext e u s
 withTheme t ctx = ctx { ctxTheme = t }
@@ -360,12 +360,15 @@ computeDelta lastFrameRef True = do
     Nothing   -> 0
     Just prev -> min 0.1 $ fromIntegral (now - prev) / 1.0e9
 
+sixtyHzMicros :: Int
+sixtyHzMicros = 16667
+
 forkAnimationTicker :: IORef Bool -> IO () -> IO ()
-forkAnimationTicker animActive notify = void $ forkIO loop
+forkAnimationTicker animActive notify = void $ forkIO tick
   where
-    loop = do
-      threadDelay 16667
+    tick = do
+      threadDelay sixtyHzMicros
       active <- readIORef animActive
       when active $ do
         notify
-        loop
+        tick
