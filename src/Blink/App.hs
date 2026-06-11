@@ -189,8 +189,9 @@ data FrameInput = FrameInput
     -- 'stepFrame' returns 'Quit' on the same frame this is first set.
   , isAnimationTick :: Bool
     -- ^ Set to 'True' when this frame was triggered by the animation ticker
-    -- rather than a platform input event. The backend sets this by detecting
-    -- the registered animation event in the platform event queue.
+    -- rather than a platform input event. Blink's ticker calls the @notify@
+    -- callback passed to 'configureEventDriven'; backends should detect that
+    -- wake-up and set this field accordingly.
   }
 
 -- | The result of processing a single frame.
@@ -201,7 +202,8 @@ data FrameResult s
     -- ^ The application has quit. Render the draw commands (the final frame)
     -- then exit the loop.
 
--- | Identifies a font for text measurement.
+-- | Identifies a font for text measurement. Passed to 'measureFont',
+-- 'measureText', 'charOffset', and 'charAtOffset' to select the font.
 data FontSpec = FontSpec
   { fontPath :: FilePath
     -- ^ Path to the font file.
@@ -209,8 +211,8 @@ data FontSpec = FontSpec
     -- ^ Point size.
   } deriving (Eq, Ord, Show)
 
--- | Font-level metrics that do not depend on the string content. Retrieved via
--- 'TextMeasurer.measureFont'.
+-- | Font-level metrics returned by 'measureFont' for a given 'FontSpec'.
+-- These metrics do not depend on string content.
 data FontMetrics = FontMetrics
   { lineHeight :: Float
     -- ^ Distance between consecutive baselines.
