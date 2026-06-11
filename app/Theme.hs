@@ -7,9 +7,11 @@ module Theme
 import Blink
 import qualified Data.Map.Strict as Map
 
-data Element = Btn Int | TextInput1
+data Element = Label
+             | Btn Int
+             | TextInput1
              | CheckboxBox1 | CheckboxBox2 | CheckboxBox3
-             | ProgressBar1
+             | ProgressBar1 | ProgressBar2
              | ScrollBar1 ScrollBarPart
              | ScrollBar2 ScrollBarPart
   deriving (Eq, Ord)
@@ -152,6 +154,25 @@ mkCheckboxBoxStyle p = StyleSet
       , styleBorderWidth  = 1
       }
 
+mkLabelStyle :: Palette -> StyleSet
+mkLabelStyle p = StyleSet
+  { styleSetNormal   = base
+  , styleSetHovered  = base
+  , styleSetPressed  = base
+  , styleSetFocused  = base
+  , styleSetDisabled = base { styleTextColour = palTextMuted p }
+  }
+  where
+    base = Style
+      { styleBackground   = RGBA 0 0 0 0
+      , styleTextColour   = palTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleMargin       = uniform 0
+      , stylePadding      = controlPadding
+      , styleBorderColour = Nothing
+      , styleBorderWidth  = 0
+      }
+
 mkScrollTrackStyle :: Palette -> StyleSet
 mkScrollTrackStyle p = StyleSet
   { styleSetNormal   = base
@@ -193,7 +214,9 @@ mkScrollThumbStyle p = StyleSet
 mkTheme :: Palette -> Theme Element
 mkTheme p = Theme
   { themeElementStyles = Map.fromList
-      [ (ProgressBar1,              mkProgressBarStyle p)
+      [ (Label,                     mkLabelStyle p)
+      , (ProgressBar1,              mkProgressBarStyle p)
+      , (ProgressBar2,              mkProgressBarStyle p)
       , (TextInput1,                mkTextInputStyle p)
       , (CheckboxBox1,              mkCheckboxBoxStyle p)
       , (CheckboxBox2,              mkCheckboxBoxStyle p)

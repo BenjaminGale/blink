@@ -5,108 +5,89 @@ import Blink
 import Theme (Element (..), lightTheme, darkTheme)
 import Control.Monad (when)
 import Data.Text (Text)
+import qualified Data.Text as T
 
 data AppState = AppState
-  { lastClicked :: Maybe Int
-  , inputText :: Text
+  { clickCount :: Int
+  , inputText  :: Text
   , isChecked1 :: Bool
   , isChecked2 :: Bool
-  , animating :: Bool
+  , animating  :: Bool
   }
 
 demoApp :: App Element (StandardControls Element) AppState
 demoApp = App
-  { startUp = pure (AppState Nothing "" False False False)
+  { startUp        = pure (AppState 0 "" False False False)
   , initialUIState = emptyStandardControls
-  , theme = \s -> if isChecked2 s then darkTheme else lightTheme
-  , view = demoView
+  , theme          = \s -> if isChecked2 s then darkTheme else lightTheme
+  , view           = demoView
   }
 
-vScrollBar :: Orientation -> Double -> UI Element (StandardControls Element) AppState ()
-vScrollBar = scrollBar ScrollBar1
+type DemoUI = UI Element (StandardControls Element) AppState
 
-hScrollBar :: Orientation -> Double -> UI Element (StandardControls Element) AppState ()
-hScrollBar = scrollBar ScrollBar2
-
-btn :: Int -> Text -> UI Element (StandardControls Element) AppState ()
+btn :: Int -> Text -> DemoUI ()
 btn i txt = do
   clicked <- button (Btn i) txt
-  when clicked $ dispatch (\s -> s { lastClicked = Just i })
+  when clicked $ dispatch (\s -> s { clickCount = min 50 (clickCount s + i) })
 
-rowBg :: Bool -> Colour -> Colour -> Colour
-rowBg dark d l = if dark then d else l
+resetBtn :: DemoUI ()
+resetBtn = do
+  clicked <- button (Btn 0) "Reset"
+  when clicked $ dispatch (\s -> s { clickCount = 0 })
 
--- Row 1: fill behaviour — fixed | fill | fill | fixed (two fills share surplus evenly)
-row1 :: Bool -> UI Element (StandardControls Element) AppState ()
-row1 dark = fillRect (rowBg dark (RGBA 0.176 0.133 0.141 1) (RGBA 0.95 0.87 0.87 1)) >>
+rowButtons :: AppState -> DemoUI ()
+rowButtons s =
+  vBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4 })
+    [ (Layout Fill Fill         TopLeft,
+         hBox (defaultBoxConfig { boxSpacing = 4, boxAlignment = Center })
+           [ (Layout (Exactly 80) Fill TopLeft,    btn 1 "One")
+           , (Layout (Exactly 80) Fill TopLeft,    btn 2 "Two")
+           , (Layout (Exactly 80) Fill TopLeft,    btn 3 "Three")
+           , (Layout Fill         Fill MiddleLeft, label Label ("Clicks: " <> T.pack (show (clickCount s))))
+           , (Layout (Exactly 80) Fill TopLeft,    resetBtn)
+           ])
+    , (Layout Fill (Exactly 20) TopLeft, progressBar ProgressBar1 (fromIntegral (clickCount s) / 50))
+    ]
+
+rowInput :: AppState -> DemoUI ()
+rowInput s =
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
-    [ (Layout (Exactly 80) Fill TopLeft, btn 1 "Left")
-    , (Layout Fill         Fill Center,  btn 2 "<fill 1>")
-    , (Layout Fill         Fill Center,  btn 3 "<fill 2>")
-    , (Layout (Exactly 80) Fill TopLeft, btn 4 "Right")
+    [ (Layout (Exactly 200) Fill         MiddleLeft, label Label "Text input")
+    , (Layout Fill          (Exactly 30) TopLeft,    textInput TextInput1 (inputText s) (\t st -> st { inputText = t }))
     ]
 
--- Row 2: fillCross = False, children top/centre/bottom aligned; scrollbar fills the height
-row2 :: Bool -> UI Element (StandardControls Element) AppState ()
-row2 dark = fillRect (rowBg dark (RGBA 0.133 0.176 0.141 1) (RGBA 0.87 0.95 0.87 1)) >>
-  hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center, boxFillCross = False })
-    [ (Layout (Exactly 100) (Exactly 30) TopLeft,    btn 5 "Top")
-    , (Layout (Exactly 100) (Exactly 50) MiddleLeft, btn 6 "Mid")
-    , (Layout (Exactly 100) (Exactly 40) BottomLeft, btn 7 "Bot")
-    , (Layout (Exactly 20)  Fill         TopLeft,    vScrollBar Vertical 0.3)
-    ]
-
--- Row 3: same constraints as row 2, fillCross = True, content aligned to the right
-row3 :: Bool -> UI Element (StandardControls Element) AppState ()
-row3 dark = fillRect (rowBg dark (RGBA 0.133 0.141 0.176 1) (RGBA 0.87 0.87 0.95 1)) >>
-  hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = MiddleRight })
-    [ (Layout (Exactly 100) (Exactly 30) TopLeft,    btn 8 "Top")
-    , (Layout (Exactly 100) (Exactly 50) MiddleLeft, btn 9 "Mid")
-    , (Layout (Exactly 100) (Exactly 40) BottomLeft, btn 10 "Bot")
-    ]
-
--- Row 4: text input
-row4 :: Bool -> AppState -> UI Element (StandardControls Element) AppState ()
-row4 dark s = fillRect (rowBg dark (RGBA 0.176 0.165 0.118 1) (RGBA 0.95 0.95 0.87 1)) >>
-  hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4 })
-    [ (Layout Fill (Exactly 30) MiddleLeft,
-         textInput TextInput1 (inputText s) (\t st -> st { inputText = t })) ]
-
--- Row 5: checkboxes — the first checkbox enables/disables editing controls
-row5 :: Bool -> AppState -> UI Element (StandardControls Element) AppState ()
-row5 dark s = fillRect (rowBg dark (RGBA 0.165 0.133 0.176 1) (RGBA 0.95 0.87 0.95 1)) >>
+rowCheckboxes :: AppState -> DemoUI ()
+rowCheckboxes s =
   hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
     [ (Layout (Exactly 160) (Exactly 30) MiddleLeft,
          checkbox CheckboxBox1 "Enable editing" (isChecked1 s) (\v st -> st { isChecked1 = v }))
-    , (Layout (Exactly 160) (Exactly 30) MiddleLeft,
-         disableWhen (not (isChecked1 s)) $
-           checkbox CheckboxBox2 "Dark mode"    (isChecked2 s) (\v st -> st { isChecked2 = v }))
-    , (Layout (Exactly 160) (Exactly 30) MiddleLeft,
-         disableWhen (not (isChecked1 s)) $
-           checkbox CheckboxBox3 "Animate"      (animating s)  (\v st -> st { animating = v }))
+    , (Layout (Exactly 120) (Exactly 30) MiddleLeft,
+         checkbox CheckboxBox2 "Dark mode" (isChecked2 s) (\v st -> st { isChecked2 = v }))
+    , (Layout (Exactly 100) (Exactly 30) MiddleLeft,
+         checkbox CheckboxBox3 "Animate" (animating s) (\v st -> st { animating = v }))
     ]
 
--- Row 6: indeterminate progress bar, running while Animate is checked
-row6 :: Bool -> AppState -> UI Element (StandardControls Element) AppState ()
-row6 dark s = fillRect (rowBg dark (RGBA 0.118 0.165 0.176 1) (RGBA 0.87 0.95 0.95 1)) >>
-  hBox (defaultBoxConfig { boxMargin = 4 })
-    [ (Layout Fill (Exactly 20) MiddleLeft,
-         if animating s
-           then indeterminateProgressBar ProgressBar1
-           else progressBar ProgressBar1 0)
+rowProgress :: AppState -> DemoUI ()
+rowProgress s =
+  vBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4 })
+    [ (Layout Fill Fill         TopLeft,
+         hBox (defaultBoxConfig { boxSpacing = 4 })
+           [ (Layout Fill         Fill TopLeft,
+                if animating s
+                  then indeterminateProgressBar ProgressBar2
+                  else progressBar ProgressBar2 0)
+           , (Layout (Exactly 20) Fill TopLeft, scrollBar ScrollBar2 Vertical 0.3)
+           ])
+    , (Layout Fill (Exactly 20) TopLeft, scrollBar ScrollBar1 Horizontal 0.2)
     ]
 
-demoView :: UI Element (StandardControls Element) AppState ()
+demoView :: DemoUI ()
 demoView = do
   s <- getAppState
-  let dark = isChecked2 s
-  when dark $ fillRect (RGBA 0.082 0.102 0.129 1)
+  when (isChecked2 s) $ fillRect (RGBA 0.082 0.102 0.129 1)
   vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
-    [ (Layout Fill (Exactly 50) TopLeft, row1 dark)
-    , (Layout Fill Fill         TopLeft, row2 dark)
-    , (Layout Fill (Exactly 80) TopLeft, row3 dark)
-    , (Layout Fill (Exactly 50) TopLeft, disableWhen (not (isChecked1 s)) $ row4 dark s)
-    , (Layout Fill (Exactly 50) TopLeft, row5 dark s)
-    , (Layout Fill (Exactly 50) TopLeft, row6 dark s)
-    , (Layout Fill (Exactly 20) TopLeft, hScrollBar Horizontal 0.3)
+    [ (Layout Fill (Exactly 50) TopLeft, rowCheckboxes s)
+    , (Layout Fill (Exactly 70) TopLeft, disableWhen (not (isChecked1 s)) $ rowButtons s)
+    , (Layout Fill (Exactly 50) TopLeft, disableWhen (not (isChecked1 s)) $ rowInput s)
+    , (Layout Fill Fill         TopLeft, rowProgress s)
     ]
