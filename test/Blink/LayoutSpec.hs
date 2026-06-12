@@ -297,6 +297,14 @@ spec = describe "layout" $ do
         runVBox vBounds cfg { boxAlignment = BottomLeft } threeExact
           `shouldBe` [Rectangle 0 80 100 40, Rectangle 0 120 100 40, Rectangle 0 160 100 40]
 
+  describe "defaultBoxConfig" $ do
+    it "has zero spacing and margin" $ do
+      boxSpacing defaultBoxConfig `shouldBe` 0
+      boxMargin  defaultBoxConfig `shouldBe` 0
+    it "aligns to TopLeft with cross-axis fill enabled" $ do
+      boxAlignment defaultBoxConfig `shouldBe` TopLeft
+      boxFillCross defaultBoxConfig `shouldBe` True
+
   describe "boxTotalSpacing" $ do
     it "returns 0 for zero children" $
       boxTotalSpacing cfg { boxSpacing = 10 } 0 `shouldBe` 0
