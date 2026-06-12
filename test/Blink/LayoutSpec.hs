@@ -4,10 +4,10 @@ import Control.Monad (forM_)
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
-import Test.QuickCheck (NonNegative (..), Positive (..))
+import Test.QuickCheck (Gen, NonNegative (..), Positive (..), choose, forAll)
 
 import Blink.Generators ()
-import Blink.Geometry (Alignment (..), Point (..), Rectangle (..), uniform)
+import Blink.Geometry (Alignment (..), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), KeyEvent, InputState (..))
 import Blink.Layout
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -66,6 +66,9 @@ runLayout bounds ui =
 
 cfg :: BoxConfig
 cfg = BoxConfig { boxSpacing = 0, boxMargin = 0, boxAlignment = TopLeft, boxFillCross = True }
+
+margin :: Gen Double
+margin = fromIntegral <$> (choose (0, 49) :: Gen Int)
 
 runHBox :: Rectangle -> BoxConfig -> [Layout] -> [Rectangle]
 runHBox bounds c rcs = runLayout bounds $ hBox c [(r, fill) | r <- rcs]
@@ -206,9 +209,10 @@ spec = describe "layout" $ do
           `shouldBe` [Rectangle 0 0 95 100, Rectangle 105 0 95 100]
 
     describe "content area" $ do
-      it "margin reduces the available space on all sides" $
-        runHBox hBounds cfg { boxMargin = 10 } [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
-          `shouldBe` [Rectangle 10 10 90 80, Rectangle 100 10 90 80]
+      prop "a Fill child fills the margin-inset content area" $
+        forAll margin $ \m ->
+          runHBox hBounds cfg { boxMargin = m } [rc Fill Fill TopLeft]
+            `shouldBe` [insetRect (uniform m) hBounds]
 
     describe "cross axis (height)" $ do
       it "fillCross = True stretches children to the full available height" $
@@ -262,9 +266,10 @@ spec = describe "layout" $ do
           `shouldBe` [Rectangle 0 0 100 95, Rectangle 0 105 100 95]
 
     describe "content area" $ do
-      it "margin reduces the available space on all sides" $
-        runVBox vBounds cfg { boxMargin = 10 } [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
-          `shouldBe` [Rectangle 10 10 80 90, Rectangle 10 100 80 90]
+      prop "a Fill child fills the margin-inset content area" $
+        forAll margin $ \m ->
+          runVBox vBounds cfg { boxMargin = m } [rc Fill Fill TopLeft]
+            `shouldBe` [insetRect (uniform m) vBounds]
 
     describe "cross axis (width)" $ do
       it "fillCross = True stretches children to the full available width" $
