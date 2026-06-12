@@ -201,14 +201,15 @@ radioGroup mkId items selected onChange =
   vBox defaultBoxConfig (zipWith mkItem [0..] items)
   where
     mkItem idx (val, lbl) =
-      ( Layout Fill Fill TopLeft
-      , control (mkId idx) $ do
-          style     <- getStyle (mkId idx)
-          activated <- isActivatedBy [KeyReturn, KeySpace] (mkId idx)
-          drawText (styleTextColour style) AlignLeft $
-            (if selected == val then "● " else "○ ") <> lbl
-          when activated $ dispatch (onChange val)
-      )
+      let eid = mkId idx
+      in ( Layout Fill Fill TopLeft
+         , control eid $ do
+             style     <- getStyle eid
+             activated <- isActivatedBy [KeyReturn, KeySpace] eid
+             drawText (styleTextColour style) AlignLeft $
+               (if selected == val then "● " else "○ ") <> lbl
+             when activated $ dispatch (onChange val)
+         )
 
 -- | A clickable button labelled @txt@. Returns 'True' on the frame the button
 -- is activated — by a left-click or by pressing Enter while focused.
