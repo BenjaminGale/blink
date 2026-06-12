@@ -52,8 +52,8 @@ emptyTheme = Theme
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
-run :: UI () () s a -> s -> (a, UIContext () () s)
-run ui s = runUI ui (emptyUIContext testBounds noInput emptyTheme () s)
+run :: UI () s a -> s -> (a, UIContext () s)
+run ui s = runUI ui (emptyUIContext testBounds noInput emptyTheme s)
 
 spec :: Spec
 spec = describe "UI primitives" $ do
@@ -63,14 +63,14 @@ spec = describe "UI primitives" $ do
     it "does not register hover when the mouse is inside bounds but outside the clip region" $
       let clipRect = Rectangle 0 0 100 50
           mouseOutsideClip = noInput { inputMousePosition = Point 50 75 }
-          ctx = emptyUIContext testBounds mouseOutsideClip emptyTheme () (0 :: Int)
+          ctx = emptyUIContext testBounds mouseOutsideClip emptyTheme (0 :: Int)
           (_, ctx') = runUI (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ())) ctx
       in ctxHoveredElement ctx' `shouldBe` Nothing
 
     it "registers hover when the mouse is inside both the bounds and the clip region" $
       let clipRect = Rectangle 0 0 100 50
           mouseInsideClip = noInput { inputMousePosition = Point 50 25 }
-          ctx = emptyUIContext testBounds mouseInsideClip emptyTheme () (0 :: Int)
+          ctx = emptyUIContext testBounds mouseInsideClip emptyTheme (0 :: Int)
           (_, ctx') = runUI (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ())) ctx
       in ctxHoveredElement ctx' `shouldBe` Just ()
 
@@ -79,7 +79,7 @@ spec = describe "UI primitives" $ do
           innerClip = Rectangle 0 25 100 50
           -- intersection is y 25–50; mouse at (50, 10) is inside outerClip but outside intersection
           mouseOutside = noInput { inputMousePosition = Point 50 10 }
-          ctx = emptyUIContext testBounds mouseOutside emptyTheme () (0 :: Int)
+          ctx = emptyUIContext testBounds mouseOutside emptyTheme (0 :: Int)
           (_, ctx') = runUI
             (withBounds outerClip $ clipToCurrent $
              withBounds innerClip $ clipToCurrent $
@@ -90,19 +90,19 @@ spec = describe "UI primitives" $ do
     let mouseOnA = noInput { inputMousePosition = Point 50 50, inputLeftButton = ButtonDown }
 
     it "does not hover an element when another element holds capture" $
-      let ctx = (emptyUIContext testBounds mouseOnA twoElemTheme () (0 :: Int))
+      let ctx = (emptyUIContext testBounds mouseOnA twoElemTheme (0 :: Int))
                   { ctxCapturedElement = Just ElemB }
           (_, ctx') = runUI (control ElemA (pure ())) ctx
       in ctxHoveredElement ctx' `shouldBe` Nothing
 
     it "hovers an element when it is itself the captured element" $
-      let ctx = (emptyUIContext testBounds mouseOnA twoElemTheme () (0 :: Int))
+      let ctx = (emptyUIContext testBounds mouseOnA twoElemTheme (0 :: Int))
                   { ctxCapturedElement = Just ElemA }
           (_, ctx') = runUI (control ElemA (pure ())) ctx
       in ctxHoveredElement ctx' `shouldBe` Just ElemA
 
     it "hovers an element when no capture is active" $
-      let ctx = emptyUIContext testBounds mouseOnA twoElemTheme () (0 :: Int)
+      let ctx = emptyUIContext testBounds mouseOnA twoElemTheme (0 :: Int)
           (_, ctx') = runUI (control ElemA (pure ())) ctx
       in ctxHoveredElement ctx' `shouldBe` Just ElemA
 
@@ -138,7 +138,7 @@ spec = describe "UI primitives" $ do
 
     it "auto-acquires capture when an element is hovered while the button is down" $
       -- Acquisition happens in setHovered during the frame, not via nextFrameContext.
-      let ctx = snd (runUI (setHovered ()) (emptyUIContext testBounds buttonDown emptyTheme () (0 :: Int)))
+      let ctx = snd (runUI (setHovered ()) (emptyUIContext testBounds buttonDown emptyTheme (0 :: Int)))
       in ctxCapturedElement ctx `shouldBe` Just ()
 
     it "carries existing capture forward on subsequent ButtonDown frames" $

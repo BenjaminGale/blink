@@ -80,19 +80,19 @@ isQuit _          = False
 
 -- Test apps
 
-counterApp :: App () () Int
+counterApp :: App () Int
 counterApp = App
   { startUp        = pure 0
-  , initialUIState = ()
+
   , theme          = const (emptyTheme testStyleSet)
   , view           = dispatch (+1)
   }
 
 -- Emits a FillRect covering the full window bounds each frame.
-drawingApp :: Colour -> App () () ()
+drawingApp :: Colour -> App () ()
 drawingApp c = App
   { startUp        = pure ()
-  , initialUIState = ()
+
   , theme          = const (emptyTheme testStyleSet)
   , view           = fillRect c
   }
@@ -100,10 +100,10 @@ drawingApp c = App
 -- Dispatches (+1) and also draws the current app state as text.
 -- The drawn value differs between continuous (pre-dispatch) and
 -- event-driven (post-dispatch) modes.
-stateDrawApp :: App () () Int
+stateDrawApp :: App () Int
 stateDrawApp = App
   { startUp        = pure 0
-  , initialUIState = ()
+
   , theme          = const (emptyTheme testStyleSet)
   , view           = do
       n <- getAppState
@@ -112,33 +112,32 @@ stateDrawApp = App
   }
 
 -- Dispatches the number of key events seen this frame.
-keyCountApp :: App () () Int
+keyCountApp :: App () Int
 keyCountApp = App
   { startUp        = pure 0
-  , initialUIState = ()
+
   , theme          = const (emptyTheme testStyleSet)
   , view           = do
       input <- getInput
       dispatch (+ length (inputKeyEvents input))
   }
 
--- Dispatches the current UI state (Int) as app state, then increments it.
-uiStateApp :: App () Int Int
+-- Reads scroll state as a counter, increments it, and dispatches the old value as app state.
+uiStateApp :: App () Int
 uiStateApp = App
-  { startUp        = pure 0
-  , initialUIState = 0
-  , theme          = const (emptyTheme testStyleSet)
-  , view           = do
-      uiSt <- getUIState
-      modifyUIState (+1)
-      dispatch (const uiSt)
+  { startUp = pure 0
+  , theme   = const (emptyTheme testStyleSet)
+  , view    = do
+      pos <- getScrollState ()
+      setScrollState () (pos + 1)
+      dispatch (\_ -> round pos)
   }
 
 -- Dispatches the animation delta as state so it can be observed.
-deltaApp :: App () () Float
+deltaApp :: App () Float
 deltaApp = App
   { startUp        = pure 999
-  , initialUIState = ()
+
   , theme          = const (emptyTheme testStyleSet)
   , view           = do
       d <- getAnimDelta
@@ -214,14 +213,14 @@ spec = do
         done <- newEmptyMVar
         let asyncApp = App
               { startUp        = pure 0
-              , initialUIState = ()
+            
               , theme          = const (emptyTheme testStyleSet)
               , view           = do
                   s <- getAppState
                   when (s == 0) $ dispatchAsync $ \_ -> do
                     putMVar done ()
                     pure (+10)
-              } :: App () () Int
+              } :: App () Int
         handle <- configureContinuous asyncApp nullMeasurer
         _ <- stepFrame handle normalInput
         takeMVar done
@@ -234,10 +233,10 @@ spec = do
         let notify = writeIORef notified True >> putMVar done ()
             asyncApp = App
               { startUp        = pure ()
-              , initialUIState = ()
+            
               , theme          = const (emptyTheme testStyleSet)
               , view           = dispatchAsync $ \_ -> pure id
-              } :: App () () ()
+              } :: App () ()
         handle <- configureEventDriven asyncApp notify nullMeasurer
         _ <- stepFrame handle normalInput
         takeMVar done

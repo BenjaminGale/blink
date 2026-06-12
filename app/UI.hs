@@ -24,15 +24,14 @@ data AppState = AppState
   , lastClickedDynamic :: Maybe Int
   }
 
-demoApp :: App Element (StandardControls Element) AppState
+demoApp :: App Element AppState
 demoApp = App
-  { startUp        = pure (AppState 0 "" False False False 0.5 0 0 "" 0 False Nothing Nothing)
-  , initialUIState = emptyStandardControls
-  , theme          = \s -> if isChecked2 s then darkTheme else lightTheme
-  , view           = demoView
+  { startUp = pure (AppState 0 "" False False False 0.5 0 0 "" 0 False Nothing Nothing)
+  , theme   = \s -> if isChecked2 s then darkTheme else lightTheme
+  , view    = demoView
   }
 
-type DemoUI = UI Element (StandardControls Element) AppState
+type DemoUI = UI Element AppState
 
 btn :: Int -> Text -> DemoUI ()
 btn i txt = do

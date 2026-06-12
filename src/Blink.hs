@@ -25,18 +25,16 @@ loop handle state = do
 
 = Type parameters
 
-Every 'App' is parameterised over three types:
+Every 'App' is parameterised over two types:
 
   * @e@ — the /element type/, a sum type with one constructor per interactive
     control. Used to look up styles from the 'Theme' and to route keyboard
     focus. See "Blink.UI".
-  * @u@ — the /UI state record/, presentation state owned by the controls
-    themselves (scroll positions and the like) and accessed through
-    'getUIState' and 'modifyUIState'. Use 'StandardControls' when only the
-    standard controls need it. See "Blink.UI" and "Blink.Controls".
   * @s@ — the /application state/, owned by the host, read by the UI tree via
     'getAppState', and changed only through modifiers queued with 'dispatch'
-    and 'dispatchAsync'. See "Blink.UI".
+    and 'dispatchAsync'. Presentational state (scroll positions, selections) is
+    baked into the 'UIContext' and accessed through dedicated primitives. See
+    "Blink.UI".
 
 = Module guide
 

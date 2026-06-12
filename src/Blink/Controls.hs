@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {- |
 Module: Blink.Controls
@@ -25,42 +23,15 @@ application data outside the UI tree.
 = Control state
 
 Controls whose state is presentational rather than application data — a
-scrollbar's position, for example — keep it in 'StandardControls', a record
-of maps keyed by element ID and stored in the UI state record @u@ (see
-"Blink.UI"). Per-instance state is keyed by a representative element of the
-control, so every instance gets its own slot automatically; absent keys read
-as the control's initial state and the maps populate lazily on first write.
-
-Applications that need no other control state use 'StandardControls' directly
-as @u@:
-
-@
-demoApp = App { initialUIState = emptyStandardControls, ... }
-@
-
-Applications with additional custom control state embed the standard record
-alongside their own and provide a 'HasStandardControls' instance pointing at
-it:
-
-@
-data MyControls e = MyControls
-  { myStandard :: StandardControls e
-  , myCustom :: Map e MyCustomState
-  }
-
-instance HasStandardControls e (MyControls e) where
-  getStandardControls = myStandard
-  setStandardControls sc c = c { myStandard = sc }
-@
+scrollbar's position, for example — read and write it directly through the
+primitives in "Blink.UI" ('getScrollState', 'setScrollState', and the
+selection counterparts). State is keyed by element ID, populates lazily on
+first write, and persists across frames inside the 'UIContext'. The application
+never sees the traffic.
 -}
 module Blink.Controls
-  ( -- * Control state
-    StandardControls (..)
-  , emptyStandardControls
-  , HasStandardControls (..)
-  , ScrollState (..)
-    -- * Display
-  , label
+  ( -- * Display
+    label
   , ProgressValue (..)
   , progressBar
     -- * Input
@@ -88,8 +59,6 @@ module Blink.Controls
 
 import Control.Monad (when)
 import Data.List (foldl')
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import Blink.Geometry (Alignment (..), Orientation (..), Point (..), Rectangle (..), insetRect)
@@ -99,40 +68,10 @@ import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
 import Blink.UI
 
--- | Per-instance presentation state for a scrollbar: its position in @[0, 1]@.
-newtype ScrollState = ScrollState { scrollPosition :: Double }
-  deriving (Eq, Ord, Show)
-
--- | The presentation state needed by the standard controls, keyed by element
--- ID. Serves directly as the UI state record @u@ for applications with no
--- custom control state; see the module introduction for embedding it
--- alongside custom state.
-data StandardControls e = StandardControls
-  { scScrollStates :: Map e ScrollState
-    -- ^ Per-instance scroll positions, keyed by the scrollbar's track element ID.
-  }
-  deriving (Eq, Show)
-
--- | A 'StandardControls' with no per-control state recorded yet.
-emptyStandardControls :: StandardControls e
-emptyStandardControls = StandardControls Map.empty
-
--- | Grants the standard controls access to their state within the
--- user-supplied UI state record @u@.
-class HasStandardControls e u where
-  getStandardControls :: u -> StandardControls e
-  -- ^ Extract the standard controls record from the UI state.
-  setStandardControls :: StandardControls e -> u -> u
-  -- ^ Replace the standard controls record in the UI state.
-
-instance HasStandardControls e (StandardControls e) where
-  getStandardControls = id
-  setStandardControls sc _ = sc
-
 -- | Read-only text display. Renders @text@ within the element's content
 -- rectangle using the active style. Does not participate in interaction or
 -- keyboard navigation.
-label :: (Eq e, Ord e) => e -> Text -> UI e u s ()
+label :: (Eq e, Ord e) => e -> Text -> UI e s ()
 label eid text = renderControl eid $ do
   style <- getStyle eid
   drawText (styleTextColour style) (styleTextAlign style) text
@@ -149,7 +88,7 @@ data ProgressValue
 -- 'Indeterminate' for a continuously animating band indicating activity of
 -- unknown duration. The animation runs only on ticker frames; 'requiresAnimation'
 -- keeps the ticker active while an 'Indeterminate' bar is visible.
-progressBar :: (Eq e, Ord e) => e -> ProgressValue -> UI e u s ()
+progressBar :: (Eq e, Ord e) => e -> ProgressValue -> UI e s ()
 progressBar eid (Progress value) = renderControl eid $ do
   style <- getStyle eid
   r     <- getBounds
@@ -169,19 +108,19 @@ progressBar eid Indeterminate = do
     withBounds (r { rectX = left, rectWidth = bandW }) $
       fillRect (styleTextColour style)
 
-checkboxMark :: (Eq e, Ord e) => e -> Bool -> (Bool -> s -> s) -> UI e u s ()
+checkboxMark :: (Eq e, Ord e) => e -> Bool -> (Bool -> s -> s) -> UI e s ()
 checkboxMark boxId checked onToggle = control boxId $ do
   style     <- getStyle boxId
   activated <- isActivatedBy [KeyReturn, KeySpace] boxId
   when checked   $ drawText (styleTextColour style) AlignCenter "✓"
   when activated $ dispatch (onToggle (not checked))
 
-checkboxLabel :: Style -> Text -> UI e u s ()
+checkboxLabel :: Style -> Text -> UI e s ()
 checkboxLabel style = drawText (styleTextColour style) AlignLeft
 
 -- | A togglable checkbox with an adjacent label. Dispatches the state modifier
 -- @onToggle (not checked)@ when activated by a click or the Enter key.
-checkbox :: (Eq e, Ord e) => e -> Text -> Bool -> (Bool -> s -> s) -> UI e u s ()
+checkbox :: (Eq e, Ord e) => e -> Text -> Bool -> (Bool -> s -> s) -> UI e s ()
 checkbox boxId text checked onToggle = do
   style <- getStyle boxId
   hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
@@ -204,7 +143,7 @@ radioGroup :: (Eq e, Ord e, Eq a)
            -> [(a, Text)]    -- ^ @(value, label)@ pairs
            -> a              -- ^ currently selected value
            -> (a -> s -> s)
-           -> UI e u s ()
+           -> UI e s ()
 radioGroup mkId items selected onChange = do
   initialFocus <- getFocus
   vBox defaultBoxConfig (zipWith (mkItem initialFocus) [0..] items)
@@ -228,7 +167,7 @@ radioGroup mkId items selected onChange = do
 
 -- | A clickable button labelled @txt@. Returns 'True' on the frame the button
 -- is activated — by a left-click or by pressing Enter while focused.
-button :: (Eq e, Ord e) => e -> Text -> UI e u s Bool
+button :: (Eq e, Ord e) => e -> Text -> UI e s Bool
 button eid txt = do
   control eid $ do
     style <- getStyle eid
@@ -239,7 +178,7 @@ button eid txt = do
 -- the state modifier @onChange newValue@ when the text changes via typed
 -- characters or Backspace; the control reads the new value back from the
 -- application state on the next frame.
-textInput :: (Eq e, Ord e) => e -> Text -> (Text -> s -> s) -> UI e u s ()
+textInput :: (Eq e, Ord e) => e -> Text -> (Text -> s -> s) -> UI e s ()
 textInput eid value onChange = control eid $ do
   style     <- getStyle eid
   hasFocus  <- isFocused eid
@@ -271,16 +210,16 @@ data ScrollBarPart
   deriving (Eq, Ord, Show)
 
 -- | A scrollbar with decrement\/increment buttons flanking a draggable thumb.
--- The scroll position in @[0, 1]@ lives in 'scScrollStates', keyed by
+-- The scroll position in @[0, 1]@ is stored in the 'UIContext', keyed by
 -- @mkId ScrollTrack@; the control reads and writes it itself. @thumbRatio@ is
 -- the fraction of the track the thumb fills (visible \/ total), also in
 -- @[0, 1]@. Button clicks step by @thumbRatio@; dragging centres the thumb on
 -- the cursor.
-scrollBar :: (Eq e, Ord e, HasStandardControls e u)
+scrollBar :: (Eq e, Ord e)
           => (ScrollBarPart -> e)
           -> Orientation
           -> Double
-          -> UI e u s ()
+          -> UI e s ()
 scrollBar mkId ori thumbRatio = do
   bounds <- getBounds
   pos <- readPos
@@ -297,14 +236,9 @@ scrollBar mkId ori thumbRatio = do
   where
     trackId = mkId ScrollTrack
 
-    -- The scroll state slot for this instance; an absent key reads as 0.
-    readPos = do
-      sc <- getStandardControls <$> getUIState
-      pure (scrollPosition (Map.findWithDefault (ScrollState 0) trackId (scScrollStates sc)))
+    readPos = getScrollState trackId
 
-    writePos v = modifyUIState $ \u ->
-      let sc = getStandardControls u
-      in setStandardControls (sc { scScrollStates = Map.insert trackId (ScrollState v) (scScrollStates sc) }) u
+    writePos v = setScrollState trackId v
 
     layoutFn = case ori of
       Vertical   -> vBox
@@ -343,23 +277,15 @@ scrollBar mkId ori thumbRatio = do
 -- returning @0@ if no position has been recorded yet. Use this to
 -- programmatically observe scroll state — for example, to show a "Back to
 -- top" button only when the user has scrolled down.
-readScrollPos
-  :: (Ord e, HasStandardControls e u)
-  => e -> UI e u s Double
-readScrollPos trackId = do
-  sc <- getStandardControls <$> getUIState
-  pure (scrollPosition (Map.findWithDefault (ScrollState 0) trackId (scScrollStates sc)))
+readScrollPos :: Ord e => e -> UI e s Double
+readScrollPos = getScrollState
 
 -- | Overwrite the scroll position for the scrollbar keyed by @trackId@. The
 -- value is clamped to @[0, 1]@. Use this to drive scroll position from
 -- application logic — for example, a "Scroll to top" button or resetting
 -- position when the content changes.
-writeScrollPos
-  :: (Ord e, HasStandardControls e u)
-  => e -> Double -> UI e u s ()
-writeScrollPos trackId v = modifyUIState $ \u ->
-  let sc = getStandardControls u
-  in setStandardControls (sc { scScrollStates = Map.insert trackId (ScrollState (max 0 (min 1 v))) (scScrollStates sc) }) u
+writeScrollPos :: Ord e => e -> Double -> UI e s ()
+writeScrollPos trackId v = setScrollState trackId (max 0 (min 1 v))
 
 -- | Computes the bounding rectangle of a scrollbar thumb within a track.
 -- Exported for callers that build custom scroll surfaces or need to hit-test
@@ -416,12 +342,12 @@ scrollRegionBarSize = 16
 -- Mouse interaction works naturally because translated bounds are in window
 -- coordinates; the clip region hides the rest.
 scrollableRegion
-  :: (Eq e, Ord e, HasStandardControls e u)
+  :: (Eq e, Ord e)
   => (ScrollRegionPart -> e)  -- ^ maps region parts to element IDs
   -> Double                    -- ^ virtual content width
   -> Double                    -- ^ virtual content height
-  -> UI e u s ()               -- ^ content
-  -> UI e u s ()
+  -> UI e s ()                 -- ^ content
+  -> UI e s ()
 scrollableRegion mkId cw ch content = do
   outer <- getBounds
   let ow      = rectWidth outer
@@ -443,12 +369,10 @@ scrollableRegion mkId cw ch content = do
   -- offset is computed.
   when needsH $ withBounds hBar $ scrollBar (mkId . ScrollRegionH) Horizontal hThumb
   when needsV $ withBounds vBar $ scrollBar (mkId . ScrollRegionV) Vertical   vThumb
-  sc <- getStandardControls <$> getUIState
-  let readPos p = scrollPosition $ Map.findWithDefault (ScrollState 0) (mkId p) (scScrollStates sc)
-      hPos      = if needsH then readPos (ScrollRegionH ScrollTrack) else 0
-      vPos      = if needsV then readPos (ScrollRegionV ScrollTrack) else 0
-      offsetX   = hPos * max 0 (cw - vpW)
-      offsetY   = vPos * max 0 (ch - vpH)
+  hPos <- if needsH then getScrollState (mkId (ScrollRegionH ScrollTrack)) else pure 0
+  vPos <- if needsV then getScrollState (mkId (ScrollRegionV ScrollTrack)) else pure 0
+  let offsetX    = hPos * max 0 (cw - vpW)
+      offsetY    = vPos * max 0 (ch - vpH)
       virtBounds = outer
         { rectX      = rectX outer - offsetX
         , rectY      = rectY outer - offsetY
@@ -468,12 +392,12 @@ scrollableRegion mkId cw ch content = do
 -- ratio is @viewportSize / contentSize@; the caller uses the returned fractions
 -- to determine which portion of the virtual content to render.
 scrollableDynamic
-  :: (Eq e, Ord e, HasStandardControls e u)
-  => (ScrollRegionPart -> e)             -- ^ maps region parts to element IDs
-  -> Maybe Double                         -- ^ horizontal scrollbar thumb ratio
-  -> Maybe Double                         -- ^ vertical scrollbar thumb ratio
-  -> (Double -> Double -> UI e u s ())   -- ^ @content hFrac vFrac@
-  -> UI e u s ()
+  :: (Eq e, Ord e)
+  => (ScrollRegionPart -> e)           -- ^ maps region parts to element IDs
+  -> Maybe Double                       -- ^ horizontal scrollbar thumb ratio
+  -> Maybe Double                       -- ^ vertical scrollbar thumb ratio
+  -> (Double -> Double -> UI e s ())   -- ^ @content hFrac vFrac@
+  -> UI e s ()
 scrollableDynamic mkId hThumb vThumb content = do
   outer <- getBounds
   let ow     = rectWidth outer
@@ -489,10 +413,8 @@ scrollableDynamic mkId hThumb vThumb content = do
   case vThumb of
     Nothing -> pure ()
     Just r  -> withBounds vBar $ scrollBar (mkId . ScrollRegionV) Vertical r
-  sc <- getStandardControls <$> getUIState
-  let readPos p = scrollPosition $ Map.findWithDefault (ScrollState 0) (mkId p) (scScrollStates sc)
-      hPos      = maybe 0 (\_ -> readPos (ScrollRegionH ScrollTrack)) hThumb
-      vPos      = maybe 0 (\_ -> readPos (ScrollRegionV ScrollTrack)) vThumb
+  hPos <- maybe (pure 0) (\_ -> getScrollState (mkId (ScrollRegionH ScrollTrack))) hThumb
+  vPos <- maybe (pure 0) (\_ -> getScrollState (mkId (ScrollRegionV ScrollTrack))) vThumb
   withBounds vpRect $ clipToCurrent $ content hPos vPos
 
 -- | Sub-parts of a slider, used as the inner tag when building the
@@ -517,7 +439,7 @@ slider :: (Eq e, Ord e)
        -> Orientation
        -> Double
        -> (Double -> s -> s)
-       -> UI e u s ()
+       -> UI e s ()
 slider mkId ori value onChange = do
   let trackId = mkId SliderTrack
       clamped = max 0 (min 1 value)

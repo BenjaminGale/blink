@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), ScrollState (..), SliderPart (..), StandardControls (..), button, checkbox, emptyStandardControls, progressBar, radioGroup, readScrollPos, scrollBar, scrollableRegion, scrollPosFromMouse, scrollRegionBarSize, scrollThumbRect, slider, sliderThumbRect, textInput, writeScrollPos)
+import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), button, checkbox, progressBar, radioGroup, readScrollPos, scrollBar, scrollableRegion, scrollPosFromMouse, scrollRegionBarSize, scrollThumbRect, slider, sliderThumbRect, textInput, writeScrollPos)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -54,17 +54,17 @@ bgRect = insetRect (uniform 10) controlRect
 contentRect :: Rectangle
 contentRect = insetRect (uniform 5) bgRect
 
-mkCtx :: InputState -> UIContext TestElement () ()
-mkCtx input = emptyUIContext controlRect input testTheme () ()
+mkCtx :: InputState -> UIContext TestElement ()
+mkCtx input = emptyUIContext controlRect input testTheme ()
 
-withFocus :: Maybe TestElement -> UIContext TestElement () s -> UIContext TestElement () s
+withFocus :: Maybe TestElement -> UIContext TestElement s -> UIContext TestElement s
 withFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = e } }
 
-getFocused :: UIContext TestElement () s -> Maybe TestElement
+getFocused :: UIContext TestElement s -> Maybe TestElement
 getFocused = focusedElement . ctxFocusState
 
 -- The number of state modifiers queued during the frame.
-dispatchCount :: UIContext e u s -> Int
+dispatchCount :: UIContext e s -> Int
 dispatchCount = length . ctxDispatches
 
 noInput :: InputState
@@ -165,7 +165,7 @@ isStrokeRect :: DrawCommand -> Bool
 isStrokeRect (StrokeRect {}) = True
 isStrokeRect _               = False
 
-type WidgetRunner = UIContext TestElement () () -> UIContext TestElement () ()
+type WidgetRunner = UIContext TestElement () -> UIContext TestElement ()
 
 -- | Shared focus, tab, and hover tests for any widget whose primary interactive
 --   element is TestControl. Pass a point inside the control's hittable area.
@@ -266,10 +266,10 @@ runTextInputControl :: WidgetRunner
 runTextInputControl ctx = snd $ runUI (textInput TestControl "" (\_ s -> s)) ctx
 
 -- Text editing tests use the entered text itself as the application state.
-mkTextCtx :: Text -> InputState -> UIContext TestElement () Text
-mkTextCtx value input = emptyUIContext controlRect input testTheme () value
+mkTextCtx :: Text -> InputState -> UIContext TestElement Text
+mkTextCtx value input = emptyUIContext controlRect input testTheme value
 
-runTextInput :: Text -> UIContext TestElement () Text -> UIContext TestElement () Text
+runTextInput :: Text -> UIContext TestElement Text -> UIContext TestElement Text
 runTextInput value ctx = snd $ runUI (textInput TestControl value (\t _ -> t)) ctx
 
 -- Forces checkboxTheme so the 20×20 box slot is hittable regardless of mkCtx's theme.
@@ -277,17 +277,17 @@ runCheckboxControl :: WidgetRunner
 runCheckboxControl ctx = snd $ runUI (checkbox TestControl "test label" False (\_ s -> s)) (ctx { ctxTheme = checkboxTheme })
 
 -- Toggle tests record the dispatched value in a Maybe Bool application state.
-runCheckbox :: Bool -> UIContext TestElement () (Maybe Bool) -> UIContext TestElement () (Maybe Bool)
+runCheckbox :: Bool -> UIContext TestElement (Maybe Bool) -> UIContext TestElement (Maybe Bool)
 runCheckbox checked ctx = snd $ runUI (checkbox TestControl "test label" checked (\v _ -> Just v)) ctx
 
-mkCheckboxCtx :: InputState -> UIContext TestElement () (Maybe Bool)
-mkCheckboxCtx input = emptyUIContext controlRect input checkboxTheme () Nothing
+mkCheckboxCtx :: InputState -> UIContext TestElement (Maybe Bool)
+mkCheckboxCtx input = emptyUIContext controlRect input checkboxTheme Nothing
 
 -- Center of the box bgRect (Rectangle 0 40 20 20) with zero-margin theme
 boxPoint :: Point
 boxPoint = Point 10 50
 
-drawnTexts :: UIContext e u s -> [Text]
+drawnTexts :: UIContext e s -> [Text]
 drawnTexts ctx = [t | DrawText _ t _ _ <- getDrawCommands ctx]
 
 -- runSliderControl maps SliderTrack -> TestControl and SliderThumb -> OtherControl
@@ -309,12 +309,12 @@ sliderTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = zeroMa
 sliderRect :: Rectangle
 sliderRect = Rectangle 0 0 200 30
 
-runSlider :: Orientation -> Double -> InputState -> UIContext SliderPart () Double
+runSlider :: Orientation -> Double -> InputState -> UIContext SliderPart Double
 runSlider ori val input =
   snd $ runUI (slider id ori val (\v _ -> v))
-    (emptyUIContext sliderRect input sliderTheme () val)
+    (emptyUIContext sliderRect input sliderTheme val)
 
-withSliderFocus :: Maybe SliderPart -> UIContext SliderPart () Double -> UIContext SliderPart () Double
+withSliderFocus :: Maybe SliderPart -> UIContext SliderPart Double -> UIContext SliderPart Double
 withSliderFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = e } }
 
 -- runRadioControl maps index 0 -> TestControl for the control suite helpers.
@@ -339,21 +339,16 @@ radioGroupRect = Rectangle 0 0 100 90
 radioItems :: [(String, Text)]
 radioItems = [("a", "Alpha"), ("b", "Beta"), ("c", "Gamma")]
 
-runRadioGroup :: String -> InputState -> UIContext Int () String
+runRadioGroup :: String -> InputState -> UIContext Int String
 runRadioGroup sel input =
   snd $ runUI (radioGroup id radioItems sel (\v _ -> v))
-    (emptyUIContext radioGroupRect input radioGroupTheme () sel)
+    (emptyUIContext radioGroupRect input radioGroupTheme sel)
 
-withItemFocus :: Maybe Int -> UIContext Int () String -> UIContext Int () String
+withItemFocus :: Maybe Int -> UIContext Int String -> UIContext Int String
 withItemFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = e } }
 
--- scrollBar setup: the element type is ScrollBarPart itself (mkId = id) and
--- the UI state is a StandardControls holding the position keyed by ScrollTrack.
-scrollControls :: Double -> StandardControls ScrollBarPart
-scrollControls pos = StandardControls (Map.singleton ScrollTrack (ScrollState pos))
-
-scrollPos :: UIContext ScrollBarPart (StandardControls ScrollBarPart) () -> Double
-scrollPos = scrollPosition . Map.findWithDefault (ScrollState 0) ScrollTrack . scScrollStates . ctxUIState
+scrollPos :: UIContext ScrollBarPart () -> Double
+scrollPos = scrollPosition . Map.findWithDefault (ScrollState 0) ScrollTrack . ctxScrollStates
 
 scrollTheme :: Theme ScrollBarPart
 scrollTheme = Theme
@@ -366,9 +361,11 @@ scrollTheme = Theme
 scrollRect :: Rectangle
 scrollRect = Rectangle 0 0 20 200
 
-runScrollBar :: Double -> InputState -> UIContext ScrollBarPart (StandardControls ScrollBarPart) ()
+runScrollBar :: Double -> InputState -> UIContext ScrollBarPart ()
 runScrollBar pos input =
-  snd $ runUI (scrollBar id Vertical 0.25) (emptyUIContext scrollRect input scrollTheme (scrollControls pos) ())
+  snd $ runUI (scrollBar id Vertical 0.25)
+    ((emptyUIContext scrollRect input scrollTheme ())
+      { ctxScrollStates = Map.singleton ScrollTrack (ScrollState pos) })
 
 data ScrollRegionElem = SRPart ScrollRegionPart | SRChild
   deriving (Eq, Ord, Show)
@@ -383,23 +380,23 @@ srOuterRect = Rectangle 0 0 200 100
 
 runScrollableRegion
   :: Point
-  -> UIContext ScrollRegionElem (StandardControls ScrollRegionElem) ()
+  -> UIContext ScrollRegionElem ()
 runScrollableRegion mousePos =
   let input = noInput { inputMousePosition = mousePos }
-      ctx = emptyUIContext srOuterRect input srTheme emptyStandardControls ()
+      ctx = emptyUIContext srOuterRect input srTheme ()
   in snd $ runUI (scrollableRegion SRPart 400 100 (control SRChild (pure ()))) ctx
 
 -- readScrollPos: dispatches the stored position as the app state so applyDispatches returns it.
-runReadScrollPos :: Double -> UIContext ScrollBarPart (StandardControls ScrollBarPart) Double
+runReadScrollPos :: Double -> UIContext ScrollBarPart Double
 runReadScrollPos initPos =
   snd $ runUI (readScrollPos ScrollTrack >>= \p -> dispatch (\_ -> p))
-              (emptyUIContext scrollRect noInput scrollTheme (scrollControls initPos) 0)
+    ((emptyUIContext scrollRect noInput scrollTheme 0)
+      { ctxScrollStates = Map.singleton ScrollTrack (ScrollState initPos) })
 
--- writeScrollPos: writes to UI state; scrollPos inspects scScrollStates directly.
-runWriteScrollPos :: Double -> UIContext ScrollBarPart (StandardControls ScrollBarPart) ()
+-- writeScrollPos: writes to ctxScrollStates; scrollPos inspects it directly.
+runWriteScrollPos :: Double -> UIContext ScrollBarPart ()
 runWriteScrollPos v =
-  snd $ runUI (writeScrollPos ScrollTrack v)
-              (emptyUIContext scrollRect noInput scrollTheme emptyStandardControls ())
+  snd $ runUI (writeScrollPos ScrollTrack v) (emptyUIContext scrollRect noInput scrollTheme ())
 
 spec :: Spec
 spec = describe "Controls" $ do
@@ -670,7 +667,7 @@ spec = describe "Controls" $ do
 
       it "does not nudge when another element has focus" $
         applyDispatches (snd $ runUI (slider id Horizontal 0.5 (\v _ -> v))
-          (withSliderFocus (Just SliderThumb) (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme () 0.5)))
+          (withSliderFocus (Just SliderThumb) (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme 0.5)))
           `shouldBe` 0.5
 
     describe "without interaction" $ do
@@ -693,17 +690,17 @@ spec = describe "Controls" $ do
 
       it "dispatches the value when Enter is pressed while an item is focused" $
         applyDispatches (snd $ runUI (radioGroup id radioItems "a" (\v _ -> v))
-          (withItemFocus (Just 1) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyReturn []] } radioGroupTheme () "a")))
+          (withItemFocus (Just 1) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyReturn []] } radioGroupTheme "a")))
           `shouldBe` "b"
 
       it "dispatches the value when Space is pressed while an item is focused" $
         applyDispatches (snd $ runUI (radioGroup id radioItems "a" (\v _ -> v))
-          (withItemFocus (Just 2) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeySpace []] } radioGroupTheme () "a")))
+          (withItemFocus (Just 2) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeySpace []] } radioGroupTheme "a")))
           `shouldBe` "c"
 
       it "does not dispatch when no item is focused and a key is pressed" $
         dispatchCount (snd $ runUI (radioGroup id radioItems "a" (\v _ -> v))
-          (withItemFocus (Just 99) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyReturn []] } radioGroupTheme () "a")))
+          (withItemFocus (Just 99) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyReturn []] } radioGroupTheme "a")))
           `shouldBe` 0
 
       it "does not dispatch when there is no interaction" $
@@ -715,7 +712,7 @@ spec = describe "Controls" $ do
             focusedElement . ctxFocusState $
               snd $ runUI (radioGroup id radioItems "a" (\v _ -> v))
                 (withItemFocus (Just focusIdx)
-                  (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent k []] } radioGroupTheme () "a"))
+                  (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent k []] } radioGroupTheme "a"))
 
       it "moves focus to the next item when Down is pressed" $
         nav 0 KeyDown `shouldBe` Just 1
