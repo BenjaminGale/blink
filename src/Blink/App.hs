@@ -263,7 +263,8 @@ data AppRefs e u s = AppRefs
 
 buildCtx :: Eq e => App e u s -> Rectangle -> InputState -> Float -> Bool -> s -> UIContext e u s -> UIContext e u s
 buildCtx app winRect inputState delta isAnimTick state prevCtx =
-  let animState = AnimationState { animDelta = delta, animIsTick = isAnimTick }
+  let elapsed   = animElapsed (ctxAnimation prevCtx) + delta
+      animState = AnimationState { animDelta = delta, animElapsed = elapsed, animIsTick = isAnimTick }
       ctx = (nextFrameContext winRect inputState prevCtx)
         { ctxTheme    = theme app state
         , ctxAppState = state

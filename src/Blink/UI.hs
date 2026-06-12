@@ -189,6 +189,7 @@ module Blink.UI
   , requiresAnimation
   , withAnimationFrame
   , getAnimDelta
+  , getAnimElapsed
     -- * Building controls
   , control
   , renderControl
@@ -210,10 +211,13 @@ import Blink.Style (Style (..), StyleSet (..), Theme (..))
 -- backend at the start of each frame; read by 'withAnimationFrame' and
 -- 'getAnimDelta'.
 data AnimationState = AnimationState
-  { animDelta  :: Float
+  { animDelta   :: Float
     -- ^ Wall-clock seconds elapsed since the previous frame, clamped to
     -- 100 ms. Zero on the first frame.
-  , animIsTick :: Bool
+  , animElapsed :: Float
+    -- ^ Total wall-clock seconds elapsed since the application started,
+    -- accumulated from 'animDelta' each frame.
+  , animIsTick  :: Bool
     -- ^ 'True' when this frame was triggered by the animation ticker rather
     -- than a platform input event.
   }
@@ -313,7 +317,7 @@ emptyUIContext bounds input thm uiState appState = UIContext
   , ctxAsyncJobs = []
   , ctxDisabled = False
   , ctxInteractionClip = Nothing
-  , ctxAnimation = AnimationState { animDelta = 0, animIsTick = False }
+  , ctxAnimation = AnimationState { animDelta = 0, animElapsed = 0, animIsTick = False }
   , ctxRequiresAnimation = False
   }
 
@@ -695,6 +699,12 @@ withAnimationFrame action = do
 -- animation state by the correct amount regardless of ticker jitter.
 getAnimDelta :: UI e u s Float
 getAnimDelta = gets (animDelta . ctxAnimation)
+
+-- | Total wall-clock seconds elapsed since the application started.
+-- Derived by accumulating 'animDelta' each frame; use this to compute
+-- animation phase without storing per-component state.
+getAnimElapsed :: UI e u s Float
+getAnimElapsed = gets (animElapsed . ctxAnimation)
 
 -- | Style-aware rendering for a control. Applies the element's margin, draws
 -- its background and border, and runs @content@ within the padded content

@@ -109,15 +109,12 @@ newtype ScrollState = ScrollState { scrollPosition :: Double }
 -- alongside custom state.
 data StandardControls e = StandardControls
   { scScrollStates :: Map e ScrollState
-  , scAnimPhases   :: Map e Double
-    -- ^ Animation phase in @[0, 1)@ for each animated control instance,
-    -- keyed by element ID. Populated lazily on first write.
   }
   deriving (Eq, Show)
 
 -- | A 'StandardControls' with no per-control state recorded yet.
 emptyStandardControls :: StandardControls e
-emptyStandardControls = StandardControls Map.empty Map.empty
+emptyStandardControls = StandardControls Map.empty
 
 -- | Grants the standard controls access to their state within the
 -- user-supplied UI state record @u@.
@@ -151,22 +148,15 @@ progressBar eid value = renderControl eid $ do
 -- moves across the control's content width to indicate ongoing activity of
 -- unknown duration. The animation runs only on ticker frames; 'requiresAnimation'
 -- keeps the ticker active while the control is visible.
-indeterminateProgressBar :: (Eq e, Ord e, HasStandardControls e u) => e -> UI e u s ()
+indeterminateProgressBar :: (Eq e, Ord e) => e -> UI e u s ()
 indeterminateProgressBar eid = do
   requiresAnimation
-  withAnimationFrame $ do
-    delta <- getAnimDelta
-    modifyUIState $ \u ->
-      let sc     = getStandardControls u
-          phase  = Map.findWithDefault 0 eid (scAnimPhases sc)
-          p      = phase + realToFrac delta * 0.5
-          phase' = p - fromIntegral (floor p :: Int)
-      in setStandardControls (sc { scAnimPhases = Map.insert eid phase' (scAnimPhases sc) }) u
   renderControl eid $ do
-    r     <- getBounds
-    sc    <- getStandardControls <$> getUIState
-    style <- getStyle eid
-    let phase = Map.findWithDefault 0 eid (scAnimPhases sc)
+    r       <- getBounds
+    style   <- getStyle eid
+    elapsed <- getAnimElapsed
+    let t     = realToFrac elapsed * (0.5 :: Double)
+        phase = t - fromIntegral (floor t :: Int)
         bandW = rectWidth r * 0.3
         left  = rectX r - bandW + (rectWidth r + bandW) * phase
     withBounds (r { rectX = left, rectWidth = bandW }) $

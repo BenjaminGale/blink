@@ -350,7 +350,7 @@ withItemFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement
 -- scrollBar setup: the element type is ScrollBarPart itself (mkId = id) and
 -- the UI state is a StandardControls holding the position keyed by ScrollTrack.
 scrollControls :: Double -> StandardControls ScrollBarPart
-scrollControls pos = StandardControls (Map.singleton ScrollTrack (ScrollState pos)) Map.empty
+scrollControls pos = StandardControls (Map.singleton ScrollTrack (ScrollState pos))
 
 scrollPos :: UIContext ScrollBarPart (StandardControls ScrollBarPart) () -> Double
 scrollPos = scrollPosition . Map.findWithDefault (ScrollState 0) ScrollTrack . scScrollStates . ctxUIState
