@@ -144,8 +144,7 @@ spec = describe "geometry" $ do
       it desc $
         alignRect alignment container size `shouldBe` expected
 
-    it "preserves the given size for all alignments" $
-      let allAlignments = [minBound .. maxBound] :: [Alignment]
-          results = map (\a -> alignRect a container size) allAlignments
-      in all (\rect -> rectWidth rect == rectWidth size && rectHeight rect == rectHeight size) results
-           `shouldBe` True
+    prop "preserves the given size regardless of container or alignment" $
+      \alignment c r ->
+        let result = alignRect alignment c r
+        in rectWidth result == rectWidth r && rectHeight result == rectHeight r
