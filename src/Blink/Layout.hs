@@ -104,7 +104,7 @@ data Layout = Layout
   , layoutAlignment :: Alignment
     -- ^ How the child is positioned within its slot when it does not fill the
     --   slot on one or both axes.
-  }
+  } deriving (Show)
 
 -- | Configuration shared by 'hBox' and 'vBox'.
 data BoxConfig = BoxConfig

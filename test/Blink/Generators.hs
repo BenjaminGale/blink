@@ -4,6 +4,7 @@ module Blink.Generators () where
 import Test.QuickCheck
 
 import Blink.Geometry (Alignment, Insets (..), Point (..), Rectangle (..), Size (..))
+import Blink.Layout (Layout (..), Length (..))
 
 coord :: Gen Double
 coord = fromIntegral <$> (choose (-500, 500) :: Gen Int)
@@ -25,3 +26,15 @@ instance Arbitrary Insets where
 
 instance Arbitrary Alignment where
   arbitrary = arbitraryBoundedEnum
+
+instance Arbitrary Length where
+  arbitrary = oneof
+    [ Exactly <$> dimension
+    , pure Fill
+    , AtLeast <$> dimension
+    , AtMost  <$> dimension
+    , (\lo d -> Between lo (lo + d)) <$> dimension <*> dimension
+    ]
+
+instance Arbitrary Layout where
+  arbitrary = Layout <$> arbitrary <*> arbitrary <*> arbitrary

@@ -3,7 +3,9 @@ module Blink.LayoutSpec (spec) where
 import Control.Monad (forM_)
 import qualified Data.Map.Strict as Map
 import Test.Hspec
+import Test.Hspec.QuickCheck (prop)
 
+import Blink.Generators ()
 import Blink.Geometry (Alignment (..), Point (..), Rectangle (..), uniform)
 import Blink.Input (ButtonState (..), KeyEvent, InputState (..))
 import Blink.Layout
@@ -232,6 +234,13 @@ spec = describe "layout" $ do
       it "MiddleRight aligns the content block to the right" $
         runHBox hBounds cfg { boxAlignment = MiddleRight } threeExact
           `shouldBe` [Rectangle 80 0 40 100, Rectangle 120 0 40 100, Rectangle 160 0 40 100]
+
+    prop "no slot exceeds the upper bound of its width constraint" $ \constraints ->
+      let rects  = runHBox hBounds cfg constraints
+          within (AtMost  w,   s) = s <= w
+          within (Between _ h, s) = s <= h
+          within _                = True
+      in all within (zip (map layoutWidth constraints) (map rectWidth rects))
 
   describe "vBox" $ do
     describe "main axis (height)" $ do
