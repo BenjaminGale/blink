@@ -201,7 +201,7 @@ import Data.Maybe (isNothing, isJust, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..))
-import Blink.Geometry (Point, Rectangle, containsPoint, insetRect)
+import Blink.Geometry (Point, Rectangle, containsPoint, intersectRect, insetRect)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 
@@ -251,6 +251,10 @@ data UIContext e u s = UIContext
   , ctxDispatches :: [s -> s]
   , ctxAsyncJobs :: [s -> IO (s -> s)]
   , ctxDisabled :: Bool
+  , ctxInteractionClip :: Maybe Rectangle
+    -- ^ When set, 'regionHit' additionally requires the mouse to fall within
+    -- this rectangle. Set by 'clipToCurrent' and restored on exit, so it
+    -- tracks the innermost enclosing clip region.
   , ctxAnimation :: AnimationState
     -- ^ Per-frame animation state: wall-clock delta and tick flag. Set by the
     -- backend at the start of each frame via 'buildCtx'.
@@ -307,6 +311,7 @@ emptyUIContext bounds input thm uiState appState = UIContext
   , ctxDispatches = []
   , ctxAsyncJobs = []
   , ctxDisabled = False
+  , ctxInteractionClip = Nothing
   , ctxAnimation = AnimationState { animDelta = 0, animIsTick = False }
   , ctxRequiresAnimation = False
   }
@@ -540,14 +545,18 @@ drawText colour align text = do
   draw $ DrawText r text colour align
 
 -- | Wraps a sub-tree in a clip region matching the current bounds. Draw
--- commands produced by the sub-tree that fall outside the region are discarded.
+-- commands produced by the sub-tree that fall outside the region are discarded,
+-- and mouse hit-testing is also restricted to the same region.
 clipToCurrent :: UI e u s a -> UI e u s a
-clipToCurrent action = do
-  r <- getBounds
-  draw $ PushClip r
-  result <- action
-  draw PopClip
-  return result
+clipToCurrent (UI f) = UI $ \ctx ->
+  let r        = ctxBounds ctx
+      newClip  = maybe r (intersectRect r) (ctxInteractionClip ctx)
+      ctx'     = ctx { ctxInteractionClip = Just newClip }
+      drawPush = \c -> c { ctxDrawCommands = PushClip r : ctxDrawCommands c }
+      (a, ctx'') = f (drawPush ctx')
+      drawPop  = ctx'' { ctxDrawCommands = PopClip : ctxDrawCommands ctx''
+                       , ctxInteractionClip = ctxInteractionClip ctx }
+  in (a, drawPop)
 
 -- | Fills the current bounds with @colour@ then runs @content@ on top.
 -- Skips the fill when @colour@ is fully transparent.
@@ -595,12 +604,14 @@ applyDispatches ctx = foldl' (flip ($)) (ctxAppState ctx) (reverse (ctxDispatche
 getAsyncJobs :: UIContext e u s -> [s -> IO (s -> s)]
 getAsyncJobs = reverse . ctxAsyncJobs
 
--- | 'True' when the mouse cursor is within the current bounds.
+-- | 'True' when the mouse cursor is within the current bounds and within the
+-- active interaction clip region (set by 'clipToCurrent').
 regionHit :: UI e u s Bool
 regionHit = do
-  r <- getBounds
-  p <- getMousePos
-  return $ containsPoint p r
+  r    <- getBounds
+  p    <- getMousePos
+  clip <- gets ctxInteractionClip
+  return $ containsPoint p r && maybe True (containsPoint p) clip
 
 -- | Skips its argument entirely when the current sub-tree is disabled.
 whenEnabled :: UI e u s () -> UI e u s ()

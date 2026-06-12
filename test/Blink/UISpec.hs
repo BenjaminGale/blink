@@ -52,6 +52,35 @@ run ui s = runUI ui (emptyUIContext testBounds noInput emptyTheme () s)
 
 spec :: Spec
 spec = describe "UI primitives" $ do
+  describe "clipToCurrent" $ do
+    -- In each test the control runs with testBounds (100×100) so the mouse is
+    -- inside the element's own bounds; only the clip region should block hover.
+    it "does not register hover when the mouse is inside bounds but outside the clip region" $
+      let clipRect = Rectangle 0 0 100 50
+          mouseOutsideClip = noInput { inputMousePosition = Point 50 75 }
+          ctx = emptyUIContext testBounds mouseOutsideClip emptyTheme () (0 :: Int)
+          (_, ctx') = runUI (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ())) ctx
+      in ctxHoveredElement ctx' `shouldBe` Nothing
+
+    it "registers hover when the mouse is inside both the bounds and the clip region" $
+      let clipRect = Rectangle 0 0 100 50
+          mouseInsideClip = noInput { inputMousePosition = Point 50 25 }
+          ctx = emptyUIContext testBounds mouseInsideClip emptyTheme () (0 :: Int)
+          (_, ctx') = runUI (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ())) ctx
+      in ctxHoveredElement ctx' `shouldBe` Just ()
+
+    it "intersects nested clip regions" $
+      let outerClip = Rectangle 0 0 100 50
+          innerClip = Rectangle 0 25 100 50
+          -- intersection is y 25–50; mouse at (50, 10) is inside outerClip but outside intersection
+          mouseOutside = noInput { inputMousePosition = Point 50 10 }
+          ctx = emptyUIContext testBounds mouseOutside emptyTheme () (0 :: Int)
+          (_, ctx') = runUI
+            (withBounds outerClip $ clipToCurrent $
+             withBounds innerClip $ clipToCurrent $
+             withBounds testBounds $ control () (pure ())) ctx
+      in ctxHoveredElement ctx' `shouldBe` Nothing
+
   it "getAppState returns the frame's starting state" $
     fst (run getAppState (42 :: Int)) `shouldBe` 42
 

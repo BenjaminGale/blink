@@ -26,6 +26,7 @@ module Blink.Geometry
   , resizeRect
   , rectCentredAt
   , containsPoint
+  , intersectRect
   , alignRect
     -- * Alignment
   , Alignment (..)
@@ -114,6 +115,16 @@ align1D :: Align1D -> Double -> Double -> Double -> Double
 align1D AlignStart  origin _            _       = origin
 align1D AlignCenter origin containerLen itemLen = origin + (containerLen - itemLen) / 2
 align1D AlignEnd    origin containerLen itemLen = origin + containerLen - itemLen
+
+-- | The axis-aligned intersection of two rectangles. Returns a zero-area
+-- rectangle when the inputs do not overlap.
+intersectRect :: Rectangle -> Rectangle -> Rectangle
+intersectRect a b =
+  let x1 = max (rectX a) (rectX b)
+      y1 = max (rectY a) (rectY b)
+      x2 = min (rectX a + rectWidth a)  (rectX b + rectWidth b)
+      y2 = min (rectY a + rectHeight a) (rectY b + rectHeight b)
+  in Rectangle x1 y1 (max 0 (x2 - x1)) (max 0 (y2 - y1))
 
 -- | 'True' when @p@ falls within (or on the boundary of) @r@.
 containsPoint :: Point -> Rectangle -> Bool

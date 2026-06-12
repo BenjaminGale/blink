@@ -171,7 +171,7 @@ submitDrawCommand renderer _ clipRef (PushClip r) = do
   let new     = toSDLRect r
       clipped = case stack of
         []        -> new
-        (top : _) -> intersectRect top new
+        (top : _) -> intersectSDLRect top new
   writeIORef clipRef (clipped : stack)
   SDL.rendererClipRect renderer $= Just clipped
 submitDrawCommand renderer _ clipRef PopClip = do
@@ -182,9 +182,9 @@ submitDrawCommand renderer _ clipRef PopClip = do
     []        -> SDL.rendererClipRect renderer $= Nothing
     (top : _) -> SDL.rendererClipRect renderer $= Just top
 
-intersectRect :: SDL.Rectangle CInt -> SDL.Rectangle CInt -> SDL.Rectangle CInt
-intersectRect (SDL.Rectangle (SDL.P (SDL.V2 x1 y1)) (SDL.V2 w1 h1))
-              (SDL.Rectangle (SDL.P (SDL.V2 x2 y2)) (SDL.V2 w2 h2)) =
+intersectSDLRect :: SDL.Rectangle CInt -> SDL.Rectangle CInt -> SDL.Rectangle CInt
+intersectSDLRect (SDL.Rectangle (SDL.P (SDL.V2 x1 y1)) (SDL.V2 w1 h1))
+                 (SDL.Rectangle (SDL.P (SDL.V2 x2 y2)) (SDL.V2 w2 h2)) =
   let x = max x1 x2
       y = max y1 y2
       r = min (x1 + w1) (x2 + w2)

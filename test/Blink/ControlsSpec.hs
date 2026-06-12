@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ScrollBarPart (..), ScrollState (..), SliderPart (..), StandardControls (..), button, checkbox, progressBar, radioGroup, scrollBar, slider, textInput)
+import Blink.Controls (ScrollBarPart (..), ScrollRegionPart (..), ScrollState (..), SliderPart (..), StandardControls (..), button, checkbox, emptyStandardControls, progressBar, radioGroup, scrollBar, scrollableRegion, slider, textInput)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -370,6 +370,25 @@ runScrollBar :: Double -> InputState -> UIContext ScrollBarPart (StandardControl
 runScrollBar pos input =
   snd $ runUI (scrollBar id Vertical 0.25) (emptyUIContext scrollRect input scrollTheme (scrollControls pos) ())
 
+data ScrollRegionElem = SRPart ScrollRegionPart | SRChild
+  deriving (Eq, Ord, Show)
+
+srTheme :: Theme ScrollRegionElem
+srTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = zeroMarginStyleSet }
+
+-- outer: 200×100, virtual content: 400×100
+-- viewport: 200×84 (H scrollbar takes 16px at bottom: y 84–100)
+srOuterRect :: Rectangle
+srOuterRect = Rectangle 0 0 200 100
+
+runScrollableRegion
+  :: Point
+  -> UIContext ScrollRegionElem (StandardControls ScrollRegionElem) ()
+runScrollableRegion mousePos =
+  let input = noInput { inputMousePosition = mousePos }
+      ctx = emptyUIContext srOuterRect input srTheme emptyStandardControls ()
+  in snd $ runUI (scrollableRegion SRPart 400 100 (control SRChild (pure ()))) ctx
+
 spec :: Spec
 spec = describe "Controls" $ do
   describe "progressBar" $ do
@@ -708,3 +727,13 @@ spec = describe "Controls" $ do
 
       it "displays all labels regardless of selection" $
         length (drawnTexts (runRadioGroup "a" noInput)) `shouldBe` 3
+
+  describe "scrollableRegion" $ do
+    describe "interaction clipping" $ do
+      it "does not hover a child item when the mouse is over the horizontal scrollbar strip" $
+        ctxHoveredElement (runScrollableRegion (Point 100 92))
+          `shouldNotBe` Just SRChild
+
+      it "hovers the child item when the mouse is within the viewport" $
+        ctxHoveredElement (runScrollableRegion (Point 100 42))
+          `shouldBe` Just SRChild
