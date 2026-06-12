@@ -261,6 +261,11 @@ spec = describe "layout" $ do
         runVBox vBounds cfg { boxSpacing = 10 } [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
           `shouldBe` [Rectangle 0 0 100 95, Rectangle 0 105 100 95]
 
+    describe "content area" $ do
+      it "margin reduces the available space on all sides" $
+        runVBox vBounds cfg { boxMargin = 10 } [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
+          `shouldBe` [Rectangle 10 10 80 90, Rectangle 10 100 80 90]
+
     describe "cross axis (width)" $ do
       it "fillCross = True stretches children to the full available width" $
         runVBox vBounds cfg [rc (Exactly 60) Fill TopLeft]
