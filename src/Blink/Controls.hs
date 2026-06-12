@@ -95,7 +95,7 @@ import Blink.UI
 
 -- | Per-instance presentation state for a scrollbar: its position in @[0, 1]@.
 newtype ScrollState = ScrollState { scrollPosition :: Double }
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 -- | The presentation state needed by the standard controls, keyed by element
 -- ID. Serves directly as the UI state record @u@ for applications with no
