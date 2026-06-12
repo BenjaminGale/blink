@@ -71,6 +71,10 @@ module Blink.Controls
     -- * Scroll
   , ScrollBarPart (..)
   , scrollBar
+    -- * Scrollable regions
+  , ScrollRegionPart (..)
+  , scrollableRegion
+  , scrollableDynamic
     -- * Slider
   , SliderPart (..)
   , slider
@@ -350,6 +354,107 @@ scrollPosFromMouse Horizontal ratio r mouse =
       range  = rectWidth r - thumbW
   in if range <= 0 then 0
      else max 0 (min 1 ((pointX mouse - rectX r - thumbW / 2) / range))
+
+-- | Sub-parts of a scrollable region's element ID hierarchy. Wraps
+-- 'ScrollBarPart' for the horizontal and vertical scrollbars:
+--
+-- @
+-- data Element = ... | MyRegion ScrollRegionPart
+-- scrollableRegion MyRegion 600 400 content
+-- @
+data ScrollRegionPart
+  = ScrollRegionH ScrollBarPart
+  | ScrollRegionV ScrollBarPart
+  deriving (Eq, Ord, Show)
+
+scrollRegionBarSize :: Double
+scrollRegionBarSize = 16
+
+-- | A scrollable region with a known virtual content size. Scrollbars appear
+-- automatically on axes where the content exceeds the viewport. The content
+-- action runs with virtual bounds — the full content rectangle translated so
+-- the scrolled portion aligns with the viewport — clipped to the visible area.
+-- Mouse interaction works naturally because translated bounds are in window
+-- coordinates; the clip region hides the rest.
+scrollableRegion
+  :: (Eq e, Ord e, HasStandardControls e u)
+  => (ScrollRegionPart -> e)  -- ^ maps region parts to element IDs
+  -> Double                    -- ^ virtual content width
+  -> Double                    -- ^ virtual content height
+  -> UI e u s ()               -- ^ content
+  -> UI e u s ()
+scrollableRegion mkId cw ch content = do
+  outer <- getBounds
+  let ow      = rectWidth outer
+      oh      = rectHeight outer
+      -- Two-pass: check V with full height to determine reduced width, then H,
+      -- then re-check V with reduced height.
+      needsV1 = ch > oh
+      vpW1    = if needsV1 then ow - scrollRegionBarSize else ow
+      needsH  = cw > vpW1
+      vpH     = if needsH  then oh - scrollRegionBarSize else oh
+      needsV  = ch > vpH
+      vpW     = if needsV  then ow - scrollRegionBarSize else ow
+      hThumb  = max 0 (min 1 (vpW / cw))
+      vThumb  = max 0 (min 1 (vpH / ch))
+      vpRect  = outer { rectWidth = vpW,                    rectHeight = vpH }
+      hBar    = outer { rectY = rectY outer + vpH,          rectHeight = scrollRegionBarSize, rectWidth = vpW }
+      vBar    = outer { rectX = rectX outer + vpW,          rectWidth  = scrollRegionBarSize, rectHeight = vpH }
+  -- Render scrollbars first so position updates take effect before the content
+  -- offset is computed.
+  when needsH $ withBounds hBar $ scrollBar (mkId . ScrollRegionH) Horizontal hThumb
+  when needsV $ withBounds vBar $ scrollBar (mkId . ScrollRegionV) Vertical   vThumb
+  sc <- getStandardControls <$> getUIState
+  let readPos p = scrollPosition $ Map.findWithDefault (ScrollState 0) (mkId p) (scScrollStates sc)
+      hPos      = if needsH then readPos (ScrollRegionH ScrollTrack) else 0
+      vPos      = if needsV then readPos (ScrollRegionV ScrollTrack) else 0
+      offsetX   = hPos * max 0 (cw - vpW)
+      offsetY   = vPos * max 0 (ch - vpH)
+      virtBounds = outer
+        { rectX      = rectX outer - offsetX
+        , rectY      = rectY outer - offsetY
+        , rectWidth  = cw
+        , rectHeight = ch
+        }
+  withBounds vpRect $ clipToCurrent $
+    withBounds virtBounds content
+
+-- | A scrollable region where the caller controls content rendering. Renders
+-- scrollbars for the axes where a thumb ratio is supplied, then calls
+-- @content hFrac vFrac@ with the current scroll fractions in @[0, 1]@. The
+-- content runs within the viewport rectangle (full bounds minus scrollbar
+-- strips) so @getBounds@ returns the available content area.
+--
+-- Pass 'Nothing' to suppress a scrollbar on an axis entirely. A typical thumb
+-- ratio is @viewportSize / contentSize@; the caller uses the returned fractions
+-- to determine which portion of the virtual content to render.
+scrollableDynamic
+  :: (Eq e, Ord e, HasStandardControls e u)
+  => (ScrollRegionPart -> e)             -- ^ maps region parts to element IDs
+  -> Maybe Double                         -- ^ horizontal scrollbar thumb ratio
+  -> Maybe Double                         -- ^ vertical scrollbar thumb ratio
+  -> (Double -> Double -> UI e u s ())   -- ^ @content hFrac vFrac@
+  -> UI e u s ()
+scrollableDynamic mkId hThumb vThumb content = do
+  outer <- getBounds
+  let ow     = rectWidth outer
+      oh     = rectHeight outer
+      vpW    = maybe ow (\_ -> ow - scrollRegionBarSize) vThumb
+      vpH    = maybe oh (\_ -> oh - scrollRegionBarSize) hThumb
+      vpRect = outer { rectWidth = vpW,               rectHeight = vpH }
+      hBar   = outer { rectY = rectY outer + vpH,     rectHeight = scrollRegionBarSize, rectWidth = vpW }
+      vBar   = outer { rectX = rectX outer + vpW,     rectWidth  = scrollRegionBarSize, rectHeight = vpH }
+  case hThumb of
+    Nothing -> pure ()
+    Just r  -> withBounds hBar $ scrollBar (mkId . ScrollRegionH) Horizontal r
+  case vThumb of
+    Nothing -> pure ()
+    Just r  -> withBounds vBar $ scrollBar (mkId . ScrollRegionV) Vertical r
+  sc <- getStandardControls <$> getUIState
+  let readPos p = scrollPosition $ Map.findWithDefault (ScrollState 0) (mkId p) (scScrollStates sc)
+      hPos      = maybe 0 (\_ -> readPos (ScrollRegionH ScrollTrack)) hThumb
+      vPos      = maybe 0 (\_ -> readPos (ScrollRegionV ScrollTrack)) vThumb
+  withBounds vpRect $ clipToCurrent $ content hPos vPos
 
 -- | Sub-parts of a slider, used as the inner tag when building the
 -- control's element IDs via a tagging function:

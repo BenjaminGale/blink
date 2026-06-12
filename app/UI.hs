@@ -3,7 +3,7 @@ module UI (Element, AppState (..), demoApp) where
 
 import Blink
 import Theme (Element (..), lightTheme, darkTheme)
-import Control.Monad (when)
+import Control.Monad (when, forM_)
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -14,17 +14,19 @@ data AppState = AppState
   , isChecked1 :: Bool
   , isChecked2 :: Bool
   , animating  :: Bool
-  , sliderValue     :: Double
-  , radioSelection  :: Int
-  , radioSelection2 :: Int
-  , lastInput      :: Text
-  , lastInputCount :: Int
-  , isHovering     :: Bool
+  , sliderValue       :: Double
+  , radioSelection    :: Int
+  , radioSelection2   :: Int
+  , lastInput         :: Text
+  , lastInputCount    :: Int
+  , isHovering        :: Bool
+  , lastClickedStatic  :: Maybe Int
+  , lastClickedDynamic :: Maybe Int
   }
 
 demoApp :: App Element (StandardControls Element) AppState
 demoApp = App
-  { startUp        = pure (AppState 0 "" False False False 0.5 0 0 "" 0 False)
+  { startUp        = pure (AppState 0 "" False False False 0.5 0 0 "" 0 False Nothing Nothing)
   , initialUIState = emptyStandardControls
   , theme          = \s -> if isChecked2 s then darkTheme else lightTheme
   , view           = demoView
@@ -108,16 +110,63 @@ rowRadio s =
 rowProgress :: AppState -> DemoUI ()
 rowProgress s =
   vBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4 })
-    [ (Layout Fill Fill         TopLeft,
-         hBox (defaultBoxConfig { boxSpacing = 4 })
-           [ (Layout Fill         Fill TopLeft,
-                if animating s
-                  then indeterminateProgressBar ProgressBar2
-                  else progressBar ProgressBar2 0)
-           , (Layout (Exactly 20) Fill TopLeft, scrollBar ScrollBar2 Vertical 0.3)
-           ])
-    , (Layout Fill (Exactly 20) TopLeft, scrollBar ScrollBar1 Horizontal 0.2)
+    [ (Layout Fill Fill TopLeft,
+         if animating s
+           then indeterminateProgressBar ProgressBar2
+           else progressBar ProgressBar2 0)
     ]
+
+rowScrollRegions :: AppState -> DemoUI ()
+rowScrollRegions s =
+  vBox (defaultBoxConfig { boxMargin = 4, boxSpacing = 4 })
+    [ (Layout Fill (Exactly 26) TopLeft,
+         hBox defaultBoxConfig
+           [ (Layout Fill Fill MiddleLeft, label Label "Known size (scrollableRegion)")
+           , (Layout Fill Fill MiddleLeft, label Label "Dynamic (scrollableDynamic, 100 items)")
+           ])
+    , (Layout Fill Fill TopLeft,
+         hBox (defaultBoxConfig { boxSpacing = 8 })
+           [ (Layout Fill Fill TopLeft, staticScrollList s)
+           , (Layout Fill Fill TopLeft, dynamicScrollList s)
+           ])
+    ]
+
+staticScrollList :: AppState -> DemoUI ()
+staticScrollList s =
+  scrollableRegion ScrollRegion1 400 (20 * 32) $
+    vBox defaultBoxConfig
+      [ (Layout Fill (Exactly 32) TopLeft, item i)
+      | i <- [1 .. 20 :: Int]
+      ]
+  where
+    item i = do
+      let isSelected = lastClickedStatic s == Just i
+          txt = (if isSelected then "✓ " else "") <> "Item " <> T.pack (show i)
+      clicked <- button (ScrollItem1 i) txt
+      when clicked $ dispatch (\st -> st { lastClickedStatic = Just i })
+
+dynamicScrollList :: AppState -> DemoUI ()
+dynamicScrollList s = do
+  bounds <- getBounds
+  let itemH      = 32 :: Double
+      totalItems = 100 :: Int
+      contentH   = fromIntegral totalItems * itemH
+      vRatio     = max 0 (min 1 (rectHeight bounds / contentH))
+  scrollableDynamic ScrollRegion2 Nothing (Just vRatio) $ \_ vFrac -> do
+    vp <- getBounds
+    let vpH      = rectHeight vp
+        offset   = vFrac * max 0 (contentH - vpH)
+        firstIdx = floor (offset / itemH) :: Int
+        subOff   = offset - fromIntegral firstIdx * itemH
+        visibleN = ceiling ((vpH + subOff) / itemH) :: Int
+    forM_ [0 .. visibleN - 1] $ \j ->
+      let i     = firstIdx + j
+          itemR = Rectangle (rectX vp) (rectY vp + fromIntegral j * itemH - subOff) (rectWidth vp) itemH
+      in when (i < totalItems) $ withBounds itemR $ do
+           let isSelected = lastClickedDynamic s == Just i
+               txt = (if isSelected then "✓ " else "") <> "Item " <> T.pack (show (i + 1))
+           clicked <- button (ScrollItem2 i) txt
+           when clicked $ dispatch (\st -> st { lastClickedDynamic = Just i })
 
 rowDebugInfo :: AppState -> (Int, Int) -> DemoUI ()
 rowDebugInfo s (winW, winH) = do
@@ -154,7 +203,8 @@ demoView = do
     , (Layout Fill (Exactly 50) TopLeft, disableWhen (not (isChecked1 s)) $ rowInput s)
     , (Layout Fill (Exactly 38) TopLeft, disableWhen (not (isChecked1 s)) $ rowSlider s)
     , (Layout Fill (Exactly 130) TopLeft, disableWhen (not (isChecked1 s)) $ rowRadio s)
-    , (Layout Fill Fill         TopLeft, rowProgress s)
+    , (Layout Fill (Exactly 280) TopLeft, rowScrollRegions s)
+    , (Layout Fill Fill          TopLeft, rowProgress s)
     ]
   -- Capture hover state at end of frame (after all controls have registered hover)
   mHov  <- UI $ \ctx -> (ctxHoveredElement ctx, ctx)

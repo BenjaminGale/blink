@@ -12,11 +12,13 @@ data Element = Label
              | TextInput1
              | CheckboxBox1 | CheckboxBox2 | CheckboxBox3
              | ProgressBar1 | ProgressBar2
-             | ScrollBar1 ScrollBarPart
-             | ScrollBar2 ScrollBarPart
              | Slider1 SliderPart
              | RadioOpt Int
              | RadioOpt2 Int
+             | ScrollRegion1 ScrollRegionPart
+             | ScrollRegion2 ScrollRegionPart
+             | ScrollItem1 Int
+             | ScrollItem2 Int
   deriving (Eq, Ord)
 
 data Palette = Palette
@@ -243,14 +245,19 @@ mkTheme p = Theme
       , (CheckboxBox1,              mkCheckboxBoxStyle p)
       , (CheckboxBox2,              mkCheckboxBoxStyle p)
       , (CheckboxBox3,              mkCheckboxBoxStyle p)
-      , (ScrollBar1 ScrollTrack,    mkScrollTrackStyle p)
-      , (ScrollBar1 ScrollThumb,    mkScrollThumbStyle p)
-      , (ScrollBar2 ScrollTrack,    mkScrollTrackStyle p)
-      , (ScrollBar2 ScrollThumb,    mkScrollThumbStyle p)
       , (Slider1 SliderTrack,       mkScrollTrackStyle p)
       , (Slider1 SliderThumb,       mkScrollThumbStyle p)
-      ] ++ [(RadioOpt i,             mkRadioItemStyle p) | i <- [0..9]]
-        ++ [(RadioOpt2 i,           mkRadioItemStyle p) | i <- [0..9]]
+      ] ++ [(RadioOpt i,                        mkRadioItemStyle p) | i <- [0..9]]
+        ++ [(RadioOpt2 i,                      mkRadioItemStyle p) | i <- [0..9]]
+        ++ [ (ScrollRegion1 (ScrollRegionH ScrollTrack), mkScrollTrackStyle p)
+           , (ScrollRegion1 (ScrollRegionH ScrollThumb), mkScrollThumbStyle p)
+           , (ScrollRegion1 (ScrollRegionV ScrollTrack), mkScrollTrackStyle p)
+           , (ScrollRegion1 (ScrollRegionV ScrollThumb), mkScrollThumbStyle p)
+           , (ScrollRegion2 (ScrollRegionH ScrollTrack), mkScrollTrackStyle p)
+           , (ScrollRegion2 (ScrollRegionH ScrollThumb), mkScrollThumbStyle p)
+           , (ScrollRegion2 (ScrollRegionV ScrollTrack), mkScrollTrackStyle p)
+           , (ScrollRegion2 (ScrollRegionV ScrollThumb), mkScrollThumbStyle p)
+           ]
   , themeDefaultStyle = mkBtnStyle p
   }
 
