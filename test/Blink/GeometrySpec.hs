@@ -101,6 +101,9 @@ spec = describe "geometry" $ do
       it ("does not contain " <> desc) $
         containsPoint pt testRect `shouldBe` False
 
+    prop "a zero-size rectangle contains only its origin point" $ \p q ->
+      containsPoint q (Rectangle (pointX p) (pointY p) 0 0) == (q == p)
+
   describe "intersectRect" $ do
     it "returns the overlapping region of two partially overlapping rectangles" $
       intersectRect (Rectangle 0 0 10 10) (Rectangle 5 5 10 10)
