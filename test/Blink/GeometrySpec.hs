@@ -15,9 +15,11 @@ import Blink.Geometry
   , containsPoint
   , insetRect
   , intersectRect
+  , leftInset
   , rectCentredAt
   , rectFromSize
   , resizeRect
+  , topInset
   , uniform
   )
 
@@ -38,6 +40,10 @@ spec = describe "geometry" $ do
     it "applies each edge's inset independently" $
       insetRect (Insets 5 10 15 20) (Rectangle 0 0 100 60)
         `shouldBe` Rectangle 20 5 70 40
+
+    prop "offsets the origin by the left and top insets" $ \ins r ->
+      rectX (insetRect ins r) == rectX r + leftInset ins
+      && rectY (insetRect ins r) == rectY r + topInset ins
 
     it "clamps width to zero when horizontal insets exceed the rectangle width" $
       rectWidth (insetRect (uniform 60) (Rectangle 0 0 100 200)) `shouldBe` 0
