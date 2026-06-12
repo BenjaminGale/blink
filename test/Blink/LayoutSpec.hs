@@ -102,12 +102,18 @@ spec = describe "layout" $ do
       it "grows to fill space when it exceeds the minimum" $
         preferredSize (AtLeast 50) 80 `shouldBe` 80
 
+      prop "result is never below the minimum" $ \(NonNegative n) (NonNegative x) ->
+        preferredSize (AtLeast n) x >= n
+
     describe "AtMost" $ do
       it "grows to fill space when within its maximum" $
         preferredSize (AtMost 80) 50 `shouldBe` 50
 
       it "limits to its maximum when space exceeds it" $
         preferredSize (AtMost 80) 100 `shouldBe` 80
+
+      prop "result never exceeds the maximum" $ \(NonNegative n) (NonNegative x) ->
+        preferredSize (AtMost n) x <= n
 
     describe "Between" $ do
       it "enforces the minimum size when space is insufficient" $
@@ -118,6 +124,11 @@ spec = describe "layout" $ do
 
       it "limits to its maximum when space exceeds it" $
         preferredSize (Between 20 80) 100 `shouldBe` 80
+
+      prop "result is always within [lo, hi]" $ \(NonNegative lo) (NonNegative d) (NonNegative x) ->
+        let hi = lo + d
+            r  = preferredSize (Between lo hi) x
+        in r >= lo && r <= hi
 
   describe "layoutWithConstraints" $ do
     let run rct = runLayout hBounds (layoutWithConstraints rct fill)
