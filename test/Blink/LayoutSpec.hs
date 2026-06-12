@@ -198,6 +198,9 @@ spec = describe "layout" $ do
             `shouldBe` [expected]
 
   describe "hBox" $ do
+    it "produces no output for an empty child list" $
+      runHBox hBounds cfg [] `shouldBe` []
+
     describe "main axis (width)" $ do
       it "a single Fill child fills the available width" $
         runHBox hBounds cfg [rc Fill Fill TopLeft]
@@ -259,6 +262,9 @@ spec = describe "layout" $ do
       in all within (zip (map layoutWidth constraints) (map rectWidth rects))
 
   describe "vBox" $ do
+    it "produces no output for an empty child list" $
+      runVBox vBounds cfg [] `shouldBe` []
+
     describe "main axis (height)" $ do
       it "a single Fill child fills the available height" $
         runVBox vBounds cfg [rc Fill Fill TopLeft]
