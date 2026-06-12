@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ScrollBarPart (..), ScrollRegionPart (..), ScrollState (..), SliderPart (..), StandardControls (..), button, checkbox, emptyStandardControls, progressBar, radioGroup, readScrollPos, scrollBar, scrollableRegion, scrollPosFromMouse, scrollRegionBarSize, scrollThumbRect, slider, sliderThumbRect, textInput, writeScrollPos)
+import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), ScrollState (..), SliderPart (..), StandardControls (..), button, checkbox, emptyStandardControls, progressBar, radioGroup, readScrollPos, scrollBar, scrollableRegion, scrollPosFromMouse, scrollRegionBarSize, scrollThumbRect, slider, sliderThumbRect, textInput, writeScrollPos)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -257,7 +257,7 @@ backgroundAndBorderSpec run = do
          `shouldContain` [StrokeRect bgRect testBorderColour 1]
 
 runProgressBar :: Double -> WidgetRunner
-runProgressBar value ctx = snd $ runUI (progressBar TestControl value) ctx
+runProgressBar value ctx = snd $ runUI (progressBar TestControl (Progress value)) ctx
 
 runButton :: WidgetRunner
 runButton ctx = snd $ runUI (button TestControl "label") ctx

@@ -55,7 +55,7 @@ rowButtons s =
            , (Layout Fill         Fill MiddleLeft, label Label ("Clicks: " <> T.pack (show (clickCount s))))
            , (Layout (Exactly 80) Fill TopLeft,    resetBtn)
            ])
-    , (Layout Fill (Exactly 20) TopLeft, progressBar ProgressBar1 (fromIntegral (clickCount s) / 50))
+    , (Layout Fill (Exactly 20) TopLeft, progressBar ProgressBar1 (Progress (fromIntegral (clickCount s) / 50)))
     ]
 
 rowInput :: AppState -> DemoUI ()
@@ -112,8 +112,8 @@ rowProgress s =
   vBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4 })
     [ (Layout Fill Fill TopLeft,
          if animating s
-           then indeterminateProgressBar ProgressBar2
-           else progressBar ProgressBar2 0)
+           then progressBar ProgressBar2 Indeterminate
+           else progressBar ProgressBar2 (Progress 0))
     ]
 
 rowScrollRegions :: AppState -> DemoUI ()

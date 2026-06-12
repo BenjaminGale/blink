@@ -61,8 +61,8 @@ module Blink.Controls
   , ScrollState (..)
     -- * Display
   , label
+  , ProgressValue (..)
   , progressBar
-  , indeterminateProgressBar
     -- * Input
   , button
   , checkbox
@@ -134,22 +134,26 @@ label eid text = renderControl eid $ do
   style <- getStyle eid
   drawText (styleTextColour style) (styleTextAlign style) text
 
--- | Read-only progress indicator. @value@ is clamped to @[0, 1]@ and rendered
--- as a filled bar scaled to that fraction of the content width.
-progressBar :: (Eq e, Ord e) => e -> Double -> UI e u s ()
-progressBar eid value = renderControl eid $ do
+-- | The value passed to 'progressBar'.
+data ProgressValue
+  = Progress Double
+    -- ^ A determinate value in @[0, 1]@, clamped and rendered as a filled bar.
+  | Indeterminate
+    -- ^ Unknown progress: a band animates continuously across the bar.
+  deriving (Eq, Show)
+
+-- | A read-only progress indicator. Pass 'Progress' for a determinate bar or
+-- 'Indeterminate' for a continuously animating band indicating activity of
+-- unknown duration. The animation runs only on ticker frames; 'requiresAnimation'
+-- keeps the ticker active while an 'Indeterminate' bar is visible.
+progressBar :: (Eq e, Ord e) => e -> ProgressValue -> UI e u s ()
+progressBar eid (Progress value) = renderControl eid $ do
   style <- getStyle eid
   r     <- getBounds
   let clamped  = max 0 (min 1 value)
       fillRect' = r { rectWidth = rectWidth r * clamped }
   withBounds fillRect' $ fillRect (styleTextColour style)
-
--- | An indeterminate progress indicator that animates continuously. A band
--- moves across the control's content width to indicate ongoing activity of
--- unknown duration. The animation runs only on ticker frames; 'requiresAnimation'
--- keeps the ticker active while the control is visible.
-indeterminateProgressBar :: (Eq e, Ord e) => e -> UI e u s ()
-indeterminateProgressBar eid = do
+progressBar eid Indeterminate = do
   requiresAnimation
   renderControl eid $ do
     r       <- getBounds
