@@ -147,109 +147,110 @@ deltaApp = App
 
 spec :: Spec
 spec = do
-  describe "configureContinuous" $ do
-    it "a normal frame returns Continue" $ do
-      handle <- configureContinuous counterApp nullMeasurer
-      result <- stepFrame handle normalInput
-      isContinue result `shouldBe` True
+  describe "App integration" $ do
+    describe "configureContinuous" $ do
+      it "a normal frame returns Continue" $ do
+        handle <- configureContinuous counterApp nullMeasurer
+        result <- stepFrame handle normalInput
+        isContinue result `shouldBe` True
 
-    it "dispatched modifiers are applied to produce the frame state" $ do
-      handle <- configureContinuous counterApp nullMeasurer
-      result <- stepFrame handle normalInput
-      resultState result `shouldBe` 1
+      it "dispatched modifiers are applied to produce the frame state" $ do
+        handle <- configureContinuous counterApp nullMeasurer
+        result <- stepFrame handle normalInput
+        resultState result `shouldBe` 1
 
-    it "returns Quit when quitRequested is True" $ do
-      handle <- configureContinuous counterApp nullMeasurer
-      result <- stepFrame handle (mkInput True False)
-      isQuit result `shouldBe` True
+      it "returns Quit when quitRequested is True" $ do
+        handle <- configureContinuous counterApp nullMeasurer
+        result <- stepFrame handle (mkInput True False)
+        isQuit result `shouldBe` True
 
-    it "draw commands from the view appear in the result" $ do
-      let c = RGBA 1 0 0 1
-      handle <- configureContinuous (drawingApp c) nullMeasurer
-      result <- stepFrame handle normalInput
-      resultDraws result `shouldContain` [FillRect (Rectangle 0 0 100 100) c]
+      it "draw commands from the view appear in the result" $ do
+        let c = RGBA 1 0 0 1
+        handle <- configureContinuous (drawingApp c) nullMeasurer
+        result <- stepFrame handle normalInput
+        resultDraws result `shouldContain` [FillRect (Rectangle 0 0 100 100) c]
 
-    it "state accumulates correctly across multiple frames" $ do
-      handle <- configureContinuous counterApp nullMeasurer
-      _ <- stepFrame handle normalInput
-      _ <- stepFrame handle normalInput
-      r3 <- stepFrame handle normalInput
-      resultState r3 `shouldBe` 3
+      it "state accumulates correctly across multiple frames" $ do
+        handle <- configureContinuous counterApp nullMeasurer
+        _ <- stepFrame handle normalInput
+        _ <- stepFrame handle normalInput
+        r3 <- stepFrame handle normalInput
+        resultState r3 `shouldBe` 3
 
-    it "draw commands reflect the pre-dispatch app state" $ do
-      handle <- configureContinuous stateDrawApp nullMeasurer
-      result <- stepFrame handle normalInput
-      drawnTexts result `shouldContain` ["0"]
+      it "draw commands reflect the pre-dispatch app state" $ do
+        handle <- configureContinuous stateDrawApp nullMeasurer
+        result <- stepFrame handle normalInput
+        drawnTexts result `shouldContain` ["0"]
 
-  describe "configureEventDriven" $ do
-    it "a normal frame returns Continue" $ do
-      handle <- configureEventDriven counterApp (pure ()) nullMeasurer
-      result <- stepFrame handle normalInput
-      isContinue result `shouldBe` True
+    describe "configureEventDriven" $ do
+      it "a normal frame returns Continue" $ do
+        handle <- configureEventDriven counterApp (pure ()) nullMeasurer
+        result <- stepFrame handle normalInput
+        isContinue result `shouldBe` True
 
-    it "dispatched modifiers are applied to produce the frame state" $ do
-      handle <- configureEventDriven counterApp (pure ()) nullMeasurer
-      result <- stepFrame handle normalInput
-      resultState result `shouldBe` 1
+      it "dispatched modifiers are applied to produce the frame state" $ do
+        handle <- configureEventDriven counterApp (pure ()) nullMeasurer
+        result <- stepFrame handle normalInput
+        resultState result `shouldBe` 1
 
-    it "returns Quit when quitRequested is True" $ do
-      handle <- configureEventDriven counterApp (pure ()) nullMeasurer
-      result <- stepFrame handle (mkInput True False)
-      isQuit result `shouldBe` True
+      it "returns Quit when quitRequested is True" $ do
+        handle <- configureEventDriven counterApp (pure ()) nullMeasurer
+        result <- stepFrame handle (mkInput True False)
+        isQuit result `shouldBe` True
 
-    it "draw commands reflect the post-dispatch app state" $ do
-      handle <- configureEventDriven stateDrawApp (pure ()) nullMeasurer
-      result <- stepFrame handle normalInput
-      drawnTexts result `shouldContain` ["1"]
+      it "draw commands reflect the post-dispatch app state" $ do
+        handle <- configureEventDriven stateDrawApp (pure ()) nullMeasurer
+        result <- stepFrame handle normalInput
+        drawnTexts result `shouldContain` ["1"]
 
-    it "key events are not replayed in the second render pass" $ do
-      handle <- configureEventDriven keyCountApp (pure ()) nullMeasurer
-      let oneKey = normalInput { keyEvents = [KeyEvent KeyReturn []] }
-      result <- stepFrame handle oneKey
-      resultState result `shouldBe` 1
+      it "key events are not replayed in the second render pass" $ do
+        handle <- configureEventDriven keyCountApp (pure ()) nullMeasurer
+        let oneKey = normalInput { keyEvents = [KeyEvent KeyReturn []] }
+        result <- stepFrame handle oneKey
+        resultState result `shouldBe` 1
 
-  describe "async dispatch" $ do
-    it "an async modifier is applied at the start of the next frame" $ do
-      done <- newEmptyMVar
-      let asyncApp = App
-            { startUp        = pure 0
-            , initialUIState = ()
-            , theme          = const (emptyTheme testStyleSet)
-            , view           = do
-                s <- getAppState
-                when (s == 0) $ dispatchAsync $ \_ -> do
-                  putMVar done ()
-                  pure (+10)
-            } :: App () () Int
-      handle <- configureContinuous asyncApp nullMeasurer
-      _ <- stepFrame handle normalInput
-      takeMVar done
-      r2 <- stepFrame handle normalInput
-      resultState r2 `shouldBe` 10
+    describe "async dispatch" $ do
+      it "an async modifier is applied at the start of the next frame" $ do
+        done <- newEmptyMVar
+        let asyncApp = App
+              { startUp        = pure 0
+              , initialUIState = ()
+              , theme          = const (emptyTheme testStyleSet)
+              , view           = do
+                  s <- getAppState
+                  when (s == 0) $ dispatchAsync $ \_ -> do
+                    putMVar done ()
+                    pure (+10)
+              } :: App () () Int
+        handle <- configureContinuous asyncApp nullMeasurer
+        _ <- stepFrame handle normalInput
+        takeMVar done
+        r2 <- stepFrame handle normalInput
+        resultState r2 `shouldBe` 10
 
-    it "the notify callback is called when an async job completes" $ do
-      notified <- newIORef False
-      done     <- newEmptyMVar
-      let notify = writeIORef notified True >> putMVar done ()
-          asyncApp = App
-            { startUp        = pure ()
-            , initialUIState = ()
-            , theme          = const (emptyTheme testStyleSet)
-            , view           = dispatchAsync $ \_ -> pure id
-            } :: App () () ()
-      handle <- configureEventDriven asyncApp notify nullMeasurer
-      _ <- stepFrame handle normalInput
-      takeMVar done
-      readIORef notified `shouldReturn` True
+      it "the notify callback is called when an async job completes" $ do
+        notified <- newIORef False
+        done     <- newEmptyMVar
+        let notify = writeIORef notified True >> putMVar done ()
+            asyncApp = App
+              { startUp        = pure ()
+              , initialUIState = ()
+              , theme          = const (emptyTheme testStyleSet)
+              , view           = dispatchAsync $ \_ -> pure id
+              } :: App () () ()
+        handle <- configureEventDriven asyncApp notify nullMeasurer
+        _ <- stepFrame handle normalInput
+        takeMVar done
+        readIORef notified `shouldReturn` True
 
-  describe "frame context progression" $ do
-    it "UI state written in frame N is readable in frame N+1" $ do
-      handle <- configureContinuous uiStateApp nullMeasurer
-      r1 <- stepFrame handle normalInput
-      r2 <- stepFrame handle normalInput
-      (resultState r1, resultState r2) `shouldBe` (0, 1)
+    describe "frame context progression" $ do
+      it "UI state written in frame N is readable in frame N+1" $ do
+        handle <- configureContinuous uiStateApp nullMeasurer
+        r1 <- stepFrame handle normalInput
+        r2 <- stepFrame handle normalInput
+        (resultState r1, resultState r2) `shouldBe` (0, 1)
 
-    it "animation delta is 0 on non-tick frames" $ do
-      handle <- configureContinuous deltaApp nullMeasurer
-      result <- stepFrame handle normalInput
-      resultState result `shouldBe` 0.0
+      it "animation delta is 0 on non-tick frames" $ do
+        handle <- configureContinuous deltaApp nullMeasurer
+        result <- stepFrame handle normalInput
+        resultState result `shouldBe` 0.0

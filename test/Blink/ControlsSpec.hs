@@ -371,149 +371,7 @@ runScrollBar pos input =
   snd $ runUI (scrollBar id Vertical 0.25) (emptyUIContext scrollRect input scrollTheme (scrollControls pos) ())
 
 spec :: Spec
-spec = do
-  describe "textInput" $ do
-    controlBehaviourSpec runTextInputControl (Point 50 50)
-    describe "background and border" $ backgroundAndBorderSpec runTextInputControl
-
-    describe "rendering" $ do
-      it "displays the value without a cursor when unfocused" $
-        drawnTexts (runTextInput "hello" (withFocus (Just OtherControl) (mkTextCtx "hello" noInput)))
-          `shouldContain` ["hello"]
-
-      it "displays the value with a cursor when focused" $
-        drawnTexts (runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput)))
-          `shouldContain` ["hello|"]
-
-    describe "text editing" $ do
-      it "appends typed characters to the value" $
-        applyDispatches (runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] })))
-          `shouldBe` "hello!"
-
-      it "removes the last character on backspace" $
-        applyDispatches (runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] })))
-          `shouldBe` "hell"
-
-      it "does not dispatch when backspace is pressed on an empty value" $
-        dispatchCount (runTextInput "" (withFocus (Just TestControl) (mkTextCtx "" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] })))
-          `shouldBe` 0
-
-      it "does not dispatch when there is no input" $
-        dispatchCount (runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput)))
-          `shouldBe` 0
-
-      it "does not process input when unfocused" $
-        dispatchCount (runTextInput "hello" (withFocus (Just OtherControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"], inputKeyEvents = [KeyEvent KeyBackspace []] })))
-          `shouldBe` 0
-
-    describe "disabled" $ do
-      it "does not process input when disabled" $
-        dispatchCount (snd (runUI (disableWhen True (textInput TestControl "hello" (\t _ -> t))) (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] }))))
-          `shouldBe` 0
-
-      it "does not show a cursor when focused and disabled" $
-        drawnTexts (snd (runUI (disableWhen True (textInput TestControl "hello" (\t _ -> t))) (withFocus (Just TestControl) (mkTextCtx "hello" noInput))))
-          `shouldNotContain` ["hello|"]
-
-  describe "checkbox" $ do
-    controlBehaviourSpec runCheckboxControl boxPoint
-
-    describe "toggle behaviour" $ do
-      it "dispatches True when the box is clicked while unchecked" $
-        applyDispatches (runCheckbox False (mkCheckboxCtx (mouseAt boxPoint ButtonReleased [])))
-          `shouldBe` Just True
-
-      it "dispatches False when the box is clicked while checked" $
-        applyDispatches (runCheckbox True (mkCheckboxCtx (mouseAt boxPoint ButtonReleased [])))
-          `shouldBe` Just False
-
-      it "dispatches toggle when Enter is pressed while focused" $
-        applyDispatches (runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
-          `shouldBe` Just True
-
-      it "dispatches toggle when Space is pressed while focused" $
-        applyDispatches (runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeySpace []] })))
-          `shouldBe` Just True
-
-      it "does not dispatch when clicked outside the box" $
-        applyDispatches (runCheckbox False (mkCheckboxCtx (mouseAt (Point 50 50) ButtonReleased [])))
-          `shouldBe` Nothing
-
-      it "does not dispatch when Enter is pressed while unfocused" $
-        applyDispatches (runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
-          `shouldBe` Nothing
-
-    describe "disabled" $ do
-      it "does not dispatch when clicked while disabled" $
-        applyDispatches (snd (runUI (disableWhen True (checkbox TestControl "test label" False (\v _ -> Just v))) (mkCheckboxCtx (mouseAt boxPoint ButtonReleased []))))
-          `shouldBe` Nothing
-
-      it "does not dispatch when Enter is pressed while disabled" $
-        applyDispatches (snd (runUI (disableWhen True (checkbox TestControl "test label" False (\v _ -> Just v))) (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))))
-          `shouldBe` Nothing
-
-    describe "rendering" $ do
-      it "draws the checkmark when checked" $
-        drawnTexts (runCheckbox True (mkCheckboxCtx noInput))
-          `shouldContain` ["✓"]
-
-      it "does not draw the checkmark when unchecked" $
-        drawnTexts (runCheckbox False (mkCheckboxCtx noInput))
-          `shouldNotContain` ["✓"]
-
-      it "draws the label text" $
-        drawnTexts (runCheckbox False (mkCheckboxCtx noInput))
-          `shouldContain` ["test label"]
-
-    describe "focus ring" $ do
-      it "draws a focus ring around the full control when focused" $
-        ctxDrawCommands (runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput) { ctxTheme = focusBorderTheme }))
-          `shouldContain` [StrokeRect controlRect testBorderColour 1]
-
-      it "does not draw a focus ring when unfocused" $
-        ctxDrawCommands (runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput) { ctxTheme = focusBorderTheme }))
-          `shouldNotContain` [StrokeRect controlRect testBorderColour 1]
-
-  describe "scrollBar" $ do
-    describe "button stepping" $ do
-      it "steps forward by the thumb ratio when the increment button is clicked" $
-        scrollPos (runScrollBar 0.5 (mouseAt (Point 10 190) ButtonReleased []))
-          `shouldBe` 0.75
-
-      it "steps back by the thumb ratio when the decrement button is clicked" $
-        scrollPos (runScrollBar 0.5 (mouseAt (Point 10 10) ButtonReleased []))
-          `shouldBe` 0.25
-
-      it "clamps to 1 when stepping forward near the end" $
-        scrollPos (runScrollBar 0.9 (mouseAt (Point 10 190) ButtonReleased []))
-          `shouldBe` 1
-
-      it "clamps to 0 when stepping back near the start" $
-        scrollPos (runScrollBar 0.1 (mouseAt (Point 10 10) ButtonReleased []))
-          `shouldBe` 0
-
-    describe "track dragging" $ do
-      it "centres the thumb on the cursor while the track is pressed" $
-        scrollPos (runScrollBar 0 (mouseAt (Point 10 100) ButtonDown []))
-          `shouldBe` 0.5
-
-      it "continues tracking when the mouse moves off the track while the button is held" $
-        let frame1 = runScrollBar 0 (mouseAt (Point 10 100) ButtonDown [])
-            frame2 = snd $ runUI (scrollBar id Vertical 0.25)
-                                 (nextFrameContext scrollRect (mouseAt (Point 200 40) ButtonDown []) frame1)
-        in scrollPos frame2 `shouldBe` 0.0
-
-      it "stops tracking when the button is released after dragging off the track" $
-        let frame1 = runScrollBar 0 (mouseAt (Point 10 100) ButtonDown [])
-            frame2 = snd $ runUI (scrollBar id Vertical 0.25)
-                                 (nextFrameContext scrollRect (mouseAt (Point 200 40) ButtonUp []) frame1)
-        in scrollPos frame2 `shouldBe` 0.5
-
-    describe "without interaction" $ do
-      it "leaves the position unchanged" $
-        scrollPos (runScrollBar 0.5 noInput)
-          `shouldBe` 0.5
-
+spec = describe "Controls" $ do
   describe "progressBar" $ do
     describe "background and border" $ backgroundAndBorderSpec (runProgressBar 0.5)
 
@@ -580,6 +438,148 @@ spec = do
       it "is not activated by Enter when disabled" $
         fst (runUI (disableWhen True (button TestControl "label")) (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
           `shouldBe` False
+
+  describe "checkbox" $ do
+    controlBehaviourSpec runCheckboxControl boxPoint
+
+    describe "toggle behaviour" $ do
+      it "dispatches True when the box is clicked while unchecked" $
+        applyDispatches (runCheckbox False (mkCheckboxCtx (mouseAt boxPoint ButtonReleased [])))
+          `shouldBe` Just True
+
+      it "dispatches False when the box is clicked while checked" $
+        applyDispatches (runCheckbox True (mkCheckboxCtx (mouseAt boxPoint ButtonReleased [])))
+          `shouldBe` Just False
+
+      it "dispatches toggle when Enter is pressed while focused" $
+        applyDispatches (runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
+          `shouldBe` Just True
+
+      it "dispatches toggle when Space is pressed while focused" $
+        applyDispatches (runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeySpace []] })))
+          `shouldBe` Just True
+
+      it "does not dispatch when clicked outside the box" $
+        applyDispatches (runCheckbox False (mkCheckboxCtx (mouseAt (Point 50 50) ButtonReleased [])))
+          `shouldBe` Nothing
+
+      it "does not dispatch when Enter is pressed while unfocused" $
+        applyDispatches (runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
+          `shouldBe` Nothing
+
+    describe "disabled" $ do
+      it "does not dispatch when clicked while disabled" $
+        applyDispatches (snd (runUI (disableWhen True (checkbox TestControl "test label" False (\v _ -> Just v))) (mkCheckboxCtx (mouseAt boxPoint ButtonReleased []))))
+          `shouldBe` Nothing
+
+      it "does not dispatch when Enter is pressed while disabled" $
+        applyDispatches (snd (runUI (disableWhen True (checkbox TestControl "test label" False (\v _ -> Just v))) (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))))
+          `shouldBe` Nothing
+
+    describe "rendering" $ do
+      it "draws the checkmark when checked" $
+        drawnTexts (runCheckbox True (mkCheckboxCtx noInput))
+          `shouldContain` ["✓"]
+
+      it "does not draw the checkmark when unchecked" $
+        drawnTexts (runCheckbox False (mkCheckboxCtx noInput))
+          `shouldNotContain` ["✓"]
+
+      it "draws the label text" $
+        drawnTexts (runCheckbox False (mkCheckboxCtx noInput))
+          `shouldContain` ["test label"]
+
+    describe "focus ring" $ do
+      it "draws a focus ring around the full control when focused" $
+        ctxDrawCommands (runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput) { ctxTheme = focusBorderTheme }))
+          `shouldContain` [StrokeRect controlRect testBorderColour 1]
+
+      it "does not draw a focus ring when unfocused" $
+        ctxDrawCommands (runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput) { ctxTheme = focusBorderTheme }))
+          `shouldNotContain` [StrokeRect controlRect testBorderColour 1]
+
+  describe "textInput" $ do
+    controlBehaviourSpec runTextInputControl (Point 50 50)
+    describe "background and border" $ backgroundAndBorderSpec runTextInputControl
+
+    describe "rendering" $ do
+      it "displays the value without a cursor when unfocused" $
+        drawnTexts (runTextInput "hello" (withFocus (Just OtherControl) (mkTextCtx "hello" noInput)))
+          `shouldContain` ["hello"]
+
+      it "displays the value with a cursor when focused" $
+        drawnTexts (runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput)))
+          `shouldContain` ["hello|"]
+
+    describe "text editing" $ do
+      it "appends typed characters to the value" $
+        applyDispatches (runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] })))
+          `shouldBe` "hello!"
+
+      it "removes the last character on backspace" $
+        applyDispatches (runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] })))
+          `shouldBe` "hell"
+
+      it "does not dispatch when backspace is pressed on an empty value" $
+        dispatchCount (runTextInput "" (withFocus (Just TestControl) (mkTextCtx "" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] })))
+          `shouldBe` 0
+
+      it "does not dispatch when there is no input" $
+        dispatchCount (runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput)))
+          `shouldBe` 0
+
+      it "does not process input when unfocused" $
+        dispatchCount (runTextInput "hello" (withFocus (Just OtherControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"], inputKeyEvents = [KeyEvent KeyBackspace []] })))
+          `shouldBe` 0
+
+    describe "disabled" $ do
+      it "does not process input when disabled" $
+        dispatchCount (snd (runUI (disableWhen True (textInput TestControl "hello" (\t _ -> t))) (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] }))))
+          `shouldBe` 0
+
+      it "does not show a cursor when focused and disabled" $
+        drawnTexts (snd (runUI (disableWhen True (textInput TestControl "hello" (\t _ -> t))) (withFocus (Just TestControl) (mkTextCtx "hello" noInput))))
+          `shouldNotContain` ["hello|"]
+
+  describe "scrollBar" $ do
+    describe "button stepping" $ do
+      it "steps forward by the thumb ratio when the increment button is clicked" $
+        scrollPos (runScrollBar 0.5 (mouseAt (Point 10 190) ButtonReleased []))
+          `shouldBe` 0.75
+
+      it "steps back by the thumb ratio when the decrement button is clicked" $
+        scrollPos (runScrollBar 0.5 (mouseAt (Point 10 10) ButtonReleased []))
+          `shouldBe` 0.25
+
+      it "clamps to 1 when stepping forward near the end" $
+        scrollPos (runScrollBar 0.9 (mouseAt (Point 10 190) ButtonReleased []))
+          `shouldBe` 1
+
+      it "clamps to 0 when stepping back near the start" $
+        scrollPos (runScrollBar 0.1 (mouseAt (Point 10 10) ButtonReleased []))
+          `shouldBe` 0
+
+    describe "track dragging" $ do
+      it "centres the thumb on the cursor while the track is pressed" $
+        scrollPos (runScrollBar 0 (mouseAt (Point 10 100) ButtonDown []))
+          `shouldBe` 0.5
+
+      it "continues tracking when the mouse moves off the track while the button is held" $
+        let frame1 = runScrollBar 0 (mouseAt (Point 10 100) ButtonDown [])
+            frame2 = snd $ runUI (scrollBar id Vertical 0.25)
+                                 (nextFrameContext scrollRect (mouseAt (Point 200 40) ButtonDown []) frame1)
+        in scrollPos frame2 `shouldBe` 0.0
+
+      it "stops tracking when the button is released after dragging off the track" $
+        let frame1 = runScrollBar 0 (mouseAt (Point 10 100) ButtonDown [])
+            frame2 = snd $ runUI (scrollBar id Vertical 0.25)
+                                 (nextFrameContext scrollRect (mouseAt (Point 200 40) ButtonUp []) frame1)
+        in scrollPos frame2 `shouldBe` 0.5
+
+    describe "without interaction" $ do
+      it "leaves the position unchanged" $
+        scrollPos (runScrollBar 0.5 noInput)
+          `shouldBe` 0.5
 
   describe "slider" $ do
     controlBehaviourSpec runSliderControl (Point 50 50)
@@ -680,11 +680,11 @@ spec = do
           `shouldBe` 0
 
     describe "keyboard navigation" $ do
-      let nav focusIdx key =
+      let nav focusIdx k =
             focusedElement . ctxFocusState $
               snd $ runUI (radioGroup id radioItems "a" (\v _ -> v))
                 (withItemFocus (Just focusIdx)
-                  (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent key []] } radioGroupTheme () "a"))
+                  (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent k []] } radioGroupTheme () "a"))
 
       it "moves focus to the next item when Down is pressed" $
         nav 0 KeyDown `shouldBe` Just 1

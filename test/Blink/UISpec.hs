@@ -51,7 +51,7 @@ run :: UI () () s a -> s -> (a, UIContext () () s)
 run ui s = runUI ui (emptyUIContext testBounds noInput emptyTheme () s)
 
 spec :: Spec
-spec = describe "application state primitives" $ do
+spec = describe "UI primitives" $ do
   it "getAppState returns the frame's starting state" $
     fst (run getAppState (42 :: Int)) `shouldBe` 42
 
