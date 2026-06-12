@@ -15,6 +15,8 @@ data Element = Label
              | ScrollBar1 ScrollBarPart
              | ScrollBar2 ScrollBarPart
              | Slider1 SliderPart
+             | RadioOpt Int
+             | RadioOpt2 Int
   deriving (Eq, Ord)
 
 data Palette = Palette
@@ -174,6 +176,25 @@ mkLabelStyle p = StyleSet
       , styleBorderWidth  = 0
       }
 
+mkRadioItemStyle :: Palette -> StyleSet
+mkRadioItemStyle p = StyleSet
+  { styleSetNormal   = base
+  , styleSetHovered  = base { styleBackground = palSurfaceButtonHover p }
+  , styleSetPressed  = base { styleBackground = palSurfaceButton p }
+  , styleSetFocused  = base { styleBorderColour = Just (palAccent p) }
+  , styleSetDisabled = base { styleTextColour = palTextMuted p }
+  }
+  where
+    base = Style
+      { styleBackground   = RGBA 0 0 0 0
+      , styleTextColour   = palTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleMargin       = uniform 0
+      , stylePadding      = Insets { topInset = 2, rightInset = 6, bottomInset = 2, leftInset = 6 }
+      , styleBorderColour = Nothing
+      , styleBorderWidth  = 1
+      }
+
 mkScrollTrackStyle :: Palette -> StyleSet
 mkScrollTrackStyle p = StyleSet
   { styleSetNormal   = base
@@ -214,7 +235,7 @@ mkScrollThumbStyle p = StyleSet
 
 mkTheme :: Palette -> Theme Element
 mkTheme p = Theme
-  { themeElementStyles = Map.fromList
+  { themeElementStyles = Map.fromList $
       [ (Label,                     mkLabelStyle p)
       , (ProgressBar1,              mkProgressBarStyle p)
       , (ProgressBar2,              mkProgressBarStyle p)
@@ -228,7 +249,8 @@ mkTheme p = Theme
       , (ScrollBar2 ScrollThumb,    mkScrollThumbStyle p)
       , (Slider1 SliderTrack,       mkScrollTrackStyle p)
       , (Slider1 SliderThumb,       mkScrollThumbStyle p)
-      ]
+      ] ++ [(RadioOpt i,             mkRadioItemStyle p) | i <- [0..9]]
+        ++ [(RadioOpt2 i,           mkRadioItemStyle p) | i <- [0..9]]
   , themeDefaultStyle = mkBtnStyle p
   }
 

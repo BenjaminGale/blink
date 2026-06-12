@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ScrollBarPart (..), ScrollState (..), SliderPart (..), StandardControls (..), button, checkbox, progressBar, scrollBar, slider, textInput)
+import Blink.Controls (ScrollBarPart (..), ScrollState (..), SliderPart (..), StandardControls (..), button, checkbox, progressBar, radioGroup, scrollBar, slider, textInput)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -317,6 +317,36 @@ runSlider ori val input =
 withSliderFocus :: Maybe SliderPart -> UIContext SliderPart () Double -> UIContext SliderPart () Double
 withSliderFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = e } }
 
+-- runRadioControl maps index 0 -> TestControl for the control suite helpers.
+-- A single-item group is enough to exercise focus, tab, hover, and background.
+runRadioControl :: WidgetRunner
+runRadioControl ctx = snd $ runUI (radioGroup tag [("a" :: String, "Option")] "a" (\_ s -> s)) ctx
+  where
+    tag 0 = TestControl
+    tag _ = OtherControl
+
+-- radioGroup setup: element type is Int (mkId = id), app state IS the selection.
+-- Three items of 30px each in a 100×90 rect (zero margin/padding), giving:
+--   item 0: y 0–30  centre Point 50 15
+--   item 1: y 30–60 centre Point 50 45
+--   item 2: y 60–90 centre Point 50 75
+radioGroupTheme :: Theme Int
+radioGroupTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = zeroMarginStyleSet }
+
+radioGroupRect :: Rectangle
+radioGroupRect = Rectangle 0 0 100 90
+
+radioItems :: [(String, Text)]
+radioItems = [("a", "Alpha"), ("b", "Beta"), ("c", "Gamma")]
+
+runRadioGroup :: String -> InputState -> UIContext Int () String
+runRadioGroup sel input =
+  snd $ runUI (radioGroup id radioItems sel (\v _ -> v))
+    (emptyUIContext radioGroupRect input radioGroupTheme () sel)
+
+withItemFocus :: Maybe Int -> UIContext Int () String -> UIContext Int () String
+withItemFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = e } }
+
 -- scrollBar setup: the element type is ScrollBarPart itself (mkId = id) and
 -- the UI state is a StandardControls holding the position keyed by ScrollTrack.
 scrollControls :: Double -> StandardControls ScrollBarPart
@@ -616,3 +646,46 @@ spec = do
       it "does not dispatch when there is no input" $
         dispatchCount (runSlider Horizontal 0.5 noInput)
           `shouldBe` 0
+
+  describe "radioGroup" $ do
+    controlBehaviourSpec runRadioControl (Point 50 50)
+    describe "background and border" $ backgroundAndBorderSpec runRadioControl
+
+    describe "selection" $ do
+      it "dispatches the value of a clicked item" $
+        applyDispatches (runRadioGroup "a" (mouseAt (Point 50 45) ButtonReleased []))
+          `shouldBe` "b"
+
+      it "dispatches the correct value when the last item is clicked" $
+        applyDispatches (runRadioGroup "a" (mouseAt (Point 50 75) ButtonReleased []))
+          `shouldBe` "c"
+
+      it "dispatches the value when Enter is pressed while an item is focused" $
+        applyDispatches (snd $ runUI (radioGroup id radioItems "a" (\v _ -> v))
+          (withItemFocus (Just 1) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyReturn []] } radioGroupTheme () "a")))
+          `shouldBe` "b"
+
+      it "dispatches the value when Space is pressed while an item is focused" $
+        applyDispatches (snd $ runUI (radioGroup id radioItems "a" (\v _ -> v))
+          (withItemFocus (Just 2) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeySpace []] } radioGroupTheme () "a")))
+          `shouldBe` "c"
+
+      it "does not dispatch when no item is focused and a key is pressed" $
+        dispatchCount (snd $ runUI (radioGroup id radioItems "a" (\v _ -> v))
+          (withItemFocus (Just 99) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyReturn []] } radioGroupTheme () "a")))
+          `shouldBe` 0
+
+      it "does not dispatch when there is no interaction" $
+        dispatchCount (runRadioGroup "b" noInput)
+          `shouldBe` 0
+
+    describe "rendering" $ do
+      it "shows the selected mark on the selected item" $
+        drawnTexts (runRadioGroup "b" noInput) `shouldContain` ["● Beta"]
+
+      it "shows the unselected mark on other items" $ do
+        drawnTexts (runRadioGroup "b" noInput) `shouldContain` ["○ Alpha"]
+        drawnTexts (runRadioGroup "b" noInput) `shouldContain` ["○ Gamma"]
+
+      it "displays all labels regardless of selection" $
+        length (drawnTexts (runRadioGroup "a" noInput)) `shouldBe` 3

@@ -13,12 +13,14 @@ data AppState = AppState
   , isChecked1 :: Bool
   , isChecked2 :: Bool
   , animating  :: Bool
-  , sliderValue :: Double
+  , sliderValue     :: Double
+  , radioSelection  :: Int
+  , radioSelection2 :: Int
   }
 
 demoApp :: App Element (StandardControls Element) AppState
 demoApp = App
-  { startUp        = pure (AppState 0 "" False False False 0.5)
+  { startUp        = pure (AppState 0 "" False False False 0.5 0 0)
   , initialUIState = emptyStandardControls
   , theme          = \s -> if isChecked2 s then darkTheme else lightTheme
   , view           = demoView
@@ -76,6 +78,29 @@ rowSlider s =
     , (Layout (Exactly 60)  Fill         MiddleLeft, label Label (T.pack (show (round (sliderValue s * 100) :: Int) <> "%")))
     ]
 
+rowRadio :: AppState -> DemoUI ()
+rowRadio s =
+  hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
+    [ (Layout Fill Fill TopLeft,
+         vBox defaultBoxConfig
+           [ (Layout Fill (Exactly 26) TopLeft, label Label "Size")
+           , (Layout Fill Fill TopLeft,
+                radioGroup RadioOpt
+                  [(0, "Small"), (1, "Medium"), (2, "Large")]
+                  (radioSelection s)
+                  (\v st -> st { radioSelection = v }))
+           ])
+    , (Layout Fill Fill TopLeft,
+         vBox defaultBoxConfig
+           [ (Layout Fill (Exactly 26) TopLeft, label Label "Priority")
+           , (Layout Fill Fill TopLeft,
+                radioGroup RadioOpt2
+                  [(0, "Low"), (1, "Medium"), (2, "High"), (3, "Critical")]
+                  (radioSelection2 s)
+                  (\v st -> st { radioSelection2 = v }))
+           ])
+    ]
+
 rowProgress :: AppState -> DemoUI ()
 rowProgress s =
   vBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4 })
@@ -99,5 +124,6 @@ demoView = do
     , (Layout Fill (Exactly 70) TopLeft, disableWhen (not (isChecked1 s)) $ rowButtons s)
     , (Layout Fill (Exactly 50) TopLeft, disableWhen (not (isChecked1 s)) $ rowInput s)
     , (Layout Fill (Exactly 38) TopLeft, disableWhen (not (isChecked1 s)) $ rowSlider s)
+    , (Layout Fill (Exactly 130) TopLeft, disableWhen (not (isChecked1 s)) $ rowRadio s)
     , (Layout Fill Fill         TopLeft, rowProgress s)
     ]

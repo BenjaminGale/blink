@@ -66,6 +66,7 @@ module Blink.Controls
     -- * Input
   , button
   , checkbox
+  , radioGroup
   , textInput
     -- * Scroll
   , ScrollBarPart (..)
@@ -185,6 +186,29 @@ checkbox boxId text checked onToggle = do
     case styleBorderColour s of
       Just c  -> strokeRect c (styleBorderWidth s)
       Nothing -> pure ()
+
+-- | A group of mutually exclusive options. Each item renders as a radio mark
+-- and label; activating one — by click, Enter, or Space — dispatches
+-- @onChange value@. Multiple groups on screen each bind to their own
+-- application-state field; no shared state is required.
+radioGroup :: (Eq e, Ord e, Eq a)
+           => (Int -> e)     -- ^ maps item index to an element ID
+           -> [(a, Text)]    -- ^ @(value, label)@ pairs
+           -> a              -- ^ currently selected value
+           -> (a -> s -> s)
+           -> UI e u s ()
+radioGroup mkId items selected onChange =
+  vBox defaultBoxConfig (zipWith mkItem [0..] items)
+  where
+    mkItem idx (val, lbl) =
+      ( Layout Fill Fill TopLeft
+      , control (mkId idx) $ do
+          style     <- getStyle (mkId idx)
+          activated <- isActivatedBy [KeyReturn, KeySpace] (mkId idx)
+          drawText (styleTextColour style) AlignLeft $
+            (if selected == val then "● " else "○ ") <> lbl
+          when activated $ dispatch (onChange val)
+      )
 
 -- | A clickable button labelled @txt@. Returns 'True' on the frame the button
 -- is activated — by a left-click or by pressing Enter while focused.
