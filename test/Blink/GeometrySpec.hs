@@ -76,30 +76,20 @@ spec = describe "geometry" $ do
   describe "containsPoint" $ do
     let testRect = Rectangle 10 20 80 60
 
-    let interiorAndBoundaryPoints =
-          [ ("a point strictly inside", Point 50 50)
-          , ("a point on the left edge", Point 10 50)
-          , ("a point on the right edge", Point 90 50)
-          , ("a point on the top edge", Point 50 20)
-          , ("a point on the bottom edge", Point 50 80)
-          , ("the top-left corner", Point 10 20)
-          , ("the bottom-right corner", Point 90 80)
-          ]
+    it "contains a point strictly inside" $
+      containsPoint (Point 50 50) testRect `shouldBe` True
 
-    let exteriorPoints =
-          [ ("a point just outside the left edge", Point 9 50)
-          , ("a point just outside the right edge", Point 91 50)
-          , ("a point just above the top edge", Point 50 19)
-          , ("a point just below the bottom edge", Point 50 81)
-          ]
+    it "contains a point on the boundary" $
+      containsPoint (Point 10 50) testRect `shouldBe` True
 
-    forM_ interiorAndBoundaryPoints $ \(desc, pt) ->
-      it ("contains " <> desc) $
-        containsPoint pt testRect `shouldBe` True
+    it "does not contain a point outside" $
+      containsPoint (Point 9 50) testRect `shouldBe` False
 
-    forM_ exteriorPoints $ \(desc, pt) ->
-      it ("does not contain " <> desc) $
-        containsPoint pt testRect `shouldBe` False
+    prop "contains a point if and only if it lies within the inclusive bounds" $ \p r ->
+      containsPoint p r ==
+        ( pointX p >= rectX r && pointX p <= rectX r + rectWidth r
+       && pointY p >= rectY r && pointY p <= rectY r + rectHeight r
+        )
 
     prop "a zero-size rectangle contains only its origin point" $ \p q ->
       containsPoint q (Rectangle (pointX p) (pointY p) 0 0) == (q == p)
