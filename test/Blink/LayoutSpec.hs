@@ -7,7 +7,7 @@ import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (Gen, NonNegative (..), Positive (..), choose, forAll)
 
 import Blink.Generators ()
-import Blink.Geometry (Alignment (..), Point (..), Rectangle (..), insetRect, uniform)
+import Blink.Geometry (Alignment (..), Point (..), Rectangle (..), uniform)
 import Blink.Input (ButtonState (..), KeyEvent, InputState (..))
 import Blink.Layout
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -212,7 +212,7 @@ spec = describe "layout" $ do
       prop "a Fill child fills the margin-inset content area" $
         forAll margin $ \m ->
           runHBox hBounds cfg { boxMargin = m } [rc Fill Fill TopLeft]
-            `shouldBe` [insetRect (uniform m) hBounds]
+            `shouldBe` [Rectangle m m (200 - 2*m) (100 - 2*m)]
 
     describe "cross axis (height)" $ do
       it "fillCross = True stretches children to the full available height" $
@@ -269,7 +269,7 @@ spec = describe "layout" $ do
       prop "a Fill child fills the margin-inset content area" $
         forAll margin $ \m ->
           runVBox vBounds cfg { boxMargin = m } [rc Fill Fill TopLeft]
-            `shouldBe` [insetRect (uniform m) vBounds]
+            `shouldBe` [Rectangle m m (100 - 2*m) (200 - 2*m)]
 
     describe "cross axis (width)" $ do
       it "fillCross = True stretches children to the full available width" $
