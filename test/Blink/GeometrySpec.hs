@@ -2,7 +2,9 @@ module Blink.GeometrySpec (spec) where
 
 import Control.Monad (forM_)
 import Test.Hspec
+import Test.Hspec.QuickCheck (prop)
 
+import Blink.Generators ()
 import Blink.Geometry
   ( Alignment (..)
   , Insets (..)
@@ -12,6 +14,7 @@ import Blink.Geometry
   , alignRect
   , containsPoint
   , insetRect
+  , intersectRect
   , rectCentredAt
   , rectFromSize
   , resizeRect
@@ -91,6 +94,26 @@ spec = describe "geometry" $ do
     forM_ exteriorPoints $ \(desc, pt) ->
       it ("does not contain " <> desc) $
         containsPoint pt testRect `shouldBe` False
+
+  describe "intersectRect" $ do
+    it "returns the overlapping region of two partially overlapping rectangles" $
+      intersectRect (Rectangle 0 0 10 10) (Rectangle 5 5 10 10)
+        `shouldBe` Rectangle 5 5 5 5
+
+    prop "is commutative" $ \a b ->
+      intersectRect a b == (intersectRect b a :: Rectangle)
+
+    prop "is idempotent" $ \a ->
+      intersectRect a a == (a :: Rectangle)
+
+    prop "always produces non-negative dimensions" $ \a b ->
+      let r = intersectRect a b
+      in rectWidth r >= 0 && rectHeight r >= (0 :: Double)
+
+    prop "result dimensions do not exceed either input's" $ \a b ->
+      let r = intersectRect a b
+      in rectWidth r <= rectWidth a && rectWidth r <= rectWidth b
+      && rectHeight r <= rectHeight a && rectHeight r <= rectHeight b
 
   describe "alignRect" $ do
     let container = Rectangle 10 20 100 60
