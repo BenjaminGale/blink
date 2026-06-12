@@ -164,6 +164,7 @@ module Blink.UI
   , isClicked
   , isPressed
   , isDragging
+  , isMouseFree
   , isActivatedBy
     -- * Focus and keyboard navigation
   , getFocus
@@ -619,15 +620,24 @@ whenEnabled ui = do
   disabled <- isDisabled
   unless disabled ui
 
+-- | 'True' when no element currently holds mouse capture — i.e. no drag is
+-- in progress. Use alongside 'isDragging' to decide whether a control should
+-- respond to hover: @free || dragging@ allows hover when the mouse is
+-- uncontested or when this element itself owns the capture.
+isMouseFree :: UI e u s Bool
+isMouseFree = isNothing <$> gets ctxCapturedElement
+
 applyHover :: (Eq e, Ord e) => e -> UI e u s ()
 applyHover eid = do
   whenEnabled $ do
-    s <- getStyle eid
-    r <- getBounds
-    let bgRect = insetRect (styleMargin s) r
-    isHit <- withBounds bgRect regionHit
-    when isHit $ do
-      setHovered eid
+    free     <- isMouseFree
+    dragging <- isDragging eid
+    when (free || dragging) $ do
+      s <- getStyle eid
+      r <- getBounds
+      let bgRect = insetRect (styleMargin s) r
+      isHit <- withBounds bgRect regionHit
+      when isHit $ setHovered eid
 
 applyFocus :: (Eq e, Ord e) => e -> UI e u s ()
 applyFocus eid = do

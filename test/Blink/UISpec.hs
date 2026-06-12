@@ -10,6 +10,11 @@ import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 
+data TwoElems = ElemA | ElemB deriving (Eq, Ord, Show)
+
+twoElemTheme :: Theme TwoElems
+twoElemTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = emptyStyleSet }
+
 noInput :: InputState
 noInput = InputState
   { inputMousePosition = Point 0 0
@@ -80,6 +85,26 @@ spec = describe "UI primitives" $ do
              withBounds innerClip $ clipToCurrent $
              withBounds testBounds $ control () (pure ())) ctx
       in ctxHoveredElement ctx' `shouldBe` Nothing
+
+  describe "hover suppression during drag" $ do
+    let mouseOnA = noInput { inputMousePosition = Point 50 50, inputLeftButton = ButtonDown }
+
+    it "does not hover an element when another element holds capture" $
+      let ctx = (emptyUIContext testBounds mouseOnA twoElemTheme () (0 :: Int))
+                  { ctxCapturedElement = Just ElemB }
+          (_, ctx') = runUI (control ElemA (pure ())) ctx
+      in ctxHoveredElement ctx' `shouldBe` Nothing
+
+    it "hovers an element when it is itself the captured element" $
+      let ctx = (emptyUIContext testBounds mouseOnA twoElemTheme () (0 :: Int))
+                  { ctxCapturedElement = Just ElemA }
+          (_, ctx') = runUI (control ElemA (pure ())) ctx
+      in ctxHoveredElement ctx' `shouldBe` Just ElemA
+
+    it "hovers an element when no capture is active" $
+      let ctx = emptyUIContext testBounds mouseOnA twoElemTheme () (0 :: Int)
+          (_, ctx') = runUI (control ElemA (pure ())) ctx
+      in ctxHoveredElement ctx' `shouldBe` Just ElemA
 
   it "getAppState returns the frame's starting state" $
     fst (run getAppState (42 :: Int)) `shouldBe` 42
