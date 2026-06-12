@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ScrollBarPart (..), ScrollRegionPart (..), ScrollState (..), SliderPart (..), StandardControls (..), button, checkbox, emptyStandardControls, progressBar, radioGroup, scrollBar, scrollableRegion, slider, textInput)
+import Blink.Controls (ScrollBarPart (..), ScrollRegionPart (..), ScrollState (..), SliderPart (..), StandardControls (..), button, checkbox, emptyStandardControls, progressBar, radioGroup, scrollBar, scrollableRegion, scrollPosFromMouse, scrollRegionBarSize, scrollThumbRect, slider, sliderThumbRect, textInput)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -737,3 +737,80 @@ spec = describe "Controls" $ do
       it "hovers the child item when the mouse is within the viewport" $
         ctxHoveredElement (runScrollableRegion (Point 100 42))
           `shouldBe` Just SRChild
+
+  -- Geometry: Rectangle 0 0 100 200 (vertical) / Rectangle 0 0 200 100 (horizontal)
+  -- thumbH/thumbW = trackLen * ratio; range = trackLen - thumbH/W
+  describe "scrollThumbRect" $ do
+    describe "Vertical" $ do
+      let r = Rectangle 0 0 100 200
+      it "places the thumb at the top when pos=0" $
+        scrollThumbRect Vertical 0 0.5 r `shouldBe` Rectangle 0 0 100 100
+      it "places the thumb at the bottom when pos=1" $
+        scrollThumbRect Vertical 1 0.5 r `shouldBe` Rectangle 0 100 100 100
+      it "centres the thumb at pos=0.5" $
+        scrollThumbRect Vertical 0.5 0.25 r `shouldBe` Rectangle 0 75 100 50
+      it "thumb fills the track when ratio=1" $
+        scrollThumbRect Vertical 0 1 r `shouldBe` r
+      it "produces a zero-height thumb when ratio=0" $
+        rectHeight (scrollThumbRect Vertical 0 0 r) `shouldBe` 0
+
+    describe "Horizontal" $ do
+      let r = Rectangle 0 0 200 100
+      it "places the thumb at the left when pos=0" $
+        scrollThumbRect Horizontal 0 0.5 r `shouldBe` Rectangle 0 0 100 100
+      it "places the thumb at the right when pos=1" $
+        scrollThumbRect Horizontal 1 0.5 r `shouldBe` Rectangle 100 0 100 100
+
+  describe "scrollPosFromMouse" $ do
+    describe "Vertical" $ do
+      let r = Rectangle 0 0 100 200; ratio = 0.5
+      -- thumbH=100, range=100; pos = clamp 0 1 ((mouseY - thumbH/2) / range)
+      it "returns 0 when the cursor is at the thumb-centre for pos=0" $
+        scrollPosFromMouse Vertical ratio r (Point 50 50) `shouldBe` 0
+      it "returns 0.5 when the cursor is in the middle" $
+        scrollPosFromMouse Vertical ratio r (Point 50 100) `shouldBe` 0.5
+      it "returns 1 when the cursor is at the thumb-centre for pos=1" $
+        scrollPosFromMouse Vertical ratio r (Point 50 150) `shouldBe` 1
+      it "clamps to 0 when the cursor is above the track" $
+        scrollPosFromMouse Vertical ratio r (Point 50 0) `shouldBe` 0
+      it "clamps to 1 when the cursor is below the track" $
+        scrollPosFromMouse Vertical ratio r (Point 50 200) `shouldBe` 1
+      it "returns 0 when ratio=1 (no range)" $
+        scrollPosFromMouse Vertical 1 r (Point 50 100) `shouldBe` 0
+
+    describe "Horizontal" $ do
+      let r = Rectangle 0 0 200 100; ratio = 0.5
+      -- thumbW=100, range=100; pos = clamp 0 1 ((mouseX - thumbW/2) / range)
+      it "returns 0 when the cursor is at the thumb-centre for pos=0" $
+        scrollPosFromMouse Horizontal ratio r (Point 50 50) `shouldBe` 0
+      it "returns 0.5 when the cursor is in the middle" $
+        scrollPosFromMouse Horizontal ratio r (Point 100 50) `shouldBe` 0.5
+      it "returns 1 when the cursor is at the thumb-centre for pos=1" $
+        scrollPosFromMouse Horizontal ratio r (Point 150 50) `shouldBe` 1
+
+  describe "sliderThumbRect" $ do
+    describe "Horizontal" $ do
+      -- sz=rectHeight=30, range=200-30=170
+      let r = Rectangle 0 0 200 30
+      it "places the thumb at the left when pos=0" $
+        sliderThumbRect Horizontal 0 r `shouldBe` Rectangle 0 0 30 30
+      it "places the thumb at the right when pos=1" $
+        sliderThumbRect Horizontal 1 r `shouldBe` Rectangle 170 0 30 30
+      it "places the thumb in the middle at pos=0.5" $
+        sliderThumbRect Horizontal 0.5 r `shouldBe` Rectangle 85 0 30 30
+      it "thumb fills a square track with no range" $
+        sliderThumbRect Horizontal 0.5 (Rectangle 0 0 30 30) `shouldBe` Rectangle 0 0 30 30
+
+    describe "Vertical" $ do
+      -- sz=rectWidth=30, range=200-30=170
+      let r = Rectangle 0 0 30 200
+      it "places the thumb at the top when pos=0" $
+        sliderThumbRect Vertical 0 r `shouldBe` Rectangle 0 0 30 30
+      it "places the thumb at the bottom when pos=1" $
+        sliderThumbRect Vertical 1 r `shouldBe` Rectangle 0 170 30 30
+      it "places the thumb in the middle at pos=0.5" $
+        sliderThumbRect Vertical 0.5 r `shouldBe` Rectangle 0 85 30 30
+
+  describe "scrollRegionBarSize" $
+    it "is 16" $
+      scrollRegionBarSize `shouldBe` 16

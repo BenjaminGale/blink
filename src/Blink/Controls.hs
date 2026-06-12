@@ -71,13 +71,17 @@ module Blink.Controls
     -- * Scroll
   , ScrollBarPart (..)
   , scrollBar
+  , scrollThumbRect
+  , scrollPosFromMouse
     -- * Scrollable regions
   , ScrollRegionPart (..)
   , scrollableRegion
   , scrollableDynamic
+  , scrollRegionBarSize
     -- * Slider
   , SliderPart (..)
   , slider
+  , sliderThumbRect
   ) where
 
 import Control.Monad (when)
@@ -336,6 +340,10 @@ scrollBar mkId ori thumbRatio = do
         mousePos <- getMousePos
         writePos (scrollPosFromMouse ori ratio' contentRect mousePos)
 
+-- | Computes the bounding rectangle of a scrollbar thumb within a track.
+-- Exported for callers that build custom scroll surfaces or need to hit-test
+-- the thumb independently of the standard 'scrollBar' widget. @pos@ and
+-- @ratio@ are both in @[0, 1]@; the result is a sub-rectangle of @r@.
 scrollThumbRect :: Orientation -> Double -> Double -> Rectangle -> Rectangle
 scrollThumbRect Vertical pos ratio r =
   let h = rectHeight r * ratio
@@ -344,6 +352,11 @@ scrollThumbRect Horizontal pos ratio r =
   let w = rectWidth r * ratio
   in r { rectX = rectX r + (rectWidth r - w) * pos, rectWidth = w }
 
+-- | Converts a mouse position to a scroll position in @[0, 1]@, centring the
+-- thumb on the cursor. This is the inverse of 'scrollThumbRect' and is
+-- exported for the same reason: callers building custom drag handlers can
+-- reuse it rather than duplicating the clamping arithmetic. Returns @0@ when
+-- the thumb fills the track (@ratio = 1@) and there is no range to scroll.
 scrollPosFromMouse :: Orientation -> Double -> Rectangle -> Point -> Double
 scrollPosFromMouse Vertical ratio r mouse =
   let thumbH = rectHeight r * ratio
@@ -368,6 +381,10 @@ data ScrollRegionPart
   | ScrollRegionV ScrollBarPart
   deriving (Eq, Ord, Show)
 
+-- | The pixel width of a scrollbar strip used by 'scrollableRegion' and
+-- 'scrollableDynamic'. Exported so callers that compose a scrollable region
+-- inside their own layout can account for the strip in their geometry without
+-- hard-coding the value.
 scrollRegionBarSize :: Double
 scrollRegionBarSize = 16
 
@@ -506,6 +523,10 @@ slider mkId ori value onChange = do
   when decrPressed $ dispatch (onChange (max 0 (clamped - step)))
   when incrPressed $ dispatch (onChange (min 1 (clamped + step)))
 
+-- | Computes the bounding rectangle of a slider thumb within a track. The
+-- thumb is square: its side equals the cross-axis of @r@. Exported alongside
+-- 'scrollThumbRect' for callers building custom slider rendering or hit-testing
+-- outside the standard 'slider' widget. @pos@ is in @[0, 1]@.
 sliderThumbRect :: Orientation -> Double -> Rectangle -> Rectangle
 sliderThumbRect Horizontal pos r =
   let sz    = rectHeight r
