@@ -197,10 +197,12 @@ radioGroup :: (Eq e, Ord e, Eq a)
            -> a              -- ^ currently selected value
            -> (a -> s -> s)
            -> UI e u s ()
-radioGroup mkId items selected onChange =
-  vBox defaultBoxConfig (zipWith mkItem [0..] items)
+radioGroup mkId items selected onChange = do
+  initialFocus <- getFocus
+  vBox defaultBoxConfig (zipWith (mkItem initialFocus) [0..] items)
   where
-    mkItem idx (val, lbl) =
+    lastIdx = length items - 1
+    mkItem initialFocus idx (val, lbl) =
       let eid = mkId idx
       in ( Layout Fill Fill TopLeft
          , control eid $ do
@@ -209,6 +211,11 @@ radioGroup mkId items selected onChange =
              drawText (styleTextColour style) AlignLeft $
                (if selected == val then "● " else "○ ") <> lbl
              when activated $ dispatch (onChange val)
+             when (initialFocus == Just eid) $ do
+               upPressed   <- isKeyPressed eid KeyUp
+               downPressed <- isKeyPressed eid KeyDown
+               when upPressed   $ setFocus (mkId (max 0 (idx - 1)))
+               when downPressed $ setFocus (mkId (min lastIdx (idx + 1)))
          )
 
 -- | A clickable button labelled @txt@. Returns 'True' on the frame the button

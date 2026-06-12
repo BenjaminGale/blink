@@ -166,6 +166,7 @@ module Blink.UI
   , isDragging
   , isActivatedBy
     -- * Focus and keyboard navigation
+  , getFocus
   , isFocused
   , setFocus
   , setFocusWhen

@@ -679,6 +679,25 @@ spec = do
         dispatchCount (runRadioGroup "b" noInput)
           `shouldBe` 0
 
+    describe "keyboard navigation" $ do
+      let nav focusIdx key =
+            focusedElement . ctxFocusState $
+              snd $ runUI (radioGroup id radioItems "a" (\v _ -> v))
+                (withItemFocus (Just focusIdx)
+                  (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent key []] } radioGroupTheme () "a"))
+
+      it "moves focus to the next item when Down is pressed" $
+        nav 0 KeyDown `shouldBe` Just 1
+
+      it "moves focus to the previous item when Up is pressed" $
+        nav 1 KeyUp `shouldBe` Just 0
+
+      it "stays on the last item when Down is pressed at the end" $
+        nav 2 KeyDown `shouldBe` Just 2
+
+      it "stays on the first item when Up is pressed at the beginning" $
+        nav 0 KeyUp `shouldBe` Just 0
+
     describe "rendering" $ do
       it "shows the selected mark on the selected item" $
         drawnTexts (runRadioGroup "b" noInput) `shouldContain` ["● Beta"]
