@@ -1,42 +1,82 @@
+{- |
+Raw input types assembled by the backend each frame and passed to
+'Blink.App.stepFrame' inside a 'Blink.App.FrameInput'. The 'InputState'
+record aggregates pointer position, primary mouse button state, and keyboard
+events for a single frame.
+-}
 module Blink.Input
-  ( ButtonState (..)
+  ( -- * Mouse
+    ButtonState (..)
+    -- * Keyboard
   , Key (..)
   , Modifier (..)
   , KeyEvent (..)
+    -- * Frame input
   , InputState (..)
   ) where
 
 import Data.Text (Text)
 import Blink.Geometry (Point)
 
+-- | State of the primary (left) mouse button for the current frame.
+-- 'ButtonReleased' appears for exactly one frame — the frame on which the
+-- button transitions from held to up.
 data ButtonState
   = ButtonUp
+    -- ^ Button is not held.
   | ButtonDown
+    -- ^ Button is held.
   | ButtonReleased
+    -- ^ Button was released this frame.
   deriving (Eq, Show)
 
+-- | The subset of keys that Blink's controls respond to. Text entry is
+-- handled via 'inputTypedText' in 'InputState'; 'Key' covers only
+-- navigation and editing keys.
 data Key
   = KeyTab
+    -- ^ Tab key (focus forward).
   | KeyReturn
+    -- ^ Return \/ Enter key.
   | KeyBackspace
+    -- ^ Backspace key.
   | KeySpace
+    -- ^ Space bar.
   | KeyLeft
+    -- ^ Left arrow.
   | KeyRight
+    -- ^ Right arrow.
   | KeyUp
+    -- ^ Up arrow.
   | KeyDown
+    -- ^ Down arrow.
   deriving (Eq, Show)
 
-data Modifier = Shift
+-- | Keyboard modifier keys. Carried alongside a 'Key' in 'KeyEvent'.
+data Modifier
+  = Shift -- ^ Shift key held during the key press.
   deriving (Eq, Show)
 
+-- | A single keyboard event from the platform: a key press together with
+-- any modifier keys held at the time.
 data KeyEvent = KeyEvent
   { key :: Key
+    -- ^ The key that was pressed.
   , modifiers :: [Modifier]
+    -- ^ Modifier keys held at the time of the press.
   } deriving (Eq, Show)
 
+-- | All per-frame input assembled by the backend. Passed to the UI tree
+-- via the 'Blink.App.FrameInput' each frame.
 data InputState = InputState
   { inputMousePosition :: Point
+    -- ^ Cursor position in window coordinates.
   , inputLeftButton    :: ButtonState
+    -- ^ State of the primary (left) mouse button.
   , inputKeyEvents     :: [KeyEvent]
+    -- ^ Key-press events for this frame.
   , inputTypedText     :: [Text]
+    -- ^ Unicode text input events for this frame, in order received.
+    -- Distinct from 'inputKeyEvents': text input handles IME, key repeat,
+    -- and composed characters; use this for text entry fields.
   } deriving (Eq, Show)
