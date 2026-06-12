@@ -109,6 +109,7 @@ newtype ScrollState = ScrollState { scrollPosition :: Double }
 -- alongside custom state.
 data StandardControls e = StandardControls
   { scScrollStates :: Map e ScrollState
+    -- ^ Per-instance scroll positions, keyed by the scrollbar's track element ID.
   }
   deriving (Eq, Show)
 
@@ -120,7 +121,9 @@ emptyStandardControls = StandardControls Map.empty
 -- user-supplied UI state record @u@.
 class HasStandardControls e u where
   getStandardControls :: u -> StandardControls e
+  -- ^ Extract the standard controls record from the UI state.
   setStandardControls :: StandardControls e -> u -> u
+  -- ^ Replace the standard controls record in the UI state.
 
 instance HasStandardControls e (StandardControls e) where
   getStandardControls = id
@@ -261,10 +264,10 @@ textInput eid value onChange = control eid $ do
 -- scrollBar VScroll Vertical ratio
 -- @
 data ScrollBarPart
-  = ScrollTrack
-  | ScrollThumb
-  | ScrollDecrBtn
-  | ScrollIncrBtn
+  = ScrollTrack   -- ^ The track area behind the thumb.
+  | ScrollThumb   -- ^ The draggable thumb.
+  | ScrollDecrBtn -- ^ The decrement arrow button.
+  | ScrollIncrBtn -- ^ The increment arrow button.
   deriving (Eq, Ord, Show)
 
 -- | A scrollbar with decrement\/increment buttons flanking a draggable thumb.
@@ -395,8 +398,8 @@ scrollPosFromMouse Horizontal ratio r mouse =
 -- scrollableRegion MyRegion 600 400 content
 -- @
 data ScrollRegionPart
-  = ScrollRegionH ScrollBarPart
-  | ScrollRegionV ScrollBarPart
+  = ScrollRegionH ScrollBarPart -- ^ A part of the horizontal scrollbar.
+  | ScrollRegionV ScrollBarPart -- ^ A part of the vertical scrollbar.
   deriving (Eq, Ord, Show)
 
 -- | The pixel width of a scrollbar strip used by 'scrollableRegion' and
@@ -499,7 +502,9 @@ scrollableDynamic mkId hThumb vThumb content = do
 -- data Element = ... | HSlider SliderPart
 -- slider HSlider Horizontal value (\\v s -> s { volume = v })
 -- @
-data SliderPart = SliderTrack | SliderThumb
+data SliderPart
+  = SliderTrack -- ^ The track area behind the thumb.
+  | SliderThumb -- ^ The draggable thumb.
   deriving (Eq, Ord, Show)
 
 -- | A slider mapping a draggable thumb to a value in @[0, 1]@. Dispatches
