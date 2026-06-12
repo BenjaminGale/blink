@@ -107,6 +107,7 @@ data StandardControls e = StandardControls
     -- ^ Animation phase in @[0, 1)@ for each animated control instance,
     -- keyed by element ID. Populated lazily on first write.
   }
+  deriving (Eq, Show)
 
 -- | A 'StandardControls' with no per-control state recorded yet.
 emptyStandardControls :: StandardControls e
