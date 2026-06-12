@@ -4,6 +4,7 @@ import Control.Monad (forM_)
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
+import Test.QuickCheck (NonNegative (..), Positive (..))
 
 import Blink.Generators ()
 import Blink.Geometry (Alignment (..), Point (..), Rectangle (..), uniform)
@@ -285,3 +286,13 @@ spec = describe "layout" $ do
       it "BottomLeft aligns the content block to the bottom" $
         runVBox vBounds cfg { boxAlignment = BottomLeft } threeExact
           `shouldBe` [Rectangle 0 80 100 40, Rectangle 0 120 100 40, Rectangle 0 160 100 40]
+
+  describe "boxTotalSpacing" $ do
+    it "returns 0 for zero children" $
+      boxTotalSpacing cfg { boxSpacing = 10 } 0 `shouldBe` 0
+
+    it "returns 0 for one child" $
+      boxTotalSpacing cfg { boxSpacing = 10 } 1 `shouldBe` 0
+
+    prop "returns spacing × (n-1) for n children" $ \(NonNegative spacing) (Positive n) ->
+      boxTotalSpacing cfg { boxSpacing = spacing } n `shouldBe` spacing * fromIntegral (n - 1 :: Int)
