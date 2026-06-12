@@ -13,11 +13,12 @@ data AppState = AppState
   , isChecked1 :: Bool
   , isChecked2 :: Bool
   , animating  :: Bool
+  , sliderValue :: Double
   }
 
 demoApp :: App Element (StandardControls Element) AppState
 demoApp = App
-  { startUp        = pure (AppState 0 "" False False False)
+  { startUp        = pure (AppState 0 "" False False False 0.5)
   , initialUIState = emptyStandardControls
   , theme          = \s -> if isChecked2 s then darkTheme else lightTheme
   , view           = demoView
@@ -67,6 +68,14 @@ rowCheckboxes s =
          checkbox CheckboxBox3 "Animate" (animating s) (\v st -> st { animating = v }))
     ]
 
+rowSlider :: AppState -> DemoUI ()
+rowSlider s =
+  hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
+    [ (Layout (Exactly 200) Fill         MiddleLeft, label Label "Slider")
+    , (Layout Fill          (Exactly 30) TopLeft,    slider Slider1 Horizontal (sliderValue s) (\v st -> st { sliderValue = v }))
+    , (Layout (Exactly 60)  Fill         MiddleLeft, label Label (T.pack (show (round (sliderValue s * 100) :: Int) <> "%")))
+    ]
+
 rowProgress :: AppState -> DemoUI ()
 rowProgress s =
   vBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4 })
@@ -89,5 +98,6 @@ demoView = do
     [ (Layout Fill (Exactly 50) TopLeft, rowCheckboxes s)
     , (Layout Fill (Exactly 70) TopLeft, disableWhen (not (isChecked1 s)) $ rowButtons s)
     , (Layout Fill (Exactly 50) TopLeft, disableWhen (not (isChecked1 s)) $ rowInput s)
+    , (Layout Fill (Exactly 38) TopLeft, disableWhen (not (isChecked1 s)) $ rowSlider s)
     , (Layout Fill Fill         TopLeft, rowProgress s)
     ]

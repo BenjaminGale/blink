@@ -15,7 +15,15 @@ data ButtonState
   | ButtonReleased
   deriving (Eq, Show)
 
-data Key = KeyTab | KeyReturn | KeyBackspace | KeySpace
+data Key
+  = KeyTab
+  | KeyReturn
+  | KeyBackspace
+  | KeySpace
+  | KeyLeft
+  | KeyRight
+  | KeyUp
+  | KeyDown
   deriving (Eq, Show)
 
 data Modifier = Shift

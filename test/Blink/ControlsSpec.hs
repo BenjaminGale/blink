@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ScrollBarPart (..), ScrollState (..), StandardControls (..), button, checkbox, progressBar, scrollBar, textInput)
+import Blink.Controls (ScrollBarPart (..), ScrollState (..), SliderPart (..), StandardControls (..), button, checkbox, progressBar, scrollBar, slider, textInput)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -290,6 +290,33 @@ boxPoint = Point 10 50
 drawnTexts :: UIContext e u s -> [Text]
 drawnTexts ctx = [t | DrawText _ t _ _ <- getDrawCommands ctx]
 
+-- runSliderControl maps SliderTrack -> TestControl and SliderThumb -> OtherControl
+-- so the control suite helpers work without modification.
+runSliderControl :: WidgetRunner
+runSliderControl ctx = snd $ runUI (slider tag Horizontal 0.5 (\_ s -> s)) ctx
+  where
+    tag SliderTrack = TestControl
+    tag SliderThumb = OtherControl
+
+-- slider setup: element type is SliderPart (mkId = id), app state IS the value.
+-- Rect is 200×30; with zero margin/padding the thumb is 30×30, giving a travel
+-- range of 170px. scrollPosFromMouse centres the thumb on the cursor, so:
+--   value = clamp 0 1 ((mouseX - 15) / 170)
+-- Key positions: mouseX=15 → 0.0, mouseX=100 → 0.5, mouseX=185 → 1.0.
+sliderTheme :: Theme SliderPart
+sliderTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = zeroMarginStyleSet }
+
+sliderRect :: Rectangle
+sliderRect = Rectangle 0 0 200 30
+
+runSlider :: Orientation -> Double -> InputState -> UIContext SliderPart () Double
+runSlider ori val input =
+  snd $ runUI (slider id ori val (\v _ -> v))
+    (emptyUIContext sliderRect input sliderTheme () val)
+
+withSliderFocus :: Maybe SliderPart -> UIContext SliderPart () Double -> UIContext SliderPart () Double
+withSliderFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = e } }
+
 -- scrollBar setup: the element type is ScrollBarPart itself (mkId = id) and
 -- the UI state is a StandardControls holding the position keyed by ScrollTrack.
 scrollControls :: Double -> StandardControls ScrollBarPart
@@ -523,3 +550,69 @@ spec = do
       it "is not activated by Enter when disabled" $
         fst (runUI (disableWhen True (button TestControl "label")) (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })))
           `shouldBe` False
+
+  describe "slider" $ do
+    controlBehaviourSpec runSliderControl (Point 50 50)
+    describe "background and border" $ backgroundAndBorderSpec runSliderControl
+
+    describe "drag interaction" $ do
+      it "sets value to 0.5 when dragged to the midpoint" $
+        applyDispatches (runSlider Horizontal 0 (mouseAt (Point 100 15) ButtonDown []))
+          `shouldBe` 0.5
+
+      it "sets value to 0 when dragged to the far left" $
+        applyDispatches (runSlider Horizontal 0.5 (mouseAt (Point 15 15) ButtonDown []))
+          `shouldBe` 0.0
+
+      it "sets value to 1 when dragged to the far right" $
+        applyDispatches (runSlider Horizontal 0.5 (mouseAt (Point 185 15) ButtonDown []))
+          `shouldBe` 1.0
+
+      it "continues tracking when the mouse moves outside the track while button held" $
+        let frame1 = runSlider Horizontal 0 (mouseAt (Point 100 15) ButtonDown [])
+            val1   = applyDispatches frame1
+            frame2 = snd $ runUI (slider id Horizontal val1 (\v _ -> v))
+                                 (nextFrameContext sliderRect (mouseAt (Point 300 15) ButtonDown []) frame1)
+        in applyDispatches frame2 `shouldBe` 1.0
+
+      it "stops tracking when the button is released" $
+        let frame1 = runSlider Horizontal 0 (mouseAt (Point 100 15) ButtonDown [])
+            val1   = applyDispatches frame1
+            frame2 = snd $ runUI (slider id Horizontal val1 (\v _ -> v))
+                                 (nextFrameContext sliderRect (mouseAt (Point 300 15) ButtonUp []) frame1)
+        in dispatchCount frame2 `shouldBe` 0
+
+    describe "keyboard nudging" $ do
+      it "increases value by 0.05 when Right is pressed (Horizontal)" $
+        applyDispatches (runSlider Horizontal 0.5 noInput { inputKeyEvents = [KeyEvent KeyRight []] })
+          `shouldBe` 0.55
+
+      it "decreases value by 0.05 when Left is pressed (Horizontal)" $
+        applyDispatches (runSlider Horizontal 0.5 noInput { inputKeyEvents = [KeyEvent KeyLeft []] })
+          `shouldBe` 0.45
+
+      it "increases value by 0.05 when Down is pressed (Vertical)" $
+        applyDispatches (runSlider Vertical 0.5 noInput { inputKeyEvents = [KeyEvent KeyDown []] })
+          `shouldBe` 0.55
+
+      it "decreases value by 0.05 when Up is pressed (Vertical)" $
+        applyDispatches (runSlider Vertical 0.5 noInput { inputKeyEvents = [KeyEvent KeyUp []] })
+          `shouldBe` 0.45
+
+      it "clamps to 1 when nudging at the maximum" $
+        applyDispatches (runSlider Horizontal 1.0 noInput { inputKeyEvents = [KeyEvent KeyRight []] })
+          `shouldBe` 1.0
+
+      it "clamps to 0 when nudging at the minimum" $
+        applyDispatches (runSlider Horizontal 0.0 noInput { inputKeyEvents = [KeyEvent KeyLeft []] })
+          `shouldBe` 0.0
+
+      it "does not nudge when another element has focus" $
+        applyDispatches (snd $ runUI (slider id Horizontal 0.5 (\v _ -> v))
+          (withSliderFocus (Just SliderThumb) (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme () 0.5)))
+          `shouldBe` 0.5
+
+    describe "without interaction" $ do
+      it "does not dispatch when there is no input" $
+        dispatchCount (runSlider Horizontal 0.5 noInput)
+          `shouldBe` 0

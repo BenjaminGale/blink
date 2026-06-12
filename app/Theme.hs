@@ -14,6 +14,7 @@ data Element = Label
              | ProgressBar1 | ProgressBar2
              | ScrollBar1 ScrollBarPart
              | ScrollBar2 ScrollBarPart
+             | Slider1 SliderPart
   deriving (Eq, Ord)
 
 data Palette = Palette
@@ -225,6 +226,8 @@ mkTheme p = Theme
       , (ScrollBar1 ScrollThumb,    mkScrollThumbStyle p)
       , (ScrollBar2 ScrollTrack,    mkScrollTrackStyle p)
       , (ScrollBar2 ScrollThumb,    mkScrollThumbStyle p)
+      , (Slider1 SliderTrack,       mkScrollTrackStyle p)
+      , (Slider1 SliderThumb,       mkScrollThumbStyle p)
       ]
   , themeDefaultStyle = mkBtnStyle p
   }

@@ -70,6 +70,9 @@ module Blink.Controls
     -- * Scroll
   , ScrollBarPart (..)
   , scrollBar
+    -- * Slider
+  , SliderPart (..)
+  , slider
   ) where
 
 import Control.Monad (when)
@@ -315,3 +318,62 @@ scrollPosFromMouse Horizontal ratio r mouse =
       range  = rectWidth r - thumbW
   in if range <= 0 then 0
      else max 0 (min 1 ((pointX mouse - rectX r - thumbW / 2) / range))
+
+-- | Sub-parts of a slider, used as the inner tag when building the
+-- control's element IDs via a tagging function:
+--
+-- @
+-- data Element = ... | HSlider SliderPart
+-- slider HSlider Horizontal value (\\v s -> s { volume = v })
+-- @
+data SliderPart = SliderTrack | SliderThumb
+  deriving (Eq, Ord, Show)
+
+-- | A slider mapping a draggable thumb to a value in @[0, 1]@. Dispatches
+-- @onChange newValue@ when the user drags, clicks on the track, or nudges
+-- with arrow keys (Left\/Right for 'Horizontal', Up\/Down for 'Vertical').
+-- The thumb is square: its side equals the cross-axis of the track's content
+-- rectangle. Arrow-key steps are 0.05.
+slider :: (Eq e, Ord e)
+       => (SliderPart -> e)
+       -> Orientation
+       -> Double
+       -> (Double -> s -> s)
+       -> UI e u s ()
+slider mkId ori value onChange = do
+  let trackId = mkId SliderTrack
+      clamped = max 0 (min 1 value)
+  slotBounds <- getBounds
+  styleSet   <- getStyleSet trackId
+  let normalStyle = styleSetNormal styleSet
+      bgRect      = insetRect (styleMargin normalStyle) slotBounds
+      contentRect = insetRect (stylePadding normalStyle) bgRect
+      (crossSz, mainSz) = case ori of
+        Horizontal -> (rectHeight contentRect, rectWidth contentRect)
+        Vertical   -> (rectWidth contentRect,  rectHeight contentRect)
+      thumbRatio  = if mainSz > 0 then crossSz / mainSz else 0
+      thumbR      = sliderThumbRect ori clamped contentRect
+  control trackId $
+    withBounds thumbR $ renderControl (mkId SliderThumb) $ pure ()
+  dragging <- isDragging trackId
+  when dragging $ do
+    mousePos <- getMousePos
+    dispatch (onChange (scrollPosFromMouse ori thumbRatio contentRect mousePos))
+  let step = 0.05
+      (decrKey, incrKey) = case ori of
+        Horizontal -> (KeyLeft,  KeyRight)
+        Vertical   -> (KeyUp,    KeyDown)
+  decrPressed <- isKeyPressed trackId decrKey
+  incrPressed <- isKeyPressed trackId incrKey
+  when decrPressed $ dispatch (onChange (max 0 (clamped - step)))
+  when incrPressed $ dispatch (onChange (min 1 (clamped + step)))
+
+sliderThumbRect :: Orientation -> Double -> Rectangle -> Rectangle
+sliderThumbRect Horizontal pos r =
+  let sz    = rectHeight r
+      range = max 0 (rectWidth r - sz)
+  in r { rectX = rectX r + range * pos, rectWidth = sz }
+sliderThumbRect Vertical pos r =
+  let sz    = rectWidth r
+      range = max 0 (rectHeight r - sz)
+  in r { rectY = rectY r + range * pos, rectHeight = sz }
