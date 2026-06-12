@@ -4,6 +4,7 @@ module UI (Element, AppState (..), demoApp) where
 import Blink
 import Theme (Element (..), lightTheme, darkTheme)
 import Control.Monad (when)
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -16,11 +17,14 @@ data AppState = AppState
   , sliderValue     :: Double
   , radioSelection  :: Int
   , radioSelection2 :: Int
+  , lastInput      :: Text
+  , lastInputCount :: Int
+  , isHovering     :: Bool
   }
 
 demoApp :: App Element (StandardControls Element) AppState
 demoApp = App
-  { startUp        = pure (AppState 0 "" False False False 0.5 0 0)
+  { startUp        = pure (AppState 0 "" False False False 0.5 0 0 "" 0 False)
   , initialUIState = emptyStandardControls
   , theme          = \s -> if isChecked2 s then darkTheme else lightTheme
   , view           = demoView
@@ -115,15 +119,56 @@ rowProgress s =
     , (Layout Fill (Exactly 20) TopLeft, scrollBar ScrollBar1 Horizontal 0.2)
     ]
 
+rowDebugInfo :: AppState -> (Int, Int) -> DemoUI ()
+rowDebugInfo s (winW, winH) = do
+  pos  <- getMousePos
+  mbtn <- getLeftButton
+  let winText    = "Window: " <> T.pack (show winW) <> " x " <> T.pack (show winH)
+      mx         = T.pack (show (round (pointX pos) :: Int))
+      my         = T.pack (show (round (pointY pos) :: Int))
+      mouseText  = "Mouse: " <> mx <> ", " <> my
+      buttonText = "Button: " <> T.pack (show mbtn)
+      hoverText  = "Hover: " <> if isHovering s then "Yes" else "No"
+      countSuffix = if lastInputCount s > 1 then " (" <> T.pack (show (lastInputCount s)) <> ")" else ""
+      keyText     = "Last Key Press: " <> if T.null (lastInput s) then "none" else lastInput s <> countSuffix
+  hBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 4, boxAlignment = Center })
+    [ (Layout (Exactly 160) Fill MiddleLeft, label Label winText)
+    , (Layout (Exactly 130) Fill MiddleLeft, label Label mouseText)
+    , (Layout (Exactly 140) Fill MiddleLeft, label Label buttonText)
+    , (Layout (Exactly 80)  Fill MiddleLeft, label Label hoverText)
+    , (Layout Fill          Fill MiddleLeft, label Label keyText)
+    ]
+
 demoView :: DemoUI ()
 demoView = do
-  s <- getAppState
+  s     <- getAppState
+  -- Snapshot input before controls consume key events (e.g. Tab navigation)
+  input <- getInput
+  win   <- getBounds
+  let winSize = (round (rectWidth win) :: Int, round (rectHeight win) :: Int)
   when (isChecked2 s) $ fillRect (RGBA 0.082 0.102 0.129 1)
   vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
-    [ (Layout Fill (Exactly 50) TopLeft, rowCheckboxes s)
+    [ (Layout Fill (Exactly 40) TopLeft, rowDebugInfo s winSize)
+    , (Layout Fill (Exactly 50) TopLeft, rowCheckboxes s)
     , (Layout Fill (Exactly 70) TopLeft, disableWhen (not (isChecked1 s)) $ rowButtons s)
     , (Layout Fill (Exactly 50) TopLeft, disableWhen (not (isChecked1 s)) $ rowInput s)
     , (Layout Fill (Exactly 38) TopLeft, disableWhen (not (isChecked1 s)) $ rowSlider s)
     , (Layout Fill (Exactly 130) TopLeft, disableWhen (not (isChecked1 s)) $ rowRadio s)
     , (Layout Fill Fill         TopLeft, rowProgress s)
     ]
+  -- Capture hover state at end of frame (after all controls have registered hover)
+  mHov  <- UI $ \ctx -> (ctxHoveredElement ctx, ctx)
+  let typed   = T.concat (inputTypedText input)
+      keyName = case inputKeyEvents input of
+                  []      -> ""
+                  (e : _) -> T.pack (show (key e))
+      newInput = if not (T.null typed)
+                   then if typed == " " then "Space" else "Character " <> typed
+                   else keyName
+  dispatch $ \s' -> s'
+    { isHovering     = isJust mHov
+    , lastInput      = if T.null newInput then lastInput s' else newInput
+    , lastInputCount = if T.null newInput then lastInputCount s'
+                       else if newInput == lastInput s' then lastInputCount s' + 1
+                       else 1
+    }
