@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ScrollBarPart (..), ScrollRegionPart (..), ScrollState (..), SliderPart (..), StandardControls (..), button, checkbox, emptyStandardControls, progressBar, radioGroup, scrollBar, scrollableRegion, scrollPosFromMouse, scrollRegionBarSize, scrollThumbRect, slider, sliderThumbRect, textInput)
+import Blink.Controls (ScrollBarPart (..), ScrollRegionPart (..), ScrollState (..), SliderPart (..), StandardControls (..), button, checkbox, emptyStandardControls, progressBar, radioGroup, readScrollPos, scrollBar, scrollableRegion, scrollPosFromMouse, scrollRegionBarSize, scrollThumbRect, slider, sliderThumbRect, textInput, writeScrollPos)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -388,6 +388,18 @@ runScrollableRegion mousePos =
   let input = noInput { inputMousePosition = mousePos }
       ctx = emptyUIContext srOuterRect input srTheme emptyStandardControls ()
   in snd $ runUI (scrollableRegion SRPart 400 100 (control SRChild (pure ()))) ctx
+
+-- readScrollPos: dispatches the stored position as the app state so applyDispatches returns it.
+runReadScrollPos :: Double -> UIContext ScrollBarPart (StandardControls ScrollBarPart) Double
+runReadScrollPos initPos =
+  snd $ runUI (readScrollPos ScrollTrack >>= \p -> dispatch (\_ -> p))
+              (emptyUIContext scrollRect noInput scrollTheme (scrollControls initPos) 0)
+
+-- writeScrollPos: writes to UI state; scrollPos inspects scScrollStates directly.
+runWriteScrollPos :: Double -> UIContext ScrollBarPart (StandardControls ScrollBarPart) ()
+runWriteScrollPos v =
+  snd $ runUI (writeScrollPos ScrollTrack v)
+              (emptyUIContext scrollRect noInput scrollTheme emptyStandardControls ())
 
 spec :: Spec
 spec = describe "Controls" $ do
@@ -814,3 +826,20 @@ spec = describe "Controls" $ do
   describe "scrollRegionBarSize" $
     it "is 16" $
       scrollRegionBarSize `shouldBe` 16
+
+  describe "readScrollPos" $ do
+    it "returns 0 when no position has been recorded" $
+      applyDispatches (runReadScrollPos 0) `shouldBe` 0
+
+    it "returns the stored scroll position" $
+      applyDispatches (runReadScrollPos 0.75) `shouldBe` 0.75
+
+  describe "writeScrollPos" $ do
+    it "stores the given position" $
+      scrollPos (runWriteScrollPos 0.5) `shouldBe` 0.5
+
+    it "clamps values below 0 to 0" $
+      scrollPos (runWriteScrollPos (-0.5)) `shouldBe` 0
+
+    it "clamps values above 1 to 1" $
+      scrollPos (runWriteScrollPos 1.5) `shouldBe` 1

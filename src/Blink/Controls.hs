@@ -71,6 +71,8 @@ module Blink.Controls
     -- * Scroll
   , ScrollBarPart (..)
   , scrollBar
+  , readScrollPos
+  , writeScrollPos
   , scrollThumbRect
   , scrollPosFromMouse
     -- * Scrollable regions
@@ -339,6 +341,28 @@ scrollBar mkId ori thumbRatio = do
       when dragging $ do
         mousePos <- getMousePos
         writePos (scrollPosFromMouse ori ratio' contentRect mousePos)
+
+-- | Read the current scroll position for the scrollbar keyed by @trackId@,
+-- returning @0@ if no position has been recorded yet. Use this to
+-- programmatically observe scroll state — for example, to show a "Back to
+-- top" button only when the user has scrolled down.
+readScrollPos
+  :: (Ord e, HasStandardControls e u)
+  => e -> UI e u s Double
+readScrollPos trackId = do
+  sc <- getStandardControls <$> getUIState
+  pure (scrollPosition (Map.findWithDefault (ScrollState 0) trackId (scScrollStates sc)))
+
+-- | Overwrite the scroll position for the scrollbar keyed by @trackId@. The
+-- value is clamped to @[0, 1]@. Use this to drive scroll position from
+-- application logic — for example, a "Scroll to top" button or resetting
+-- position when the content changes.
+writeScrollPos
+  :: (Ord e, HasStandardControls e u)
+  => e -> Double -> UI e u s ()
+writeScrollPos trackId v = modifyUIState $ \u ->
+  let sc = getStandardControls u
+  in setStandardControls (sc { scScrollStates = Map.insert trackId (ScrollState (max 0 (min 1 v))) (scScrollStates sc) }) u
 
 -- | Computes the bounding rectangle of a scrollbar thumb within a track.
 -- Exported for callers that build custom scroll surfaces or need to hit-test
