@@ -79,7 +79,6 @@ the element has registered a hover hit via 'setHovered' (or the high-level
   * 'isHovered' — the mouse is inside the element's bounds.
   * 'isPressed' — the left button is held while the element is hovered.
   * 'isClicked' — the left button was just released while the element is hovered.
-  * 'isKeyPressed' — the element is focused and a matching key event is present.
 
 'regionHit' is the lower-level primitive: it checks whether the mouse is within
 the /current bounds/, without reference to any element ID.
@@ -89,12 +88,11 @@ the /current bounds/, without reference to any element ID.
 At most one element holds keyboard focus at a time, tracked in 'FocusState'.
 
   * 'isFocused' \/ 'setFocus' \/ 'clearFocus' — query and update focus.
-  * 'whenFocused' — run an action only when an element is focused.
   * 'consumeKey' — remove a key event from the frame's queue so that it is not
     handled by multiple controls in the same frame.
 
 Tab and Shift-Tab navigation between controls is managed automatically by
-'control'.
+'control' in "Blink.Controls".
 
 = Styles
 
@@ -109,13 +107,6 @@ one is needed simultaneously.
 'disableWhen' marks an entire sub-tree as disabled. Disabled controls render
 normally but ignore all input. 'whenEnabled' is a guard that skips its body
 when disabled.
-
-= Building controls
-
-'control' is the high-level entry point for interactive controls: it applies
-hover detection, focus management, tab navigation, and style-aware rendering in
-one call. 'renderControl' provides the rendering half alone, for display-only
-elements that should not participate in interaction.
 -}
 module Blink.UI
   ( -- * The UI monad
@@ -163,15 +154,13 @@ module Blink.UI
   , isPressed
   , isDragging
   , isMouseFree
-  , isActivatedBy
+  , getCapturedElement
     -- * Focus and keyboard navigation
   , getFocus
   , isFocused
   , setFocus
   , setFocusWhen
   , clearFocus
-  , whenFocused
-  , isKeyPressed
   , consumeKey
   , getPreviousTabStop
   , setPreviousTabStop
@@ -188,21 +177,18 @@ module Blink.UI
   , withAnimationFrame
   , getAnimDelta
   , getAnimElapsed
-    -- * Building controls
-  , control
-  , renderControl
   ) where
 
-import Control.Monad (when, unless, guard, forM_)
+import Control.Monad (when, unless, guard)
 import Data.Foldable (asum)
 import Data.Functor (($>))
-import Data.List (find, foldl')
-import Data.Maybe (isNothing, isJust, fromMaybe, listToMaybe)
+import Data.List (foldl')
+import Data.Maybe (isNothing, fromMaybe, listToMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..))
-import Blink.Geometry (Point, Rectangle, containsPoint, intersectRect, insetRect)
-import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
+import Blink.Geometry (Point, Rectangle, containsPoint, intersectRect)
+import Blink.Input (ButtonState (..), Key (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 
 -- | Per-frame animation state threaded through the 'UIContext'. Set by the
@@ -464,16 +450,6 @@ isPressed eid = do
   btn   <- getLeftButton
   return (isHov && btn == ButtonDown)
 
--- | 'True' when the element is clicked or any of the given keys are pressed
--- while it is focused, and the element is not disabled. Use this to implement
--- the activation behaviour of interactive controls.
-isActivatedBy :: (Eq e, Ord e) => [Key] -> e -> UI e s Bool
-isActivatedBy keys eid = do
-  clicked  <- isClicked eid
-  keyPress <- or <$> mapM (isKeyPressed eid) keys
-  disabled <- isDisabled
-  return (not disabled && (clicked || keyPress))
-
 -- | Derives the next frame's captured element from the current button state.
 -- Capture is carried forward while the button is held and survives through
 -- ButtonReleased so that 'applyFocus' can distinguish a drag release (mouse
@@ -489,18 +465,11 @@ nextCapture _             _        = Nothing
 isDragging :: Eq e => e -> UI e s Bool
 isDragging eid = (== Just eid) <$> gets ctxCapturedElement
 
-
--- | Runs an action only when the given element holds keyboard focus.
-whenFocused :: Eq e => e -> UI e s () -> UI e s ()
-whenFocused eid action = isFocused eid >>= \f -> when f action
-
--- | 'True' when the element holds focus and a key event for @k@ is present
--- in the current frame's input queue.
-isKeyPressed :: Eq e => e -> Key -> UI e s Bool
-isKeyPressed eid k = do
-  hasFoc <- isFocused eid
-  pressed <- any (\e -> key e == k) . inputKeyEvents <$> getInput
-  return (hasFoc && pressed)
+-- | The element that currently holds mouse capture, or 'Nothing' when no drag
+-- is in progress. Exported for control authors that need to inspect capture
+-- state directly, e.g. when implementing focus-on-click without using 'control'.
+getCapturedElement :: UI e s (Maybe e)
+getCapturedElement = gets ctxCapturedElement
 
 -- | Registers the element as the current hover target. Also acquires mouse
 -- capture for it if the left button is currently down and nothing is captured
@@ -664,54 +633,6 @@ whenEnabled ui = do
 isMouseFree :: UI e s Bool
 isMouseFree = isNothing <$> gets ctxCapturedElement
 
-applyHover :: (Eq e, Ord e) => e -> UI e s ()
-applyHover eid = do
-  whenEnabled $ do
-    free     <- isMouseFree
-    dragging <- isDragging eid
-    when (free || dragging) $ do
-      s <- getStyle eid
-      r <- getBounds
-      let bgRect = insetRect (styleMargin s) r
-      isHit <- withBounds bgRect regionHit
-      when isHit $ setHovered eid
-
-applyFocus :: (Eq e, Ord e) => e -> UI e s ()
-applyFocus eid = do
-  whenEnabled $ do
-    currentFocus <- getFocus
-    isHit        <- isHovered eid
-    btn          <- getLeftButton
-    captured     <- gets ctxCapturedElement
-    let nothingIsFocused = isNothing currentFocus
-        -- Re-claims focus each frame so nextFocusFrame does not treat this
-        -- element as stale when it is still present in the tree.
-        isRetainingFocus = currentFocus == Just eid
-        -- A drag release is when the button is released over a different
-        -- element than the one that was captured. Focus should not transfer
-        -- in that case — the drag origin retains focus.
-        isDragRelease = btn == ButtonReleased && isJust captured && captured /= Just eid
-        wasClicked    = isHit && btn == ButtonReleased && not isDragRelease
-    setFocusWhen ((nothingIsFocused || isRetainingFocus || wasClicked) && not isDragRelease) eid
-
-applyTabNavigation :: (Eq e, Ord e) => e -> UI e s ()
-applyTabNavigation eid = do
-  hasFocus <- isFocused eid
-  input    <- getInput
-  prevCtrl <- getPreviousTabStop
-  let tabKey          = find (\e -> key e == KeyTab) (inputKeyEvents input)
-      tabPressed      = maybe False (\e -> Shift `notElem` modifiers e) tabKey
-      shiftTabPressed = maybe False (\e -> Shift `elem`    modifiers e) tabKey
-  when (hasFocus && tabPressed) $ do
-    clearFocus
-    consumeKey KeyTab
-  when (hasFocus && shiftTabPressed) $
-    forM_ prevCtrl $ \prev -> do
-      setFocus prev
-      consumeKey KeyTab
-  whenEnabled $ do
-    setPreviousTabStop eid
-
 -- | Signals that animation should continue running. Call unconditionally on
 -- every frame from any component that needs animation, including frames not
 -- triggered by the ticker. Keeps 'refsAnimActive' set so the ticker does not
@@ -739,37 +660,3 @@ getAnimDelta = gets (animDelta . ctxAnimation)
 getAnimElapsed :: UI e s Float
 getAnimElapsed = gets (animElapsed . ctxAnimation)
 
--- | Style-aware rendering for a control. Applies the element's margin, draws
--- its background and border, and runs @content@ within the padded content
--- rectangle. Does not perform hover detection, focus management, or tab
--- navigation — use this for display-only elements that should not participate
--- in interaction. See 'control' for the interactive counterpart.
-renderControl :: Ord e => e -> UI e s () -> UI e s ()
-renderControl eid content = do
-  style <- getStyle eid
-  r     <- getBounds
-  let bgRect      = insetRect (styleMargin style) r
-      contentRect = insetRect (stylePadding style) bgRect
-      inner       = withBounds contentRect $ clipToCurrent content
-  withBounds bgRect $
-    withBackground (styleBackground style) $
-    case styleBorderColour style of
-      Just c  -> withBorder c (styleBorderWidth style) inner
-      Nothing -> inner
-
--- | The standard entry point for interactive controls. Applies hover detection,
--- focus management, and Tab\/Shift-Tab navigation, then delegates to
--- 'renderControl' for style-aware rendering. @content@ runs inside the padded
--- content rectangle.
---
--- @
--- control eid $ do
---   style <- getStyle eid
---   drawText (styleTextColour style) (styleTextAlign style) label
--- @
-control :: (Eq e, Ord e) => e -> UI e s () -> UI e s ()
-control eid content = do
-  applyHover eid
-  applyFocus eid
-  applyTabNavigation eid
-  renderControl eid content

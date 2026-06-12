@@ -8,6 +8,7 @@ import Blink.Geometry (Point (..), Rectangle (..), uniform)
 import Blink.Input (ButtonState (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Controls (control)
 import Blink.UI
 
 data TwoElems = ElemA | ElemB deriving (Eq, Ord, Show)

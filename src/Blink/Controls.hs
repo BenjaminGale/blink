@@ -55,14 +55,21 @@ module Blink.Controls
   , SliderPart (..)
   , slider
   , sliderThumbRect
+    -- * Building controls
+  , control
+  , renderControl
+  , isActivatedBy
+  , whenFocused
+  , isKeyPressed
   ) where
 
-import Control.Monad (when)
-import Data.List (foldl')
+import Control.Monad (when, forM_)
+import Data.List (foldl', find)
+import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Blink.Geometry (Alignment (..), Orientation (..), Point (..), Rectangle (..), insetRect)
-import Blink.Input (Key (..), InputState (..))
+import Blink.Input (ButtonState (..), Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (Layout (..), Length (..), BoxConfig (..), hBox, vBox, defaultBoxConfig)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
@@ -481,3 +488,106 @@ sliderThumbRect Vertical pos r =
   let sz    = rectWidth r
       range = max 0 (rectHeight r - sz)
   in r { rectY = rectY r + range * pos, rectHeight = sz }
+
+-- | Style-aware rendering for a control. Applies the element's margin, draws
+-- its background and border, and runs @content@ within the padded content
+-- rectangle. Does not perform hover detection, focus management, or tab
+-- navigation — use this for display-only elements that should not participate
+-- in interaction. See 'control' for the interactive counterpart.
+renderControl :: Ord e => e -> UI e s () -> UI e s ()
+renderControl eid content = do
+  style <- getStyle eid
+  r     <- getBounds
+  let bgRect      = insetRect (styleMargin style) r
+      contentRect = insetRect (stylePadding style) bgRect
+      inner       = withBounds contentRect $ clipToCurrent content
+  withBounds bgRect $
+    withBackground (styleBackground style) $
+    case styleBorderColour style of
+      Just c  -> withBorder c (styleBorderWidth style) inner
+      Nothing -> inner
+
+-- | The standard entry point for interactive controls. Applies hover detection,
+-- focus management, and Tab\/Shift-Tab navigation, then delegates to
+-- 'renderControl' for style-aware rendering. @content@ runs inside the padded
+-- content rectangle.
+--
+-- @
+-- control eid $ do
+--   style <- getStyle eid
+--   drawText (styleTextColour style) (styleTextAlign style) label
+-- @
+control :: (Eq e, Ord e) => e -> UI e s () -> UI e s ()
+control eid content = do
+  applyHover eid
+  applyFocus eid
+  applyTabNavigation eid
+  renderControl eid content
+
+applyHover :: (Eq e, Ord e) => e -> UI e s ()
+applyHover eid = do
+  whenEnabled $ do
+    free     <- isMouseFree
+    dragging <- isDragging eid
+    when (free || dragging) $ do
+      s <- getStyle eid
+      r <- getBounds
+      let bgRect = insetRect (styleMargin s) r
+      isHit <- withBounds bgRect regionHit
+      when isHit $ setHovered eid
+
+applyFocus :: (Eq e, Ord e) => e -> UI e s ()
+applyFocus eid = do
+  whenEnabled $ do
+    currentFocus <- getFocus
+    isHit        <- isHovered eid
+    btn          <- getLeftButton
+    captured     <- getCapturedElement
+    let nothingIsFocused = isNothing currentFocus
+        isRetainingFocus = currentFocus == Just eid
+        -- A drag release is when the button is released over a different
+        -- element than the one that was captured. Focus should not transfer
+        -- in that case — the drag origin retains focus.
+        isDragRelease = btn == ButtonReleased && isJust captured && captured /= Just eid
+        wasClicked    = isHit && btn == ButtonReleased && not isDragRelease
+    setFocusWhen ((nothingIsFocused || isRetainingFocus || wasClicked) && not isDragRelease) eid
+
+applyTabNavigation :: (Eq e, Ord e) => e -> UI e s ()
+applyTabNavigation eid = do
+  hasFocus <- isFocused eid
+  input    <- getInput
+  prevCtrl <- getPreviousTabStop
+  let tabKey          = find (\e -> key e == KeyTab) (inputKeyEvents input)
+      tabPressed      = maybe False (\e -> Shift `notElem` modifiers e) tabKey
+      shiftTabPressed = maybe False (\e -> Shift `elem`    modifiers e) tabKey
+  when (hasFocus && tabPressed) $ do
+    clearFocus
+    consumeKey KeyTab
+  when (hasFocus && shiftTabPressed) $
+    forM_ prevCtrl $ \prev -> do
+      setFocus prev
+      consumeKey KeyTab
+  whenEnabled $ do
+    setPreviousTabStop eid
+
+-- | 'True' when the element is clicked or any of the given keys are pressed
+-- while it is focused, and the element is not disabled. Use this to implement
+-- the activation behaviour of interactive controls.
+isActivatedBy :: (Eq e, Ord e) => [Key] -> e -> UI e s Bool
+isActivatedBy keys eid = do
+  clicked  <- isClicked eid
+  keyPress <- or <$> mapM (isKeyPressed eid) keys
+  disabled <- isDisabled
+  return (not disabled && (clicked || keyPress))
+
+-- | Runs an action only when the given element holds keyboard focus.
+whenFocused :: Eq e => e -> UI e s () -> UI e s ()
+whenFocused eid action = isFocused eid >>= \f -> when f action
+
+-- | 'True' when the element holds focus and a key event for @k@ is present
+-- in the current frame's input queue.
+isKeyPressed :: Eq e => e -> Key -> UI e s Bool
+isKeyPressed eid k = do
+  hasFoc  <- isFocused eid
+  pressed <- any (\e -> key e == k) . inputKeyEvents <$> getInput
+  return (hasFoc && pressed)
