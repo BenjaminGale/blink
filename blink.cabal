@@ -48,9 +48,11 @@ test-suite blink-tests
     other-modules:
         Blink.AppSpec
         Blink.ControlsSpec
+        Blink.Generators
         Blink.GeometrySpec
         Blink.LayoutSpec
         Blink.UISpec
     build-depends:
         blink,
-        hspec
+        hspec,
+        QuickCheck
