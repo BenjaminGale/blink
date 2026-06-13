@@ -273,6 +273,45 @@ spec = describe "Blink.UI" $ do
       let ctx = nextFrameContext testBounds noInput (captured ctx0)
       ixnCaptured (ctxInteraction ctx) `shouldBe` Nothing
 
+  describe "focus" $ do
+    it "getFocus returns Nothing initially" $ do
+      (f, _) <- run getFocus (0 :: Int)
+      f `shouldBe` Nothing
+
+    it "isFocused returns True after setFocus" $ do
+      (b, _) <- run (setFocus () >> isFocused ()) (0 :: Int)
+      b `shouldBe` True
+
+    it "isFocused returns False for an element that does not hold focus" $ do
+      (b, _) <- runUI
+        (setFocus ElemA >> isFocused ElemB)
+        (emptyUIContext testBounds noInput twoElemTheme (0 :: Int) noOpTextMeasurer)
+      b `shouldBe` False
+
+    it "clearFocus removes the focused element" $ do
+      (f, _) <- run (setFocus () >> clearFocus >> getFocus) (0 :: Int)
+      f `shouldBe` Nothing
+
+    it "setFocusWhen does nothing when the condition is False" $ do
+      (f, _) <- run (setFocusWhen False () >> getFocus) (0 :: Int)
+      f `shouldBe` Nothing
+
+    it "setFocusWhen sets focus when the condition is True" $ do
+      (f, _) <- run (setFocusWhen True () >> getFocus) (0 :: Int)
+      f `shouldBe` Just ()
+
+    it "nextFrameContext carries focus forward when the element was visited this frame" $ do
+      (_, ctx) <- run (setFocus ()) (0 :: Int)
+      let ctx' = nextFrameContext testBounds noInput ctx
+      focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just ()
+
+    it "nextFrameContext clears focus when the element was not visited this frame" $ do
+      (_, ctx) <- run (pure ()) (0 :: Int)
+      let staleCtx = ctx { ctxInteraction = (ctxInteraction ctx)
+                             { ixnFocus = FocusState { focusedElement = Just (), focusedThisFrame = False } } }
+          ctx' = nextFrameContext testBounds noInput staleCtx
+      focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Nothing
+
   describe "isMouseFree" $ do
     it "is True when no element holds capture" $ do
       (result, _) <- run isMouseFree (0 :: Int)
