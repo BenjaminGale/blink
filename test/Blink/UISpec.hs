@@ -273,6 +273,81 @@ spec = describe "Blink.UI" $ do
       let ctx = nextFrameContext testBounds noInput (captured ctx0)
       ixnCaptured (ctxInteraction ctx) `shouldBe` Nothing
 
+  describe "button interaction" $ do
+    describe "state transitions via nextFrameContext" $ do
+      it "ixnButtonDown is True when the button is currently held" $ do
+        let ctx = nextFrameContext testBounds (noInput { inputLeftButtonDown = True })
+                    (emptyUIContext testBounds noInput emptyTheme (0 :: Int) noOpTextMeasurer)
+        ixnButtonDown (ctxInteraction ctx) `shouldBe` True
+
+      it "ixnButtonReleased is True on the frame the button goes up" $ do
+        let ctx0 = emptyUIContext testBounds (noInput { inputLeftButtonDown = True })
+                     emptyTheme (0 :: Int) noOpTextMeasurer
+            ctx  = nextFrameContext testBounds noInput ctx0
+        ixnButtonReleased (ctxInteraction ctx) `shouldBe` True
+
+      it "ixnButtonReleased is False when the button stays up" $ do
+        (_, ctx0) <- run (pure ()) (0 :: Int)
+        let ctx = nextFrameContext testBounds noInput ctx0
+        ixnButtonReleased (ctxInteraction ctx) `shouldBe` False
+
+      it "ixnButtonReleased is False when the button stays down" $ do
+        let ctx0 = emptyUIContext testBounds (noInput { inputLeftButtonDown = True })
+                     emptyTheme (0 :: Int) noOpTextMeasurer
+            ctx  = nextFrameContext testBounds (noInput { inputLeftButtonDown = True }) ctx0
+        ixnButtonReleased (ctxInteraction ctx) `shouldBe` False
+
+    it "isButtonDown returns True when the button is held" $ do
+      let ctx = emptyUIContext testBounds (noInput { inputLeftButtonDown = True })
+                  emptyTheme (0 :: Int) noOpTextMeasurer
+      (b, _) <- runUI isButtonDown ctx
+      b `shouldBe` True
+
+    it "isButtonReleased returns True on the release frame" $ do
+      let ctx0 = emptyUIContext testBounds (noInput { inputLeftButtonDown = True })
+                   emptyTheme (0 :: Int) noOpTextMeasurer
+          ctx  = nextFrameContext testBounds noInput ctx0
+      (b, _) <- runUI isButtonReleased ctx
+      b `shouldBe` True
+
+    it "isPressed is True when the element is hovered and the button is held" $ do
+      let mouseOn = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
+          ctx = emptyUIContext testBounds mouseOn emptyTheme (0 :: Int) noOpTextMeasurer
+      (b, _) <- runUI (setHovered () >> isPressed ()) ctx
+      b `shouldBe` True
+
+    it "isPressed is False when the element is not hovered" $ do
+      let ctx = emptyUIContext testBounds (noInput { inputLeftButtonDown = True })
+                  emptyTheme (0 :: Int) noOpTextMeasurer
+      (b, _) <- runUI (isPressed ()) ctx
+      b `shouldBe` False
+
+    it "isClicked is True when hovered and the button was just released" $ do
+      let mouseOn = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
+          ctx0 = emptyUIContext testBounds mouseOn emptyTheme (0 :: Int) noOpTextMeasurer
+      (_, ctx1) <- runUI (setHovered ()) ctx0
+      let ctx2 = nextFrameContext testBounds (noInput { inputMousePosition = Point 50 50 }) ctx1
+      (b, _) <- runUI (setHovered () >> isClicked ()) ctx2
+      b `shouldBe` True
+
+    it "isClicked is False when hovered but the button is still held" $ do
+      let mouseOn = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
+          ctx = emptyUIContext testBounds mouseOn emptyTheme (0 :: Int) noOpTextMeasurer
+      (b, _) <- runUI (setHovered () >> isClicked ()) ctx
+      b `shouldBe` False
+
+    it "isDragging is True when the element holds capture" $ do
+      (_, ctx0) <- run (pure ()) (0 :: Int)
+      let ctx = ctx0 { ctxInteraction = (ctxInteraction ctx0) { ixnCaptured = Just () } }
+      (b, _) <- runUI (isDragging ()) ctx
+      b `shouldBe` True
+
+    it "isDragging is False when a different element holds capture" $ do
+      (_, ctx0) <- runUI (pure ()) (emptyUIContext testBounds noInput twoElemTheme (0 :: Int) noOpTextMeasurer)
+      let ctx = ctx0 { ctxInteraction = (ctxInteraction ctx0) { ixnCaptured = Just ElemB } }
+      (b, _) <- runUI (isDragging ElemA) ctx
+      b `shouldBe` False
+
   describe "focus" $ do
     it "getFocus returns Nothing initially" $ do
       (f, _) <- run getFocus (0 :: Int)
