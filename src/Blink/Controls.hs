@@ -78,7 +78,7 @@ import Blink.UI
 -- | Read-only text display. Renders @text@ within the element's content
 -- rectangle using the active style. Does not participate in interaction or
 -- keyboard navigation.
-label :: (Eq e, Ord e) => e -> Text -> UI e s ()
+label :: Ord e => e -> Text -> UI e s ()
 label eid text = renderControl eid $ do
   style <- getStyle eid
   drawText (styleTextColour style) (styleTextAlign style) text
@@ -95,7 +95,7 @@ data ProgressValue
 -- 'Indeterminate' for a continuously animating band indicating activity of
 -- unknown duration. The animation runs only on ticker frames; 'requiresAnimation'
 -- keeps the ticker active while an 'Indeterminate' bar is visible.
-progressBar :: (Eq e, Ord e) => e -> ProgressValue -> UI e s ()
+progressBar :: Ord e => e -> ProgressValue -> UI e s ()
 progressBar eid (Progress value) = renderControl eid $ do
   style <- getStyle eid
   r     <- getBounds
@@ -115,7 +115,7 @@ progressBar eid Indeterminate = do
     withBounds (r { rectX = left, rectWidth = bandW }) $
       fillRect (styleTextColour style)
 
-checkboxMark :: (Eq e, Ord e) => e -> Bool -> (Bool -> s -> s) -> UI e s ()
+checkboxMark :: Ord e => e -> Bool -> (Bool -> s -> s) -> UI e s ()
 checkboxMark boxId checked onToggle = control boxId $ do
   style     <- getStyle boxId
   activated <- isActivatedBy [KeyReturn, KeySpace] boxId
@@ -127,7 +127,7 @@ checkboxLabel style = drawText (styleTextColour style) AlignLeft
 
 -- | A togglable checkbox with an adjacent label. Dispatches the state modifier
 -- @onToggle (not checked)@ when activated by a click or the Enter key.
-checkbox :: (Eq e, Ord e) => e -> Text -> Bool -> (Bool -> s -> s) -> UI e s ()
+checkbox :: Ord e => e -> Text -> Bool -> (Bool -> s -> s) -> UI e s ()
 checkbox boxId text checked onToggle = do
   style <- getStyle boxId
   hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
@@ -174,7 +174,7 @@ radioGroup mkId items selected onChange = do
 
 -- | A clickable button labelled @txt@. Returns 'True' on the frame the button
 -- is activated — by a left-click or by pressing Enter while focused.
-button :: (Eq e, Ord e) => e -> Text -> UI e s Bool
+button :: Ord e => e -> Text -> UI e s Bool
 button eid txt = do
   control eid $ do
     style <- getStyle eid
@@ -184,7 +184,7 @@ button eid txt = do
 -- | A single-line text entry field. Supports click-to-place cursor, drag
 -- selection, Shift+arrow extension, and selection-aware editing. Long text
 -- scrolls horizontally to keep the cursor visible.
-textInput :: (Eq e, Ord e) => e -> Text -> (Text -> s -> s) -> UI e s ()
+textInput :: Ord e => e -> Text -> (Text -> s -> s) -> UI e s ()
 textInput eid value onChange = do
   wasFocused   <- isFocused eid
   wasCapturing <- isDragging eid
@@ -325,7 +325,7 @@ data ScrollBarPart
 -- the fraction of the track the thumb fills (visible \/ total), also in
 -- @[0, 1]@. Button clicks step by @thumbRatio@; dragging centres the thumb on
 -- the cursor.
-scrollBar :: (Eq e, Ord e)
+scrollBar :: Ord e
           => (ScrollBarPart -> e)
           -> Orientation
           -> Double
@@ -452,7 +452,7 @@ scrollRegionBarSize = 16
 -- Mouse interaction works naturally because translated bounds are in window
 -- coordinates; the clip region hides the rest.
 scrollableRegion
-  :: (Eq e, Ord e)
+  :: Ord e
   => (ScrollRegionPart -> e)  -- ^ maps region parts to element IDs
   -> Double                    -- ^ virtual content width
   -> Double                    -- ^ virtual content height
@@ -502,7 +502,7 @@ scrollableRegion mkId cw ch content = do
 -- ratio is @viewportSize / contentSize@; the caller uses the returned fractions
 -- to determine which portion of the virtual content to render.
 scrollableDynamic
-  :: (Eq e, Ord e)
+  :: Ord e
   => (ScrollRegionPart -> e)           -- ^ maps region parts to element IDs
   -> Maybe Double                       -- ^ horizontal scrollbar thumb ratio
   -> Maybe Double                       -- ^ vertical scrollbar thumb ratio
@@ -544,7 +544,7 @@ data SliderPart
 -- with arrow keys (Left\/Right for 'Horizontal', Up\/Down for 'Vertical').
 -- The thumb is square: its side equals the cross-axis of the track's content
 -- rectangle. Arrow-key steps are 0.05.
-slider :: (Eq e, Ord e)
+slider :: Ord e
        => (SliderPart -> e)
        -> Orientation
        -> Double
@@ -620,14 +620,14 @@ renderControl eid content = do
 --   style <- getStyle eid
 --   drawText (styleTextColour style) (styleTextAlign style) label
 -- @
-control :: (Eq e, Ord e) => e -> UI e s () -> UI e s ()
+control :: Ord e => e -> UI e s () -> UI e s ()
 control eid content = do
   applyHover eid
   applyFocus eid
   applyTabNavigation eid
   renderControl eid content
 
-applyHover :: (Eq e, Ord e) => e -> UI e s ()
+applyHover :: Ord e => e -> UI e s ()
 applyHover eid = do
   whenEnabled $ do
     free     <- isMouseFree
@@ -639,7 +639,7 @@ applyHover eid = do
       isHit <- withBounds bgRect regionHit
       when isHit $ setHovered eid
 
-applyFocus :: (Eq e, Ord e) => e -> UI e s ()
+applyFocus :: Ord e => e -> UI e s ()
 applyFocus eid = do
   whenEnabled $ do
     currentFocus <- getFocus
@@ -655,7 +655,7 @@ applyFocus eid = do
         wasClicked    = isHit && btn == ButtonReleased && not isDragRelease
     setFocusWhen ((nothingIsFocused || isRetainingFocus || wasClicked) && not isDragRelease) eid
 
-applyTabNavigation :: (Eq e, Ord e) => e -> UI e s ()
+applyTabNavigation :: Ord e => e -> UI e s ()
 applyTabNavigation eid = do
   hasFocus <- isFocused eid
   input    <- getInput
@@ -676,7 +676,7 @@ applyTabNavigation eid = do
 -- | 'True' when the element is clicked or any of the given keys are pressed
 -- while it is focused, and the element is not disabled. Use this to implement
 -- the activation behaviour of interactive controls.
-isActivatedBy :: (Eq e, Ord e) => [Key] -> e -> UI e s Bool
+isActivatedBy :: Ord e => [Key] -> e -> UI e s Bool
 isActivatedBy keys eid = do
   clicked  <- isClicked eid
   keyPress <- or <$> mapM (isKeyPressed eid) keys
