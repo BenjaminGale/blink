@@ -1,12 +1,14 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Blink.UISpec (spec) where
 
 import Data.IORef
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import Test.Hspec
 
 import Blink.Geometry (Point (..), Rectangle (..), uniform)
 import Blink.Input (InputState (..))
-import Blink.Rendering (Colour (..), TextAlign (..))
+import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.Controls (control)
 import Blink.UI
@@ -386,6 +388,78 @@ spec = describe "Blink.UI" $ do
                              { ixnFocus = FocusState { focusedElement = Just (), focusedThisFrame = False } } }
           ctx' = nextFrameContext testBounds noInput staleCtx
       focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Nothing
+
+  describe "drawing" $ do
+    it "fillRect emits a FillRect command for the current bounds" $ do
+      let colour = RGBA 1 0 0 1
+      (_, ctx) <- run (fillRect colour) (0 :: Int)
+      getDrawCommands ctx `shouldBe` [FillRect testBounds colour]
+
+    it "strokeRect emits a StrokeRect command for the current bounds" $ do
+      let colour = RGBA 0 1 0 1
+      (_, ctx) <- run (strokeRect colour 2) (0 :: Int)
+      getDrawCommands ctx `shouldBe` [StrokeRect testBounds colour 2]
+
+    it "drawText emits a DrawText command for the current bounds" $ do
+      let colour = RGBA 0 0 1 1
+      (_, ctx) <- run (drawText colour AlignCenter "hello") (0 :: Int)
+      getDrawCommands ctx `shouldBe` [DrawText testBounds "hello" colour AlignCenter]
+
+    it "getDrawCommands returns commands in submission order" $ do
+      let c1 = RGBA 1 0 0 1
+          c2 = RGBA 0 1 0 1
+      (_, ctx) <- run (fillRect c1 >> fillRect c2) (0 :: Int)
+      getDrawCommands ctx `shouldBe` [FillRect testBounds c1, FillRect testBounds c2]
+
+    it "nextFrameContext clears draw commands from the previous frame" $ do
+      (_, ctx) <- run (fillRect (RGBA 1 0 0 1)) (0 :: Int)
+      let ctx' = nextFrameContext testBounds noInput ctx
+      getDrawCommands ctx' `shouldBe` []
+
+    describe "withBackground" $ do
+      it "emits a FillRect when the colour is opaque" $ do
+        let colour = RGBA 1 0 0 1
+        (_, ctx) <- run (withBackground colour (pure ())) (0 :: Int)
+        getDrawCommands ctx `shouldBe` [FillRect testBounds colour]
+
+      it "emits no FillRect when the colour is fully transparent" $ do
+        (_, ctx) <- run (withBackground (RGBA 0 0 0 0) (pure ())) (0 :: Int)
+        getDrawCommands ctx `shouldBe` []
+
+    describe "withBorder" $ do
+      it "strokes the border after the content" $ do
+        let bgColour     = RGBA 1 0 0 1
+            borderColour = RGBA 0 0 1 1
+        (_, ctx) <- run (withBorder borderColour 1 (fillRect bgColour)) (0 :: Int)
+        getDrawCommands ctx `shouldBe`
+          [ FillRect testBounds bgColour
+          , StrokeRect testBounds borderColour 1
+          ]
+
+  describe "disableWhen" $ do
+    it "isDisabled is False by default" $ do
+      (b, _) <- run isDisabled (0 :: Int)
+      b `shouldBe` False
+
+    it "isDisabled is True inside disableWhen True" $ do
+      (b, _) <- run (disableWhen True isDisabled) (0 :: Int)
+      b `shouldBe` True
+
+    it "isDisabled is False inside disableWhen False" $ do
+      (b, _) <- run (disableWhen False isDisabled) (0 :: Int)
+      b `shouldBe` False
+
+    it "restores the disabled flag to False after the sub-tree completes" $ do
+      (b, _) <- run (disableWhen True (pure ()) >> isDisabled) (0 :: Int)
+      b `shouldBe` False
+
+    it "whenEnabled skips its body when the sub-tree is disabled" $ do
+      (_, ctx) <- run (disableWhen True (whenEnabled (dispatch (const 1)))) (0 :: Int)
+      applyDispatches ctx `shouldBe` 0
+
+    it "whenEnabled runs its body when the sub-tree is enabled" $ do
+      (_, ctx) <- run (whenEnabled (dispatch (const 1))) (0 :: Int)
+      applyDispatches ctx `shouldBe` 1
 
   describe "isMouseFree" $ do
     it "is True when no element holds capture" $ do
