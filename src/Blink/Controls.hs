@@ -165,8 +165,8 @@ radioGroup mkId items selected onChange = do
                (if selected == val then "● " else "○ ") <> lbl
              when activated $ dispatch (onChange val)
              when (initialFocus == Just eid) $ do
-               upPressed   <- isKeyPressed eid KeyUp
-               downPressed <- isKeyPressed eid KeyDown
+               upPressed   <- isActivatedBy eid [KeyUp]
+               downPressed <- isActivatedBy eid [KeyDown]
                when upPressed   $ setFocus (mkId (max 0 (idx - 1)))
                when downPressed $ setFocus (mkId (min lastIdx (idx + 1)))
          )
@@ -582,8 +582,8 @@ slider mkId ori value onChange = do
       (decrKey, incrKey) = case ori of
         Horizontal -> (KeyLeft,  KeyRight)
         Vertical   -> (KeyUp,    KeyDown)
-  decrPressed <- isKeyPressed trackId decrKey
-  incrPressed <- isKeyPressed trackId incrKey
+  decrPressed <- isActivatedBy trackId [decrKey]
+  incrPressed <- isActivatedBy trackId [incrKey]
   when decrPressed $ dispatch (onChange (max 0 (clamped - step)))
   when incrPressed $ dispatch (onChange (min 1 (clamped + step)))
 

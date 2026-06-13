@@ -736,6 +736,11 @@ spec = describe "Controls" $ do
           (withSliderFocus (Just SliderThumb) (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme 0.5 noOpTextMeasurer))
         applyDispatches ctx' `shouldBe` 0.5
 
+      it "does not nudge when disabled" $ do
+        ctx' <- fmap snd $ runUI (disableWhen True (slider id Horizontal 0.5 (\v _ -> v)))
+          (withSliderFocus (Just SliderTrack) (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme 0.5 noOpTextMeasurer))
+        dispatchCount ctx' `shouldBe` 0
+
     describe "without interaction" $ do
       it "does not dispatch when there is no input" $ do
         ctx' <- runSlider Horizontal 0.5 noInput
@@ -795,6 +800,11 @@ spec = describe "Controls" $ do
       it "stays on the first item when Up is pressed at the beginning" $ do
         result <- nav 0 KeyUp
         result `shouldBe` Just 0
+
+      it "does not move focus when disabled" $ do
+        ctx' <- fmap snd $ runUI (disableWhen True (radioGroup id radioItems "a" (\v _ -> v)))
+          (withItemFocus (Just 0) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyDown []] } radioGroupTheme "a" noOpTextMeasurer))
+        focusedElement (ctxFocusState ctx') `shouldBe` Just 0
 
     describe "rendering" $ do
       it "shows the selected mark on the selected item" $ do
