@@ -79,6 +79,9 @@ runTwoElem ui = runUI ui (emptyUIContext testBounds noInput twoElemTheme (0 :: I
 freshCtx :: IO (UIContext () Int)
 freshCtx = snd <$> run (pure ()) (0 :: Int)
 
+run0 :: UI () Int a -> IO (a, UIContext () Int)
+run0 ui = run ui 0
+
 withCapture :: e -> UIContext e s -> UIContext e s
 withCapture e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnCaptured = Just e } }
 
@@ -103,7 +106,7 @@ spec = describe "Blink.UI" $ do
 
     it "wraps draw commands in PushClip / PopClip" $ do
       let clipRect = Rectangle 0 0 100 50
-      (_, ctx) <- run (withBounds clipRect $ clipToCurrent $ fillRect (RGBA 1 0 0 1)) (0 :: Int)
+      (_, ctx) <- run0 (withBounds clipRect $ clipToCurrent $ fillRect (RGBA 1 0 0 1))
       getDrawCommands ctx `shouldBe`
         [PushClip clipRect, FillRect clipRect (RGBA 1 0 0 1), PopClip]
 
@@ -121,11 +124,11 @@ spec = describe "Blink.UI" $ do
   describe "withBounds" $ do
     it "replaces the current bounds inside the sub-tree" $ do
       let inner = Rectangle 10 10 50 50
-      (b, _) <- run (withBounds inner getBounds) (0 :: Int)
+      (b, _) <- run0 (withBounds inner getBounds)
       b `shouldBe` inner
 
     it "restores the outer bounds after the sub-tree completes" $ do
-      (b, _) <- run (withBounds (Rectangle 10 10 50 50) (pure ()) >> getBounds) (0 :: Int)
+      (b, _) <- run0 (withBounds (Rectangle 10 10 50 50) (pure ()) >> getBounds)
       b `shouldBe` testBounds
 
   describe "hover suppression during drag" $ do
@@ -150,27 +153,27 @@ spec = describe "Blink.UI" $ do
     a `shouldBe` 42
 
   it "getAppState still sees the pre-dispatch state later in the same frame" $ do
-    (a, _) <- run (dispatch (+ 1) >> getAppState) (0 :: Int)
+    (a, _) <- run0 (dispatch (+ 1) >> getAppState)
     a `shouldBe` 0
 
   it "applyDispatches applies modifiers in dispatch order" $ do
-    (_, ctx) <- run (dispatch (+ 1) >> dispatch (* 10)) (0 :: Int)
+    (_, ctx) <- run0 (dispatch (+ 1) >> dispatch (* 10))
     applyDispatches ctx `shouldBe` 10
 
   it "applyDispatches returns the starting state when nothing was dispatched" $ do
-    (_, ctx) <- run (pure ()) (0 :: Int)
+    (_, ctx) <- run0 (pure ())
     applyDispatches ctx `shouldBe` 0
 
   it "dispatchAsync queues the job without running it" $ do
     ref <- newIORef False
     let job s = writeIORef ref True >> pure (const s)
-    (_, ctx) <- run (dispatchAsync job) (0 :: Int)
+    (_, ctx) <- run0 (dispatchAsync job)
     length (getAsyncJobs ctx) `shouldBe` 1
     ran <- readIORef ref
     ran `shouldBe` False
 
   it "nextFrameContext clears queued dispatches and async jobs" $ do
-    (_, ctx) <- run (dispatch (+ 1) >> dispatchAsync (\s -> pure (const s))) (0 :: Int)
+    (_, ctx) <- run0 (dispatch (+ 1) >> dispatchAsync (\s -> pure (const s)))
     let ctx' = nextFrameContext testBounds noInput ctx
     (applyDispatches ctx', length (getAsyncJobs ctx')) `shouldBe` (0, 0)
 
@@ -239,33 +242,33 @@ spec = describe "Blink.UI" $ do
 
   describe "selection store" $ do
     it "returns [] when no selection has been recorded" $ do
-      (ss, _) <- run (getSelections ()) (0 :: Int)
+      (ss, _) <- run0 (getSelections ())
       ss `shouldBe` []
 
     it "returns the selections just written in the same frame" $ do
       let s = Selection 1 4
-      (ss, _) <- run (setSelections () [s] >> getSelections ()) (0 :: Int)
+      (ss, _) <- run0 (setSelections () [s] >> getSelections ())
       ss `shouldBe` [s]
 
     it "getSelection returns Nothing when no selection exists" $ do
-      (s, _) <- run (getSelection ()) (0 :: Int)
+      (s, _) <- run0 (getSelection ())
       s `shouldBe` Nothing
 
     it "getSelection returns the first selection after setSelection" $ do
-      (s, _) <- run (setSelection () (cursor 3) >> getSelection ()) (0 :: Int)
+      (s, _) <- run0 (setSelection () (cursor 3) >> getSelection ())
       s `shouldBe` Just (cursor 3)
 
     it "setSelection replaces any existing selections" $ do
-      (ss, _) <- run (setSelections () [Selection 0 5, Selection 7 9] >> setSelection () (cursor 1) >> getSelections ()) (0 :: Int)
+      (ss, _) <- run0 (setSelections () [Selection 0 5, Selection 7 9] >> setSelection () (cursor 1) >> getSelections ())
       ss `shouldBe` [cursor 1]
 
   describe "scroll state" $ do
     it "returns 0 when no position has been recorded" $ do
-      (v, _) <- run (getScrollState ()) (0 :: Int)
+      (v, _) <- run0 (getScrollState ())
       v `shouldBe` 0
 
     it "returns the value just written in the same frame" $ do
-      (v, _) <- run (setScrollState () 0.5 >> getScrollState ()) (0 :: Int)
+      (v, _) <- run0 (setScrollState () 0.5 >> getScrollState ())
       v `shouldBe` 0.5
 
     it "keeps scroll positions separate per element" $ do
@@ -376,11 +379,11 @@ spec = describe "Blink.UI" $ do
 
   describe "focus" $ do
     it "getFocus returns Nothing initially" $ do
-      (f, _) <- run getFocus (0 :: Int)
+      (f, _) <- run0 getFocus
       f `shouldBe` Nothing
 
     it "isFocused returns True after setFocus" $ do
-      (b, _) <- run (setFocus () >> isFocused ()) (0 :: Int)
+      (b, _) <- run0 (setFocus () >> isFocused ())
       b `shouldBe` True
 
     it "isFocused returns False for an element that does not hold focus" $ do
@@ -388,24 +391,24 @@ spec = describe "Blink.UI" $ do
       b `shouldBe` False
 
     it "clearFocus removes the focused element" $ do
-      (f, _) <- run (setFocus () >> clearFocus >> getFocus) (0 :: Int)
+      (f, _) <- run0 (setFocus () >> clearFocus >> getFocus)
       f `shouldBe` Nothing
 
     it "setFocusWhen does nothing when the condition is False" $ do
-      (f, _) <- run (setFocusWhen False () >> getFocus) (0 :: Int)
+      (f, _) <- run0 (setFocusWhen False () >> getFocus)
       f `shouldBe` Nothing
 
     it "setFocusWhen sets focus when the condition is True" $ do
-      (f, _) <- run (setFocusWhen True () >> getFocus) (0 :: Int)
+      (f, _) <- run0 (setFocusWhen True () >> getFocus)
       f `shouldBe` Just ()
 
     it "nextFrameContext carries focus forward when the element was visited this frame" $ do
-      (_, ctx) <- run (setFocus ()) (0 :: Int)
+      (_, ctx) <- run0 (setFocus ())
       let ctx' = nextFrameContext testBounds noInput ctx
       focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just ()
 
     it "nextFrameContext clears focus when the element was not visited this frame" $ do
-      (_, ctx) <- run (pure ()) (0 :: Int)
+      (_, ctx) <- run0 (pure ())
       let staleCtx = ctx { ctxInteraction = (ctxInteraction ctx)
                              { ixnFocus = FocusState { focusedElement = Just (), focusedThisFrame = False } } }
           ctx' = nextFrameContext testBounds noInput staleCtx
@@ -414,45 +417,45 @@ spec = describe "Blink.UI" $ do
   describe "drawing" $ do
     it "fillRect emits a FillRect command for the current bounds" $ do
       let colour = RGBA 1 0 0 1
-      (_, ctx) <- run (fillRect colour) (0 :: Int)
+      (_, ctx) <- run0 (fillRect colour)
       getDrawCommands ctx `shouldBe` [FillRect testBounds colour]
 
     it "strokeRect emits a StrokeRect command for the current bounds" $ do
       let colour = RGBA 0 1 0 1
-      (_, ctx) <- run (strokeRect colour 2) (0 :: Int)
+      (_, ctx) <- run0 (strokeRect colour 2)
       getDrawCommands ctx `shouldBe` [StrokeRect testBounds colour 2]
 
     it "drawText emits a DrawText command for the current bounds" $ do
       let colour = RGBA 0 0 1 1
-      (_, ctx) <- run (drawText colour AlignCenter "hello") (0 :: Int)
+      (_, ctx) <- run0 (drawText colour AlignCenter "hello")
       getDrawCommands ctx `shouldBe` [DrawText testBounds "hello" colour AlignCenter]
 
     it "getDrawCommands returns commands in submission order" $ do
       let c1 = RGBA 1 0 0 1
           c2 = RGBA 0 1 0 1
-      (_, ctx) <- run (fillRect c1 >> fillRect c2) (0 :: Int)
+      (_, ctx) <- run0 (fillRect c1 >> fillRect c2)
       getDrawCommands ctx `shouldBe` [FillRect testBounds c1, FillRect testBounds c2]
 
     it "nextFrameContext clears draw commands from the previous frame" $ do
-      (_, ctx) <- run (fillRect (RGBA 1 0 0 1)) (0 :: Int)
+      (_, ctx) <- run0 (fillRect (RGBA 1 0 0 1))
       let ctx' = nextFrameContext testBounds noInput ctx
       getDrawCommands ctx' `shouldBe` []
 
     describe "withBackground" $ do
       it "emits a FillRect when the colour is opaque" $ do
         let colour = RGBA 1 0 0 1
-        (_, ctx) <- run (withBackground colour (pure ())) (0 :: Int)
+        (_, ctx) <- run0 (withBackground colour (pure ()))
         getDrawCommands ctx `shouldBe` [FillRect testBounds colour]
 
       it "emits no FillRect when the colour is fully transparent" $ do
-        (_, ctx) <- run (withBackground (RGBA 0 0 0 0) (pure ())) (0 :: Int)
+        (_, ctx) <- run0 (withBackground (RGBA 0 0 0 0) (pure ()))
         getDrawCommands ctx `shouldBe` []
 
     describe "withBorder" $ do
       it "strokes the border after the content" $ do
         let bgColour     = RGBA 1 0 0 1
             borderColour = RGBA 0 0 1 1
-        (_, ctx) <- run (withBorder borderColour 1 (fillRect bgColour)) (0 :: Int)
+        (_, ctx) <- run0 (withBorder borderColour 1 (fillRect bgColour))
         getDrawCommands ctx `shouldBe`
           [ FillRect testBounds bgColour
           , StrokeRect testBounds borderColour 1
@@ -460,32 +463,32 @@ spec = describe "Blink.UI" $ do
 
   describe "disableWhen" $ do
     it "isDisabled is False by default" $ do
-      (b, _) <- run isDisabled (0 :: Int)
+      (b, _) <- run0 isDisabled
       b `shouldBe` False
 
     it "isDisabled is True inside disableWhen True" $ do
-      (b, _) <- run (disableWhen True isDisabled) (0 :: Int)
+      (b, _) <- run0 (disableWhen True isDisabled)
       b `shouldBe` True
 
     it "isDisabled is False inside disableWhen False" $ do
-      (b, _) <- run (disableWhen False isDisabled) (0 :: Int)
+      (b, _) <- run0 (disableWhen False isDisabled)
       b `shouldBe` False
 
     it "restores the disabled flag to False after the sub-tree completes" $ do
-      (b, _) <- run (disableWhen True (pure ()) >> isDisabled) (0 :: Int)
+      (b, _) <- run0 (disableWhen True (pure ()) >> isDisabled)
       b `shouldBe` False
 
     it "whenEnabled skips its body when the sub-tree is disabled" $ do
-      (_, ctx) <- run (disableWhen True (whenEnabled (dispatch (const 1)))) (0 :: Int)
+      (_, ctx) <- run0 (disableWhen True (whenEnabled (dispatch (const 1))))
       applyDispatches ctx `shouldBe` 0
 
     it "whenEnabled runs its body when the sub-tree is enabled" $ do
-      (_, ctx) <- run (whenEnabled (dispatch (const 1))) (0 :: Int)
+      (_, ctx) <- run0 (whenEnabled (dispatch (const 1)))
       applyDispatches ctx `shouldBe` 1
 
   describe "isMouseFree" $ do
     it "is True when no element holds capture" $ do
-      (result, _) <- run isMouseFree (0 :: Int)
+      (result, _) <- run0 isMouseFree
       result `shouldBe` True
 
     it "is False when an element holds capture" $ do
@@ -519,11 +522,11 @@ spec = describe "Blink.UI" $ do
 
     describe "tab stop" $ do
       it "getPreviousTabStop returns Nothing initially" $ do
-        (s, _) <- run getPreviousTabStop (0 :: Int)
+        (s, _) <- run0 getPreviousTabStop
         s `shouldBe` Nothing
 
       it "getPreviousTabStop returns the element after setPreviousTabStop" $ do
-        (s, _) <- run (setPreviousTabStop () >> getPreviousTabStop) (0 :: Int)
+        (s, _) <- run0 (setPreviousTabStop () >> getPreviousTabStop)
         s `shouldBe` Just ()
 
   describe "styles" $ do
@@ -547,7 +550,7 @@ spec = describe "Blink.UI" $ do
         styleBackground (styleSetNormal ss) `shouldBe` RGBA 0 0 0 1
 
       it "falls back to the theme default when no element-specific style is registered" $ do
-        (ss, _) <- run (getStyleSet ()) (0 :: Int)
+        (ss, _) <- run0 (getStyleSet ())
         styleBackground (styleSetNormal ss) `shouldBe` styleBackground (styleSetNormal emptyStyleSet)
 
     describe "getStyle" $ do
@@ -572,10 +575,10 @@ spec = describe "Blink.UI" $ do
         styleBackground s `shouldBe` RGBA 1 1 1 1
 
   describe "animation" $ do
-    let tickCtx = (emptyUIContext testBounds noInput emptyTheme (0 :: Int) noOpTextMeasurer)
-                    { ctxAnimation = AnimationState { animDelta = 0.016, animElapsed = 1.5, animIsTick = True } }
-        nonTickCtx = (emptyUIContext testBounds noInput emptyTheme (0 :: Int) noOpTextMeasurer)
-                       { ctxAnimation = AnimationState { animDelta = 0.016, animElapsed = 1.5, animIsTick = False } }
+    let baseAnimCtx = (emptyUIContext testBounds noInput emptyTheme (0 :: Int) noOpTextMeasurer)
+                        { ctxAnimation = AnimationState { animDelta = 0.016, animElapsed = 1.5, animIsTick = False } }
+        tickCtx    = baseAnimCtx { ctxAnimation = (ctxAnimation baseAnimCtx) { animIsTick = True } }
+        nonTickCtx = baseAnimCtx
 
     it "getAnimDelta returns the frame delta" $ do
       (d, _) <- runUI getAnimDelta tickCtx
@@ -601,7 +604,7 @@ spec = describe "Blink.UI" $ do
 
   describe "getHoveredElement" $ do
     it "returns Nothing when no element is hovered" $ do
-      (result, _) <- run getHoveredElement (0 :: Int)
+      (result, _) <- run0 getHoveredElement
       result `shouldBe` Nothing
 
     it "returns the hovered element after setHovered" $ do
