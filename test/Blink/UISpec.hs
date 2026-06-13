@@ -66,14 +66,14 @@ spec = describe "UI primitives" $ do
           mouseOutsideClip = noInput { inputMousePosition = Point 50 75 }
           ctx = emptyUIContext testBounds mouseOutsideClip emptyTheme (0 :: Int) noOpTextMeasurer
       (_, ctx') <- runUI (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ())) ctx
-      ctxHoveredElement ctx' `shouldBe` Nothing
+      ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
     it "registers hover when the mouse is inside both the bounds and the clip region" $ do
       let clipRect = Rectangle 0 0 100 50
           mouseInsideClip = noInput { inputMousePosition = Point 50 25 }
           ctx = emptyUIContext testBounds mouseInsideClip emptyTheme (0 :: Int) noOpTextMeasurer
       (_, ctx') <- runUI (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ())) ctx
-      ctxHoveredElement ctx' `shouldBe` Just ()
+      ixnHovered (ctxInteraction ctx') `shouldBe` Just ()
 
     it "intersects nested clip regions" $ do
       let outerClip = Rectangle 0 0 100 50
@@ -85,27 +85,27 @@ spec = describe "UI primitives" $ do
         (withBounds outerClip $ clipToCurrent $
          withBounds innerClip $ clipToCurrent $
          withBounds testBounds $ control () (pure ())) ctx
-      ctxHoveredElement ctx' `shouldBe` Nothing
+      ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
   describe "hover suppression during drag" $ do
     let mouseOnA = noInput { inputMousePosition = Point 50 50, inputLeftButton = ButtonDown }
 
     it "does not hover an element when another element holds capture" $ do
-      let ctx = (emptyUIContext testBounds mouseOnA twoElemTheme (0 :: Int) noOpTextMeasurer)
-                  { ctxCapturedElement = Just ElemB }
+      let base = emptyUIContext testBounds mouseOnA twoElemTheme (0 :: Int) noOpTextMeasurer
+          ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just ElemB } }
       (_, ctx') <- runUI (control ElemA (pure ())) ctx
-      ctxHoveredElement ctx' `shouldBe` Nothing
+      ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
     it "hovers an element when it is itself the captured element" $ do
-      let ctx = (emptyUIContext testBounds mouseOnA twoElemTheme (0 :: Int) noOpTextMeasurer)
-                  { ctxCapturedElement = Just ElemA }
+      let base = emptyUIContext testBounds mouseOnA twoElemTheme (0 :: Int) noOpTextMeasurer
+          ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just ElemA } }
       (_, ctx') <- runUI (control ElemA (pure ())) ctx
-      ctxHoveredElement ctx' `shouldBe` Just ElemA
+      ixnHovered (ctxInteraction ctx') `shouldBe` Just ElemA
 
     it "hovers an element when no capture is active" $ do
       let ctx = emptyUIContext testBounds mouseOnA twoElemTheme (0 :: Int) noOpTextMeasurer
       (_, ctx') <- runUI (control ElemA (pure ())) ctx
-      ctxHoveredElement ctx' `shouldBe` Just ElemA
+      ixnHovered (ctxInteraction ctx') `shouldBe` Just ElemA
 
   it "getAppState returns the frame's starting state" $ do
     (a, _) <- run getAppState (42 :: Int)
@@ -212,26 +212,26 @@ spec = describe "UI primitives" $ do
       clampScrollPos 1 `shouldBe` 1
 
   describe "nextFrameContext capture" $ do
-    let captured ctx = ctx { ctxCapturedElement = Just () }
+    let captured ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnCaptured = Just () } }
         buttonDown  = noInput { inputLeftButton = ButtonDown }
         buttonRel   = noInput { inputLeftButton = ButtonReleased }
 
     it "auto-acquires capture when an element is hovered while the button is down" $ do
       -- Acquisition happens in setHovered during the frame, not via nextFrameContext.
       (_, ctx) <- runUI (setHovered ()) (emptyUIContext testBounds buttonDown emptyTheme (0 :: Int) noOpTextMeasurer)
-      ctxCapturedElement ctx `shouldBe` Just ()
+      ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
 
     it "carries existing capture forward on subsequent ButtonDown frames" $ do
       (_, ctx0) <- run (pure ()) (0 :: Int)
       let ctx = nextFrameContext testBounds buttonDown (captured ctx0)
-      ctxCapturedElement ctx `shouldBe` Just ()
+      ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
 
     it "carries capture through ButtonReleased so focus logic can inspect it" $ do
       (_, ctx0) <- run (pure ()) (0 :: Int)
       let ctx = nextFrameContext testBounds buttonRel (captured ctx0)
-      ctxCapturedElement ctx `shouldBe` Just ()
+      ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
 
     it "clears capture on ButtonUp" $ do
       (_, ctx0) <- run (pure ()) (0 :: Int)
       let ctx = nextFrameContext testBounds noInput (captured ctx0)
-      ctxCapturedElement ctx `shouldBe` Nothing
+      ixnCaptured (ctxInteraction ctx) `shouldBe` Nothing

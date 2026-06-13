@@ -43,10 +43,10 @@ state exists when the job completes.
 
 Some controls carry presentation state that is no business of the application
 — a scrollbar's position, a text input's cursor. This state is baked directly
-into the 'UIContext': scroll positions are stored in 'ctxScrollStates' (a
-@Map e 'ScrollState'@) and selections in 'ctxSelections' (a
-@Map e ['Selection']@). Both maps are keyed by element ID, populate lazily on
-first write, and persist across frames. Controls read and write them through
+into the 'UIContext' via 'ctxElements': scroll positions are stored in
+'elmScrollStates' (a @Map e 'ScrollState'@) and selections in 'elmSelections'
+(a @Map e ['Selection']@). Both maps are keyed by element ID, populate lazily
+on first write, and persist across frames. Controls read and write them through
 'getScrollState' \/ 'setScrollState' and 'getSelections' \/ 'setSelections';
 the application never sees the traffic. Changes take effect immediately:
 later reads in the same frame see the new value.
@@ -113,6 +113,9 @@ module Blink.UI
     UI (..)
   , FocusState (..)
   , UIContext (..)
+  , InteractionState (..)
+  , ElementState (..)
+  , FrameOutputs (..)
     -- * Re-export for convenience
   , TextMeasurer (..)
   , noOpTextMeasurer
@@ -244,6 +247,33 @@ data FocusState e = FocusState
     -- Used to clear stale focus when a focused element is no longer present in the UI.
   }
 
+-- | Per-frame interactive targeting state: which element the mouse is over,
+-- which holds capture during a drag, which has keyboard focus, and which was
+-- the most recent tab stop. Reset and carried forward by 'nextFrameContext'.
+data InteractionState e = InteractionState
+  { ixnHovered     :: Maybe e
+  , ixnCaptured    :: Maybe e
+  , ixnFocus       :: FocusState e
+  , ixnPrevTabStop :: Maybe e
+  }
+
+-- | Cross-frame per-element presentation state. Persists unchanged across
+-- frames; never exposed to the application.
+data ElementState e = ElementState
+  { elmScrollStates :: Map.Map e ScrollState
+  , elmSelections   :: Map.Map e [Selection]
+  }
+
+-- | Outputs accumulated during a single frame: draw commands, queued state
+-- modifiers, async jobs, and the animation continuation flag. Reset to empty
+-- at the start of each frame by 'nextFrameContext'.
+data FrameOutputs s = FrameOutputs
+  { outDrawCommands     :: [DrawCommand]
+  , outDispatches       :: [s -> s]
+  , outAsyncJobs        :: [s -> IO (s -> s)]
+  , outRequiresAnimation :: Bool
+  }
+
 -- | The frame context threaded through every 'UI' computation. Carries the
 -- current bounds, input state, active theme, accumulated draw commands, focus
 -- state, scroll and selection state, and the application state with its
@@ -254,34 +284,24 @@ data FocusState e = FocusState
 -- [@s@] Application state type — read with 'getAppState', modified via
 -- 'dispatch' and 'dispatchAsync'.
 data UIContext e s = UIContext
-  { ctxBounds :: Rectangle
-  , ctxInput :: InputState
-  , ctxTheme :: Theme e
-  , ctxDrawCommands :: [DrawCommand]
-  , ctxHoveredElement :: Maybe e
-  , ctxCapturedElement :: Maybe e
-  , ctxFocusState :: FocusState e
-  , ctxPreviousTabStop :: Maybe e
-  , ctxScrollStates :: Map.Map e ScrollState
-  , ctxSelections :: Map.Map e [Selection]
-  , ctxAppState :: s
-  , ctxDispatches :: [s -> s]
-  , ctxAsyncJobs :: [s -> IO (s -> s)]
-  , ctxDisabled :: Bool
+  { ctxBounds          :: Rectangle
+  , ctxInput           :: InputState
+  , ctxTheme           :: Theme e
+  , ctxAppState        :: s
+  , ctxDisabled        :: Bool
   , ctxInteractionClip :: Maybe Rectangle
     -- ^ When set, 'regionHit' additionally requires the mouse to fall within
     -- this rectangle. Set by 'clipToCurrent' and restored on exit, so it
     -- tracks the innermost enclosing clip region.
-  , ctxAnimation :: AnimationState
+  , ctxAnimation       :: AnimationState
     -- ^ Per-frame animation state: wall-clock delta and tick flag. Set by the
     -- backend at the start of each frame via 'buildCtx'.
-  , ctxRequiresAnimation :: Bool
-    -- ^ Set to 'True' by any component calling 'requiresAnimation'. Read at
-    -- the end of the frame to decide whether to keep the ticker active.
-    -- Reset to 'False' at the start of each frame by 'nextFrameContext'.
-  , ctxTextMeasure :: TextMeasurer
+  , ctxTextMeasure     :: TextMeasurer
     -- ^ Text measurement service supplied at configure time. Controls call
     -- 'charOffsetUI' and 'charAtOffsetUI' rather than accessing this directly.
+  , ctxInteraction     :: InteractionState e
+  , ctxElements        :: ElementState e
+  , ctxOutputs         :: FrameOutputs s
   }
 
 -- | The UI monad. A state-threading computation in 'IO' that reads from a
@@ -313,27 +333,36 @@ instance Monad (UI e s) where
     (a, ctx') <- x ctx
     runUI (f a) ctx'
 
+emptyInteractionState :: InteractionState e
+emptyInteractionState = InteractionState
+  { ixnHovered     = Nothing
+  , ixnCaptured    = Nothing
+  , ixnFocus       = FocusState { focusedElement = Nothing, focusedThisFrame = False }
+  , ixnPrevTabStop = Nothing
+  }
+
+emptyFrameOutputs :: FrameOutputs s
+emptyFrameOutputs = FrameOutputs
+  { outDrawCommands      = []
+  , outDispatches        = []
+  , outAsyncJobs         = []
+  , outRequiresAnimation = False
+  }
+
 -- | Constructs the initial 'UIContext' for the first frame.
 emptyUIContext :: Rectangle -> InputState -> Theme e -> s -> TextMeasurer -> UIContext e s
 emptyUIContext bounds input thm appState measurer = UIContext
-  { ctxBounds = bounds
-  , ctxInput = input
-  , ctxTheme = thm
-  , ctxDrawCommands = []
-  , ctxHoveredElement = Nothing
-  , ctxCapturedElement = Nothing
-  , ctxFocusState = FocusState { focusedElement = Nothing, focusedThisFrame = False }
-  , ctxPreviousTabStop = Nothing
-  , ctxScrollStates = Map.empty
-  , ctxSelections = Map.empty
-  , ctxAppState = appState
-  , ctxDispatches = []
-  , ctxAsyncJobs = []
-  , ctxDisabled = False
+  { ctxBounds          = bounds
+  , ctxInput           = input
+  , ctxTheme           = thm
+  , ctxAppState        = appState
+  , ctxDisabled        = False
   , ctxInteractionClip = Nothing
-  , ctxAnimation = AnimationState { animDelta = 0, animElapsed = 0, animIsTick = False }
-  , ctxRequiresAnimation = False
-  , ctxTextMeasure = measurer
+  , ctxAnimation       = AnimationState { animDelta = 0, animElapsed = 0, animIsTick = False }
+  , ctxTextMeasure     = measurer
+  , ctxInteraction     = emptyInteractionState
+  , ctxElements        = ElementState { elmScrollStates = Map.empty, elmSelections = Map.empty }
+  , ctxOutputs         = emptyFrameOutputs
   }
 
 -- | Advances the context to the next frame. Resets per-frame state (draw
@@ -342,15 +371,20 @@ emptyUIContext bounds input thm appState measurer = UIContext
 -- element, scroll state, selections, application state, and tab-stop bookkeeping).
 nextFrameContext :: Rectangle -> InputState -> UIContext e s -> UIContext e s
 nextFrameContext bounds input ctx = ctx
-  { ctxBounds = bounds
-  , ctxInput = input
-  , ctxDrawCommands = []
-  , ctxHoveredElement = Nothing
-  , ctxCapturedElement = nextCapture (inputLeftButton input) (ctxCapturedElement ctx)
-  , ctxFocusState = nextFocusFrame (ctxFocusState ctx)
-  , ctxDispatches = []
-  , ctxAsyncJobs = []
-  , ctxRequiresAnimation = False
+  { ctxBounds      = bounds
+  , ctxInput       = input
+  , ctxInteraction = nextInteractionFrame (inputLeftButton input) (ctxInteraction ctx)
+  , ctxOutputs     = emptyFrameOutputs
+  }
+
+-- | Advances 'InteractionState' to the next frame: clears hover, advances
+-- capture, and carries focus forward only if it was visited this frame.
+-- The previous tab stop is preserved for Shift-Tab navigation.
+nextInteractionFrame :: ButtonState -> InteractionState e -> InteractionState e
+nextInteractionFrame btn ixn = ixn
+  { ixnHovered  = Nothing
+  , ixnCaptured = nextCapture btn (ixnCaptured ixn)
+  , ixnFocus    = nextFocusFrame (ixnFocus ixn)
   }
 
 gets :: (UIContext e s -> a) -> UI e s a
@@ -359,28 +393,37 @@ gets f = UI $ \ctx -> pure (f ctx, ctx)
 modify :: (UIContext e s -> UIContext e s) -> UI e s ()
 modify f = UI $ \ctx -> pure ((), f ctx)
 
+modifyIxn :: (InteractionState e -> InteractionState e) -> UI e s ()
+modifyIxn f = modify $ \ctx -> ctx { ctxInteraction = f (ctxInteraction ctx) }
+
+modifyElm :: (ElementState e -> ElementState e) -> UI e s ()
+modifyElm f = modify $ \ctx -> ctx { ctxElements = f (ctxElements ctx) }
+
+modifyOut :: (FrameOutputs s -> FrameOutputs s) -> UI e s ()
+modifyOut f = modify $ \ctx -> ctx { ctxOutputs = f (ctxOutputs ctx) }
+
 -- | The current scroll position for the given element, in @[0, 1]@. Returns
 -- @0@ when no position has been recorded yet.
 getScrollState :: Ord e => e -> UI e s Double
 getScrollState eid = gets $ \ctx ->
-  scrollPosition (Map.findWithDefault (ScrollState 0) eid (ctxScrollStates ctx))
+  scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
 -- | Overwrites the scroll position for the given element. The change takes
 -- effect immediately: later reads in the same frame see the new value.
 setScrollState :: Ord e => e -> Double -> UI e s ()
-setScrollState eid v = modify $ \ctx ->
-  ctx { ctxScrollStates = Map.insert eid (ScrollState v) (ctxScrollStates ctx) }
+setScrollState eid v = modifyElm $ \elm ->
+  elm { elmScrollStates = Map.insert eid (ScrollState v) (elmScrollStates elm) }
 
 -- | All selections for the given element. Returns @[]@ when none have been recorded.
 getSelections :: Ord e => e -> UI e s [Selection]
 getSelections eid = gets $ \ctx ->
-  Map.findWithDefault [] eid (ctxSelections ctx)
+  Map.findWithDefault [] eid (elmSelections (ctxElements ctx))
 
 -- | Overwrites the selection list for the given element. The change takes
 -- effect immediately.
 setSelections :: Ord e => e -> [Selection] -> UI e s ()
-setSelections eid ss = modify $ \ctx ->
-  ctx { ctxSelections = Map.insert eid ss (ctxSelections ctx) }
+setSelections eid ss = modifyElm $ \elm ->
+  elm { elmSelections = Map.insert eid ss (elmSelections elm) }
 
 -- | The first selection for the given element, or 'Nothing'.
 getSelection :: Ord e => e -> UI e s (Maybe Selection)
@@ -452,12 +495,12 @@ consumeKey k = modify $ \ctx ->
 -- | The element that was the most recent tab stop before the current one,
 -- used by 'control' to implement Shift-Tab navigation.
 getPreviousTabStop :: UI e s (Maybe e)
-getPreviousTabStop = gets ctxPreviousTabStop
+getPreviousTabStop = gets (ixnPrevTabStop . ctxInteraction)
 
 -- | Records the current element as the previous tab stop. Called automatically
 -- by 'control'; call manually when building custom focusable controls.
 setPreviousTabStop :: e -> UI e s ()
-setPreviousTabStop eid = modify $ \ctx -> ctx { ctxPreviousTabStop = Just eid }
+setPreviousTabStop eid = modifyIxn $ \ixn -> ixn { ixnPrevTabStop = Just eid }
 
 getTheme :: UI e s (Theme e)
 getTheme = gets ctxTheme
@@ -488,7 +531,7 @@ getStyle eid = do
 
 -- | 'True' when the given element is the current hover target.
 isHovered :: Eq e => e -> UI e s Bool
-isHovered eid = (== Just eid) <$> gets ctxHoveredElement
+isHovered eid = (== Just eid) <$> gets (ixnHovered . ctxInteraction)
 
 -- | 'True' when the element is hovered and the left button was just released.
 isClicked :: Eq e => e -> UI e s Bool
@@ -510,33 +553,35 @@ isPressed eid = do
 -- on a different element) from a plain click. Cleared on ButtonUp.
 -- Acquisition — setting capture in the first place — happens in 'setHovered'.
 nextCapture :: ButtonState -> Maybe e -> Maybe e
-nextCapture ButtonDown    existing = existing
+nextCapture ButtonDown     existing = existing
 nextCapture ButtonReleased existing = existing
-nextCapture _             _        = Nothing
+nextCapture _              _        = Nothing
 
 -- | 'True' on every frame that the given element is being dragged — from the
 -- initial press through to release.
 isDragging :: Eq e => e -> UI e s Bool
-isDragging eid = (== Just eid) <$> gets ctxCapturedElement
+isDragging eid = (== Just eid) <$> gets (ixnCaptured . ctxInteraction)
 
 -- | The element that currently holds mouse capture, or 'Nothing' when no drag
 -- is in progress. Exported for control authors that need to inspect capture
 -- state directly, e.g. when implementing focus-on-click without using 'control'.
 getCapturedElement :: UI e s (Maybe e)
-getCapturedElement = gets ctxCapturedElement
+getCapturedElement = gets (ixnCaptured . ctxInteraction)
 
 -- | Registers the element as the current hover target. Also acquires mouse
 -- capture for it if the left button is currently down and nothing is captured
 -- yet, making this the first point of capture for that press.
 setHovered :: e -> UI e s ()
 setHovered eid = modify $ \ctx ->
-  let ctx' = ctx { ctxHoveredElement = Just eid }
-  in if inputLeftButton (ctxInput ctx) == ButtonDown && isNothing (ctxCapturedElement ctx)
-     then ctx' { ctxCapturedElement = Just eid }
-     else ctx'
+  let ixn  = ctxInteraction ctx
+      ixn' = ixn { ixnHovered = Just eid }
+  in ctx { ctxInteraction =
+       if inputLeftButton (ctxInput ctx) == ButtonDown && isNothing (ixnCaptured ixn)
+       then ixn' { ixnCaptured = Just eid }
+       else ixn' }
 
 getFocus :: UI e s (Maybe e)
-getFocus = gets (focusedElement . ctxFocusState)
+getFocus = gets (focusedElement . ixnFocus . ctxInteraction)
 
 -- | 'True' when the given element holds keyboard focus.
 isFocused :: Eq e => e -> UI e s Bool
@@ -544,7 +589,8 @@ isFocused eid = (== Just eid) <$> getFocus
 
 -- | Transfers keyboard focus to the given element.
 setFocus :: e -> UI e s ()
-setFocus eid = modify $ \ctx -> ctx { ctxFocusState = FocusState { focusedElement = Just eid, focusedThisFrame = True } }
+setFocus eid = modifyIxn $ \ixn ->
+  ixn { ixnFocus = FocusState { focusedElement = Just eid, focusedThisFrame = True } }
 
 -- | Transfers keyboard focus to the given element when the condition is 'True'.
 setFocusWhen :: Bool -> e -> UI e s ()
@@ -552,10 +598,10 @@ setFocusWhen b eid = when b (setFocus eid)
 
 -- | Removes keyboard focus from all elements.
 clearFocus :: UI e s ()
-clearFocus = modify $ \ctx -> ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = Nothing } }
+clearFocus = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { focusedElement = Nothing } }
 
 -- | Advances a 'FocusState' to the next frame: carries focus forward if it
--- was explicitly set this frame, otherwise clears it. Used by 'nextFrameContext'.
+-- was explicitly set this frame, otherwise clears it. Used by 'nextInteractionFrame'.
 nextFocusFrame :: FocusState e -> FocusState e
 nextFocusFrame fs = FocusState
   { focusedElement   = if focusedThisFrame fs
@@ -585,7 +631,7 @@ disableWhen True (UI f) = UI $ \ctx -> do
 disableWhen False action = action
 
 draw :: DrawCommand -> UI e s ()
-draw cmd = modify $ \ctx -> ctx { ctxDrawCommands = cmd : ctxDrawCommands ctx }
+draw cmd = modifyOut $ \out -> out { outDrawCommands = cmd : outDrawCommands out }
 
 -- | Fills the current bounds with a solid colour.
 fillRect :: Colour -> UI e s ()
@@ -613,9 +659,11 @@ clipToCurrent (UI f) = UI $ \ctx -> do
   let r       = ctxBounds ctx
       newClip = maybe r (intersectRect r) (ctxInteractionClip ctx)
       ctx'    = ctx { ctxInteractionClip = Just newClip
-                    , ctxDrawCommands    = PushClip r : ctxDrawCommands ctx }
+                    , ctxOutputs = (ctxOutputs ctx)
+                        { outDrawCommands = PushClip r : outDrawCommands (ctxOutputs ctx) } }
   (a, ctx'') <- f ctx'
-  let ctx''' = ctx'' { ctxDrawCommands    = PopClip : ctxDrawCommands ctx''
+  let ctx''' = ctx'' { ctxOutputs = (ctxOutputs ctx'')
+                         { outDrawCommands = PopClip : outDrawCommands (ctxOutputs ctx'') }
                      , ctxInteractionClip = ctxInteractionClip ctx }
   pure (a, ctx''')
 
@@ -643,27 +691,28 @@ getAppState = gets ctxAppState
 -- | Queues a modifier to be applied to the application state once the frame
 -- completes. Modifiers are applied in dispatch order by 'applyDispatches'.
 dispatch :: (s -> s) -> UI e s ()
-dispatch f = modify $ \ctx -> ctx { ctxDispatches = f : ctxDispatches ctx }
+dispatch f = modifyOut $ \out -> out { outDispatches = f : outDispatches out }
 
 -- | Queues an asynchronous job. The host forks the job once the frame
 -- completes, passing it the post-dispatch application state; the modifier the
 -- job returns is applied to whatever state exists when it finishes.
 dispatchAsync :: (s -> IO (s -> s)) -> UI e s ()
-dispatchAsync job = modify $ \ctx -> ctx { ctxAsyncJobs = job : ctxAsyncJobs ctx }
+dispatchAsync job = modifyOut $ \out -> out { outAsyncJobs = job : outAsyncJobs out }
 
 -- | Extracts the draw commands produced during the frame, in submission order.
 getDrawCommands :: UIContext e s -> [DrawCommand]
-getDrawCommands = reverse . ctxDrawCommands
+getDrawCommands = reverse . outDrawCommands . ctxOutputs
 
 -- | Applies the modifiers queued with 'dispatch' during the frame to the
 -- frame's application state, in dispatch order.
 applyDispatches :: UIContext e s -> s
-applyDispatches ctx = foldl' (flip ($)) (ctxAppState ctx) (reverse (ctxDispatches ctx))
+applyDispatches ctx =
+  foldl' (flip ($)) (ctxAppState ctx) (reverse (outDispatches (ctxOutputs ctx)))
 
 -- | Extracts the asynchronous jobs queued with 'dispatchAsync' during the
 -- frame, in dispatch order.
 getAsyncJobs :: UIContext e s -> [s -> IO (s -> s)]
-getAsyncJobs = reverse . ctxAsyncJobs
+getAsyncJobs = reverse . outAsyncJobs . ctxOutputs
 
 -- | 'True' when the mouse cursor is within the current bounds and within the
 -- active interaction clip region (set by 'clipToCurrent').
@@ -685,14 +734,14 @@ whenEnabled ui = do
 -- respond to hover: @free || dragging@ allows hover when the mouse is
 -- uncontested or when this element itself owns the capture.
 isMouseFree :: UI e s Bool
-isMouseFree = isNothing <$> gets ctxCapturedElement
+isMouseFree = isNothing <$> gets (ixnCaptured . ctxInteraction)
 
 -- | Signals that animation should continue running. Call unconditionally on
 -- every frame from any component that needs animation, including frames not
 -- triggered by the ticker. Keeps 'refsAnimActive' set so the ticker does not
 -- go quiet while the component is visible.
 requiresAnimation :: UI e s ()
-requiresAnimation = modify $ \ctx -> ctx { ctxRequiresAnimation = True }
+requiresAnimation = modifyOut $ \out -> out { outRequiresAnimation = True }
 
 -- | Runs @action@ only on frames triggered by the animation ticker. On frames
 -- triggered by mouse movement, keyboard input, or other platform events, this
@@ -727,4 +776,3 @@ charAtOffsetUI :: Text -> Float -> UI e s Int
 charAtOffsetUI text x = UI $ \ctx -> do
   v <- tmCharAtOffset (ctxTextMeasure ctx) text x
   pure (v, ctx)
-

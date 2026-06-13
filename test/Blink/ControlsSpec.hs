@@ -58,14 +58,14 @@ mkCtx :: InputState -> UIContext TestElement ()
 mkCtx input = emptyUIContext controlRect input testTheme () noOpTextMeasurer
 
 withFocus :: Maybe TestElement -> UIContext TestElement s -> UIContext TestElement s
-withFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = e } }
+withFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus = (ixnFocus (ctxInteraction ctx)) { focusedElement = e } } }
 
 getFocused :: UIContext TestElement s -> Maybe TestElement
-getFocused = focusedElement . ctxFocusState
+getFocused = focusedElement . ixnFocus . ctxInteraction
 
 -- The number of state modifiers queued during the frame.
 dispatchCount :: UIContext e s -> Int
-dispatchCount = length . ctxDispatches
+dispatchCount = length . outDispatches . ctxOutputs
 
 noInput :: InputState
 noInput = InputState
@@ -186,7 +186,8 @@ controlBehaviourSpec run hitPoint = do
 
     it "does not steal focus when the mouse is released on it after dragging from another element" $ do
       -- Simulate being mid-drag from OtherControl: capture is set to OtherControl on the release frame.
-      let ctx = (mkCtx (mouseAt hitPoint ButtonReleased [])) { ctxCapturedElement = Just OtherControl }
+      let base = mkCtx (mouseAt hitPoint ButtonReleased [])
+          ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just OtherControl } }
       ctx' <- run ctx
       getFocused ctx' `shouldBe` Nothing
 
@@ -196,17 +197,18 @@ controlBehaviourSpec run hitPoint = do
       getFocused ctx' `shouldBe` Nothing
 
     it "passes focus to the previous control when Shift+Tab is pressed" $ do
-      ctx' <- run (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab [Shift]] }) { ctxPreviousTabStop = Just OtherControl })
+      let base = withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab [Shift]] })
+      ctx' <- run (base { ctxInteraction = (ctxInteraction base) { ixnPrevTabStop = Just OtherControl } })
       getFocused ctx' `shouldBe` Just OtherControl
 
   describe "hover detection" $ do
     it "is hovered when the mouse is inside" $ do
       ctx' <- run (mkCtx (mouseAt hitPoint ButtonUp []))
-      ctxHoveredElement ctx' `shouldBe` Just TestControl
+      ixnHovered (ctxInteraction ctx') `shouldBe` Just TestControl
 
     it "is not hovered when the mouse is outside" $ do
       ctx' <- run (mkCtx (mouseAt (Point 200 200) ButtonUp []))
-      ctxHoveredElement ctx' `shouldBe` Nothing
+      ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
   describe "when disabled" $ do
     let disabledRun ctx = run (ctx { ctxDisabled = True })
@@ -221,11 +223,11 @@ controlBehaviourSpec run hitPoint = do
 
     it "is not hovered when the mouse is inside" $ do
       ctx' <- disabledRun (mkCtx (mouseAt hitPoint ButtonUp []))
-      ctxHoveredElement ctx' `shouldBe` Nothing
+      ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
     it "is not recorded as the previous tab stop" $ do
       ctx' <- disabledRun (mkCtx noInput)
-      ctxPreviousTabStop ctx' `shouldBe` Nothing
+      ixnPrevTabStop (ctxInteraction ctx') `shouldBe` Nothing
 
 -- | Background and border rendering tests. Only applicable to single controls
 --   that fill controlRect directly (not composite widgets).
@@ -234,27 +236,27 @@ backgroundAndBorderSpec run = do
   let runWithBorder ctx = run (ctx { ctxTheme = testThemeWithBorder })
   it "does not draw a background in the margin area" $ do
     ctx' <- run (mkCtx noInput)
-    ctxDrawCommands ctx' `shouldNotContain` [FillRect controlRect testColour]
+    getDrawCommands ctx' `shouldNotContain` [FillRect controlRect testColour]
 
   it "fills its background area" $ do
     ctx' <- run (mkCtx noInput)
-    ctxDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
+    getDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
 
   it "clips content to its padding area" $ do
     ctx' <- run (mkCtx noInput)
-    ctxDrawCommands ctx' `shouldContain` [PushClip contentRect]
+    getDrawCommands ctx' `shouldContain` [PushClip contentRect]
 
   it "does not draw a border when borderColour is Nothing" $ do
     ctx' <- run (mkCtx noInput)
-    filter isStrokeRect (ctxDrawCommands ctx') `shouldBe` []
+    filter isStrokeRect (getDrawCommands ctx') `shouldBe` []
 
   it "draws a border when borderColour is set" $ do
     ctx' <- runWithBorder (mkCtx noInput)
-    ctxDrawCommands ctx' `shouldContain` [StrokeRect bgRect testBorderColour 1]
+    getDrawCommands ctx' `shouldContain` [StrokeRect bgRect testBorderColour 1]
 
   it "draws a border even when the background is transparent" $ do
     ctx' <- run ((mkCtx noInput) { ctxTheme = transparentBgWithBorderTheme })
-    ctxDrawCommands ctx' `shouldContain` [StrokeRect bgRect testBorderColour 1]
+    getDrawCommands ctx' `shouldContain` [StrokeRect bgRect testBorderColour 1]
 
 runProgressBar :: Double -> WidgetRunner
 runProgressBar value ctx = fmap snd $ runUI (progressBar TestControl (Progress value)) ctx
@@ -315,7 +317,7 @@ runSlider ori val input =
     (emptyUIContext sliderRect input sliderTheme val noOpTextMeasurer)
 
 withSliderFocus :: Maybe SliderPart -> UIContext SliderPart Double -> UIContext SliderPart Double
-withSliderFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = e } }
+withSliderFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus = (ixnFocus (ctxInteraction ctx)) { focusedElement = e } } }
 
 -- runRadioControl maps index 0 -> TestControl for the control suite helpers.
 -- A single-item group is enough to exercise focus, tab, hover, and background.
@@ -345,10 +347,10 @@ runRadioGroup sel input =
     (emptyUIContext radioGroupRect input radioGroupTheme sel noOpTextMeasurer)
 
 withItemFocus :: Maybe Int -> UIContext Int String -> UIContext Int String
-withItemFocus e ctx = ctx { ctxFocusState = (ctxFocusState ctx) { focusedElement = e } }
+withItemFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus = (ixnFocus (ctxInteraction ctx)) { focusedElement = e } } }
 
 scrollPos :: UIContext ScrollBarPart () -> Double
-scrollPos = scrollPosition . Map.findWithDefault (ScrollState 0) ScrollTrack . ctxScrollStates
+scrollPos = scrollPosition . Map.findWithDefault (ScrollState 0) ScrollTrack . elmScrollStates . ctxElements
 
 scrollTheme :: Theme ScrollBarPart
 scrollTheme = Theme
@@ -364,8 +366,8 @@ scrollRect = Rectangle 0 0 20 200
 runScrollBar :: Double -> InputState -> IO (UIContext ScrollBarPart ())
 runScrollBar pos input =
   fmap snd $ runUI (scrollBar id Vertical 0.25)
-    ((emptyUIContext scrollRect input scrollTheme () noOpTextMeasurer)
-      { ctxScrollStates = Map.singleton ScrollTrack (ScrollState pos) })
+    (let base = emptyUIContext scrollRect input scrollTheme () noOpTextMeasurer
+     in base { ctxElements = (ctxElements base) { elmScrollStates = Map.singleton ScrollTrack (ScrollState pos) } })
 
 data ScrollRegionElem = SRPart ScrollRegionPart | SRChild
   deriving (Eq, Ord, Show)
@@ -393,24 +395,24 @@ spec = describe "Controls" $ do
     describe "rendering" $ do
       it "fills the correct proportion of the content area at 0.5" $ do
         ctx' <- runProgressBar 0.5 (mkCtx noInput)
-        ctxDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 35 70) testColour]
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 35 70) testColour]
 
       it "fills the full content area at 1.0" $ do
         ctx' <- runProgressBar 1.0 (mkCtx noInput)
-        ctxDrawCommands ctx' `shouldContain` [FillRect contentRect testColour]
+        getDrawCommands ctx' `shouldContain` [FillRect contentRect testColour]
 
       it "fills zero width at 0.0" $ do
         ctx' <- runProgressBar 0.0 (mkCtx noInput)
-        ctxDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 0 70) testColour]
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 0 70) testColour]
 
     describe "clamping" $ do
       it "clamps values above 1.0 to full width" $ do
         ctx' <- runProgressBar 1.5 (mkCtx noInput)
-        ctxDrawCommands ctx' `shouldContain` [FillRect contentRect testColour]
+        getDrawCommands ctx' `shouldContain` [FillRect contentRect testColour]
 
       it "clamps values below 0.0 to zero width" $ do
         ctx' <- runProgressBar (-0.5) (mkCtx noInput)
-        ctxDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 0 70) testColour]
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 0 70) testColour]
 
   describe "button" $ do
     controlBehaviourSpec runButton (Point 50 50)
@@ -507,11 +509,11 @@ spec = describe "Controls" $ do
     describe "focus ring" $ do
       it "draws a focus ring around the full control when focused" $ do
         ctx' <- runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput) { ctxTheme = focusBorderTheme })
-        ctxDrawCommands ctx' `shouldContain` [StrokeRect controlRect testBorderColour 1]
+        getDrawCommands ctx' `shouldContain` [StrokeRect controlRect testBorderColour 1]
 
       it "does not draw a focus ring when unfocused" $ do
         ctx' <- runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput) { ctxTheme = focusBorderTheme })
-        ctxDrawCommands ctx' `shouldNotContain` [StrokeRect controlRect testBorderColour 1]
+        getDrawCommands ctx' `shouldNotContain` [StrokeRect controlRect testBorderColour 1]
 
   describe "textInput" $ do
     controlBehaviourSpec runTextInputControl (Point 50 50)
@@ -525,7 +527,7 @@ spec = describe "Controls" $ do
       it "displays the value with a cursor when focused" $ do
         ctx' <- runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
         drawnTexts ctx' `shouldContain` ["hello"]
-        ctxDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 1 70) testColour]
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 1 70) testColour]
 
     describe "text editing" $ do
       it "appends typed characters to the value" $ do
@@ -555,13 +557,13 @@ spec = describe "Controls" $ do
 
       it "does not show a cursor when focused and disabled" $ do
         ctx' <- fmap snd $ runUI (disableWhen True (textInput TestControl "hello" (\t _ -> t))) (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
-        ctxDrawCommands ctx' `shouldNotContain` [FillRect (Rectangle 15 15 1 70) testColour]
+        getDrawCommands ctx' `shouldNotContain` [FillRect (Rectangle 15 15 1 70) testColour]
 
     describe "cursor placement" $ do
       it "sets the cursor to the clicked position on mouse press" $ do
         -- noOpTextMeasurer maps every offset to 0, so any click → position 0
         ctx' <- runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" (mouseAt (Point 50 50) ButtonDown [])))
-        Map.lookup TestControl (ctxSelections ctx') `shouldBe` Just [Selection 0 0]
+        Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 0 0]
 
       it "extends the active end on drag while keeping anchor" $ do
         -- First frame: click starts drag; second frame: drag extends selection.
@@ -570,47 +572,47 @@ spec = describe "Controls" $ do
                     (nextFrameContext controlRect (mouseAt (Point 70 50) ButtonDown []) frame1)
         -- With noOpTextMeasurer both positions are 0, so selection is (0,0); the
         -- key check is that anchor was NOT reset on the second frame.
-        case Map.lookup TestControl (ctxSelections frame2) of
+        case Map.lookup TestControl (elmSelections (ctxElements frame2)) of
           Just [Selection a _] -> a `shouldBe` 0
           other                -> expectationFailure $ "expected Just [Selection a _], got: " <> show other
 
     describe "arrow navigation" $ do
-      let withSel a v ctx = ctx { ctxSelections = Map.singleton TestControl [Selection a v] }
+      let withSel a v ctx = ctx { ctxElements = (ctxElements ctx) { elmSelections = Map.singleton TestControl [Selection a v] } }
 
       it "moves cursor left with Left" $ do
         ctx' <- runTextInput "hello" (withSel 3 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyLeft []] })))
-        Map.lookup TestControl (ctxSelections ctx') `shouldBe` Just [Selection 2 2]
+        Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 2 2]
 
       it "moves cursor right with Right" $ do
         ctx' <- runTextInput "hello" (withSel 2 2 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyRight []] })))
-        Map.lookup TestControl (ctxSelections ctx') `shouldBe` Just [Selection 3 3]
+        Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 3 3]
 
       it "collapses selection to low end on plain Left" $ do
         ctx' <- runTextInput "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyLeft []] })))
-        Map.lookup TestControl (ctxSelections ctx') `shouldBe` Just [Selection 1 1]
+        Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 1 1]
 
       it "collapses selection to high end on plain Right" $ do
         ctx' <- runTextInput "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyRight []] })))
-        Map.lookup TestControl (ctxSelections ctx') `shouldBe` Just [Selection 3 3]
+        Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 3 3]
 
       it "extends selection left with Shift+Left" $ do
         ctx' <- runTextInput "hello" (withSel 3 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyLeft [Shift]] })))
-        Map.lookup TestControl (ctxSelections ctx') `shouldBe` Just [Selection 3 2]
+        Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 3 2]
 
       it "extends selection right with Shift+Right" $ do
         ctx' <- runTextInput "hello" (withSel 3 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyRight [Shift]] })))
-        Map.lookup TestControl (ctxSelections ctx') `shouldBe` Just [Selection 3 4]
+        Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 3 4]
 
       it "does not move cursor past the beginning" $ do
         ctx' <- runTextInput "hello" (withSel 0 0 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyLeft []] })))
-        Map.lookup TestControl (ctxSelections ctx') `shouldBe` Just [Selection 0 0]
+        Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 0 0]
 
       it "does not move cursor past the end" $ do
         ctx' <- runTextInput "hello" (withSel 5 5 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyRight []] })))
-        Map.lookup TestControl (ctxSelections ctx') `shouldBe` Just [Selection 5 5]
+        Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 5 5]
 
     describe "selection editing" $ do
-      let withSel a v ctx = ctx { ctxSelections = Map.singleton TestControl [Selection a v] }
+      let withSel a v ctx = ctx { ctxElements = (ctxElements ctx) { elmSelections = Map.singleton TestControl [Selection a v] } }
 
       it "deletes the selected range on backspace" $ do
         ctx' <- runTextInput "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] })))
@@ -622,7 +624,7 @@ spec = describe "Controls" $ do
 
       it "collapses cursor to insertion point after replacing selection" $ do
         ctx' <- runTextInput "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["XY"] })))
-        Map.lookup TestControl (ctxSelections ctx') `shouldBe` Just [Selection 3 3]
+        Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 3 3]
 
   describe "scrollBar" $ do
     describe "button stepping" $ do
@@ -772,7 +774,7 @@ spec = describe "Controls" $ do
             ctx' <- fmap snd $ runUI (radioGroup id radioItems "a" (\v _ -> v))
               (withItemFocus (Just focusIdx)
                 (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent k []] } radioGroupTheme "a" noOpTextMeasurer))
-            pure $ focusedElement (ctxFocusState ctx')
+            pure $ focusedElement (ixnFocus (ctxInteraction ctx'))
 
       it "moves focus to the next item when Down is pressed" $ do
         result <- nav 0 KeyDown
@@ -793,7 +795,7 @@ spec = describe "Controls" $ do
       it "does not move focus when disabled" $ do
         ctx' <- fmap snd $ runUI (disableWhen True (radioGroup id radioItems "a" (\v _ -> v)))
           (withItemFocus (Just 0) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyDown []] } radioGroupTheme "a" noOpTextMeasurer))
-        focusedElement (ctxFocusState ctx') `shouldBe` Just 0
+        focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just 0
 
     describe "rendering" $ do
       it "shows the selected mark on the selected item" $ do
@@ -813,11 +815,11 @@ spec = describe "Controls" $ do
     describe "interaction clipping" $ do
       it "does not hover a child item when the mouse is over the horizontal scrollbar strip" $ do
         ctx' <- runScrollableRegion (Point 100 92)
-        ctxHoveredElement ctx' `shouldNotBe` Just SRChild
+        ixnHovered (ctxInteraction ctx') `shouldNotBe` Just SRChild
 
       it "hovers the child item when the mouse is within the viewport" $ do
         ctx' <- runScrollableRegion (Point 100 42)
-        ctxHoveredElement ctx' `shouldBe` Just SRChild
+        ixnHovered (ctxInteraction ctx') `shouldBe` Just SRChild
 
   -- Geometry: Rectangle 0 0 100 200 (vertical) / Rectangle 0 0 200 100 (horizontal)
   -- thumbH/thumbW = trackLen * ratio; range = trackLen - thumbH/W

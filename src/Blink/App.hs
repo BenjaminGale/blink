@@ -100,7 +100,7 @@ import Blink.Input (ButtonState (..), KeyEvent, InputState (..))
 import Blink.Rendering (DrawCommand, TextMeasurer (..))
 import Blink.Style (Theme)
 import Blink.UI
-  ( UI, UIContext (..)
+  ( UI, UIContext (..), FrameOutputs (..)
   , AnimationState (..)
   , emptyUIContext, nextFrameContext
   , runUI, getDrawCommands, applyDispatches, getAsyncJobs
@@ -267,7 +267,7 @@ doStepEventDriven app refs notify input = do
   ((), renderedCtx) <- runUI (view app) freshCtx
   writeIORef (refsCtx refs) renderedCtx
   wasActive <- readIORef (refsAnimActive refs)
-  let nowActive = ctxRequiresAnimation renderedCtx
+  let nowActive = outRequiresAnimation (ctxOutputs renderedCtx)
   writeIORef (refsAnimActive refs) nowActive
   when (not wasActive && nowActive) $
     forkAnimationTicker (refsAnimActive refs) notify
