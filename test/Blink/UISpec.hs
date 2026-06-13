@@ -57,7 +57,7 @@ run :: UI () s a -> s -> IO (a, UIContext () s)
 run ui s = runUI ui (emptyUIContext testBounds noInput emptyTheme s noOpTextMeasurer)
 
 spec :: Spec
-spec = describe "UI primitives" $ do
+spec = describe "Blink.UI" $ do
   describe "clipToCurrent" $ do
     -- In each test the control runs with testBounds (100×100) so the mouse is
     -- inside the element's own bounds; only the clip region should block hover.
@@ -198,6 +198,21 @@ spec = describe "UI primitives" $ do
         selectionAnchor (extendActive (+1) (sel 2 3)) `shouldBe` 2
       it "can collapse a selection by moving active to anchor" $
         extendActive (const 2) (sel 2 5) `shouldBe` cursor 2
+
+  describe "scroll state" $ do
+    it "returns 0 when no position has been recorded" $ do
+      (v, _) <- run (getScrollState ()) (0 :: Int)
+      v `shouldBe` 0
+
+    it "returns the value just written in the same frame" $ do
+      (v, _) <- run (setScrollState () 0.5 >> getScrollState ()) (0 :: Int)
+      v `shouldBe` 0.5
+
+    it "keeps scroll positions separate per element" $ do
+      (v, _) <- runUI
+        (setScrollState ElemA 0.3 >> setScrollState ElemB 0.7 >> getScrollState ElemA)
+        (emptyUIContext testBounds noInput twoElemTheme (0 :: Int) noOpTextMeasurer)
+      v `shouldBe` 0.3
 
   describe "clampScrollPos" $ do
     it "clamps values below 0 to 0" $
