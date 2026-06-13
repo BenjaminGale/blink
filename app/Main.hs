@@ -9,6 +9,8 @@ import qualified SDL.Font as Font
 import qualified SDL.Raw
 import Control.Monad (void)
 import Data.IORef
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (isJust)
 import Foreign.Ptr (nullPtr)
 import Data.Text (Text)
@@ -29,6 +31,7 @@ main = do
   SDL.Raw.startTextInput
 
   buttonRef  <- newIORef ButtonUp
+  texCache   <- newIORef Map.empty
   mAnimEvent <- SDL.registerEvent
                   (\_ _ -> pure (Just ()))
                   (\_ -> pure (SDL.RegisteredEventData Nothing 0 nullPtr nullPtr))
@@ -42,13 +45,14 @@ main = do
         SDL.rendererDrawColor renderer $= SDL.V4 229 229 234 255
         SDL.clear renderer
         clipRef <- newIORef ([] :: [SDL.Rectangle CInt])
-        mapM_ (submitDrawCommand renderer font clipRef) calls
+        mapM_ (submitDrawCommand renderer font texCache clipRef) calls
         SDL.present renderer
 
   handle <- configureEventDriven demoApp notify measurer
 
   loop handle buttonRef renderFrame window mAnimEvent
 
+  readIORef texCache >>= mapM_ (\(t, _, _) -> SDL.destroyTexture t) . Map.elems
   Font.free font
   SDL.destroyRenderer renderer
   SDL.destroyWindow window
@@ -163,14 +167,23 @@ renderStroke renderer r color = do
   SDL.rendererDrawColor renderer $= toSDLColor color
   SDL.drawRect renderer (Just (toSDLRect r))
 
-renderText :: SDL.Renderer -> Font.Font -> Rectangle -> Text -> Colour -> TextAlign -> IO ()
-renderText renderer font r text color align = do
-  surface <- Font.blended font (toSDLColor color) text
-  texture <- SDL.createTextureFromSurface renderer surface
-  SDL.freeSurface surface
-  (SDL.TextureInfo _ _ tw th) <- SDL.queryTexture texture
+type TextureCache = IORef (Map (Text, SDL.V4 Word8) (SDL.Texture, CInt, CInt))
+
+renderText :: SDL.Renderer -> Font.Font -> TextureCache -> Rectangle -> Text -> Colour -> TextAlign -> IO ()
+renderText renderer font cache r text color align = do
+  let sdlColor  = toSDLColor color
+      cacheKey  = (text, sdlColor)
+  m <- readIORef cache
+  (texture, tw, th) <- case Map.lookup cacheKey m of
+    Just hit -> pure hit
+    Nothing  -> do
+      surface <- Font.blended font sdlColor text
+      tex     <- SDL.createTextureFromSurface renderer surface
+      SDL.freeSurface surface
+      (SDL.TextureInfo _ _ w h) <- SDL.queryTexture tex
+      writeIORef cache (Map.insert cacheKey (tex, w, h) m)
+      pure (tex, w, h)
   SDL.copy renderer texture Nothing (Just (alignedTextRect r align (fromIntegral tw) (fromIntegral th)))
-  SDL.destroyTexture texture
 
 pushClip :: SDL.Renderer -> IORef [SDL.Rectangle CInt] -> Rectangle -> IO ()
 pushClip renderer clipRef r = do
@@ -191,13 +204,13 @@ popClip renderer clipRef = do
     []        -> SDL.rendererClipRect renderer $= Nothing
     (top : _) -> SDL.rendererClipRect renderer $= Just top
 
-submitDrawCommand :: SDL.Renderer -> Font.Font -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
-submitDrawCommand renderer _ _       (FillRect r color)              = renderFill   renderer r color
-submitDrawCommand renderer _ _       (StrokeRect r color _)          = renderStroke renderer r color
-submitDrawCommand _ _ _              (DrawText _ text _ _) | T.null text = pure ()
-submitDrawCommand renderer font _    (DrawText r text color align)   = renderText   renderer font r text color align
-submitDrawCommand renderer _ clipRef (PushClip r)                    = pushClip     renderer clipRef r
-submitDrawCommand renderer _ clipRef  PopClip                        = popClip      renderer clipRef
+submitDrawCommand :: SDL.Renderer -> Font.Font -> TextureCache -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
+submitDrawCommand renderer _ _ _        (FillRect r color)             = renderFill   renderer r color
+submitDrawCommand renderer _ _ _        (StrokeRect r color _)         = renderStroke renderer r color
+submitDrawCommand _ _ _ _               (DrawText _ text _ _) | T.null text = pure ()
+submitDrawCommand renderer font cache _ (DrawText r text color align)  = renderText   renderer font cache r text color align
+submitDrawCommand renderer _ _ clipRef  (PushClip r)                   = pushClip     renderer clipRef r
+submitDrawCommand renderer _ _ clipRef   PopClip                       = popClip      renderer clipRef
 
 intersectSDLRect :: SDL.Rectangle CInt -> SDL.Rectangle CInt -> SDL.Rectangle CInt
 intersectSDLRect (SDL.Rectangle (SDL.P (SDL.V2 x1 y1)) (SDL.V2 w1 h1))
