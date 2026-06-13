@@ -118,7 +118,7 @@ progressBar eid Indeterminate = do
 checkboxMark :: Ord e => e -> Bool -> (Bool -> s -> s) -> UI e s ()
 checkboxMark boxId checked onToggle = control boxId $ do
   style     <- getStyle boxId
-  activated <- isActivatedBy [KeyReturn, KeySpace] boxId
+  activated <- isActivatedBy boxId [KeyReturn, KeySpace]
   when checked   $ drawText (styleTextColour style) AlignCenter "✓"
   when activated $ dispatch (onToggle (not checked))
 
@@ -161,7 +161,7 @@ radioGroup mkId items selected onChange = do
       in ( Layout Fill Fill TopLeft
          , control eid $ do
              style     <- getStyle eid
-             activated <- isActivatedBy [KeyReturn, KeySpace] eid
+             activated <- isActivatedBy eid [KeyReturn, KeySpace]
              drawText (styleTextColour style) AlignLeft $
                (if selected == val then "● " else "○ ") <> lbl
              when activated $ dispatch (onChange val)
@@ -179,7 +179,7 @@ button eid txt = do
   control eid $ do
     style <- getStyle eid
     drawText (styleTextColour style) (styleTextAlign style) txt
-  isActivatedBy [KeyReturn] eid
+  isActivatedBy eid [KeyReturn]
 
 -- | A single-line text entry field. Supports click-to-place cursor, drag
 -- selection, Shift+arrow extension, and selection-aware editing. Long text
@@ -676,8 +676,8 @@ applyTabNavigation eid = do
 -- | 'True' when the element is clicked or any of the given keys are pressed
 -- while it is focused, and the element is not disabled. Use this to implement
 -- the activation behaviour of interactive controls.
-isActivatedBy :: Ord e => [Key] -> e -> UI e s Bool
-isActivatedBy keys eid = do
+isActivatedBy :: Ord e => e -> [Key] -> UI e s Bool
+isActivatedBy eid keys = do
   clicked  <- isClicked eid
   keyPress <- or <$> mapM (isKeyPressed eid) keys
   disabled <- isDisabled
