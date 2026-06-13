@@ -3,7 +3,6 @@ module Blink.UISpec (spec) where
 
 import Data.IORef
 import qualified Data.Map.Strict as Map
-import Data.Text (Text)
 import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (forAll, choose)
@@ -173,12 +172,12 @@ spec = describe "Blink.UI" $ do
     ran `shouldBe` False
 
   it "nextFrameContext clears queued dispatches and async jobs" $ do
-    (_, ctx) <- run0 (dispatch (+ 1) >> dispatchAsync (\s -> pure (const s)))
+    (_, ctx) <- run0 (dispatch (+ 1) >> dispatchAsync (pure . const))
     let ctx' = nextFrameContext testBounds noInput ctx
     (applyDispatches ctx', length (getAsyncJobs ctx')) `shouldBe` (0, 0)
 
   describe "Selection helpers" $ do
-    let sel a v = Selection a v
+    let sel = Selection
 
     describe "selectionLow" $ do
       it "returns the anchor when anchor < active" $
@@ -590,12 +589,12 @@ spec = describe "Blink.UI" $ do
 
     it "withAnimationFrame runs its body on tick frames" $ do
       ref <- newIORef False
-      runUI (withAnimationFrame (UI $ \ctx -> writeIORef ref True >> pure ((), ctx))) tickCtx
+      _ <- runUI (withAnimationFrame (UI $ \ctx -> writeIORef ref True >> pure ((), ctx))) tickCtx
       readIORef ref `shouldReturn` True
 
     it "withAnimationFrame skips its body on non-tick frames" $ do
       ref <- newIORef False
-      runUI (withAnimationFrame (UI $ \ctx -> writeIORef ref True >> pure ((), ctx))) nonTickCtx
+      _ <- runUI (withAnimationFrame (UI $ \ctx -> writeIORef ref True >> pure ((), ctx))) nonTickCtx
       readIORef ref `shouldReturn` False
 
     it "requiresAnimation sets the animation continuation flag" $ do
