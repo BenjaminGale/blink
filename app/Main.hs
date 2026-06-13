@@ -50,7 +50,7 @@ main = do
 
   handle <- configureEventDriven demoApp notify measurer
 
-  loop handle ButtonUp renderFrame window checkAnimTick
+  loop handle False renderFrame window checkAnimTick
 
   freeTextureCache texCache
   Font.free font
@@ -61,19 +61,19 @@ main = do
 
 loop
   :: BlinkHandle s
-  -> ButtonState
+  -> Bool
   -> ([DrawCommand] -> IO ())
   -> SDL.Window
   -> ([SDL.Event] -> IO Bool)
   -> IO ()
-loop handle btn renderFrame window checkAnimTick = do
+loop handle btnDown renderFrame window checkAnimTick = do
   first <- SDL.waitEvent
   rest  <- SDL.pollEvents
-  let events = first : rest
-      btn'   = foldl' updateButton btn events
-      keys   = concatMap toKeyEvents events
-      chars  = concatMap toTypedText events
-      isQuit = any ((== SDL.QuitEvent) . SDL.eventPayload) events
+  let events   = first : rest
+      btnDown' = foldl' updateButton btnDown events
+      keys     = concatMap toKeyEvents events
+      chars    = concatMap toTypedText events
+      isQuit   = any ((== SDL.QuitEvent) . SDL.eventPayload) events
   isAnimTick <- checkAnimTick events
 
   mousePos         <- SDL.getAbsoluteMouseLocation
@@ -81,7 +81,7 @@ loop handle btn renderFrame window checkAnimTick = do
 
   let fi = FrameInput
              { mousePosition   = sdlPoint mousePos
-             , mouseButton     = btn'
+             , mouseButtonDown = btnDown'
              , keyEvents       = keys
              , typedText       = chars
              , windowSize      = Size (fromIntegral winW) (fromIntegral winH)
@@ -91,23 +91,17 @@ loop handle btn renderFrame window checkAnimTick = do
 
   result <- stepFrame handle fi
   case result of
-    Continue draws _ -> renderFrame draws >> loop handle (nextFrameButton btn') renderFrame window checkAnimTick
+    Continue draws _ -> renderFrame draws >> loop handle btnDown' renderFrame window checkAnimTick
     Quit     draws _ -> renderFrame draws
 
-updateButton :: ButtonState -> SDL.Event -> ButtonState
+updateButton :: Bool -> SDL.Event -> Bool
 updateButton current e = case SDL.eventPayload e of
   SDL.MouseButtonEvent d
     | SDL.mouseButtonEventButton d == SDL.ButtonLeft ->
         case SDL.mouseButtonEventMotion d of
-          SDL.Released -> ButtonReleased
-          SDL.Pressed  -> case current of
-            ButtonReleased -> ButtonReleased  -- preserve a release seen earlier this frame
-            _              -> ButtonDown
+          SDL.Released -> False
+          SDL.Pressed  -> True
   _ -> current
-
-nextFrameButton :: ButtonState -> ButtonState
-nextFrameButton ButtonReleased = ButtonUp
-nextFrameButton s              = s
 
 toKeyEvents :: SDL.Event -> [KeyEvent]
 toKeyEvents e = case SDL.eventPayload e of

@@ -10,7 +10,7 @@ import Test.Hspec
 
 import Blink.App
 import Blink.Geometry (Point (..), Rectangle (..), Size (..), uniform)
-import Blink.Input (ButtonState (..), Key (..), KeyEvent (..), InputState (..))
+import Blink.Input (Key (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), emptyTheme)
 import Blink.UI
@@ -20,7 +20,7 @@ import Blink.UI
 mkInput :: Bool -> Bool -> FrameInput
 mkInput quit animTick = FrameInput
   { mousePosition   = Point 0 0
-  , mouseButton     = ButtonUp
+  , mouseButtonDown = False
   , keyEvents       = []
   , typedText       = []
   , windowSize      = Size 100 100

@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Geometry (Point (..), Rectangle (..), uniform)
-import Blink.Input (ButtonState (..), InputState (..))
+import Blink.Input (InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.Controls (control)
@@ -18,10 +18,10 @@ twoElemTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = empty
 
 noInput :: InputState
 noInput = InputState
-  { inputMousePosition = Point 0 0
-  , inputLeftButton = ButtonUp
-  , inputKeyEvents = []
-  , inputTypedText = []
+  { inputMousePosition  = Point 0 0
+  , inputLeftButtonDown = False
+  , inputKeyEvents      = []
+  , inputTypedText      = []
   }
 
 emptyStyle :: Style
@@ -88,7 +88,7 @@ spec = describe "UI primitives" $ do
       ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
   describe "hover suppression during drag" $ do
-    let mouseOnA = noInput { inputMousePosition = Point 50 50, inputLeftButton = ButtonDown }
+    let mouseOnA = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
 
     it "does not hover an element when another element holds capture" $ do
       let base = emptyUIContext testBounds mouseOnA twoElemTheme (0 :: Int) noOpTextMeasurer
@@ -213,8 +213,7 @@ spec = describe "UI primitives" $ do
 
   describe "nextFrameContext capture" $ do
     let captured ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnCaptured = Just () } }
-        buttonDown  = noInput { inputLeftButton = ButtonDown }
-        buttonRel   = noInput { inputLeftButton = ButtonReleased }
+        buttonDown  = noInput { inputLeftButtonDown = True }
 
     it "auto-acquires capture when an element is hovered while the button is down" $ do
       -- Acquisition happens in setHovered during the frame, not via nextFrameContext.
@@ -226,12 +225,13 @@ spec = describe "UI primitives" $ do
       let ctx = nextFrameContext testBounds buttonDown (captured ctx0)
       ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
 
-    it "carries capture through ButtonReleased so focus logic can inspect it" $ do
-      (_, ctx0) <- run (pure ()) (0 :: Int)
-      let ctx = nextFrameContext testBounds buttonRel (captured ctx0)
+    it "carries capture through the release frame so focus logic can inspect it" $ do
+      -- Simulate: previous frame had button held, current frame it is released.
+      (_, ctx0) <- runUI (pure ()) (emptyUIContext testBounds buttonDown emptyTheme (0 :: Int) noOpTextMeasurer)
+      let ctx = nextFrameContext testBounds noInput (captured ctx0)
       ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
 
-    it "clears capture on ButtonUp" $ do
+    it "clears capture once the button is fully up" $ do
       (_, ctx0) <- run (pure ()) (0 :: Int)
       let ctx = nextFrameContext testBounds noInput (captured ctx0)
       ixnCaptured (ctxInteraction ctx) `shouldBe` Nothing

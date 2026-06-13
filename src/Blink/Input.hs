@@ -5,10 +5,8 @@ record aggregates pointer position, primary mouse button state, and keyboard
 events for a single frame.
 -}
 module Blink.Input
-  ( -- * Mouse
-    ButtonState (..)
-    -- * Keyboard
-  , Key (..)
+  ( -- * Keyboard
+    Key (..)
   , Modifier (..)
   , KeyEvent (..)
     -- * Frame input
@@ -17,18 +15,6 @@ module Blink.Input
 
 import Data.Text (Text)
 import Blink.Geometry (Point)
-
--- | State of the primary (left) mouse button for the current frame.
--- 'ButtonReleased' appears for exactly one frame — the frame on which the
--- button transitions from held to up.
-data ButtonState
-  = ButtonUp
-    -- ^ Button is not held.
-  | ButtonDown
-    -- ^ Button is held.
-  | ButtonReleased
-    -- ^ Button was released this frame.
-  deriving (Eq, Show)
 
 -- | The subset of keys that Blink's controls respond to. Text entry is
 -- handled via 'inputTypedText' in 'InputState'; 'Key' covers only
@@ -69,11 +55,13 @@ data KeyEvent = KeyEvent
 -- | All per-frame input assembled by the backend. Passed to the UI tree
 -- via the 'Blink.App.FrameInput' each frame.
 data InputState = InputState
-  { inputMousePosition :: Point
+  { inputMousePosition   :: Point
     -- ^ Cursor position in window coordinates.
-  , inputLeftButton    :: ButtonState
-    -- ^ State of the primary (left) mouse button.
-  , inputKeyEvents     :: [KeyEvent]
+  , inputLeftButtonDown  :: Bool
+    -- ^ 'True' while the primary (left) mouse button is physically held.
+    -- Button transition state (pressed\/released this frame) is derived by
+    -- 'Blink.UI' from this value compared against the previous frame.
+  , inputKeyEvents       :: [KeyEvent]
     -- ^ Key-press events for this frame.
   , inputTypedText     :: [Text]
     -- ^ Unicode text input events for this frame, in order received.

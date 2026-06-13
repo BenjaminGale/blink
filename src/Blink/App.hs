@@ -96,7 +96,7 @@ import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
 
 import Blink.Geometry (Point (..), Rectangle, Size (..), rectFromSize)
-import Blink.Input (ButtonState (..), KeyEvent, InputState (..))
+import Blink.Input (KeyEvent, InputState (..))
 import Blink.Rendering (DrawCommand, TextMeasurer (..))
 import Blink.Style (Theme)
 import Blink.UI
@@ -164,8 +164,8 @@ data BlinkHandle s = BlinkHandle
 data FrameInput = FrameInput
   { mousePosition :: Point
     -- ^ Cursor position in window coordinates.
-  , mouseButton   :: ButtonState
-    -- ^ State of the primary (left) mouse button.
+  , mouseButtonDown :: Bool
+    -- ^ 'True' while the primary (left) mouse button is physically held.
   , keyEvents     :: [KeyEvent]
     -- ^ Keyboard events for this frame.
   , typedText     :: [Text]
@@ -280,18 +280,18 @@ toResult input draws state
 
 emptyInputState :: InputState
 emptyInputState = InputState
-  { inputMousePosition = Point 0 0
-  , inputLeftButton    = ButtonUp
-  , inputKeyEvents     = []
-  , inputTypedText     = []
+  { inputMousePosition  = Point 0 0
+  , inputLeftButtonDown = False
+  , inputKeyEvents      = []
+  , inputTypedText      = []
   }
 
 toInputState :: FrameInput -> InputState
 toInputState fi = InputState
-  { inputMousePosition = mousePosition fi
-  , inputLeftButton    = mouseButton fi
-  , inputKeyEvents     = keyEvents fi
-  , inputTypedText     = typedText fi
+  { inputMousePosition  = mousePosition fi
+  , inputLeftButtonDown = mouseButtonDown fi
+  , inputKeyEvents      = keyEvents fi
+  , inputTypedText      = typedText fi
   }
 
 -- Clears keyboard and text events for the second render pass in event-driven mode.

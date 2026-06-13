@@ -161,10 +161,11 @@ module Blink.UI
     -- * Interaction
   , getInput
   , getMousePos
-  , getLeftButton
   , regionHit
   , isHovered
   , setHovered
+  , isButtonDown
+  , isButtonReleased
   , isClicked
   , isPressed
   , isDragging
@@ -206,7 +207,7 @@ import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..), TextMeasurer (..), noOpTextMeasurer)
 import Blink.Geometry (Point, Rectangle, containsPoint, intersectRect)
-import Blink.Input (ButtonState (..), Key (..), KeyEvent (..), InputState (..))
+import Blink.Input (Key (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 
 -- | Per-frame animation state threaded through the 'UIContext'. Set by the
@@ -250,11 +251,31 @@ data FocusState e = FocusState
 -- | Per-frame interactive targeting state: which element the mouse is over,
 -- which holds capture during a drag, which has keyboard focus, and which was
 -- the most recent tab stop. Reset and carried forward by 'nextFrameContext'.
+-- | Per-frame mouse button interaction state, derived by 'nextInteractionFrame'
+-- from the previous and current raw button-down values. Four states arise from
+-- the two-frame comparison:
+--
+-- @
+-- prev  curr  ixnButtonDown  ixnButtonReleased  meaning
+-- ----  ----  -------------  -----------------  -------
+-- F     F     False          False              Up       — not held, no event
+-- F     T     True           False              Pressed  — went down this frame
+-- T     T     True           False              Down     — held, no event
+-- T     F     False          True               Released — went up this frame
+-- @
+--
+-- Controls read 'ixnButtonDown' for press state and 'ixnButtonReleased' for
+-- click detection. Capture is held through Released so that drag-release can be
+-- distinguished from a plain click.
 data InteractionState e = InteractionState
-  { ixnHovered     :: Maybe e
-  , ixnCaptured    :: Maybe e
-  , ixnFocus       :: FocusState e
-  , ixnPrevTabStop :: Maybe e
+  { ixnHovered         :: Maybe e
+  , ixnCaptured        :: Maybe e
+  , ixnFocus           :: FocusState e
+  , ixnPrevTabStop     :: Maybe e
+  , ixnButtonDown      :: Bool
+    -- ^ 'True' when the left button is currently held (Pressed or Down state).
+  , ixnButtonReleased  :: Bool
+    -- ^ 'True' on the one frame the left button transitions from held to up.
   }
 
 -- | Cross-frame per-element presentation state. Persists unchanged across
@@ -335,10 +356,12 @@ instance Monad (UI e s) where
 
 emptyInteractionState :: InteractionState e
 emptyInteractionState = InteractionState
-  { ixnHovered     = Nothing
-  , ixnCaptured    = Nothing
-  , ixnFocus       = FocusState { focusedElement = Nothing, focusedThisFrame = False }
-  , ixnPrevTabStop = Nothing
+  { ixnHovered        = Nothing
+  , ixnCaptured       = Nothing
+  , ixnFocus          = FocusState { focusedElement = Nothing, focusedThisFrame = False }
+  , ixnPrevTabStop    = Nothing
+  , ixnButtonDown     = False
+  , ixnButtonReleased = False
   }
 
 emptyFrameOutputs :: FrameOutputs s
@@ -360,7 +383,7 @@ emptyUIContext bounds input thm appState measurer = UIContext
   , ctxInteractionClip = Nothing
   , ctxAnimation       = AnimationState { animDelta = 0, animElapsed = 0, animIsTick = False }
   , ctxTextMeasure     = measurer
-  , ctxInteraction     = emptyInteractionState
+  , ctxInteraction     = emptyInteractionState { ixnButtonDown = inputLeftButtonDown input }
   , ctxElements        = ElementState { elmScrollStates = Map.empty, elmSelections = Map.empty }
   , ctxOutputs         = emptyFrameOutputs
   }
@@ -373,18 +396,24 @@ nextFrameContext :: Rectangle -> InputState -> UIContext e s -> UIContext e s
 nextFrameContext bounds input ctx = ctx
   { ctxBounds      = bounds
   , ctxInput       = input
-  , ctxInteraction = nextInteractionFrame (inputLeftButton input) (ctxInteraction ctx)
+  , ctxInteraction = nextInteractionFrame
+      (inputLeftButtonDown (ctxInput ctx))
+      (inputLeftButtonDown input)
+      (ctxInteraction ctx)
   , ctxOutputs     = emptyFrameOutputs
   }
 
--- | Advances 'InteractionState' to the next frame: clears hover, advances
--- capture, and carries focus forward only if it was visited this frame.
+-- | Advances 'InteractionState' to the next frame: clears hover, derives
+-- button transition state from the previous and current raw down values,
+-- advances capture, and carries focus forward only if it was visited this frame.
 -- The previous tab stop is preserved for Shift-Tab navigation.
-nextInteractionFrame :: ButtonState -> InteractionState e -> InteractionState e
-nextInteractionFrame btn ixn = ixn
-  { ixnHovered  = Nothing
-  , ixnCaptured = nextCapture btn (ixnCaptured ixn)
-  , ixnFocus    = nextFocusFrame (ixnFocus ixn)
+nextInteractionFrame :: Bool -> Bool -> InteractionState e -> InteractionState e
+nextInteractionFrame prevDown currDown ixn = ixn
+  { ixnHovered        = Nothing
+  , ixnButtonDown     = currDown
+  , ixnButtonReleased = prevDown && not currDown
+  , ixnCaptured       = nextCapture prevDown currDown (ixnCaptured ixn)
+  , ixnFocus          = nextFocusFrame (ixnFocus ixn)
   }
 
 gets :: (UIContext e s -> a) -> UI e s a
@@ -477,10 +506,6 @@ getBounds = gets ctxBounds
 getMousePos :: UI e s Point
 getMousePos = inputMousePosition <$> getInput
 
--- | The current state of the primary (left) mouse button.
-getLeftButton :: UI e s ButtonState
-getLeftButton = inputLeftButton <$> getInput
-
 -- | The raw input state for the current frame.
 getInput :: UI e s InputState
 getInput = gets ctxInput
@@ -533,29 +558,37 @@ getStyle eid = do
 isHovered :: Eq e => e -> UI e s Bool
 isHovered eid = (== Just eid) <$> gets (ixnHovered . ctxInteraction)
 
+-- | 'True' when the left button is currently held (Pressed or Down state).
+isButtonDown :: UI e s Bool
+isButtonDown = gets (ixnButtonDown . ctxInteraction)
+
+-- | 'True' on the one frame the left button transitions from held to up.
+isButtonReleased :: UI e s Bool
+isButtonReleased = gets (ixnButtonReleased . ctxInteraction)
+
 -- | 'True' when the element is hovered and the left button was just released.
 isClicked :: Eq e => e -> UI e s Bool
 isClicked eid = do
-  isHov <- isHovered eid
-  btn   <- getLeftButton
-  return (isHov && btn == ButtonReleased)
+  isHov     <- isHovered eid
+  released  <- gets (ixnButtonReleased . ctxInteraction)
+  return (isHov && released)
 
 -- | 'True' when the element is hovered and the left button is held down.
 isPressed :: Eq e => e -> UI e s Bool
 isPressed eid = do
   isHov <- isHovered eid
-  btn   <- getLeftButton
-  return (isHov && btn == ButtonDown)
+  down  <- gets (ixnButtonDown . ctxInteraction)
+  return (isHov && down)
 
--- | Derives the next frame's captured element from the current button state.
--- Capture is carried forward while the button is held and survives through
--- ButtonReleased so that 'applyFocus' can distinguish a drag release (mouse
--- on a different element) from a plain click. Cleared on ButtonUp.
+-- | Derives the next frame's captured element from the button transition.
+-- Capture is held while the button is down and through the release frame so
+-- that 'applyFocus' can distinguish a drag release from a plain click.
+-- Cleared once the button is fully up (both prev and curr false).
 -- Acquisition — setting capture in the first place — happens in 'setHovered'.
-nextCapture :: ButtonState -> Maybe e -> Maybe e
-nextCapture ButtonDown     existing = existing
-nextCapture ButtonReleased existing = existing
-nextCapture _              _        = Nothing
+nextCapture :: Bool -> Bool -> Maybe e -> Maybe e
+nextCapture prevDown currDown existing
+  | prevDown || currDown = existing
+  | otherwise            = Nothing
 
 -- | 'True' on every frame that the given element is being dragged — from the
 -- initial press through to release.
@@ -576,7 +609,7 @@ setHovered eid = modify $ \ctx ->
   let ixn  = ctxInteraction ctx
       ixn' = ixn { ixnHovered = Just eid }
   in ctx { ctxInteraction =
-       if inputLeftButton (ctxInput ctx) == ButtonDown && isNothing (ixnCaptured ixn)
+       if ixnButtonDown ixn && isNothing (ixnCaptured ixn)
        then ixn' { ixnCaptured = Just eid }
        else ixn' }
 

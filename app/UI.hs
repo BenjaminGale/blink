@@ -169,13 +169,13 @@ dynamicScrollList s = do
 
 rowDebugInfo :: AppState -> (Int, Int) -> DemoUI ()
 rowDebugInfo s (winW, winH) = do
-  pos  <- getMousePos
-  mbtn <- getLeftButton
+  pos   <- getMousePos
+  input <- getInput
   let winText    = "Window: " <> T.pack (show winW) <> " x " <> T.pack (show winH)
       mx         = T.pack (show (round (pointX pos) :: Int))
       my         = T.pack (show (round (pointY pos) :: Int))
       mouseText  = "Mouse: " <> mx <> ", " <> my
-      buttonText = "Button: " <> T.pack (show mbtn)
+      buttonText = "Button: " <> T.pack (show (inputLeftButtonDown input))
       hoverText  = "Hover: " <> if isHovering s then "Yes" else "No"
       countSuffix = if lastInputCount s > 1 then " (" <> T.pack (show (lastInputCount s)) <> ")" else ""
       keyText     = "Last Key Press: " <> if T.null (lastInput s) then "none" else lastInput s <> countSuffix

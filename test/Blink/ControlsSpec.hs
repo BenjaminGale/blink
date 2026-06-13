@@ -8,7 +8,7 @@ import Test.Hspec
 import Data.Text (Text)
 import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), button, checkbox, control, mouseToTrackPos, progressBar, radioGroup, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, uniform)
-import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
+import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -69,18 +69,26 @@ dispatchCount = length . outDispatches . ctxOutputs
 
 noInput :: InputState
 noInput = InputState
-  { inputMousePosition = Point 200 200
-  , inputLeftButton    = ButtonUp
-  , inputKeyEvents     = []
-  , inputTypedText     = []
+  { inputMousePosition  = Point 200 200
+  , inputLeftButtonDown = False
+  , inputKeyEvents      = []
+  , inputTypedText      = []
   }
 
-mouseAt :: Point -> ButtonState -> [KeyEvent] -> InputState
-mouseAt pos btn keys = InputState
-  { inputMousePosition = pos
-  , inputLeftButton    = btn
-  , inputKeyEvents     = keys
-  , inputTypedText     = []
+mouseAt :: Point -> Bool -> [KeyEvent] -> InputState
+mouseAt pos down keys = InputState
+  { inputMousePosition  = pos
+  , inputLeftButtonDown = down
+  , inputKeyEvents      = keys
+  , inputTypedText      = []
+  }
+
+-- | Sets 'ixnButtonReleased' so controls see a click this frame, without
+-- requiring a prior down-frame in the test sequence.
+withButtonReleased :: UIContext e s -> UIContext e s
+withButtonReleased ctx = ctx
+  { ctxInput       = (ctxInput ctx) { inputLeftButtonDown = False }
+  , ctxInteraction = (ctxInteraction ctx) { ixnButtonDown = False, ixnButtonReleased = True }
   }
 
 insidePoints :: [(String, Point)]
@@ -181,12 +189,12 @@ controlBehaviourSpec run hitPoint = do
       getFocused ctx' `shouldBe` Just OtherControl
 
     it "receives focus when clicked" $ do
-      ctx' <- run (withFocus (Just OtherControl) (mkCtx (mouseAt hitPoint ButtonReleased [])))
+      ctx' <- run (withFocus (Just OtherControl) (withButtonReleased (mkCtx (mouseAt hitPoint False []))))
       getFocused ctx' `shouldBe` Just TestControl
 
     it "does not steal focus when the mouse is released on it after dragging from another element" $ do
       -- Simulate being mid-drag from OtherControl: capture is set to OtherControl on the release frame.
-      let base = mkCtx (mouseAt hitPoint ButtonReleased [])
+      let base = withButtonReleased (mkCtx (mouseAt hitPoint False []))
           ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just OtherControl } }
       ctx' <- run ctx
       getFocused ctx' `shouldBe` Nothing
@@ -203,11 +211,11 @@ controlBehaviourSpec run hitPoint = do
 
   describe "hover detection" $ do
     it "is hovered when the mouse is inside" $ do
-      ctx' <- run (mkCtx (mouseAt hitPoint ButtonUp []))
+      ctx' <- run (mkCtx (mouseAt hitPoint False []))
       ixnHovered (ctxInteraction ctx') `shouldBe` Just TestControl
 
     it "is not hovered when the mouse is outside" $ do
-      ctx' <- run (mkCtx (mouseAt (Point 200 200) ButtonUp []))
+      ctx' <- run (mkCtx (mouseAt (Point 200 200) False []))
       ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
   describe "when disabled" $ do
@@ -218,11 +226,11 @@ controlBehaviourSpec run hitPoint = do
       getFocused ctx' `shouldBe` Nothing
 
     it "does not steal focus when clicked" $ do
-      ctx' <- disabledRun (withFocus (Just OtherControl) (mkCtx (mouseAt hitPoint ButtonReleased [])))
+      ctx' <- disabledRun (withFocus (Just OtherControl) (withButtonReleased (mkCtx (mouseAt hitPoint False []))))
       getFocused ctx' `shouldBe` Just OtherControl
 
     it "is not hovered when the mouse is inside" $ do
-      ctx' <- disabledRun (mkCtx (mouseAt hitPoint ButtonUp []))
+      ctx' <- disabledRun (mkCtx (mouseAt hitPoint False []))
       ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
     it "is not recorded as the previous tab stop" $ do
@@ -341,10 +349,11 @@ radioGroupRect = Rectangle 0 0 100 90
 radioItems :: [(String, Text)]
 radioItems = [("a", "Alpha"), ("b", "Beta"), ("c", "Gamma")]
 
-runRadioGroup :: String -> InputState -> IO (UIContext Int String)
-runRadioGroup sel input =
-  fmap snd $ runUI (radioGroup id radioItems sel (\v _ -> v))
-    (emptyUIContext radioGroupRect input radioGroupTheme sel noOpTextMeasurer)
+mkRadioGroupCtx :: String -> InputState -> UIContext Int String
+mkRadioGroupCtx sel input = emptyUIContext radioGroupRect input radioGroupTheme sel noOpTextMeasurer
+
+runRadioGroup :: String -> UIContext Int String -> IO (UIContext Int String)
+runRadioGroup sel = fmap snd . runUI (radioGroup id radioItems sel (\v _ -> v))
 
 withItemFocus :: Maybe Int -> UIContext Int String -> UIContext Int String
 withItemFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus = (ixnFocus (ctxInteraction ctx)) { focusedElement = e } } }
@@ -363,11 +372,13 @@ scrollTheme = Theme
 scrollRect :: Rectangle
 scrollRect = Rectangle 0 0 20 200
 
-runScrollBar :: Double -> InputState -> IO (UIContext ScrollBarPart ())
-runScrollBar pos input =
-  fmap snd $ runUI (scrollBar id Vertical 0.25)
-    (let base = emptyUIContext scrollRect input scrollTheme () noOpTextMeasurer
-     in base { ctxElements = (ctxElements base) { elmScrollStates = Map.singleton ScrollTrack (ScrollState pos) } })
+mkScrollBarCtx :: Double -> InputState -> UIContext ScrollBarPart ()
+mkScrollBarCtx pos input =
+  let base = emptyUIContext scrollRect input scrollTheme () noOpTextMeasurer
+  in base { ctxElements = (ctxElements base) { elmScrollStates = Map.singleton ScrollTrack (ScrollState pos) } }
+
+runScrollBar :: UIContext ScrollBarPart () -> IO (UIContext ScrollBarPart ())
+runScrollBar = fmap snd . runUI (scrollBar id Vertical 0.25)
 
 data ScrollRegionElem = SRPart ScrollRegionPart | SRChild
   deriving (Eq, Ord, Show)
@@ -426,12 +437,12 @@ spec = describe "Controls" $ do
     describe "click behaviour" $ do
       forM_ insidePoints $ \(desc, pt) ->
         it ("is clicked when the mouse is released " <> desc) $ do
-          result <- fst <$> runUI (button TestControl "label") (mkCtx (mouseAt pt ButtonReleased []))
+          result <- fst <$> runUI (button TestControl "label") (withButtonReleased (mkCtx (mouseAt pt False [])))
           result `shouldBe` True
 
       forM_ outsidePoints $ \(desc, pt) ->
         it ("is not clicked when the mouse is released " <> desc) $ do
-          result <- fst <$> runUI (button TestControl "label") (mkCtx (mouseAt pt ButtonReleased []))
+          result <- fst <$> runUI (button TestControl "label") (withButtonReleased (mkCtx (mouseAt pt False [])))
           result `shouldBe` False
 
       it "is clicked when Enter is pressed and the button has focus" $ do
@@ -449,7 +460,7 @@ spec = describe "Controls" $ do
 
     describe "disabled" $ do
       it "is not activated by a click when disabled" $ do
-        result <- fst <$> runUI (disableWhen True (button TestControl "label")) (mkCtx (mouseAt (Point 50 50) ButtonReleased []))
+        result <- fst <$> runUI (disableWhen True (button TestControl "label")) (withButtonReleased (mkCtx (mouseAt (Point 50 50) False [])))
         result `shouldBe` False
 
       it "is not activated by Enter when disabled" $ do
@@ -461,11 +472,11 @@ spec = describe "Controls" $ do
 
     describe "toggle behaviour" $ do
       it "dispatches True when the box is clicked while unchecked" $ do
-        ctx' <- runCheckbox False (mkCheckboxCtx (mouseAt boxPoint ButtonReleased []))
+        ctx' <- runCheckbox False (withButtonReleased (mkCheckboxCtx (mouseAt boxPoint False [])))
         applyDispatches ctx' `shouldBe` Just True
 
       it "dispatches False when the box is clicked while checked" $ do
-        ctx' <- runCheckbox True (mkCheckboxCtx (mouseAt boxPoint ButtonReleased []))
+        ctx' <- runCheckbox True (withButtonReleased (mkCheckboxCtx (mouseAt boxPoint False [])))
         applyDispatches ctx' `shouldBe` Just False
 
       it "dispatches toggle when Enter is pressed while focused" $ do
@@ -477,7 +488,7 @@ spec = describe "Controls" $ do
         applyDispatches ctx' `shouldBe` Just True
 
       it "does not dispatch when clicked outside the box" $ do
-        ctx' <- runCheckbox False (mkCheckboxCtx (mouseAt (Point 50 50) ButtonReleased []))
+        ctx' <- runCheckbox False (withButtonReleased (mkCheckboxCtx (mouseAt (Point 50 50) False [])))
         applyDispatches ctx' `shouldBe` Nothing
 
       it "does not dispatch when Enter is pressed while unfocused" $ do
@@ -486,7 +497,7 @@ spec = describe "Controls" $ do
 
     describe "disabled" $ do
       it "does not dispatch when clicked while disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (checkbox TestControl "test label" False (\v _ -> Just v))) (mkCheckboxCtx (mouseAt boxPoint ButtonReleased []))
+        ctx' <- fmap snd $ runUI (disableWhen True (checkbox TestControl "test label" False (\v _ -> Just v))) (withButtonReleased (mkCheckboxCtx (mouseAt boxPoint False [])))
         applyDispatches ctx' `shouldBe` Nothing
 
       it "does not dispatch when Enter is pressed while disabled" $ do
@@ -562,14 +573,14 @@ spec = describe "Controls" $ do
     describe "cursor placement" $ do
       it "sets the cursor to the clicked position on mouse press" $ do
         -- noOpTextMeasurer maps every offset to 0, so any click → position 0
-        ctx' <- runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" (mouseAt (Point 50 50) ButtonDown [])))
+        ctx' <- runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" (mouseAt (Point 50 50) True [])))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 0 0]
 
       it "extends the active end on drag while keeping anchor" $ do
         -- First frame: click starts drag; second frame: drag extends selection.
-        frame1 <- runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" (mouseAt (Point 50 50) ButtonDown [])))
+        frame1 <- runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" (mouseAt (Point 50 50) True [])))
         frame2 <- fmap snd $ runUI (textInput TestControl "hello" (\t _ -> t))
-                    (nextFrameContext controlRect (mouseAt (Point 70 50) ButtonDown []) frame1)
+                    (nextFrameContext controlRect (mouseAt (Point 70 50) True []) frame1)
         -- With noOpTextMeasurer both positions are 0, so selection is (0,0); the
         -- key check is that anchor was NOT reset on the second frame.
         case Map.lookup TestControl (elmSelections (ctxElements frame2)) of
@@ -629,41 +640,41 @@ spec = describe "Controls" $ do
   describe "scrollBar" $ do
     describe "button stepping" $ do
       it "steps forward by the thumb ratio when the increment button is clicked" $ do
-        ctx' <- runScrollBar 0.5 (mouseAt (Point 10 190) ButtonReleased [])
+        ctx' <- runScrollBar (withButtonReleased (mkScrollBarCtx 0.5 (mouseAt (Point 10 190) False [])))
         scrollPos ctx' `shouldBe` 0.75
 
       it "steps back by the thumb ratio when the decrement button is clicked" $ do
-        ctx' <- runScrollBar 0.5 (mouseAt (Point 10 10) ButtonReleased [])
+        ctx' <- runScrollBar (withButtonReleased (mkScrollBarCtx 0.5 (mouseAt (Point 10 10) False [])))
         scrollPos ctx' `shouldBe` 0.25
 
       it "clamps to 1 when stepping forward near the end" $ do
-        ctx' <- runScrollBar 0.9 (mouseAt (Point 10 190) ButtonReleased [])
+        ctx' <- runScrollBar (withButtonReleased (mkScrollBarCtx 0.9 (mouseAt (Point 10 190) False [])))
         scrollPos ctx' `shouldBe` 1
 
       it "clamps to 0 when stepping back near the start" $ do
-        ctx' <- runScrollBar 0.1 (mouseAt (Point 10 10) ButtonReleased [])
+        ctx' <- runScrollBar (withButtonReleased (mkScrollBarCtx 0.1 (mouseAt (Point 10 10) False [])))
         scrollPos ctx' `shouldBe` 0
 
     describe "track dragging" $ do
       it "centres the thumb on the cursor while the track is pressed" $ do
-        ctx' <- runScrollBar 0 (mouseAt (Point 10 100) ButtonDown [])
+        ctx' <- runScrollBar (mkScrollBarCtx 0 (mouseAt (Point 10 100) True []))
         scrollPos ctx' `shouldBe` 0.5
 
       it "continues tracking when the mouse moves off the track while the button is held" $ do
-        frame1 <- runScrollBar 0 (mouseAt (Point 10 100) ButtonDown [])
+        frame1 <- runScrollBar (mkScrollBarCtx 0 (mouseAt (Point 10 100) True []))
         frame2 <- fmap snd $ runUI (scrollBar id Vertical 0.25)
-                                   (nextFrameContext scrollRect (mouseAt (Point 200 40) ButtonDown []) frame1)
+                                   (nextFrameContext scrollRect (mouseAt (Point 200 40) True []) frame1)
         scrollPos frame2 `shouldBe` 0.0
 
       it "stops tracking when the button is released after dragging off the track" $ do
-        frame1 <- runScrollBar 0 (mouseAt (Point 10 100) ButtonDown [])
+        frame1 <- runScrollBar (mkScrollBarCtx 0 (mouseAt (Point 10 100) True []))
         frame2 <- fmap snd $ runUI (scrollBar id Vertical 0.25)
-                                   (nextFrameContext scrollRect (mouseAt (Point 200 40) ButtonUp []) frame1)
+                                   (nextFrameContext scrollRect (mouseAt (Point 200 40) False []) frame1)
         scrollPos frame2 `shouldBe` 0.5
 
     describe "without interaction" $ do
       it "leaves the position unchanged" $ do
-        ctx' <- runScrollBar 0.5 noInput
+        ctx' <- runScrollBar (mkScrollBarCtx 0.5 noInput)
         scrollPos ctx' `shouldBe` 0.5
 
   describe "slider" $ do
@@ -672,29 +683,29 @@ spec = describe "Controls" $ do
 
     describe "drag interaction" $ do
       it "sets value to 0.5 when dragged to the midpoint" $ do
-        ctx' <- runSlider Horizontal 0 (mouseAt (Point 100 15) ButtonDown [])
+        ctx' <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
         applyDispatches ctx' `shouldBe` 0.5
 
       it "sets value to 0 when dragged to the far left" $ do
-        ctx' <- runSlider Horizontal 0.5 (mouseAt (Point 15 15) ButtonDown [])
+        ctx' <- runSlider Horizontal 0.5 (mouseAt (Point 15 15) True [])
         applyDispatches ctx' `shouldBe` 0.0
 
       it "sets value to 1 when dragged to the far right" $ do
-        ctx' <- runSlider Horizontal 0.5 (mouseAt (Point 185 15) ButtonDown [])
+        ctx' <- runSlider Horizontal 0.5 (mouseAt (Point 185 15) True [])
         applyDispatches ctx' `shouldBe` 1.0
 
       it "continues tracking when the mouse moves outside the track while button held" $ do
-        frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) ButtonDown [])
+        frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
         let val1 = applyDispatches frame1
         frame2 <- fmap snd $ runUI (slider id Horizontal val1 (\v _ -> v))
-                                   (nextFrameContext sliderRect (mouseAt (Point 300 15) ButtonDown []) frame1)
+                                   (nextFrameContext sliderRect (mouseAt (Point 300 15) True []) frame1)
         applyDispatches frame2 `shouldBe` 1.0
 
       it "stops tracking when the button is released" $ do
-        frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) ButtonDown [])
+        frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
         let val1 = applyDispatches frame1
         frame2 <- fmap snd $ runUI (slider id Horizontal val1 (\v _ -> v))
-                                   (nextFrameContext sliderRect (mouseAt (Point 300 15) ButtonUp []) frame1)
+                                   (nextFrameContext sliderRect (mouseAt (Point 300 15) False []) frame1)
         dispatchCount frame2 `shouldBe` 0
 
     describe "keyboard nudging" $ do
@@ -743,11 +754,11 @@ spec = describe "Controls" $ do
 
     describe "selection" $ do
       it "dispatches the value of a clicked item" $ do
-        ctx' <- runRadioGroup "a" (mouseAt (Point 50 45) ButtonReleased [])
+        ctx' <- runRadioGroup "a" (withButtonReleased (mkRadioGroupCtx "a" (mouseAt (Point 50 45) False [])))
         applyDispatches ctx' `shouldBe` "b"
 
       it "dispatches the correct value when the last item is clicked" $ do
-        ctx' <- runRadioGroup "a" (mouseAt (Point 50 75) ButtonReleased [])
+        ctx' <- runRadioGroup "a" (withButtonReleased (mkRadioGroupCtx "a" (mouseAt (Point 50 75) False [])))
         applyDispatches ctx' `shouldBe` "c"
 
       it "dispatches the value when Enter is pressed while an item is focused" $ do
@@ -766,7 +777,7 @@ spec = describe "Controls" $ do
         dispatchCount ctx' `shouldBe` 0
 
       it "does not dispatch when there is no interaction" $ do
-        ctx' <- runRadioGroup "b" noInput
+        ctx' <- runRadioGroup "b" (mkRadioGroupCtx "b" noInput)
         dispatchCount ctx' `shouldBe` 0
 
     describe "keyboard navigation" $ do
@@ -799,16 +810,16 @@ spec = describe "Controls" $ do
 
     describe "rendering" $ do
       it "shows the selected mark on the selected item" $ do
-        ctx' <- runRadioGroup "b" noInput
+        ctx' <- runRadioGroup "b" (mkRadioGroupCtx "b" noInput)
         drawnTexts ctx' `shouldContain` ["● Beta"]
 
       it "shows the unselected mark on other items" $ do
-        ctx' <- runRadioGroup "b" noInput
+        ctx' <- runRadioGroup "b" (mkRadioGroupCtx "b" noInput)
         drawnTexts ctx' `shouldContain` ["○ Alpha"]
         drawnTexts ctx' `shouldContain` ["○ Gamma"]
 
       it "displays all labels regardless of selection" $ do
-        ctx' <- runRadioGroup "a" noInput
+        ctx' <- runRadioGroup "a" (mkRadioGroupCtx "a" noInput)
         length (drawnTexts ctx') `shouldBe` 3
 
   describe "scrollableRegion" $ do

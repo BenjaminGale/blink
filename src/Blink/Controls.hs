@@ -66,7 +66,7 @@ import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Blink.Geometry (Alignment (..), Orientation (..), Point (..), Rectangle (..), Size (..), insetRect)
-import Blink.Input (ButtonState (..), Key (..), KeyEvent (..), Modifier (..), InputState (..))
+import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (Layout (..), Length (..), BoxConfig (..), hBox, vBox, defaultBoxConfig)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
@@ -388,7 +388,8 @@ scrollBar mkId ori thumbRatio = do
       control trackId $
         withBounds thumbR $ renderControl (mkId ScrollThumb) $ pure ()
       dragging <- isDragging trackId
-      when dragging $ do
+      btnDown  <- isButtonDown
+      when (dragging && btnDown) $ do
         mousePos <- getMousePos
         writePos (mouseToTrackPos ori ratio' contentRect mousePos)
 
@@ -559,7 +560,8 @@ slider mkId ori value onChange = do
   control trackId $
     withBounds thumbR $ renderControl (mkId SliderThumb) $ pure ()
   dragging <- isDragging trackId
-  when dragging $ do
+  btnDown  <- isButtonDown
+  when (dragging && btnDown) $ do
     mousePos <- getMousePos
     dispatch (onChange (mouseToTrackPos ori thumbRatio contentRect mousePos))
   let step = 0.05
@@ -624,15 +626,15 @@ applyFocus eid = do
   whenEnabled $ do
     currentFocus <- getFocus
     isHit        <- isHovered eid
-    btn          <- getLeftButton
+    released     <- isButtonReleased
     captured     <- getCapturedElement
     let nothingIsFocused = isNothing currentFocus
         isRetainingFocus = currentFocus == Just eid
         -- A drag release is when the button is released over a different
         -- element than the one that was captured. Focus should not transfer
         -- in that case — the drag origin retains focus.
-        isDragRelease = btn == ButtonReleased && isJust captured && captured /= Just eid
-        wasClicked    = isHit && btn == ButtonReleased && not isDragRelease
+        isDragRelease = released && isJust captured && captured /= Just eid
+        wasClicked    = isHit && released && not isDragRelease
     setFocusWhen ((nothingIsFocused || isRetainingFocus || wasClicked) && not isDragRelease) eid
 
 applyTabNavigation :: Ord e => e -> UI e s ()
