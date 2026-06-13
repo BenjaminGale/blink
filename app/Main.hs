@@ -9,7 +9,7 @@ import qualified SDL
 import qualified SDL.Font as Font
 import qualified SDL.Raw
 import Control.Monad (void)
-import Data.IORef
+import Data.IORef (newIORef)
 import Data.List (foldl')
 import Data.Maybe (isJust)
 import Foreign.Ptr (nullPtr)
@@ -28,7 +28,6 @@ main = do
   font     <- Font.load demoFontPath 14
   SDL.Raw.startTextInput
 
-  buttonRef <- newIORef ButtonUp
   texCache  <- newTextureCache
   mAnimEvent <- SDL.registerEvent
                   (\_ _ -> pure (Just ()))
@@ -51,7 +50,7 @@ main = do
 
   handle <- configureEventDriven demoApp notify measurer
 
-  loop handle buttonRef renderFrame window checkAnimTick
+  loop handle ButtonUp renderFrame window checkAnimTick
 
   freeTextureCache texCache
   Font.free font
@@ -62,23 +61,20 @@ main = do
 
 loop
   :: BlinkHandle s
-  -> IORef ButtonState
+  -> ButtonState
   -> ([DrawCommand] -> IO ())
   -> SDL.Window
   -> ([SDL.Event] -> IO Bool)
   -> IO ()
-loop handle buttonRef renderFrame window checkAnimTick = do
+loop handle btn renderFrame window checkAnimTick = do
   first <- SDL.waitEvent
   rest  <- SDL.pollEvents
   let events = first : rest
-
-  btn <- readIORef buttonRef
-  let btn'   = foldl' updateButton btn events
+      btn'   = foldl' updateButton btn events
       keys   = concatMap toKeyEvents events
       chars  = concatMap toTypedText events
       isQuit = any ((== SDL.QuitEvent) . SDL.eventPayload) events
   isAnimTick <- checkAnimTick events
-  writeIORef buttonRef (nextFrameButton btn')
 
   mousePos         <- SDL.getAbsoluteMouseLocation
   SDL.V2 winW winH <- SDL.get (SDL.windowSize window)
@@ -95,7 +91,7 @@ loop handle buttonRef renderFrame window checkAnimTick = do
 
   result <- stepFrame handle fi
   case result of
-    Continue draws _ -> renderFrame draws >> loop handle buttonRef renderFrame window checkAnimTick
+    Continue draws _ -> renderFrame draws >> loop handle (nextFrameButton btn') renderFrame window checkAnimTick
     Quit     draws _ -> renderFrame draws
 
 -- | A no-op 'TextMeasurer' for backends that do not yet use text measurement.
