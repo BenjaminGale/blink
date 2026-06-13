@@ -79,15 +79,15 @@ loop handle buttonRef renderFrame window mAnimEvent = do
   mousePos         <- SDL.getAbsoluteMouseLocation
   SDL.V2 winW winH <- SDL.get (SDL.windowSize window)
 
-  -- Use positional constructor to avoid ambiguity with InputState field names
   let fi = FrameInput
-             (sdlPoint mousePos)
-             btn'
-             keys
-             chars
-             (Size (fromIntegral winW) (fromIntegral winH))
-             isQuit
-             isAnimTick
+             { mousePosition   = sdlPoint mousePos
+             , mouseButton     = btn'
+             , keyEvents       = keys
+             , typedText       = chars
+             , windowSize      = Size (fromIntegral winW) (fromIntegral winH)
+             , quitRequested   = isQuit
+             , isAnimationTick = isAnimTick
+             }
 
   result <- stepFrame handle fi
   case result of
