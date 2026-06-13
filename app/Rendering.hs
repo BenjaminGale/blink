@@ -3,9 +3,11 @@ module Rendering
   , newTextureCache
   , freeTextureCache
   , submitDrawCommand
+  , mkTextMeasurer
   ) where
 
 import Blink
+import Blink.Rendering (TextMeasurer (..))
 import SDL (($=))
 import qualified SDL
 import qualified SDL.Font as Font
@@ -108,3 +110,51 @@ submitDrawCommand _ _ _ _               (DrawText _ text _ _) | T.null text = pu
 submitDrawCommand renderer font cache _ (DrawText r text color align) = renderText   renderer font cache r text color align
 submitDrawCommand renderer _ _ clipRef  (PushClip r)                  = pushClip     renderer clipRef r
 submitDrawCommand renderer _ _ clipRef   PopClip                      = popClip      renderer clipRef
+
+mkTextMeasurer :: Font.Font -> IO TextMeasurer
+mkTextMeasurer font = do
+  offsetCache <- newIORef (Map.empty :: Map Text [Float])
+  pure TextMeasurer
+    { tmCharOffset   = \t i -> do
+        offsets <- getOffsets offsetCache font t
+        pure $ indexOr 0 i offsets
+
+    , tmCharAtOffset = \t x -> do
+        offsets <- getOffsets offsetCache font t
+        pure $ findCharAt offsets x
+    }
+
+getOffsets :: IORef (Map Text [Float]) -> Font.Font -> Text -> IO [Float]
+getOffsets cacheRef font t = do
+  cache <- readIORef cacheRef
+  case Map.lookup t cache of
+    Just offsets -> pure offsets
+    Nothing -> do
+      offsets <- buildOffsets font t
+      writeIORef cacheRef (Map.insert t offsets cache)
+      pure offsets
+
+buildOffsets :: Font.Font -> Text -> IO [Float]
+buildOffsets font t = do
+  advances <- mapM (glyphAdvance font) (T.unpack t)
+  pure $ map fromIntegral (scanl (+) (0 :: Int) advances)
+
+glyphAdvance :: Font.Font -> Char -> IO Int
+glyphAdvance font ch = do
+  mMetrics <- Font.glyphMetrics font ch
+  pure $ case mMetrics of
+    Nothing                    -> 0
+    Just (_, _, _, _, advance) -> advance
+
+indexOr :: a -> Int -> [a] -> a
+indexOr def i xs
+  | i < 0 || i >= length xs = def
+  | otherwise                = xs !! i
+
+findCharAt :: [Float] -> Float -> Int
+findCharAt []      _ = 0
+findCharAt offsets x =
+  let n         = length offsets - 1
+      midpoints = [ (offsets !! i + offsets !! (i+1)) / 2 | i <- [0 .. n-1] ]
+      idx       = length (takeWhile (<= x) midpoints)
+  in max 0 (min n idx)

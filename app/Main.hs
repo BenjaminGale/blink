@@ -39,9 +39,9 @@ main = do
       checkAnimTick = case mAnimEvent of
                        Nothing -> \_ -> pure False
                        Just et -> \evs -> or <$> mapM (fmap isJust . SDL.getRegisteredEvent et) evs
-      measurer      = noOpMeasurer
+  measurer <- mkTextMeasurer font
 
-      renderFrame calls = do
+  let renderFrame calls = do
         SDL.rendererDrawColor renderer $= SDL.V4 229 229 234 255
         SDL.clear renderer
         clipRef <- newIORef ([] :: [SDL.Rectangle CInt])
@@ -93,15 +93,6 @@ loop handle btn renderFrame window checkAnimTick = do
   case result of
     Continue draws _ -> renderFrame draws >> loop handle (nextFrameButton btn') renderFrame window checkAnimTick
     Quit     draws _ -> renderFrame draws
-
--- | A no-op 'TextMeasurer' for backends that do not yet use text measurement.
-noOpMeasurer :: TextMeasurer
-noOpMeasurer = TextMeasurer
-  { measureFont  = \_ -> pure (FontMetrics 0 0 0)
-  , measureText  = \_ _ -> pure (Size 0 0)
-  , charOffset   = \_ _ _ -> pure 0
-  , charAtOffset = \_ _ _ -> pure 0
-  }
 
 updateButton :: ButtonState -> SDL.Event -> ButtonState
 updateButton current e = case SDL.eventPayload e of

@@ -113,6 +113,9 @@ module Blink.UI
     UI (..)
   , FocusState (..)
   , UIContext (..)
+    -- * Re-export for convenience
+  , TextMeasurer (..)
+  , noOpTextMeasurer
     -- * The render loop
   , emptyUIContext
   , nextFrameContext
@@ -167,6 +170,9 @@ module Blink.UI
     -- * Styles
   , getStyleSet
   , getStyle
+    -- * Text measurement
+  , charOffsetUI
+  , charAtOffsetUI
     -- * Disabled state
   , isDisabled
   , disableWhen
@@ -186,7 +192,7 @@ import Data.List (foldl')
 import Data.Maybe (isNothing, fromMaybe, listToMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
-import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..))
+import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..), TextMeasurer (..), noOpTextMeasurer)
 import Blink.Geometry (Point, Rectangle, containsPoint, intersectRect)
 import Blink.Input (ButtonState (..), Key (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
@@ -264,9 +270,12 @@ data UIContext e s = UIContext
     -- ^ Set to 'True' by any component calling 'requiresAnimation'. Read at
     -- the end of the frame to decide whether to keep the ticker active.
     -- Reset to 'False' at the start of each frame by 'nextFrameContext'.
+  , ctxTextMeasure :: TextMeasurer
+    -- ^ Text measurement service supplied at configure time. Controls call
+    -- 'charOffsetUI' and 'charAtOffsetUI' rather than accessing this directly.
   }
 
--- | The UI monad. A pure state-threading computation that reads from a
+-- | The UI monad. A state-threading computation in 'IO' that reads from a
 -- 'UIContext' and emits draw commands and application state modifiers as a
 -- side effect. Use the 'Functor', 'Applicative', and 'Monad' instances to
 -- compose UI trees. See 'control' and "Blink.Controls" for higher-level
@@ -275,30 +284,29 @@ data UIContext e s = UIContext
 -- [@e@] Element identity type.
 -- [@s@] Application state type.
 -- [@a@] Result type.
-newtype UI e s a = UI { runUI :: UIContext e s -> (a, UIContext e s) }
+newtype UI e s a = UI { runUI :: UIContext e s -> IO (a, UIContext e s) }
 
 instance Functor (UI e s) where
-  fmap f (UI g) = UI $ \ctx ->
-    let (a, ctx') = g ctx
-    in (f a, ctx')
+  fmap f (UI g) = UI $ \ctx -> do
+    (a, ctx') <- g ctx
+    pure (f a, ctx')
 
 instance Applicative (UI e s) where
-  pure a = UI $ \ctx -> (a, ctx)
-  UI f <*> UI x = UI $ \ctx ->
-    let (g, ctx') = f ctx
-        (a, ctx'') = x ctx'
-    in (g a, ctx'')
+  pure a = UI $ \ctx -> pure (a, ctx)
+  UI f <*> UI x = UI $ \ctx -> do
+    (g, ctx')  <- f ctx
+    (a, ctx'') <- x ctx'
+    pure (g a, ctx'')
 
 instance Monad (UI e s) where
   return = pure
-  UI x >>= f = UI $ \ctx ->
-    let (a, ctx') = x ctx
-        UI g = f a
-    in g ctx'
+  UI x >>= f = UI $ \ctx -> do
+    (a, ctx') <- x ctx
+    runUI (f a) ctx'
 
 -- | Constructs the initial 'UIContext' for the first frame.
-emptyUIContext :: Rectangle -> InputState -> Theme e -> s -> UIContext e s
-emptyUIContext bounds input thm appState = UIContext
+emptyUIContext :: Rectangle -> InputState -> Theme e -> s -> TextMeasurer -> UIContext e s
+emptyUIContext bounds input thm appState measurer = UIContext
   { ctxBounds = bounds
   , ctxInput = input
   , ctxTheme = thm
@@ -316,6 +324,7 @@ emptyUIContext bounds input thm appState = UIContext
   , ctxInteractionClip = Nothing
   , ctxAnimation = AnimationState { animDelta = 0, animElapsed = 0, animIsTick = False }
   , ctxRequiresAnimation = False
+  , ctxTextMeasure = measurer
   }
 
 -- | Advances the context to the next frame. Resets per-frame state (draw
@@ -336,10 +345,10 @@ nextFrameContext bounds input ctx = ctx
   }
 
 gets :: (UIContext e s -> a) -> UI e s a
-gets f = UI $ \ctx -> (f ctx, ctx)
+gets f = UI $ \ctx -> pure (f ctx, ctx)
 
 modify :: (UIContext e s -> UIContext e s) -> UI e s ()
-modify f = UI $ \ctx -> ((), f ctx)
+modify f = UI $ \ctx -> pure ((), f ctx)
 
 -- | The current scroll position for the given element, in @[0, 1]@. Returns
 -- @0@ when no position has been recorded yet.
@@ -514,9 +523,9 @@ nextFocusFrame fs = FocusState
 -- are restored when the sub-tree completes. Used by the layout system to
 -- assign each child its allocated slot.
 withBounds :: Rectangle -> UI e s a -> UI e s a
-withBounds r (UI f) = UI $ \ctx ->
-  let (a, ctx') = f (ctx { ctxBounds = r })
-  in (a, ctx' { ctxBounds = ctxBounds ctx })
+withBounds r (UI f) = UI $ \ctx -> do
+  (a, ctx') <- f (ctx { ctxBounds = r })
+  pure (a, ctx' { ctxBounds = ctxBounds ctx })
 
 -- | 'True' when the current sub-tree has been marked disabled.
 isDisabled :: UI e s Bool
@@ -525,9 +534,9 @@ isDisabled = gets ctxDisabled
 -- | Marks a sub-tree as disabled when the condition is 'True'. The flag is
 -- restored to its previous value once the sub-tree completes.
 disableWhen :: Bool -> UI e s a -> UI e s a
-disableWhen True (UI f) = UI $ \ctx ->
-  let (a, ctx') = f (ctx { ctxDisabled = True })
-  in (a, ctx' { ctxDisabled = ctxDisabled ctx })
+disableWhen True (UI f) = UI $ \ctx -> do
+  (a, ctx') <- f (ctx { ctxDisabled = True })
+  pure (a, ctx' { ctxDisabled = ctxDisabled ctx })
 disableWhen False action = action
 
 draw :: DrawCommand -> UI e s ()
@@ -555,15 +564,15 @@ drawText colour align text = do
 -- commands produced by the sub-tree that fall outside the region are discarded,
 -- and mouse hit-testing is also restricted to the same region.
 clipToCurrent :: UI e s a -> UI e s a
-clipToCurrent (UI f) = UI $ \ctx ->
-  let r        = ctxBounds ctx
-      newClip  = maybe r (intersectRect r) (ctxInteractionClip ctx)
-      ctx'     = ctx { ctxInteractionClip = Just newClip }
-      drawPush = \c -> c { ctxDrawCommands = PushClip r : ctxDrawCommands c }
-      (a, ctx'') = f (drawPush ctx')
-      drawPop  = ctx'' { ctxDrawCommands = PopClip : ctxDrawCommands ctx''
-                       , ctxInteractionClip = ctxInteractionClip ctx }
-  in (a, drawPop)
+clipToCurrent (UI f) = UI $ \ctx -> do
+  let r       = ctxBounds ctx
+      newClip = maybe r (intersectRect r) (ctxInteractionClip ctx)
+      ctx'    = ctx { ctxInteractionClip = Just newClip
+                    , ctxDrawCommands    = PushClip r : ctxDrawCommands ctx }
+  (a, ctx'') <- f ctx'
+  let ctx''' = ctx'' { ctxDrawCommands    = PopClip : ctxDrawCommands ctx''
+                     , ctxInteractionClip = ctxInteractionClip ctx }
+  pure (a, ctx''')
 
 -- | Fills the current bounds with @colour@ then runs @content@ on top.
 -- Skips the fill when @colour@ is fully transparent.
@@ -659,4 +668,18 @@ getAnimDelta = gets (animDelta . ctxAnimation)
 -- animation phase without storing per-component state.
 getAnimElapsed :: UI e s Float
 getAnimElapsed = gets (animElapsed . ctxAnimation)
+
+-- | Returns the x offset (pixels) of character index @n@ from the start of
+-- @text@, using the backend's text measurer.
+charOffsetUI :: Text -> Int -> UI e s Float
+charOffsetUI text n = UI $ \ctx -> do
+  v <- tmCharOffset (ctxTextMeasure ctx) text n
+  pure (v, ctx)
+
+-- | Returns the character index closest to x offset @x@ in @text@, using the
+-- backend's text measurer.
+charAtOffsetUI :: Text -> Float -> UI e s Int
+charAtOffsetUI text x = UI $ \ctx -> do
+  v <- tmCharAtOffset (ctxTextMeasure ctx) text x
+  pure (v, ctx)
 

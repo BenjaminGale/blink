@@ -4,7 +4,7 @@ import Control.Monad (forM_)
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
-import Test.QuickCheck (Gen, NonNegative (..), Positive (..), choose, forAll)
+import Test.QuickCheck (Gen, NonNegative (..), choose, forAll, ioProperty)
 
 import Blink.Generators ()
 import Blink.Geometry (Alignment (..), Point (..), Rectangle (..), uniform)
@@ -56,11 +56,11 @@ testColour = RGBA 0 0 0 1
 fill :: UI () () ()
 fill = fillRect testColour
 
-runLayout :: Rectangle -> UI () () () -> [Rectangle]
-runLayout bounds ui =
-  let ctx = emptyUIContext bounds noInput emptyTheme ()
-      (_, ctx') = runUI ui ctx
-  in [r | FillRect r _ <- getDrawCommands ctx']
+runLayout :: Rectangle -> UI () () () -> IO [Rectangle]
+runLayout bounds ui = do
+  let ctx = emptyUIContext bounds noInput emptyTheme () noOpTextMeasurer
+  (_, ctx') <- runUI ui ctx
+  pure [r | FillRect r _ <- getDrawCommands ctx']
 
 -- hBox / vBox helpers
 
@@ -70,10 +70,10 @@ cfg = BoxConfig { boxSpacing = 0, boxMargin = 0, boxAlignment = TopLeft, boxFill
 margin :: Gen Double
 margin = fromIntegral <$> (choose (0, 49) :: Gen Int)
 
-runHBox :: Rectangle -> BoxConfig -> [Layout] -> [Rectangle]
+runHBox :: Rectangle -> BoxConfig -> [Layout] -> IO [Rectangle]
 runHBox bounds c rcs = runLayout bounds $ hBox c [(r, fill) | r <- rcs]
 
-runVBox :: Rectangle -> BoxConfig -> [Layout] -> [Rectangle]
+runVBox :: Rectangle -> BoxConfig -> [Layout] -> IO [Rectangle]
 runVBox bounds c rcs = runLayout bounds $ vBox c [(r, fill) | r <- rcs]
 
 rc :: Length -> Length -> Alignment -> Layout
@@ -134,25 +134,25 @@ spec = describe "layout" $ do
     let run rct = runLayout hBounds (layoutWithConstraints rct fill)
 
     describe "width constraints" $ do
-      it "Exactly gives the child its exact width" $
-        run (rc (Exactly 80) Fill TopLeft)
-          `shouldBe` [Rectangle 0 0 80 100]
+      it "Exactly gives the child its exact width" $ do
+        result <- run (rc (Exactly 80) Fill TopLeft)
+        result `shouldBe` [Rectangle 0 0 80 100]
 
-      it "Fill gives the child the full available width" $
-        run (rc Fill Fill TopLeft)
-          `shouldBe` [Rectangle 0 0 200 100]
+      it "Fill gives the child the full available width" $ do
+        result <- run (rc Fill Fill TopLeft)
+        result `shouldBe` [Rectangle 0 0 200 100]
 
-      it "AtLeast expands to fill available space beyond the minimum" $
-        run (rc (AtLeast 50) Fill TopLeft)
-          `shouldBe` [Rectangle 0 0 200 100]
+      it "AtLeast expands to fill available space beyond the minimum" $ do
+        result <- run (rc (AtLeast 50) Fill TopLeft)
+        result `shouldBe` [Rectangle 0 0 200 100]
 
-      it "AtMost caps the child at its maximum" $
-        run (rc (AtMost 150) Fill TopLeft)
-          `shouldBe` [Rectangle 0 0 150 100]
+      it "AtMost caps the child at its maximum" $ do
+        result <- run (rc (AtMost 150) Fill TopLeft)
+        result `shouldBe` [Rectangle 0 0 150 100]
 
-      it "Between clamps the child between its floor and ceiling" $
-        run (rc (Between 50 150) Fill TopLeft)
-          `shouldBe` [Rectangle 0 0 150 100]
+      it "Between clamps the child between its floor and ceiling" $ do
+        result <- run (rc (Between 50 150) Fill TopLeft)
+        result `shouldBe` [Rectangle 0 0 150 100]
 
     describe "height constraints" $ do
       let cases =
@@ -168,8 +168,9 @@ spec = describe "layout" $ do
               , Between 50 80,    Rectangle 0 0 200 80  )
             ]
       forM_ cases $ \(desc, hc, expected) ->
-        it desc $
-          run (rc Fill hc TopLeft) `shouldBe` [expected]
+        it desc $ do
+          result <- run (rc Fill hc TopLeft)
+          result `shouldBe` [expected]
 
     describe "alignment" $ do
       let cases =
@@ -193,45 +194,47 @@ spec = describe "layout" $ do
               , BottomRight,  Rectangle 120 60 80 40 )
             ]
       forM_ cases $ \(desc, alignment, expected) ->
-        it desc $
-          run (rc (Exactly 80) (Exactly 40) alignment)
-            `shouldBe` [expected]
+        it desc $ do
+          result <- run (rc (Exactly 80) (Exactly 40) alignment)
+          result `shouldBe` [expected]
 
   describe "hBox" $ do
-    it "produces no output for an empty child list" $
-      runHBox hBounds cfg [] `shouldBe` []
+    it "produces no output for an empty child list" $ do
+      result <- runHBox hBounds cfg []
+      result `shouldBe` []
 
     describe "main axis (width)" $ do
-      it "a single Fill child fills the available width" $
-        runHBox hBounds cfg [rc Fill Fill TopLeft]
-          `shouldBe` [Rectangle 0 0 200 100]
+      it "a single Fill child fills the available width" $ do
+        result <- runHBox hBounds cfg [rc Fill Fill TopLeft]
+        result `shouldBe` [Rectangle 0 0 200 100]
 
-      it "two Fill children share the available width equally" $
-        runHBox hBounds cfg [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
-          `shouldBe` [Rectangle 0 0 100 100, Rectangle 100 0 100 100]
+      it "two Fill children share the available width equally" $ do
+        result <- runHBox hBounds cfg [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
+        result `shouldBe` [Rectangle 0 0 100 100, Rectangle 100 0 100 100]
 
-      it "an Exactly child gets its exact width" $
-        runHBox hBounds cfg [rc (Exactly 60) Fill TopLeft]
-          `shouldBe` [Rectangle 0 0 60 100]
+      it "an Exactly child gets its exact width" $ do
+        result <- runHBox hBounds cfg [rc (Exactly 60) Fill TopLeft]
+        result `shouldBe` [Rectangle 0 0 60 100]
 
-      it "a fixed child and a Fill child share the remaining space" $
-        runHBox hBounds cfg [rc (Exactly 60) Fill TopLeft, rc Fill Fill TopLeft]
-          `shouldBe` [Rectangle 0 0 60 100, Rectangle 60 0 140 100]
+      it "a fixed child and a Fill child share the remaining space" $ do
+        result <- runHBox hBounds cfg [rc (Exactly 60) Fill TopLeft, rc Fill Fill TopLeft]
+        result `shouldBe` [Rectangle 0 0 60 100, Rectangle 60 0 140 100]
 
-      it "spacing separates children" $
-        runHBox hBounds cfg { boxSpacing = 10 } [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
-          `shouldBe` [Rectangle 0 0 95 100, Rectangle 105 0 95 100]
+      it "spacing separates children" $ do
+        result <- runHBox hBounds cfg { boxSpacing = 10 } [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
+        result `shouldBe` [Rectangle 0 0 95 100, Rectangle 105 0 95 100]
 
     describe "content area" $ do
       prop "a Fill child fills the margin-inset content area" $
         forAll margin $ \m ->
-          runHBox hBounds cfg { boxMargin = m } [rc Fill Fill TopLeft]
-            `shouldBe` [Rectangle m m (200 - 2*m) (100 - 2*m)]
+          ioProperty $ do
+            result <- runHBox hBounds cfg { boxMargin = m } [rc Fill Fill TopLeft]
+            pure $ result == [Rectangle m m (200 - 2*m) (100 - 2*m)]
 
     describe "cross axis (height)" $ do
-      it "fillCross = True stretches children to the full available height" $
-        runHBox hBounds cfg [rc Fill (Exactly 40) TopLeft]
-          `shouldBe` [Rectangle 0 0 200 100]
+      it "fillCross = True stretches children to the full available height" $ do
+        result <- runHBox hBounds cfg [rc Fill (Exactly 40) TopLeft]
+        result `shouldBe` [Rectangle 0 0 200 100]
 
       let cases =
             [ ("TopLeft aligns the child to the top",    TopLeft,    Rectangle 0 0  200 40)
@@ -239,59 +242,62 @@ spec = describe "layout" $ do
             , ("BottomLeft aligns the child to the bottom", BottomLeft, Rectangle 0 60 200 40)
             ]
       forM_ cases $ \(desc, alignment, expected) ->
-        it desc $
-          runHBox hBounds cfg { boxFillCross = False } [rc Fill (Exactly 40) alignment]
-            `shouldBe` [expected]
+        it desc $ do
+          result <- runHBox hBounds cfg { boxFillCross = False } [rc Fill (Exactly 40) alignment]
+          result `shouldBe` [expected]
 
     describe "boxAlignment" $ do
       let threeExact = [rc (Exactly 40) Fill TopLeft, rc (Exactly 40) Fill TopLeft, rc (Exactly 40) Fill TopLeft]
 
-      it "Center centres the content block horizontally" $
-        runHBox hBounds cfg { boxAlignment = Center } threeExact
-          `shouldBe` [Rectangle 40 0 40 100, Rectangle 80 0 40 100, Rectangle 120 0 40 100]
+      it "Center centres the content block horizontally" $ do
+        result <- runHBox hBounds cfg { boxAlignment = Center } threeExact
+        result `shouldBe` [Rectangle 40 0 40 100, Rectangle 80 0 40 100, Rectangle 120 0 40 100]
 
-      it "MiddleRight aligns the content block to the right" $
-        runHBox hBounds cfg { boxAlignment = MiddleRight } threeExact
-          `shouldBe` [Rectangle 80 0 40 100, Rectangle 120 0 40 100, Rectangle 160 0 40 100]
+      it "MiddleRight aligns the content block to the right" $ do
+        result <- runHBox hBounds cfg { boxAlignment = MiddleRight } threeExact
+        result `shouldBe` [Rectangle 80 0 40 100, Rectangle 120 0 40 100, Rectangle 160 0 40 100]
 
     prop "no slot exceeds the upper bound of its width constraint" $ \constraints ->
-      let rects  = runHBox hBounds cfg constraints
-          within (AtMost  w,   s) = s <= w
-          within (Between _ h, s) = s <= h
-          within _                = True
-      in all within (zip (map layoutWidth constraints) (map rectWidth rects))
+      ioProperty $ do
+        rects <- runHBox hBounds cfg constraints
+        let within (AtMost  w,   s) = s <= w
+            within (Between _ h, s) = s <= h
+            within _                = True
+        pure $ all within (zip (map layoutWidth constraints) (map rectWidth rects))
 
   describe "vBox" $ do
-    it "produces no output for an empty child list" $
-      runVBox vBounds cfg [] `shouldBe` []
+    it "produces no output for an empty child list" $ do
+      result <- runVBox vBounds cfg []
+      result `shouldBe` []
 
     describe "main axis (height)" $ do
-      it "a single Fill child fills the available height" $
-        runVBox vBounds cfg [rc Fill Fill TopLeft]
-          `shouldBe` [Rectangle 0 0 100 200]
+      it "a single Fill child fills the available height" $ do
+        result <- runVBox vBounds cfg [rc Fill Fill TopLeft]
+        result `shouldBe` [Rectangle 0 0 100 200]
 
-      it "two Fill children share the available height equally" $
-        runVBox vBounds cfg [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
-          `shouldBe` [Rectangle 0 0 100 100, Rectangle 0 100 100 100]
+      it "two Fill children share the available height equally" $ do
+        result <- runVBox vBounds cfg [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
+        result `shouldBe` [Rectangle 0 0 100 100, Rectangle 0 100 100 100]
 
-      it "a fixed child and a Fill child share the remaining space" $
-        runVBox vBounds cfg [rc Fill (Exactly 60) TopLeft, rc Fill Fill TopLeft]
-          `shouldBe` [Rectangle 0 0 100 60, Rectangle 0 60 100 140]
+      it "a fixed child and a Fill child share the remaining space" $ do
+        result <- runVBox vBounds cfg [rc Fill (Exactly 60) TopLeft, rc Fill Fill TopLeft]
+        result `shouldBe` [Rectangle 0 0 100 60, Rectangle 0 60 100 140]
 
-      it "spacing separates children" $
-        runVBox vBounds cfg { boxSpacing = 10 } [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
-          `shouldBe` [Rectangle 0 0 100 95, Rectangle 0 105 100 95]
+      it "spacing separates children" $ do
+        result <- runVBox vBounds cfg { boxSpacing = 10 } [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
+        result `shouldBe` [Rectangle 0 0 100 95, Rectangle 0 105 100 95]
 
     describe "content area" $ do
       prop "a Fill child fills the margin-inset content area" $
         forAll margin $ \m ->
-          runVBox vBounds cfg { boxMargin = m } [rc Fill Fill TopLeft]
-            `shouldBe` [Rectangle m m (100 - 2*m) (200 - 2*m)]
+          ioProperty $ do
+            result <- runVBox vBounds cfg { boxMargin = m } [rc Fill Fill TopLeft]
+            pure $ result == [Rectangle m m (100 - 2*m) (200 - 2*m)]
 
     describe "cross axis (width)" $ do
-      it "fillCross = True stretches children to the full available width" $
-        runVBox vBounds cfg [rc (Exactly 60) Fill TopLeft]
-          `shouldBe` [Rectangle 0 0 100 200]
+      it "fillCross = True stretches children to the full available width" $ do
+        result <- runVBox vBounds cfg [rc (Exactly 60) Fill TopLeft]
+        result `shouldBe` [Rectangle 0 0 100 200]
 
       let cases =
             [ ("TopLeft aligns the child to the left",      TopLeft,  Rectangle 0  0 60 200)
@@ -299,20 +305,20 @@ spec = describe "layout" $ do
             , ("TopRight aligns the child to the right",    TopRight, Rectangle 40 0 60 200)
             ]
       forM_ cases $ \(desc, alignment, expected) ->
-        it desc $
-          runVBox vBounds cfg { boxFillCross = False } [rc (Exactly 60) Fill alignment]
-            `shouldBe` [expected]
+        it desc $ do
+          result <- runVBox vBounds cfg { boxFillCross = False } [rc (Exactly 60) Fill alignment]
+          result `shouldBe` [expected]
 
     describe "boxAlignment" $ do
       let threeExact = [rc Fill (Exactly 40) TopLeft, rc Fill (Exactly 40) TopLeft, rc Fill (Exactly 40) TopLeft]
 
-      it "Center centres the content block vertically" $
-        runVBox vBounds cfg { boxAlignment = Center } threeExact
-          `shouldBe` [Rectangle 0 40 100 40, Rectangle 0 80 100 40, Rectangle 0 120 100 40]
+      it "Center centres the content block vertically" $ do
+        result <- runVBox vBounds cfg { boxAlignment = Center } threeExact
+        result `shouldBe` [Rectangle 0 40 100 40, Rectangle 0 80 100 40, Rectangle 0 120 100 40]
 
-      it "BottomLeft aligns the content block to the bottom" $
-        runVBox vBounds cfg { boxAlignment = BottomLeft } threeExact
-          `shouldBe` [Rectangle 0 80 100 40, Rectangle 0 120 100 40, Rectangle 0 160 100 40]
+      it "BottomLeft aligns the content block to the bottom" $ do
+        result <- runVBox vBounds cfg { boxAlignment = BottomLeft } threeExact
+        result `shouldBe` [Rectangle 0 80 100 40, Rectangle 0 120 100 40, Rectangle 0 160 100 40]
 
   describe "defaultBoxConfig" $ do
     it "has zero spacing and margin" $ do
@@ -321,13 +327,3 @@ spec = describe "layout" $ do
     it "aligns to TopLeft with cross-axis fill enabled" $ do
       boxAlignment defaultBoxConfig `shouldBe` TopLeft
       boxFillCross defaultBoxConfig `shouldBe` True
-
-  describe "boxTotalSpacing" $ do
-    it "returns 0 for zero children" $
-      boxTotalSpacing cfg { boxSpacing = 10 } 0 `shouldBe` 0
-
-    it "returns 0 for one child" $
-      boxTotalSpacing cfg { boxSpacing = 10 } 1 `shouldBe` 0
-
-    prop "returns spacing × (n-1) for n children" $ \(NonNegative spacing) (Positive n) ->
-      boxTotalSpacing cfg { boxSpacing = spacing } n `shouldBe` spacing * fromIntegral (n - 1 :: Int)

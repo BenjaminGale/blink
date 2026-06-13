@@ -206,7 +206,7 @@ demoView = do
     , (Layout Fill Fill          TopLeft, rowProgress s)
     ]
   -- Capture hover state at end of frame (after all controls have registered hover)
-  mHov  <- UI $ \ctx -> (ctxHoveredElement ctx, ctx)
+  mHov  <- UI $ \ctx -> pure (ctxHoveredElement ctx, ctx)
   let typed   = T.concat (inputTypedText input)
       keyName = case inputKeyEvents input of
                   []      -> ""

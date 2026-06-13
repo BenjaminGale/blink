@@ -15,10 +15,31 @@ module Blink.Rendering
   , TextAlign (..)
     -- * Draw commands
   , DrawCommand (..)
+    -- * Text measurement
+  , TextMeasurer (..)
+  , noOpTextMeasurer
   ) where
 
 import Data.Text (Text)
 import Blink.Geometry (Rectangle)
+
+-- | Text measurement operations provided to the UI for cursor positioning.
+-- Construct one from your platform's font API and pass it to
+-- 'Blink.App.configureContinuous' or 'Blink.App.configureEventDriven'.
+data TextMeasurer = TextMeasurer
+  { tmCharOffset   :: Text -> Int -> IO Float
+    -- ^ X offset (pixels) of character index @n@ from the start of the string.
+  , tmCharAtOffset :: Text -> Float -> IO Int
+    -- ^ Character index closest to the given x offset.
+  }
+
+-- | A 'TextMeasurer' whose operations always return @0@. Use in tests or
+-- when no font backend is available.
+noOpTextMeasurer :: TextMeasurer
+noOpTextMeasurer = TextMeasurer
+  { tmCharOffset   = \_ _ -> pure 0
+  , tmCharAtOffset = \_ _ -> pure 0
+  }
 
 -- | An RGBA colour with components in @[0, 1]@.
 data Colour = RGBA Double Double Double Double

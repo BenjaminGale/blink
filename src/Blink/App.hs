@@ -85,8 +85,6 @@ module Blink.App
   , FrameResult (..)
     -- * Text measurement
   , TextMeasurer (..)
-  , FontSpec (..)
-  , FontMetrics (..)
   ) where
 
 import Control.Concurrent (forkIO, threadDelay)
@@ -99,7 +97,7 @@ import GHC.Clock (getMonotonicTimeNSec)
 
 import Blink.Geometry (Point (..), Rectangle, Size (..), rectFromSize)
 import Blink.Input (ButtonState (..), KeyEvent, InputState (..))
-import Blink.Rendering (DrawCommand)
+import Blink.Rendering (DrawCommand, TextMeasurer (..))
 import Blink.Style (Theme)
 import Blink.UI
   ( UI, UIContext (..)
@@ -127,11 +125,11 @@ data App e s = App
 -- | Produces a 'BlinkHandle' for a continuous render backend. The draw list
 -- from the first render pass is submitted immediately each frame.
 configureContinuous :: Eq e => App e s -> TextMeasurer -> IO (BlinkHandle s)
-configureContinuous app _measurer = do
+configureContinuous app measurer = do
   s <- startUp app
   refs <- AppRefs
     <$> newIORef []
-    <*> newIORef (emptyUIContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) s)
+    <*> newIORef (emptyUIContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) s measurer)
     <*> newIORef s
     <*> newIORef False
     <*> newIORef Nothing
@@ -142,11 +140,11 @@ configureContinuous app _measurer = do
 -- The 'IO ()' callback is called when async work completes so the backend can
 -- unblock its event wait.
 configureEventDriven :: Eq e => App e s -> IO () -> TextMeasurer -> IO (BlinkHandle s)
-configureEventDriven app notify _measurer = do
+configureEventDriven app notify measurer = do
   s <- startUp app
   refs <- AppRefs
     <$> newIORef []
-    <*> newIORef (emptyUIContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) s)
+    <*> newIORef (emptyUIContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) s measurer)
     <*> newIORef s
     <*> newIORef False
     <*> newIORef Nothing
@@ -194,42 +192,6 @@ data FrameResult s
 
 -- | Identifies a font for text measurement. Passed to 'measureFont',
 -- 'measureText', 'charOffset', and 'charAtOffset' to select the font.
-data FontSpec = FontSpec
-  { fontPath :: FilePath
-    -- ^ Path to the font file.
-  , fontSize :: Int
-    -- ^ Point size.
-  } deriving (Eq, Ord, Show)
-
--- | Font-level metrics returned by 'measureFont' for a given 'FontSpec'.
--- These metrics do not depend on string content.
-data FontMetrics = FontMetrics
-  { lineHeight :: Float
-    -- ^ Distance between consecutive baselines.
-  , ascender   :: Float
-    -- ^ Distance from the baseline to the top of the tallest glyph.
-  , descender  :: Float
-    -- ^ Distance from the baseline to the bottom of the deepest descender.
-    -- Typically negative.
-  }
-
--- | Text measurement operations provided by the backend at configure time.
--- All operations are in @IO@ because they may invoke the platform's font
--- renderer.
-data TextMeasurer = TextMeasurer
-  { measureFont  :: FontSpec -> IO FontMetrics
-    -- ^ Returns font-level metrics. Used during layout to determine control
-    -- height before the content string is known.
-  , measureText  :: Text -> FontSpec -> IO Size
-    -- ^ Returns the total bounding box of a string. Used for layout.
-  , charOffset   :: Text -> FontSpec -> Int -> IO Float
-    -- ^ Returns the x offset (in pixels) at a given character index, measured
-    -- from the start of the string. Used for cursor positioning.
-  , charAtOffset :: Text -> FontSpec -> Float -> IO Int
-    -- ^ Returns the character index closest to a given x offset. Used for
-    -- mapping a mouse click position back to a character index.
-  }
-
 -- Mutable state shared across frames, allocated once at configure time.
 data AppRefs e s = AppRefs
   { refsAsyncQueue :: IORef [s -> s]
@@ -277,9 +239,9 @@ runFrame app refs notify input = do
   delta <- sampleDelta (refsLastFrame refs) (isAnimationTick input)
 
   prevCtx <- readIORef (refsCtx refs)
-  let ctx        = buildCtx app winRect inputState delta (isAnimationTick input) state prevCtx
-      ((), ctx') = runUI (view app) ctx
-      state'     = applyDispatches ctx'
+  let ctx = buildCtx app winRect inputState delta (isAnimationTick input) state prevCtx
+  ((), ctx') <- runUI (view app) ctx
+  let state' = applyDispatches ctx'
 
   writeIORef (refsState refs) state'
   mapM_ (forkJob (refsAsyncQueue refs) notify state') (getAsyncJobs ctx')
@@ -302,7 +264,7 @@ doStepEventDriven app refs notify input = do
         . withTheme (theme app state')
         . nextFrameContext winRect (clearKeyEvents inputState)
         $ firstPassCtx
-      ((), renderedCtx) = runUI (view app) freshCtx
+  ((), renderedCtx) <- runUI (view app) freshCtx
   writeIORef (refsCtx refs) renderedCtx
   wasActive <- readIORef (refsAnimActive refs)
   let nowActive = ctxRequiresAnimation renderedCtx

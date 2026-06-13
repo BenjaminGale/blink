@@ -32,12 +32,7 @@ normalInput :: FrameInput
 normalInput = mkInput False False
 
 nullMeasurer :: TextMeasurer
-nullMeasurer = TextMeasurer
-  { measureFont  = \_ -> pure (FontMetrics 0 0 0)
-  , measureText  = \_ _ -> pure (Size 0 0)
-  , charOffset   = \_ _ _ -> pure 0
-  , charAtOffset = \_ _ _ -> pure 0
-  }
+nullMeasurer = noOpTextMeasurer
 
 testStyle :: Style
 testStyle = Style

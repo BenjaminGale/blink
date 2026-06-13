@@ -71,7 +71,7 @@ import qualified Data.Text as T
 import Blink.Geometry (Alignment (..), Orientation (..), Point (..), Rectangle (..), insetRect)
 import Blink.Input (ButtonState (..), Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (Layout (..), Length (..), BoxConfig (..), hBox, vBox, defaultBoxConfig)
-import Blink.Rendering (TextAlign (..))
+import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
 import Blink.UI
 
@@ -181,26 +181,106 @@ button eid txt = do
     drawText (styleTextColour style) (styleTextAlign style) txt
   isActivatedBy [KeyReturn] eid
 
--- | A single-line text entry field. Displays a cursor when focused. Dispatches
--- the state modifier @onChange newValue@ when the text changes via typed
--- characters or Backspace; the control reads the new value back from the
--- application state on the next frame.
+-- | A single-line text entry field. Supports click-to-place cursor, drag
+-- selection, Shift+arrow extension, and selection-aware editing.
 textInput :: (Eq e, Ord e) => e -> Text -> (Text -> s -> s) -> UI e s ()
-textInput eid value onChange = control eid $ do
-  style     <- getStyle eid
-  hasFocus  <- isFocused eid
-  disabled  <- isDisabled
-  backspace <- isKeyPressed eid KeyBackspace
-  let displayed = if hasFocus && not disabled then value <> "|" else value
-  drawText (styleTextColour style) (styleTextAlign style) displayed
-  when hasFocus $ whenEnabled $ do
-    input <- getInput
-    let appended = foldl' (<>) value (inputTypedText input)
-        result    = if backspace && not (T.null appended)
-                    then T.init appended
-                    else appended
-    when (result /= value) $ do
-      dispatch (onChange result)
+textInput eid value onChange = do
+  wasCapturing <- isDragging eid
+  control eid $ do
+    style    <- getStyle eid
+    hasFocus <- isFocused eid
+    disabled <- isDisabled
+    bounds   <- getBounds
+    input    <- getInput
+    sel      <- getSelection eid
+
+    let defPos  = T.length value
+        anchor0 = maybe defPos selAnchor sel
+        active0 = maybe defPos selActive sel
+
+    -- Mouse: click sets both ends; drag extends active only.
+    (anchor1, active1) <-
+      if hasFocus && not disabled then do
+        isCapturing <- isDragging eid
+        if isCapturing then do
+          mousePos <- getMousePos
+          let localX = realToFrac (pointX mousePos - rectX bounds) :: Float
+          clickedPos <- charAtOffsetUI value localX
+          pure $ if not wasCapturing
+            then (clickedPos, clickedPos)
+            else (anchor0, clickedPos)
+        else pure (anchor0, active0)
+      else pure (anchor0, active0)
+
+    -- Keyboard: Shift+arrows extend selection; plain arrows collapse it.
+    let keyEvts    = inputKeyEvents input
+        len        = T.length value
+        hasSel1    = anchor1 /= active1
+        selLo1     = min anchor1 active1
+        selHi1     = max anchor1 active1
+        shiftLeft  = hasFocus && any (\e -> key e == KeyLeft  && Shift `elem`    modifiers e) keyEvts
+        shiftRight = hasFocus && any (\e -> key e == KeyRight && Shift `elem`    modifiers e) keyEvts
+        plainLeft  = hasFocus && any (\e -> key e == KeyLeft  && Shift `notElem` modifiers e) keyEvts
+        plainRight = hasFocus && any (\e -> key e == KeyRight && Shift `notElem` modifiers e) keyEvts
+        (anchor2, active2)
+          | shiftLeft  = (anchor1, max 0    (active1 - 1))
+          | shiftRight = (anchor1, min len  (active1 + 1))
+          | plainLeft  = let p = if hasSel1 then selLo1 else max 0   (active1 - 1) in (p, p)
+          | plainRight = let p = if hasSel1 then selHi1 else min len (active1 + 1) in (p, p)
+          | otherwise  = (anchor1, active1)
+
+    when (hasFocus && not disabled) $
+      setSelection eid (Selection anchor2 active2)
+
+    -- Editing: typed text and backspace, selection-aware.
+    when (hasFocus && not disabled) $ do
+      let backspace = any (\e -> key e == KeyBackspace) keyEvts
+          typed     = foldl' (<>) T.empty (inputTypedText input)
+          hasTyped  = not (T.null typed)
+          hasSel2   = anchor2 /= active2
+          selLo2    = min anchor2 active2
+          selHi2    = max anchor2 active2
+      when (backspace || hasTyped) $ do
+        let (newText, newCursor)
+              | hasSel2 && backspace =
+                  (T.take selLo2 value <> T.drop selHi2 value, selLo2)
+              | hasSel2 =
+                  (T.take selLo2 value <> typed <> T.drop selHi2 value, selLo2 + T.length typed)
+              | backspace && active2 > 0 =
+                  (T.take (active2 - 1) value <> T.drop active2 value, active2 - 1)
+              | hasTyped =
+                  (T.take active2 value <> typed <> T.drop active2 value, active2 + T.length typed)
+              | otherwise = (value, active2)
+        when (newText /= value) $ dispatch (onChange newText)
+        setSelection eid (Selection newCursor newCursor)
+
+    -- Drawing: selection highlight, text, then cursor.
+    finalSel <- getSelection eid
+    let finalAnchor = maybe defPos selAnchor finalSel
+        finalActive = maybe defPos selActive finalSel
+        finalLo     = min finalAnchor finalActive
+        finalHi     = max finalAnchor finalActive
+
+    when (hasFocus && finalLo < finalHi) $ do
+      loX <- charOffsetUI value finalLo
+      hiX <- charOffsetUI value finalHi
+      let selRect = Rectangle
+            (rectX bounds + realToFrac loX)
+            (rectY bounds)
+            (realToFrac (hiX - loX))
+            (rectHeight bounds)
+      withBounds selRect $ fillRect (RGBA 0.3 0.5 1.0 0.4)
+
+    drawText (styleTextColour style) (styleTextAlign style) value
+
+    when (hasFocus && not disabled) $ do
+      curX <- charOffsetUI value finalActive
+      let cursorRect = Rectangle
+            (rectX bounds + realToFrac curX)
+            (rectY bounds)
+            1
+            (rectHeight bounds)
+      withBounds cursorRect $ fillRect (styleTextColour style)
 
 -- | Sub-parts of a scrollbar, used as the inner tag when building the
 -- control's element IDs via a tagging function:
