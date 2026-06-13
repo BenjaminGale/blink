@@ -132,7 +132,7 @@ rowScrollRegions s =
 
 staticScrollList :: AppState -> DemoUI ()
 staticScrollList s =
-  scrollableRegion ScrollRegion1 400 (20 * 32) $
+  scrollableRegion ScrollRegion1 (Size 400 (20 * 32)) $
     vBox defaultBoxConfig
       [ (Layout Fill (Exactly 32) TopLeft, item i)
       | i <- [1 .. 20 :: Int]

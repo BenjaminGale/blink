@@ -7,7 +7,7 @@ import Test.Hspec
 
 import Data.Text (Text)
 import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), button, checkbox, control, mouseToTrackPos, progressBar, radioGroup, readScrollPos, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect, writeScrollPos)
-import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
+import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
@@ -382,7 +382,7 @@ runScrollableRegion :: Point -> IO (UIContext ScrollRegionElem ())
 runScrollableRegion mousePos =
   let input = noInput { inputMousePosition = mousePos }
       ctx = emptyUIContext srOuterRect input srTheme () noOpTextMeasurer
-  in fmap snd $ runUI (scrollableRegion SRPart 400 100 (control SRChild (pure ()))) ctx
+  in fmap snd $ runUI (scrollableRegion SRPart (Size 400 100) (control SRChild (pure ()))) ctx
 
 -- readScrollPos: dispatches the stored position as the app state so applyDispatches returns it.
 runReadScrollPos :: Double -> IO (UIContext ScrollBarPart Double)

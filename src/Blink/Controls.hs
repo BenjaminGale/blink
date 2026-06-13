@@ -67,7 +67,7 @@ import Data.List (foldl', find)
 import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Geometry (Alignment (..), Orientation (..), Point (..), Rectangle (..), insetRect)
+import Blink.Geometry (Alignment (..), Orientation (..), Point (..), Rectangle (..), Size (..), insetRect)
 import Blink.Input (ButtonState (..), Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (Layout (..), Length (..), BoxConfig (..), hBox, vBox, defaultBoxConfig)
 import Blink.Rendering (Colour (..), TextAlign (..))
@@ -441,7 +441,7 @@ mouseToTrackPos Horizontal ratio r mouse =
 --
 -- @
 -- data Element = ... | MyRegion ScrollRegionPart
--- scrollableRegion MyRegion 600 400 content
+-- scrollableRegion MyRegion (Size 600 400) content
 -- @
 data ScrollRegionPart
   = ScrollRegionH ScrollBarPart -- ^ A part of the horizontal scrollbar.
@@ -464,11 +464,10 @@ scrollRegionBarSize = 16
 scrollableRegion
   :: Ord e
   => (ScrollRegionPart -> e)  -- ^ maps region parts to element IDs
-  -> Double                    -- ^ virtual content width
-  -> Double                    -- ^ virtual content height
+  -> Size                      -- ^ virtual content size
   -> UI e s ()                 -- ^ content
   -> UI e s ()
-scrollableRegion mkId cw ch content = do
+scrollableRegion mkId (Size cw ch) content = do
   outer <- getBounds
   let ow      = rectWidth outer
       oh      = rectHeight outer
