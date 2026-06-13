@@ -208,15 +208,13 @@ spec = do
         done <- newEmptyMVar
         let asyncApp = App
               { startUp        = pure 0
-            
               , theme          = const (emptyTheme testStyleSet)
               , view           = do
                   s <- getAppState
-                  when (s == 0) $ dispatchAsync $ \_ -> do
-                    putMVar done ()
-                    pure (+10)
+                  when (s == 0) $ dispatchAsync $ \_ -> pure (+10)
               } :: App () Int
-        handle <- configureContinuous asyncApp nullMeasurer
+            notify = putMVar done ()
+        handle <- configureEventDriven asyncApp notify nullMeasurer
         _ <- stepFrame handle normalInput
         takeMVar done
         r2 <- stepFrame handle normalInput

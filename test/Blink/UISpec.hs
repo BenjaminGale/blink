@@ -5,13 +5,16 @@ import Data.IORef
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Test.Hspec
+import Test.Hspec.QuickCheck (prop)
+import Test.QuickCheck (forAll, choose)
 
 import Blink.Geometry (Point (..), Rectangle (..), uniform)
-import Blink.Input (InputState (..))
+import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.Controls (control)
 import Blink.UI
+import Blink.Generators ()
 
 data TwoElems = ElemA | ElemB deriving (Eq, Ord, Show)
 
@@ -77,6 +80,12 @@ spec = describe "Blink.UI" $ do
       (_, ctx') <- runUI (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ())) ctx
       ixnHovered (ctxInteraction ctx') `shouldBe` Just ()
 
+    it "wraps draw commands in PushClip / PopClip" $ do
+      let clipRect = Rectangle 0 0 100 50
+      (_, ctx) <- run (withBounds clipRect $ clipToCurrent $ fillRect (RGBA 1 0 0 1)) (0 :: Int)
+      getDrawCommands ctx `shouldBe`
+        [PushClip clipRect, FillRect clipRect (RGBA 1 0 0 1), PopClip]
+
     it "intersects nested clip regions" $ do
       let outerClip = Rectangle 0 0 100 50
           innerClip = Rectangle 0 25 100 50
@@ -88,6 +97,16 @@ spec = describe "Blink.UI" $ do
          withBounds innerClip $ clipToCurrent $
          withBounds testBounds $ control () (pure ())) ctx
       ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
+
+  describe "withBounds" $ do
+    it "replaces the current bounds inside the sub-tree" $ do
+      let inner = Rectangle 10 10 50 50
+      (b, _) <- run (withBounds inner getBounds) (0 :: Int)
+      b `shouldBe` inner
+
+    it "restores the outer bounds after the sub-tree completes" $ do
+      (b, _) <- run (withBounds (Rectangle 10 10 50 50) (pure ()) >> getBounds) (0 :: Int)
+      b `shouldBe` testBounds
 
   describe "hover suppression during drag" $ do
     let mouseOnA = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
@@ -274,6 +293,13 @@ spec = describe "Blink.UI" $ do
       (_, ctx0) <- run (pure ()) (0 :: Int)
       let ctx = nextFrameContext testBounds noInput (captured ctx0)
       ixnCaptured (ctxInteraction ctx) `shouldBe` Nothing
+
+    it "clears the hovered element from the previous frame" $ do
+      let mouseOn = noInput { inputMousePosition = Point 50 50 }
+          ctx0 = emptyUIContext testBounds mouseOn emptyTheme (0 :: Int) noOpTextMeasurer
+      (_, ctx1) <- runUI (control () (pure ())) ctx0
+      let ctx2 = nextFrameContext testBounds noInput ctx1
+      ixnHovered (ctxInteraction ctx2) `shouldBe` Nothing
 
   describe "button interaction" $ do
     describe "state transitions via nextFrameContext" $ do
@@ -472,6 +498,122 @@ spec = describe "Blink.UI" $ do
       (result, _) <- runUI isMouseFree ctx
       result `shouldBe` False
 
+  describe "regionHit" $ do
+    it "is True when the mouse is inside the current bounds" $ do
+      let ctx = emptyUIContext testBounds (noInput { inputMousePosition = Point 50 50 })
+                  emptyTheme (0 :: Int) noOpTextMeasurer
+      (hit, _) <- runUI regionHit ctx
+      hit `shouldBe` True
+
+    it "is False when the mouse is outside the current bounds" $ do
+      let ctx = emptyUIContext testBounds (noInput { inputMousePosition = Point 200 200 })
+                  emptyTheme (0 :: Int) noOpTextMeasurer
+      (hit, _) <- runUI regionHit ctx
+      hit `shouldBe` False
+
+  describe "keyboard" $ do
+    describe "consumeKey" $ do
+      it "removes all events for the given key from the queue" $ do
+        let input = noInput { inputKeyEvents = [ KeyEvent KeyTab [], KeyEvent KeyTab [] ] }
+            ctx   = emptyUIContext testBounds input emptyTheme (0 :: Int) noOpTextMeasurer
+        (_, ctx') <- runUI (consumeKey KeyTab) ctx
+        inputKeyEvents (ctxInput ctx') `shouldBe` []
+
+      it "leaves events for other keys in the queue" $ do
+        let tabEv    = KeyEvent KeyTab []
+            returnEv = KeyEvent KeyReturn []
+            input    = noInput { inputKeyEvents = [tabEv, returnEv] }
+            ctx      = emptyUIContext testBounds input emptyTheme (0 :: Int) noOpTextMeasurer
+        (_, ctx') <- runUI (consumeKey KeyTab) ctx
+        inputKeyEvents (ctxInput ctx') `shouldBe` [returnEv]
+
+    describe "tab stop" $ do
+      it "getPreviousTabStop returns Nothing initially" $ do
+        (s, _) <- run getPreviousTabStop (0 :: Int)
+        s `shouldBe` Nothing
+
+      it "getPreviousTabStop returns the element after setPreviousTabStop" $ do
+        (s, _) <- run (setPreviousTabStop () >> getPreviousTabStop) (0 :: Int)
+        s `shouldBe` Just ()
+
+  describe "styles" $ do
+    let distinctStyles = StyleSet
+          { styleSetNormal   = emptyStyle { styleBackground = RGBA 0 0 0 1 }
+          , styleSetHovered  = emptyStyle { styleBackground = RGBA 1 0 0 1 }
+          , styleSetPressed  = emptyStyle { styleBackground = RGBA 0 1 0 1 }
+          , styleSetFocused  = emptyStyle { styleBackground = RGBA 0 0 1 1 }
+          , styleSetDisabled = emptyStyle { styleBackground = RGBA 1 1 1 1 }
+          }
+        styledTheme = Theme
+          { themeElementStyles = Map.singleton () distinctStyles
+          , themeDefaultStyle  = emptyStyleSet
+          }
+        runStyled ui = runUI ui (emptyUIContext testBounds noInput styledTheme (0 :: Int) noOpTextMeasurer)
+
+    describe "getStyleSet" $ do
+      it "returns the element-specific style when registered" $ do
+        (ss, _) <- runStyled (getStyleSet ())
+        styleBackground (styleSetNormal ss) `shouldBe` RGBA 0 0 0 1
+
+      it "falls back to the theme default when no element-specific style is registered" $ do
+        (ss, _) <- run (getStyleSet ()) (0 :: Int)
+        styleBackground (styleSetNormal ss) `shouldBe` styleBackground (styleSetNormal emptyStyleSet)
+
+    describe "getStyle" $ do
+      it "returns the normal style when no interaction is active" $ do
+        (s, _) <- runStyled (getStyle ())
+        styleBackground s `shouldBe` RGBA 0 0 0 1
+
+      it "returns the hovered style when the element is hovered" $ do
+        let mouseOn = noInput { inputMousePosition = Point 50 50 }
+            ctx = emptyUIContext testBounds mouseOn styledTheme (0 :: Int) noOpTextMeasurer
+        (s, _) <- runUI (setHovered () >> getStyle ()) ctx
+        styleBackground s `shouldBe` RGBA 1 0 0 1
+
+      it "returns the focused style when the element is focused but not hovered" $ do
+        (s, _) <- runStyled (setFocus () >> getStyle ())
+        styleBackground s `shouldBe` RGBA 0 0 1 1
+
+      it "pressed takes priority over hovered" $ do
+        let mouseOn = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
+            ctx = emptyUIContext testBounds mouseOn styledTheme (0 :: Int) noOpTextMeasurer
+        (s, _) <- runUI (setHovered () >> getStyle ()) ctx
+        styleBackground s `shouldBe` RGBA 0 1 0 1
+
+      it "disabled takes priority over all other states" $ do
+        let mouseOn = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
+            ctx = emptyUIContext testBounds mouseOn styledTheme (0 :: Int) noOpTextMeasurer
+        (s, _) <- runUI (disableWhen True (setHovered () >> getStyle ())) ctx
+        styleBackground s `shouldBe` RGBA 1 1 1 1
+
+  describe "animation" $ do
+    let tickCtx = (emptyUIContext testBounds noInput emptyTheme (0 :: Int) noOpTextMeasurer)
+                    { ctxAnimation = AnimationState { animDelta = 0.016, animElapsed = 1.5, animIsTick = True } }
+        nonTickCtx = (emptyUIContext testBounds noInput emptyTheme (0 :: Int) noOpTextMeasurer)
+                       { ctxAnimation = AnimationState { animDelta = 0.016, animElapsed = 1.5, animIsTick = False } }
+
+    it "getAnimDelta returns the frame delta" $ do
+      (d, _) <- runUI getAnimDelta tickCtx
+      d `shouldBe` 0.016
+
+    it "getAnimElapsed returns the total elapsed time" $ do
+      (e, _) <- runUI getAnimElapsed tickCtx
+      e `shouldBe` 1.5
+
+    it "withAnimationFrame runs its body on tick frames" $ do
+      ref <- newIORef False
+      runUI (withAnimationFrame (UI $ \ctx -> writeIORef ref True >> pure ((), ctx))) tickCtx
+      readIORef ref `shouldReturn` True
+
+    it "withAnimationFrame skips its body on non-tick frames" $ do
+      ref <- newIORef False
+      runUI (withAnimationFrame (UI $ \ctx -> writeIORef ref True >> pure ((), ctx))) nonTickCtx
+      readIORef ref `shouldReturn` False
+
+    it "requiresAnimation sets the animation continuation flag" $ do
+      (_, ctx) <- runUI requiresAnimation tickCtx
+      outRequiresAnimation (ctxOutputs ctx) `shouldBe` True
+
   describe "getHoveredElement" $ do
     it "returns Nothing when no element is hovered" $ do
       (result, _) <- run getHoveredElement (0 :: Int)
@@ -482,3 +624,22 @@ spec = describe "Blink.UI" $ do
           ctx = emptyUIContext testBounds mouseInside emptyTheme (0 :: Int) noOpTextMeasurer
       (result, _) <- runUI (control () (pure ()) >> getHoveredElement) ctx
       result `shouldBe` Just ()
+
+  describe "properties" $ do
+    prop "clampScrollPos is idempotent" $ \x ->
+      clampScrollPos (clampScrollPos x) == (clampScrollPos x :: Double)
+
+    prop "clampScrollPos result is always in [0, 1]" $ \x ->
+      let v = clampScrollPos (x :: Double) in v >= 0 && v <= 1
+
+    prop "selectionLow is never greater than selectionHigh" $
+      forAll ((,) <$> choose (-100, 100) <*> choose (-100, 100)) $ \(a, v) ->
+        selectionLow (Selection a v) <= selectionHigh (Selection a v)
+
+    prop "collapseToLow always produces a cursor with no extent" $
+      forAll ((,) <$> choose (-100, 100) <*> choose (-100, 100)) $ \(a, v) ->
+        not (selectionHasExtent (collapseToLow (Selection a v)))
+
+    prop "extendActive preserves the anchor" $
+      forAll ((,) <$> choose (-100, 100) <*> choose (-100, 100)) $ \(a, v) ->
+        selectionAnchor (extendActive (+1) (Selection a v)) == a
