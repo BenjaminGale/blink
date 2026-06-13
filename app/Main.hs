@@ -73,7 +73,7 @@ loop handle buttonRef renderFrame window mAnimEvent = do
       keys  = concatMap toKeyEvents events
       chars = concatMap toTypedText events
       isQuit = SDL.QuitEvent `elem` map SDL.eventPayload events
-  isAnimTick <- maybe (pure False) (\et -> fmap or $ mapM (isAnimationEvent et) events) mAnimEvent
+  isAnimTick <- maybe (pure False) (\et -> or <$> mapM (isAnimationEvent et) events) mAnimEvent
   writeIORef buttonRef (nextFrameButton btn')
 
   mousePos         <- SDL.getAbsoluteMouseLocation
