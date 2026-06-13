@@ -8,9 +8,8 @@ import SDL (($=))
 import qualified SDL
 import qualified SDL.Font as Font
 import qualified SDL.Raw
-import Control.Monad (void)
+import Control.Monad (foldM, void)
 import Data.IORef (newIORef)
-import Data.List (foldl')
 import Data.Maybe (isJust)
 import Foreign.Ptr (nullPtr)
 import Data.Text (Text)
@@ -69,30 +68,30 @@ loop
 loop handle btnDown renderFrame window checkAnimTick = do
   first <- SDL.waitEvent
   rest  <- SDL.pollEvents
-  let events   = first : rest
-      btnDown' = foldl' updateButton btnDown events
-      keys     = concatMap toKeyEvents events
-      chars    = concatMap toTypedText events
-      isQuit   = any ((== SDL.QuitEvent) . SDL.eventPayload) events
-  isAnimTick <- checkAnimTick events
-
   mousePos         <- SDL.getAbsoluteMouseLocation
   SDL.V2 winW winH <- SDL.get (SDL.windowSize window)
-
-  let fi = FrameInput
-             { mousePosition   = sdlPoint mousePos
-             , mouseButtonDown = btnDown'
-             , keyEvents       = keys
-             , typedText       = chars
-             , windowSize      = Size (fromIntegral winW) (fromIntegral winH)
-             , quitRequested   = isQuit
-             , isAnimationTick = isAnimTick
-             }
-
-  result <- stepFrame handle fi
+  let pos     = sdlPoint mousePos
+      winSize = Size (fromIntegral winW) (fromIntegral winH)
+  (btnDown', result) <- foldM (stepEvent pos winSize) (btnDown, Nothing) (first : rest)
   case result of
-    Continue draws _ -> renderFrame draws >> loop handle btnDown' renderFrame window checkAnimTick
-    Quit     draws _ -> renderFrame draws
+    Just (Continue draws _) -> renderFrame draws >> loop handle btnDown' renderFrame window checkAnimTick
+    Just (Quit     draws _) -> renderFrame draws
+    Nothing                 -> loop handle btnDown' renderFrame window checkAnimTick
+  where
+    stepEvent pos winSize (btn, _) event = do
+      isAnimTick <- checkAnimTick [event]
+      let btn' = updateButton btn event
+          fi   = FrameInput
+                   { mousePosition   = pos
+                   , mouseButtonDown = btn'
+                   , keyEvents       = toKeyEvents event
+                   , typedText       = toTypedText event
+                   , windowSize      = winSize
+                   , quitRequested   = SDL.eventPayload event == SDL.QuitEvent
+                   , isAnimationTick = isAnimTick
+                   }
+      result <- stepFrame handle fi
+      pure (btn', Just result)
 
 updateButton :: Bool -> SDL.Event -> Bool
 updateButton current e = case SDL.eventPayload e of
