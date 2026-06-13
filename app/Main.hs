@@ -121,8 +121,14 @@ toKeyEvents e = case SDL.eventPayload e of
          SDL.KeycodeReturn    -> [KeyEvent { key = KeyReturn,    modifiers = [] }]
          SDL.KeycodeBackspace -> [KeyEvent { key = KeyBackspace, modifiers = [] }]
          SDL.KeycodeSpace     -> [KeyEvent { key = KeySpace,     modifiers = [] }]
-         SDL.KeycodeLeft      -> [KeyEvent { key = KeyLeft,      modifiers = [] }]
-         SDL.KeycodeRight     -> [KeyEvent { key = KeyRight,     modifiers = [] }]
+         SDL.KeycodeLeft      ->
+           let mods    = SDL.keysymModifier (SDL.keyboardEventKeysym d)
+               shifted = SDL.keyModifierLeftShift mods || SDL.keyModifierRightShift mods
+           in [KeyEvent { key = KeyLeft,  modifiers = [Shift | shifted] }]
+         SDL.KeycodeRight     ->
+           let mods    = SDL.keysymModifier (SDL.keyboardEventKeysym d)
+               shifted = SDL.keyModifierLeftShift mods || SDL.keyModifierRightShift mods
+           in [KeyEvent { key = KeyRight, modifiers = [Shift | shifted] }]
          SDL.KeycodeUp        -> [KeyEvent { key = KeyUp,        modifiers = [] }]
          SDL.KeycodeDown      -> [KeyEvent { key = KeyDown,      modifiers = [] }]
          _ -> []

@@ -182,9 +182,11 @@ button eid txt = do
   isActivatedBy [KeyReturn] eid
 
 -- | A single-line text entry field. Supports click-to-place cursor, drag
--- selection, Shift+arrow extension, and selection-aware editing.
+-- selection, Shift+arrow extension, and selection-aware editing. Long text
+-- scrolls horizontally to keep the cursor visible.
 textInput :: (Eq e, Ord e) => e -> Text -> (Text -> s -> s) -> UI e s ()
 textInput eid value onChange = do
+  wasFocused   <- isFocused eid
   wasCapturing <- isDragging eid
   control eid $ do
     style    <- getStyle eid
@@ -193,20 +195,27 @@ textInput eid value onChange = do
     bounds   <- getBounds
     input    <- getInput
     sel      <- getSelection eid
+    scrollX  <- getScrollState eid
 
-    let defPos  = T.length value
-        anchor0 = maybe defPos selAnchor sel
-        active0 = maybe defPos selActive sel
+    let w           = rectWidth bounds
+        defPos      = T.length value
+        anchor0     = maybe defPos selAnchor sel
+        active0     = maybe defPos selActive sel
+        -- Focus was gained by a click this frame (e.g. clicking from another
+        -- element). Treat as a fresh click rather than a drag continuation so
+        -- the old anchor is not inherited.
+        justFocused = hasFocus && not wasFocused
 
-    -- Mouse: click sets both ends; drag extends active only.
+    -- Mouse: click sets both ends; drag extends active only. Account for the
+    -- current horizontal scroll offset when converting mouse X to a character index.
     (anchor1, active1) <-
       if hasFocus && not disabled then do
         isCapturing <- isDragging eid
         if isCapturing then do
           mousePos <- getMousePos
-          let localX = realToFrac (pointX mousePos - rectX bounds) :: Float
+          let localX = realToFrac (pointX mousePos - rectX bounds) + realToFrac scrollX :: Float
           clickedPos <- charAtOffsetUI value localX
-          pure $ if not wasCapturing
+          pure $ if not wasCapturing || justFocused
             then (clickedPos, clickedPos)
             else (anchor0, clickedPos)
         else pure (anchor0, active0)
@@ -229,54 +238,68 @@ textInput eid value onChange = do
           | plainRight = let p = if hasSel1 then selHi1 else min len (active1 + 1) in (p, p)
           | otherwise  = (anchor1, active1)
 
-    when (hasFocus && not disabled) $
-      setSelection eid (Selection anchor2 active2)
-
     -- Editing: typed text and backspace, selection-aware.
+    (anchor3, active3) <-
+      if hasFocus && not disabled then do
+        let backspace = any (\e -> key e == KeyBackspace) keyEvts
+            typed     = foldl' (<>) T.empty (inputTypedText input)
+            hasTyped  = not (T.null typed)
+            hasSel2   = anchor2 /= active2
+            selLo2    = min anchor2 active2
+            selHi2    = max anchor2 active2
+        if backspace || hasTyped
+          then do
+            let (newText, newCursor)
+                  | hasSel2 && backspace =
+                      (T.take selLo2 value <> T.drop selHi2 value, selLo2)
+                  | hasSel2 =
+                      (T.take selLo2 value <> typed <> T.drop selHi2 value, selLo2 + T.length typed)
+                  | backspace && active2 > 0 =
+                      (T.take (active2 - 1) value <> T.drop active2 value, active2 - 1)
+                  | hasTyped =
+                      (T.take active2 value <> typed <> T.drop active2 value, active2 + T.length typed)
+                  | otherwise = (value, active2)
+            when (newText /= value) $ dispatch (onChange newText)
+            pure (newCursor, newCursor)
+          else pure (anchor2, active2)
+      else pure (anchor2, active2)
+
+    when (hasFocus && not disabled) $
+      setSelection eid (Selection anchor3 active3)
+
+    -- Scroll horizontally to keep the cursor visible.
     when (hasFocus && not disabled) $ do
-      let backspace = any (\e -> key e == KeyBackspace) keyEvts
-          typed     = foldl' (<>) T.empty (inputTypedText input)
-          hasTyped  = not (T.null typed)
-          hasSel2   = anchor2 /= active2
-          selLo2    = min anchor2 active2
-          selHi2    = max anchor2 active2
-      when (backspace || hasTyped) $ do
-        let (newText, newCursor)
-              | hasSel2 && backspace =
-                  (T.take selLo2 value <> T.drop selHi2 value, selLo2)
-              | hasSel2 =
-                  (T.take selLo2 value <> typed <> T.drop selHi2 value, selLo2 + T.length typed)
-              | backspace && active2 > 0 =
-                  (T.take (active2 - 1) value <> T.drop active2 value, active2 - 1)
-              | hasTyped =
-                  (T.take active2 value <> typed <> T.drop active2 value, active2 + T.length typed)
-              | otherwise = (value, active2)
-        when (newText /= value) $ dispatch (onChange newText)
-        setSelection eid (Selection newCursor newCursor)
+      curX <- charOffsetUI value active3
+      let cursorAbs  = realToFrac curX :: Double
+          newScrollX
+            | cursorAbs < scrollX         = cursorAbs
+            | cursorAbs > scrollX + w - 1 = max 0 (cursorAbs - w + 1)
+            | otherwise                   = scrollX
+      when (newScrollX /= scrollX) $ setScrollState eid newScrollX
+
+    scrollX' <- getScrollState eid
+    let ox     = scrollX'
+        drawLo = min anchor3 active3
+        drawHi = max anchor3 active3
 
     -- Drawing: selection highlight, text, then cursor.
-    finalSel <- getSelection eid
-    let finalAnchor = maybe defPos selAnchor finalSel
-        finalActive = maybe defPos selActive finalSel
-        finalLo     = min finalAnchor finalActive
-        finalHi     = max finalAnchor finalActive
-
-    when (hasFocus && finalLo < finalHi) $ do
-      loX <- charOffsetUI value finalLo
-      hiX <- charOffsetUI value finalHi
+    when (hasFocus && drawLo < drawHi) $ do
+      loX <- charOffsetUI value drawLo
+      hiX <- charOffsetUI value drawHi
       let selRect = Rectangle
-            (rectX bounds + realToFrac loX)
+            (rectX bounds + realToFrac loX - ox)
             (rectY bounds)
             (realToFrac (hiX - loX))
             (rectHeight bounds)
       withBounds selRect $ fillRect (RGBA 0.3 0.5 1.0 0.4)
 
-    drawText (styleTextColour style) (styleTextAlign style) value
+    let textBounds = bounds { rectX = rectX bounds - ox }
+    withBounds textBounds $ drawText (styleTextColour style) AlignLeft value
 
     when (hasFocus && not disabled) $ do
-      curX <- charOffsetUI value finalActive
+      curX <- charOffsetUI value active3
       let cursorRect = Rectangle
-            (rectX bounds + realToFrac curX)
+            (rectX bounds + realToFrac curX - ox)
             (rectY bounds)
             1
             (rectHeight bounds)
