@@ -109,7 +109,7 @@ spec = describe "Blink.UI" $ do
       getDrawCommands ctx `shouldBe`
         [PushClip clipRect, FillRect clipRect (RGBA 1 0 0 1), PopClip]
 
-    it "intersects nested clip regions" $ do
+    it "does not register hover when the mouse is outside the intersection of nested clip regions" $ do
       let outerClip = Rectangle 0 0 100 50
           innerClip = Rectangle 0 25 100 50
           -- intersection is y 25–50; mouse at (50, 10) is inside outerClip but outside intersection
@@ -130,7 +130,7 @@ spec = describe "Blink.UI" $ do
       (b, _) <- run0 (withBounds (Rectangle 10 10 50 50) (pure ()) >> getBounds)
       b `shouldBe` testBounds
 
-  describe "hover suppression during drag" $ do
+  context "during a drag (another element holds capture)" $ do
     let base = emptyUIContext testBounds mouseOnCenterDown twoElemTheme (0 :: Int) noOpTextMeasurer
 
     it "does not hover an element when another element holds capture" $ do
@@ -163,13 +163,16 @@ spec = describe "Blink.UI" $ do
     (_, ctx) <- run0 (pure ())
     applyDispatches ctx `shouldBe` 0
 
-  it "dispatchAsync queues the job without running it" $ do
-    ref <- newIORef False
-    let job s = writeIORef ref True >> pure (const s)
+  it "dispatchAsync enqueues exactly one job" $ do
+    let job s = pure (const s)
     (_, ctx) <- run0 (dispatchAsync job)
     length (getAsyncJobs ctx) `shouldBe` 1
-    ran <- readIORef ref
-    ran `shouldBe` False
+
+  it "dispatchAsync does not execute the job immediately" $ do
+    ref <- newIORef False
+    let job s = writeIORef ref True >> pure (const s)
+    _ <- run0 (dispatchAsync job)
+    readIORef ref `shouldReturn` False
 
   it "nextFrameContext clears queued dispatches and async jobs" $ do
     (_, ctx) <- run0 (dispatch (+ 1) >> dispatchAsync (pure . const))
@@ -288,11 +291,6 @@ spec = describe "Blink.UI" $ do
       clampScrollPos 1 `shouldBe` 1
 
   describe "nextFrameContext capture" $ do
-    it "auto-acquires capture when an element is hovered while the button is down" $ do
-      -- Acquisition happens in setHovered during the frame, not via nextFrameContext.
-      (_, ctx) <- runWith buttonDown (setHovered ())
-      ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
-
     it "carries existing capture forward on subsequent ButtonDown frames" $ do
       ctx0 <- freshCtx
       let ctx = nextFrameContext testBounds buttonDown (withCapture () ctx0)
@@ -309,13 +307,8 @@ spec = describe "Blink.UI" $ do
       let ctx = nextFrameContext testBounds noInput (withCapture () ctx0)
       ixnCaptured (ctxInteraction ctx) `shouldBe` Nothing
 
-    it "clears the hovered element from the previous frame" $ do
-      (_, ctx1) <- runWith mouseOnCenter (control () (pure ()))
-      let ctx2 = nextFrameContext testBounds noInput ctx1
-      ixnHovered (ctxInteraction ctx2) `shouldBe` Nothing
-
   describe "button interaction" $ do
-    describe "state transitions via nextFrameContext" $ do
+    context "when advancing to the next frame" $ do
       it "ixnButtonDown is True when the button is currently held" $ do
         ctx0 <- freshCtx
         let ctx = nextFrameContext testBounds buttonDown ctx0
@@ -375,6 +368,10 @@ spec = describe "Blink.UI" $ do
       let ctx = withCapture ElemB ctx0
       (b, _) <- runUI (isDragging ElemA) ctx
       b `shouldBe` False
+
+    it "setHovered auto-acquires capture when the button is down" $ do
+      (_, ctx) <- runWith buttonDown (setHovered ())
+      ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
 
   describe "focus" $ do
     it "getFocus returns Nothing initially" $ do
@@ -439,6 +436,11 @@ spec = describe "Blink.UI" $ do
       (_, ctx) <- run0 (fillRect (RGBA 1 0 0 1))
       let ctx' = nextFrameContext testBounds noInput ctx
       getDrawCommands ctx' `shouldBe` []
+
+    it "nextFrameContext clears the hovered element from the previous frame" $ do
+      (_, ctx1) <- runWith mouseOnCenter (control () (pure ()))
+      let ctx2 = nextFrameContext testBounds noInput ctx1
+      ixnHovered (ctxInteraction ctx2) `shouldBe` Nothing
 
     describe "withBackground" $ do
       it "emits a FillRect when the colour is opaque" $ do
@@ -520,11 +522,11 @@ spec = describe "Blink.UI" $ do
         inputKeyEvents (ctxInput ctx') `shouldBe` [returnEv]
 
     describe "tab stop" $ do
-      it "getPreviousTabStop returns Nothing initially" $ do
+      it "returns Nothing when no tab stop has been registered" $ do
         (s, _) <- run0 getPreviousTabStop
         s `shouldBe` Nothing
 
-      it "getPreviousTabStop returns the element after setPreviousTabStop" $ do
+      it "returns the element registered as the previous tab stop" $ do
         (s, _) <- run0 (setPreviousTabStop () >> getPreviousTabStop)
         s `shouldBe` Just ()
 
@@ -606,17 +608,18 @@ spec = describe "Blink.UI" $ do
       (result, _) <- run0 getHoveredElement
       result `shouldBe` Nothing
 
-    it "returns the hovered element after setHovered" $ do
+    it "returns the element currently registered as hovered" $ do
       (result, _) <- runWith mouseOnCenter (control () (pure ()) >> getHoveredElement)
       result `shouldBe` Just ()
 
-  describe "properties" $ do
-    prop "clampScrollPos is idempotent" $ \x ->
+  describe "clampScrollPos properties" $ do
+    prop "is idempotent" $ \x ->
       clampScrollPos (clampScrollPos x) == (clampScrollPos x :: Double)
 
-    prop "clampScrollPos result is always in [0, 1]" $ \x ->
+    prop "result is always in [0, 1]" $ \x ->
       let v = clampScrollPos (x :: Double) in v >= 0 && v <= 1
 
+  describe "Selection invariants" $ do
     prop "selectionLow is never greater than selectionHigh" $
       forAll ((,) <$> choose (-100, 100) <*> choose (-100, 100)) $ \(a, v) ->
         selectionLow (Selection a v) <= selectionHigh (Selection a v)
