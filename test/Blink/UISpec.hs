@@ -199,6 +199,28 @@ spec = describe "Blink.UI" $ do
       it "can collapse a selection by moving active to anchor" $
         extendActive (const 2) (sel 2 5) `shouldBe` cursor 2
 
+  describe "selection store" $ do
+    it "returns [] when no selection has been recorded" $ do
+      (ss, _) <- run (getSelections ()) (0 :: Int)
+      ss `shouldBe` []
+
+    it "returns the selections just written in the same frame" $ do
+      let s = Selection 1 4
+      (ss, _) <- run (setSelections () [s] >> getSelections ()) (0 :: Int)
+      ss `shouldBe` [s]
+
+    it "getSelection returns Nothing when no selection exists" $ do
+      (s, _) <- run (getSelection ()) (0 :: Int)
+      s `shouldBe` Nothing
+
+    it "getSelection returns the first selection after setSelection" $ do
+      (s, _) <- run (setSelection () (cursor 3) >> getSelection ()) (0 :: Int)
+      s `shouldBe` Just (cursor 3)
+
+    it "setSelection replaces any existing selections" $ do
+      (ss, _) <- run (setSelections () [Selection 0 5, Selection 7 9] >> setSelection () (cursor 1) >> getSelections ()) (0 :: Int)
+      ss `shouldBe` [cursor 1]
+
   describe "scroll state" $ do
     it "returns 0 when no position has been recorded" $ do
       (v, _) <- run (getScrollState ()) (0 :: Int)
