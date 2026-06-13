@@ -33,7 +33,7 @@ executable demo
     import: defaults
     ghc-options: -threaded
     main-is: Main.hs
-    other-modules: UI, Theme
+    other-modules: UI, Theme, Rendering
     build-depends:
         blink,
         sdl2,
