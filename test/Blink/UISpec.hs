@@ -29,6 +29,15 @@ noInput = InputState
   , inputTypedText      = []
   }
 
+buttonDown :: InputState
+buttonDown = noInput { inputLeftButtonDown = True }
+
+mouseOnCenter :: InputState
+mouseOnCenter = noInput { inputMousePosition = Point 50 50 }
+
+mouseOnCenterDown :: InputState
+mouseOnCenterDown = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
+
 emptyStyle :: Style
 emptyStyle = Style
   { styleBackground = RGBA 0 0 0 1
@@ -61,6 +70,18 @@ testBounds = Rectangle 0 0 100 100
 run :: UI () s a -> s -> IO (a, UIContext () s)
 run ui s = runUI ui (emptyUIContext testBounds noInput emptyTheme s noOpTextMeasurer)
 
+runWith :: InputState -> UI () Int a -> IO (a, UIContext () Int)
+runWith input ui = runUI ui (emptyUIContext testBounds input emptyTheme (0 :: Int) noOpTextMeasurer)
+
+runTwoElem :: UI TwoElems Int a -> IO (a, UIContext TwoElems Int)
+runTwoElem ui = runUI ui (emptyUIContext testBounds noInput twoElemTheme (0 :: Int) noOpTextMeasurer)
+
+freshCtx :: IO (UIContext () Int)
+freshCtx = snd <$> run (pure ()) (0 :: Int)
+
+withCapture :: e -> UIContext e s -> UIContext e s
+withCapture e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnCaptured = Just e } }
+
 spec :: Spec
 spec = describe "Blink.UI" $ do
   describe "clipToCurrent" $ do
@@ -69,15 +90,15 @@ spec = describe "Blink.UI" $ do
     it "does not register hover when the mouse is inside bounds but outside the clip region" $ do
       let clipRect = Rectangle 0 0 100 50
           mouseOutsideClip = noInput { inputMousePosition = Point 50 75 }
-          ctx = emptyUIContext testBounds mouseOutsideClip emptyTheme (0 :: Int) noOpTextMeasurer
-      (_, ctx') <- runUI (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ())) ctx
+      (_, ctx') <- runWith mouseOutsideClip
+        (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ()))
       ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
     it "registers hover when the mouse is inside both the bounds and the clip region" $ do
       let clipRect = Rectangle 0 0 100 50
           mouseInsideClip = noInput { inputMousePosition = Point 50 25 }
-          ctx = emptyUIContext testBounds mouseInsideClip emptyTheme (0 :: Int) noOpTextMeasurer
-      (_, ctx') <- runUI (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ())) ctx
+      (_, ctx') <- runWith mouseInsideClip
+        (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ()))
       ixnHovered (ctxInteraction ctx') `shouldBe` Just ()
 
     it "wraps draw commands in PushClip / PopClip" $ do
@@ -91,11 +112,10 @@ spec = describe "Blink.UI" $ do
           innerClip = Rectangle 0 25 100 50
           -- intersection is y 25–50; mouse at (50, 10) is inside outerClip but outside intersection
           mouseOutside = noInput { inputMousePosition = Point 50 10 }
-          ctx = emptyUIContext testBounds mouseOutside emptyTheme (0 :: Int) noOpTextMeasurer
-      (_, ctx') <- runUI
+      (_, ctx') <- runWith mouseOutside
         (withBounds outerClip $ clipToCurrent $
          withBounds innerClip $ clipToCurrent $
-         withBounds testBounds $ control () (pure ())) ctx
+         withBounds testBounds $ control () (pure ()))
       ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
   describe "withBounds" $ do
@@ -109,23 +129,20 @@ spec = describe "Blink.UI" $ do
       b `shouldBe` testBounds
 
   describe "hover suppression during drag" $ do
-    let mouseOnA = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
+    let base = emptyUIContext testBounds mouseOnCenterDown twoElemTheme (0 :: Int) noOpTextMeasurer
 
     it "does not hover an element when another element holds capture" $ do
-      let base = emptyUIContext testBounds mouseOnA twoElemTheme (0 :: Int) noOpTextMeasurer
-          ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just ElemB } }
+      let ctx = withCapture ElemB base
       (_, ctx') <- runUI (control ElemA (pure ())) ctx
       ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
     it "hovers an element when it is itself the captured element" $ do
-      let base = emptyUIContext testBounds mouseOnA twoElemTheme (0 :: Int) noOpTextMeasurer
-          ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just ElemA } }
+      let ctx = withCapture ElemA base
       (_, ctx') <- runUI (control ElemA (pure ())) ctx
       ixnHovered (ctxInteraction ctx') `shouldBe` Just ElemA
 
     it "hovers an element when no capture is active" $ do
-      let ctx = emptyUIContext testBounds mouseOnA twoElemTheme (0 :: Int) noOpTextMeasurer
-      (_, ctx') <- runUI (control ElemA (pure ())) ctx
+      (_, ctx') <- runUI (control ElemA (pure ())) base
       ixnHovered (ctxInteraction ctx') `shouldBe` Just ElemA
 
   it "getAppState returns the frame's starting state" $ do
@@ -252,9 +269,8 @@ spec = describe "Blink.UI" $ do
       v `shouldBe` 0.5
 
     it "keeps scroll positions separate per element" $ do
-      (v, _) <- runUI
+      (v, _) <- runTwoElem
         (setScrollState ElemA 0.3 >> setScrollState ElemB 0.7 >> getScrollState ElemA)
-        (emptyUIContext testBounds noInput twoElemTheme (0 :: Int) noOpTextMeasurer)
       v `shouldBe` 0.3
 
   describe "clampScrollPos" $ do
@@ -270,109 +286,91 @@ spec = describe "Blink.UI" $ do
       clampScrollPos 1 `shouldBe` 1
 
   describe "nextFrameContext capture" $ do
-    let captured ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnCaptured = Just () } }
-        buttonDown  = noInput { inputLeftButtonDown = True }
-
     it "auto-acquires capture when an element is hovered while the button is down" $ do
       -- Acquisition happens in setHovered during the frame, not via nextFrameContext.
-      (_, ctx) <- runUI (setHovered ()) (emptyUIContext testBounds buttonDown emptyTheme (0 :: Int) noOpTextMeasurer)
+      (_, ctx) <- runWith buttonDown (setHovered ())
       ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
 
     it "carries existing capture forward on subsequent ButtonDown frames" $ do
-      (_, ctx0) <- run (pure ()) (0 :: Int)
-      let ctx = nextFrameContext testBounds buttonDown (captured ctx0)
+      ctx0 <- freshCtx
+      let ctx = nextFrameContext testBounds buttonDown (withCapture () ctx0)
       ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
 
     it "carries capture through the release frame so focus logic can inspect it" $ do
       -- Simulate: previous frame had button held, current frame it is released.
-      (_, ctx0) <- runUI (pure ()) (emptyUIContext testBounds buttonDown emptyTheme (0 :: Int) noOpTextMeasurer)
-      let ctx = nextFrameContext testBounds noInput (captured ctx0)
+      (_, ctx0) <- runWith buttonDown (pure ())
+      let ctx = nextFrameContext testBounds noInput (withCapture () ctx0)
       ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
 
     it "clears capture once the button is fully up" $ do
-      (_, ctx0) <- run (pure ()) (0 :: Int)
-      let ctx = nextFrameContext testBounds noInput (captured ctx0)
+      ctx0 <- freshCtx
+      let ctx = nextFrameContext testBounds noInput (withCapture () ctx0)
       ixnCaptured (ctxInteraction ctx) `shouldBe` Nothing
 
     it "clears the hovered element from the previous frame" $ do
-      let mouseOn = noInput { inputMousePosition = Point 50 50 }
-          ctx0 = emptyUIContext testBounds mouseOn emptyTheme (0 :: Int) noOpTextMeasurer
-      (_, ctx1) <- runUI (control () (pure ())) ctx0
+      (_, ctx1) <- runWith mouseOnCenter (control () (pure ()))
       let ctx2 = nextFrameContext testBounds noInput ctx1
       ixnHovered (ctxInteraction ctx2) `shouldBe` Nothing
 
   describe "button interaction" $ do
     describe "state transitions via nextFrameContext" $ do
       it "ixnButtonDown is True when the button is currently held" $ do
-        let ctx = nextFrameContext testBounds (noInput { inputLeftButtonDown = True })
-                    (emptyUIContext testBounds noInput emptyTheme (0 :: Int) noOpTextMeasurer)
+        ctx0 <- freshCtx
+        let ctx = nextFrameContext testBounds buttonDown ctx0
         ixnButtonDown (ctxInteraction ctx) `shouldBe` True
 
       it "ixnButtonReleased is True on the frame the button goes up" $ do
-        let ctx0 = emptyUIContext testBounds (noInput { inputLeftButtonDown = True })
-                     emptyTheme (0 :: Int) noOpTextMeasurer
-            ctx  = nextFrameContext testBounds noInput ctx0
+        (_, ctx0) <- runWith buttonDown (pure ())
+        let ctx = nextFrameContext testBounds noInput ctx0
         ixnButtonReleased (ctxInteraction ctx) `shouldBe` True
 
       it "ixnButtonReleased is False when the button stays up" $ do
-        (_, ctx0) <- run (pure ()) (0 :: Int)
+        ctx0 <- freshCtx
         let ctx = nextFrameContext testBounds noInput ctx0
         ixnButtonReleased (ctxInteraction ctx) `shouldBe` False
 
       it "ixnButtonReleased is False when the button stays down" $ do
-        let ctx0 = emptyUIContext testBounds (noInput { inputLeftButtonDown = True })
-                     emptyTheme (0 :: Int) noOpTextMeasurer
-            ctx  = nextFrameContext testBounds (noInput { inputLeftButtonDown = True }) ctx0
+        (_, ctx0) <- runWith buttonDown (pure ())
+        let ctx = nextFrameContext testBounds buttonDown ctx0
         ixnButtonReleased (ctxInteraction ctx) `shouldBe` False
 
     it "isButtonDown returns True when the button is held" $ do
-      let ctx = emptyUIContext testBounds (noInput { inputLeftButtonDown = True })
-                  emptyTheme (0 :: Int) noOpTextMeasurer
-      (b, _) <- runUI isButtonDown ctx
+      (b, _) <- runWith buttonDown isButtonDown
       b `shouldBe` True
 
     it "isButtonReleased returns True on the release frame" $ do
-      let ctx0 = emptyUIContext testBounds (noInput { inputLeftButtonDown = True })
-                   emptyTheme (0 :: Int) noOpTextMeasurer
-          ctx  = nextFrameContext testBounds noInput ctx0
+      (_, ctx0) <- runWith buttonDown (pure ())
+      let ctx = nextFrameContext testBounds noInput ctx0
       (b, _) <- runUI isButtonReleased ctx
       b `shouldBe` True
 
     it "isPressed is True when the element is hovered and the button is held" $ do
-      let mouseOn = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
-          ctx = emptyUIContext testBounds mouseOn emptyTheme (0 :: Int) noOpTextMeasurer
-      (b, _) <- runUI (setHovered () >> isPressed ()) ctx
+      (b, _) <- runWith mouseOnCenterDown (setHovered () >> isPressed ())
       b `shouldBe` True
 
     it "isPressed is False when the element is not hovered" $ do
-      let ctx = emptyUIContext testBounds (noInput { inputLeftButtonDown = True })
-                  emptyTheme (0 :: Int) noOpTextMeasurer
-      (b, _) <- runUI (isPressed ()) ctx
+      (b, _) <- runWith buttonDown (isPressed ())
       b `shouldBe` False
 
     it "isClicked is True when hovered and the button was just released" $ do
-      let mouseOn = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
-          ctx0 = emptyUIContext testBounds mouseOn emptyTheme (0 :: Int) noOpTextMeasurer
-      (_, ctx1) <- runUI (setHovered ()) ctx0
-      let ctx2 = nextFrameContext testBounds (noInput { inputMousePosition = Point 50 50 }) ctx1
+      (_, ctx1) <- runWith mouseOnCenterDown (setHovered ())
+      let ctx2 = nextFrameContext testBounds mouseOnCenter ctx1
       (b, _) <- runUI (setHovered () >> isClicked ()) ctx2
       b `shouldBe` True
 
     it "isClicked is False when hovered but the button is still held" $ do
-      let mouseOn = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
-          ctx = emptyUIContext testBounds mouseOn emptyTheme (0 :: Int) noOpTextMeasurer
-      (b, _) <- runUI (setHovered () >> isClicked ()) ctx
+      (b, _) <- runWith mouseOnCenterDown (setHovered () >> isClicked ())
       b `shouldBe` False
 
     it "isDragging is True when the element holds capture" $ do
-      (_, ctx0) <- run (pure ()) (0 :: Int)
-      let ctx = ctx0 { ctxInteraction = (ctxInteraction ctx0) { ixnCaptured = Just () } }
+      ctx0 <- freshCtx
+      let ctx = withCapture () ctx0
       (b, _) <- runUI (isDragging ()) ctx
       b `shouldBe` True
 
     it "isDragging is False when a different element holds capture" $ do
-      (_, ctx0) <- runUI (pure ()) (emptyUIContext testBounds noInput twoElemTheme (0 :: Int) noOpTextMeasurer)
-      let ctx = ctx0 { ctxInteraction = (ctxInteraction ctx0) { ixnCaptured = Just ElemB } }
+      (_, ctx0) <- runTwoElem (pure ())
+      let ctx = withCapture ElemB ctx0
       (b, _) <- runUI (isDragging ElemA) ctx
       b `shouldBe` False
 
@@ -386,9 +384,7 @@ spec = describe "Blink.UI" $ do
       b `shouldBe` True
 
     it "isFocused returns False for an element that does not hold focus" $ do
-      (b, _) <- runUI
-        (setFocus ElemA >> isFocused ElemB)
-        (emptyUIContext testBounds noInput twoElemTheme (0 :: Int) noOpTextMeasurer)
+      (b, _) <- runTwoElem (setFocus ElemA >> isFocused ElemB)
       b `shouldBe` False
 
     it "clearFocus removes the focused element" $ do
@@ -493,38 +489,32 @@ spec = describe "Blink.UI" $ do
       result `shouldBe` True
 
     it "is False when an element holds capture" $ do
-      (_, ctx0) <- run (pure ()) (0 :: Int)
-      let ctx = ctx0 { ctxInteraction = (ctxInteraction ctx0) { ixnCaptured = Just () } }
+      ctx0 <- freshCtx
+      let ctx = withCapture () ctx0
       (result, _) <- runUI isMouseFree ctx
       result `shouldBe` False
 
   describe "regionHit" $ do
     it "is True when the mouse is inside the current bounds" $ do
-      let ctx = emptyUIContext testBounds (noInput { inputMousePosition = Point 50 50 })
-                  emptyTheme (0 :: Int) noOpTextMeasurer
-      (hit, _) <- runUI regionHit ctx
+      (hit, _) <- runWith mouseOnCenter regionHit
       hit `shouldBe` True
 
     it "is False when the mouse is outside the current bounds" $ do
-      let ctx = emptyUIContext testBounds (noInput { inputMousePosition = Point 200 200 })
-                  emptyTheme (0 :: Int) noOpTextMeasurer
-      (hit, _) <- runUI regionHit ctx
+      (hit, _) <- runWith (noInput { inputMousePosition = Point 200 200 }) regionHit
       hit `shouldBe` False
 
   describe "keyboard" $ do
     describe "consumeKey" $ do
       it "removes all events for the given key from the queue" $ do
         let input = noInput { inputKeyEvents = [ KeyEvent KeyTab [], KeyEvent KeyTab [] ] }
-            ctx   = emptyUIContext testBounds input emptyTheme (0 :: Int) noOpTextMeasurer
-        (_, ctx') <- runUI (consumeKey KeyTab) ctx
+        (_, ctx') <- runWith input (consumeKey KeyTab)
         inputKeyEvents (ctxInput ctx') `shouldBe` []
 
       it "leaves events for other keys in the queue" $ do
         let tabEv    = KeyEvent KeyTab []
             returnEv = KeyEvent KeyReturn []
             input    = noInput { inputKeyEvents = [tabEv, returnEv] }
-            ctx      = emptyUIContext testBounds input emptyTheme (0 :: Int) noOpTextMeasurer
-        (_, ctx') <- runUI (consumeKey KeyTab) ctx
+        (_, ctx') <- runWith input (consumeKey KeyTab)
         inputKeyEvents (ctxInput ctx') `shouldBe` [returnEv]
 
     describe "tab stop" $ do
@@ -548,7 +538,8 @@ spec = describe "Blink.UI" $ do
           { themeElementStyles = Map.singleton () distinctStyles
           , themeDefaultStyle  = emptyStyleSet
           }
-        runStyled ui = runUI ui (emptyUIContext testBounds noInput styledTheme (0 :: Int) noOpTextMeasurer)
+        runStyled     ui       = runUI ui (emptyUIContext testBounds noInput       styledTheme (0 :: Int) noOpTextMeasurer)
+        runStyledWith input ui = runUI ui (emptyUIContext testBounds input         styledTheme (0 :: Int) noOpTextMeasurer)
 
     describe "getStyleSet" $ do
       it "returns the element-specific style when registered" $ do
@@ -565,9 +556,7 @@ spec = describe "Blink.UI" $ do
         styleBackground s `shouldBe` RGBA 0 0 0 1
 
       it "returns the hovered style when the element is hovered" $ do
-        let mouseOn = noInput { inputMousePosition = Point 50 50 }
-            ctx = emptyUIContext testBounds mouseOn styledTheme (0 :: Int) noOpTextMeasurer
-        (s, _) <- runUI (setHovered () >> getStyle ()) ctx
+        (s, _) <- runStyledWith mouseOnCenter (setHovered () >> getStyle ())
         styleBackground s `shouldBe` RGBA 1 0 0 1
 
       it "returns the focused style when the element is focused but not hovered" $ do
@@ -575,15 +564,11 @@ spec = describe "Blink.UI" $ do
         styleBackground s `shouldBe` RGBA 0 0 1 1
 
       it "pressed takes priority over hovered" $ do
-        let mouseOn = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
-            ctx = emptyUIContext testBounds mouseOn styledTheme (0 :: Int) noOpTextMeasurer
-        (s, _) <- runUI (setHovered () >> getStyle ()) ctx
+        (s, _) <- runStyledWith mouseOnCenterDown (setHovered () >> getStyle ())
         styleBackground s `shouldBe` RGBA 0 1 0 1
 
       it "disabled takes priority over all other states" $ do
-        let mouseOn = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
-            ctx = emptyUIContext testBounds mouseOn styledTheme (0 :: Int) noOpTextMeasurer
-        (s, _) <- runUI (disableWhen True (setHovered () >> getStyle ())) ctx
+        (s, _) <- runStyledWith mouseOnCenterDown (disableWhen True (setHovered () >> getStyle ()))
         styleBackground s `shouldBe` RGBA 1 1 1 1
 
   describe "animation" $ do
@@ -620,9 +605,7 @@ spec = describe "Blink.UI" $ do
       result `shouldBe` Nothing
 
     it "returns the hovered element after setHovered" $ do
-      let mouseInside = noInput { inputMousePosition = Point 50 50 }
-          ctx = emptyUIContext testBounds mouseInside emptyTheme (0 :: Int) noOpTextMeasurer
-      (result, _) <- runUI (control () (pure ()) >> getHoveredElement) ctx
+      (result, _) <- runWith mouseOnCenter (control () (pure ()) >> getHoveredElement)
       result `shouldBe` Just ()
 
   describe "properties" $ do
