@@ -235,3 +235,25 @@ spec = describe "UI primitives" $ do
       (_, ctx0) <- run (pure ()) (0 :: Int)
       let ctx = nextFrameContext testBounds noInput (captured ctx0)
       ixnCaptured (ctxInteraction ctx) `shouldBe` Nothing
+
+  describe "isMouseFree" $ do
+    it "is True when no element holds capture" $ do
+      (result, _) <- run isMouseFree (0 :: Int)
+      result `shouldBe` True
+
+    it "is False when an element holds capture" $ do
+      (_, ctx0) <- run (pure ()) (0 :: Int)
+      let ctx = ctx0 { ctxInteraction = (ctxInteraction ctx0) { ixnCaptured = Just () } }
+      (result, _) <- runUI isMouseFree ctx
+      result `shouldBe` False
+
+  describe "getHoveredElement" $ do
+    it "returns Nothing when no element is hovered" $ do
+      (result, _) <- run getHoveredElement (0 :: Int)
+      result `shouldBe` Nothing
+
+    it "returns the hovered element after setHovered" $ do
+      let mouseInside = noInput { inputMousePosition = Point 50 50 }
+          ctx = emptyUIContext testBounds mouseInside emptyTheme (0 :: Int) noOpTextMeasurer
+      (result, _) <- runUI (control () (pure ()) >> getHoveredElement) ctx
+      result `shouldBe` Just ()

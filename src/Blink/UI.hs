@@ -171,6 +171,7 @@ module Blink.UI
   , isDragging
   , isMouseFree
   , getCapturedElement
+  , getHoveredElement
     -- * Focus and keyboard navigation
   , getFocus
   , isFocused
@@ -600,6 +601,12 @@ isDragging eid = (== Just eid) <$> gets (ixnCaptured . ctxInteraction)
 -- state directly, e.g. when implementing focus-on-click without using 'control'.
 getCapturedElement :: UI e s (Maybe e)
 getCapturedElement = gets (ixnCaptured . ctxInteraction)
+
+-- | The element currently under the mouse pointer, or 'Nothing' when no
+-- element is hovered. Updated at the end of each frame after all controls
+-- have had a chance to register hover via 'setHovered'.
+getHoveredElement :: UI e s (Maybe e)
+getHoveredElement = gets (ixnHovered . ctxInteraction)
 
 -- | Registers the element as the current hover target. Also acquires mouse
 -- capture for it if the left button is currently down and nothing is captured
