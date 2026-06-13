@@ -173,6 +173,18 @@ radioGroup mkId items selected onChange = do
 
 -- | A clickable button labelled @txt@. Returns 'True' on the frame the button
 -- is activated — by a left-click or by pressing Enter while focused.
+--
+-- Unlike the other input controls, @button@ returns a 'Bool' rather than
+-- accepting a value-callback. This is intentional: button clicks often trigger
+-- UI actions ('setFocus', opening a dialog) that cannot be expressed as a pure
+-- @s -> s@ state modifier, so the caller dispatches the response directly:
+--
+-- @
+-- clicked <- button eid "Save"
+-- when clicked $ do
+--   dispatch (\\s -> s { dirty = False })
+--   setFocus ConfirmDialog
+-- @
 button :: Ord e => e -> Text -> UI e s Bool
 button eid txt = do
   control eid $ do
