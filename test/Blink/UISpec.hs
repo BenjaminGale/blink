@@ -404,11 +404,12 @@ spec = describe "Blink.UI" $ do
       focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just ()
 
     it "nextFrameContext clears focus when the element was not visited this frame" $ do
-      (_, ctx) <- run0 (pure ())
-      let staleCtx = ctx { ctxInteraction = (ctxInteraction ctx)
-                             { ixnFocus = FocusState { focusedElement = Just (), focusedThisFrame = False } } }
-          ctx' = nextFrameContext testBounds noInput staleCtx
-      focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Nothing
+      (_, ctx0) <- run0 (setFocus ())
+      let ctx1 = nextFrameContext testBounds noInput ctx0
+      (_, ctx2) <- runUI (pure ()) ctx1
+      let ctx3 = nextFrameContext testBounds noInput ctx2
+      (f, _) <- runUI getFocus ctx3
+      f `shouldBe` Nothing
 
   describe "drawing" $ do
     it "fillRect emits a FillRect command for the current bounds" $ do
