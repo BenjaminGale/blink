@@ -147,26 +147,33 @@ toTypedText e = case SDL.eventPayload e of
 sdlPoint :: SDL.Point SDL.V2 CInt -> Point
 sdlPoint (SDL.P (SDL.V2 x y)) = Point (fromIntegral x) (fromIntegral y)
 
-submitDrawCommand :: SDL.Renderer -> Font.Font -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
-submitDrawCommand renderer _ _ (FillRect r (RGBA red green blue _)) = do
-  let toWord8 c = round (c * 255) :: Word8
-  SDL.rendererDrawColor renderer $= SDL.V4 (toWord8 red) (toWord8 green) (toWord8 blue) 255
+toWord8 :: Double -> Word8
+toWord8 c = round (c * 255)
+
+toSDLColor :: Colour -> SDL.V4 Word8
+toSDLColor (RGBA r g b _) = SDL.V4 (toWord8 r) (toWord8 g) (toWord8 b) 255
+
+renderFill :: SDL.Renderer -> Rectangle -> Colour -> IO ()
+renderFill renderer r color = do
+  SDL.rendererDrawColor renderer $= toSDLColor color
   SDL.fillRect renderer (Just (toSDLRect r))
-submitDrawCommand renderer _ _ (StrokeRect r (RGBA red green blue _) _) = do
-  let toWord8 c = round (c * 255) :: Word8
-  SDL.rendererDrawColor renderer $= SDL.V4 (toWord8 red) (toWord8 green) (toWord8 blue) 255
+
+renderStroke :: SDL.Renderer -> Rectangle -> Colour -> IO ()
+renderStroke renderer r color = do
+  SDL.rendererDrawColor renderer $= toSDLColor color
   SDL.drawRect renderer (Just (toSDLRect r))
-submitDrawCommand _ _ _ (DrawText _ text _ _) | T.null text = pure ()
-submitDrawCommand renderer font _ (DrawText r text (RGBA red green blue _) align) = do
-  let toWord8 c = round (c * 255) :: Word8
-  surface <- Font.blended font (SDL.V4 (toWord8 red) (toWord8 green) (toWord8 blue) 255) text
+
+renderText :: SDL.Renderer -> Font.Font -> Rectangle -> Text -> Colour -> TextAlign -> IO ()
+renderText renderer font r text color align = do
+  surface <- Font.blended font (toSDLColor color) text
   texture <- SDL.createTextureFromSurface renderer surface
   SDL.freeSurface surface
   (SDL.TextureInfo _ _ tw th) <- SDL.queryTexture texture
-  let dstRect = alignedTextRect r align (fromIntegral tw) (fromIntegral th)
-  SDL.copy renderer texture Nothing (Just dstRect)
+  SDL.copy renderer texture Nothing (Just (alignedTextRect r align (fromIntegral tw) (fromIntegral th)))
   SDL.destroyTexture texture
-submitDrawCommand renderer _ clipRef (PushClip r) = do
+
+pushClip :: SDL.Renderer -> IORef [SDL.Rectangle CInt] -> Rectangle -> IO ()
+pushClip renderer clipRef r = do
   stack <- readIORef clipRef
   let new     = toSDLRect r
       clipped = case stack of
@@ -174,13 +181,23 @@ submitDrawCommand renderer _ clipRef (PushClip r) = do
         (top : _) -> intersectSDLRect top new
   writeIORef clipRef (clipped : stack)
   SDL.rendererClipRect renderer $= Just clipped
-submitDrawCommand renderer _ clipRef PopClip = do
+
+popClip :: SDL.Renderer -> IORef [SDL.Rectangle CInt] -> IO ()
+popClip renderer clipRef = do
   stack <- readIORef clipRef
-  let rest = drop 1 stack
+  let rest = tail stack
   writeIORef clipRef rest
   case rest of
     []        -> SDL.rendererClipRect renderer $= Nothing
     (top : _) -> SDL.rendererClipRect renderer $= Just top
+
+submitDrawCommand :: SDL.Renderer -> Font.Font -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
+submitDrawCommand renderer _ _       (FillRect r color)              = renderFill   renderer r color
+submitDrawCommand renderer _ _       (StrokeRect r color _)          = renderStroke renderer r color
+submitDrawCommand _ _ _              (DrawText _ text _ _) | T.null text = pure ()
+submitDrawCommand renderer font _    (DrawText r text color align)   = renderText   renderer font r text color align
+submitDrawCommand renderer _ clipRef (PushClip r)                    = pushClip     renderer clipRef r
+submitDrawCommand renderer _ clipRef  PopClip                        = popClip      renderer clipRef
 
 intersectSDLRect :: SDL.Rectangle CInt -> SDL.Rectangle CInt -> SDL.Rectangle CInt
 intersectSDLRect (SDL.Rectangle (SDL.P (SDL.V2 x1 y1)) (SDL.V2 w1 h1))
