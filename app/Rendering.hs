@@ -7,7 +7,6 @@ module Rendering
   ) where
 
 import Blink
-import Blink.Rendering (TextMeasurer (..))
 import SDL (($=))
 import qualified SDL
 import qualified SDL.Font as Font

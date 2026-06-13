@@ -130,12 +130,21 @@ module Blink.UI
   , ScrollState (..)
   , getScrollState
   , setScrollState
+  , clampScrollPos
     -- * Selections
   , Selection (..)
   , getSelections
   , setSelections
   , getSelection
   , setSelection
+  , selectionLow
+  , selectionHigh
+  , selectionHasExtent
+  , cursor
+  , collapseToLow
+  , collapseToHigh
+  , collapseToActive
+  , extendActive
     -- * Bounds
   , getBounds
   , withBounds
@@ -220,8 +229,8 @@ newtype ScrollState = ScrollState { scrollPosition :: Double }
 -- range is @(min anchor active, max anchor active)@. When @anchor == active@
 -- the selection is a cursor with no extent.
 data Selection = Selection
-  { selAnchor :: Int  -- ^ The fixed end.
-  , selActive :: Int  -- ^ The moving end (cursor position).
+  { selectionAnchor :: Int  -- ^ The fixed end.
+  , selectionActive :: Int  -- ^ The moving end (cursor position).
   }
   deriving (Eq, Show)
 
@@ -380,6 +389,42 @@ getSelection eid = listToMaybe <$> getSelections eid
 -- | Sets a single selection, replacing any existing selections for the element.
 setSelection :: Ord e => e -> Selection -> UI e s ()
 setSelection eid s = setSelections eid [s]
+
+-- | The lower bound of the selected range: @min selectionAnchor selectionActive@.
+selectionLow :: Selection -> Int
+selectionLow s = min (selectionAnchor s) (selectionActive s)
+
+-- | The upper bound of the selected range: @max selectionAnchor selectionActive@.
+selectionHigh :: Selection -> Int
+selectionHigh s = max (selectionAnchor s) (selectionActive s)
+
+-- | 'True' when the selection has non-zero extent (anchor ≠ active).
+selectionHasExtent :: Selection -> Bool
+selectionHasExtent s = selectionAnchor s /= selectionActive s
+
+-- | A cursor with no selection extent. Equivalent to @'Selection' n n@.
+cursor :: Int -> Selection
+cursor n = Selection n n
+
+-- | Collapse the selection to a cursor at the lower bound.
+collapseToLow :: Selection -> Selection
+collapseToLow = cursor . selectionLow
+
+-- | Collapse the selection to a cursor at the upper bound.
+collapseToHigh :: Selection -> Selection
+collapseToHigh = cursor . selectionHigh
+
+-- | Collapse the selection to a cursor at the active (moving) end.
+collapseToActive :: Selection -> Selection
+collapseToActive = cursor . selectionActive
+
+-- | Apply a function to the active end, keeping the anchor fixed.
+extendActive :: (Int -> Int) -> Selection -> Selection
+extendActive f s = s { selectionActive = f (selectionActive s) }
+
+-- | Clamp a scroll position to @[0, 1]@.
+clampScrollPos :: Double -> Double
+clampScrollPos = max 0 . min 1
 
 -- | The current layout rectangle. Set by the layout system via 'withBounds'.
 getBounds :: UI e s Rectangle

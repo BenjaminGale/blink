@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), button, checkbox, control, mouseToTrackPos, progressBar, radioGroup, readScrollPos, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect, writeScrollPos)
+import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), button, checkbox, control, mouseToTrackPos, progressBar, radioGroup, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, uniform)
 import Blink.Input (ButtonState (..), Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -384,17 +384,6 @@ runScrollableRegion mousePos =
       ctx = emptyUIContext srOuterRect input srTheme () noOpTextMeasurer
   in fmap snd $ runUI (scrollableRegion SRPart (Size 400 100) (control SRChild (pure ()))) ctx
 
--- readScrollPos: dispatches the stored position as the app state so applyDispatches returns it.
-runReadScrollPos :: Double -> IO (UIContext ScrollBarPart Double)
-runReadScrollPos initPos =
-  fmap snd $ runUI (readScrollPos ScrollTrack >>= \p -> dispatch (\_ -> p))
-    ((emptyUIContext scrollRect noInput scrollTheme 0 noOpTextMeasurer)
-      { ctxScrollStates = Map.singleton ScrollTrack (ScrollState initPos) })
-
--- writeScrollPos: writes to ctxScrollStates; scrollPos inspects it directly.
-runWriteScrollPos :: Double -> IO (UIContext ScrollBarPart ())
-runWriteScrollPos v =
-  fmap snd $ runUI (writeScrollPos ScrollTrack v) (emptyUIContext scrollRect noInput scrollTheme () noOpTextMeasurer)
 
 spec :: Spec
 spec = describe "Controls" $ do
@@ -907,24 +896,3 @@ spec = describe "Controls" $ do
     it "is 16" $
       scrollRegionBarSize `shouldBe` 16
 
-  describe "readScrollPos" $ do
-    it "returns 0 when no position has been recorded" $ do
-      ctx' <- runReadScrollPos 0
-      applyDispatches ctx' `shouldBe` 0
-
-    it "returns the stored scroll position" $ do
-      ctx' <- runReadScrollPos 0.75
-      applyDispatches ctx' `shouldBe` 0.75
-
-  describe "writeScrollPos" $ do
-    it "stores the given position" $ do
-      ctx' <- runWriteScrollPos 0.5
-      scrollPos ctx' `shouldBe` 0.5
-
-    it "clamps values below 0 to 0" $ do
-      ctx' <- runWriteScrollPos (-0.5)
-      scrollPos ctx' `shouldBe` 0
-
-    it "clamps values above 1 to 1" $ do
-      ctx' <- runWriteScrollPos 1.5
-      scrollPos ctx' `shouldBe` 1

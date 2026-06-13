@@ -136,6 +136,81 @@ spec = describe "UI primitives" $ do
     let ctx' = nextFrameContext testBounds noInput ctx
     (applyDispatches ctx', length (getAsyncJobs ctx')) `shouldBe` (0, 0)
 
+  describe "Selection helpers" $ do
+    let sel a v = Selection a v
+
+    describe "selectionLow" $ do
+      it "returns the anchor when anchor < active" $
+        selectionLow (sel 1 3) `shouldBe` 1
+      it "returns the active when active < anchor" $
+        selectionLow (sel 3 1) `shouldBe` 1
+      it "returns the position when anchor == active" $
+        selectionLow (sel 2 2) `shouldBe` 2
+
+    describe "selectionHigh" $ do
+      it "returns the active when active > anchor" $
+        selectionHigh (sel 1 3) `shouldBe` 3
+      it "returns the anchor when anchor > active" $
+        selectionHigh (sel 3 1) `shouldBe` 3
+      it "returns the position when anchor == active" $
+        selectionHigh (sel 2 2) `shouldBe` 2
+
+    describe "selectionHasExtent" $ do
+      it "is True when anchor /= active" $
+        selectionHasExtent (sel 1 3) `shouldBe` True
+      it "is False when anchor == active" $
+        selectionHasExtent (sel 2 2) `shouldBe` False
+
+    describe "cursor" $ do
+      it "creates a selection with equal anchor and active" $
+        cursor 5 `shouldBe` Selection 5 5
+      it "has no extent" $
+        selectionHasExtent (cursor 3) `shouldBe` False
+
+    describe "collapseToLow" $ do
+      it "collapses to the lower bound" $
+        collapseToLow (sel 1 4) `shouldBe` cursor 1
+      it "collapses to the lower bound when active < anchor" $
+        collapseToLow (sel 4 1) `shouldBe` cursor 1
+      it "is a no-op on a cursor" $
+        collapseToLow (sel 3 3) `shouldBe` cursor 3
+
+    describe "collapseToHigh" $ do
+      it "collapses to the upper bound" $
+        collapseToHigh (sel 1 4) `shouldBe` cursor 4
+      it "collapses to the upper bound when anchor > active" $
+        collapseToHigh (sel 4 1) `shouldBe` cursor 4
+      it "is a no-op on a cursor" $
+        collapseToHigh (sel 3 3) `shouldBe` cursor 3
+
+    describe "collapseToActive" $ do
+      it "collapses to the active end" $
+        collapseToActive (sel 1 4) `shouldBe` cursor 4
+      it "collapses to the active end when active < anchor" $
+        collapseToActive (sel 4 1) `shouldBe` cursor 1
+      it "is a no-op on a cursor" $
+        collapseToActive (sel 3 3) `shouldBe` cursor 3
+
+    describe "extendActive" $ do
+      it "applies the function to the active end" $
+        extendActive (+1) (sel 2 3) `shouldBe` sel 2 4
+      it "leaves the anchor unchanged" $
+        selectionAnchor (extendActive (+1) (sel 2 3)) `shouldBe` 2
+      it "can collapse a selection by moving active to anchor" $
+        extendActive (const 2) (sel 2 5) `shouldBe` cursor 2
+
+  describe "clampScrollPos" $ do
+    it "clamps values below 0 to 0" $
+      clampScrollPos (-0.5) `shouldBe` 0
+    it "clamps values above 1 to 1" $
+      clampScrollPos 1.5 `shouldBe` 1
+    it "preserves values inside [0, 1]" $
+      clampScrollPos 0.5 `shouldBe` 0.5
+    it "preserves 0" $
+      clampScrollPos 0 `shouldBe` 0
+    it "preserves 1" $
+      clampScrollPos 1 `shouldBe` 1
+
   describe "nextFrameContext capture" $ do
     let captured ctx = ctx { ctxCapturedElement = Just () }
         buttonDown  = noInput { inputLeftButton = ButtonDown }

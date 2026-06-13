@@ -42,8 +42,6 @@ module Blink.Controls
     -- * Scroll
   , ScrollBarPart (..)
   , scrollBar
-  , readScrollPos
-  , writeScrollPos
   , thumbRect
   , mouseToTrackPos
     -- * Scrollable regions
@@ -210,8 +208,8 @@ textInput eid value onChange = do
 
     let w           = rectWidth bounds
         defPos      = T.length value
-        anchor0     = maybe defPos selAnchor sel
-        active0     = maybe defPos selActive sel
+        anchor0     = maybe defPos selectionAnchor sel
+        active0     = maybe defPos selectionActive sel
         -- Focus was gained by a click this frame (e.g. clicking from another
         -- element). Treat as a fresh click rather than a drag continuation so
         -- the old anchor is not inherited.
@@ -393,20 +391,6 @@ scrollBar mkId ori thumbRatio = do
       when dragging $ do
         mousePos <- getMousePos
         writePos (mouseToTrackPos ori ratio' contentRect mousePos)
-
--- | Read the current scroll position for the scrollbar keyed by @trackId@,
--- returning @0@ if no position has been recorded yet. Use this to
--- programmatically observe scroll state — for example, to show a "Back to
--- top" button only when the user has scrolled down.
-readScrollPos :: Ord e => e -> UI e s Double
-readScrollPos = getScrollState
-
--- | Overwrite the scroll position for the scrollbar keyed by @trackId@. The
--- value is clamped to @[0, 1]@. Use this to drive scroll position from
--- application logic — for example, a "Scroll to top" button or resetting
--- position when the content changes.
-writeScrollPos :: Ord e => e -> Double -> UI e s ()
-writeScrollPos trackId v = setScrollState trackId (max 0 (min 1 v))
 
 -- | Computes the bounding rectangle of a thumb within a track. @pos@ is the
 -- position along the track and @ratio@ is the fraction of the track the thumb
