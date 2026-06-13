@@ -44,8 +44,8 @@ module Blink.Controls
   , scrollBar
   , readScrollPos
   , writeScrollPos
-  , scrollThumbRect
-  , scrollPosFromMouse
+  , thumbRect
+  , mouseToTrackPos
     -- * Scrollable regions
   , ScrollRegionPart (..)
   , scrollableRegion
@@ -54,7 +54,6 @@ module Blink.Controls
     -- * Slider
   , SliderPart (..)
   , slider
-  , sliderThumbRect
     -- * Building controls
   , control
   , renderControl
@@ -375,13 +374,13 @@ scrollBar mkId ori thumbRatio = do
       let normalStyle = styleSetNormal styleSet
           bgRect      = insetRect (styleMargin normalStyle) slotBounds
           contentRect = insetRect (stylePadding normalStyle) bgRect
-          thumbR      = scrollThumbRect ori pos' ratio' contentRect
+          thumbR      = thumbRect ori pos' ratio' contentRect
       control trackId $
         withBounds thumbR $ renderControl (mkId ScrollThumb) $ pure ()
       dragging <- isDragging trackId
       when dragging $ do
         mousePos <- getMousePos
-        writePos (scrollPosFromMouse ori ratio' contentRect mousePos)
+        writePos (mouseToTrackPos ori ratio' contentRect mousePos)
 
 -- | Read the current scroll position for the scrollbar keyed by @trackId@,
 -- returning @0@ if no position has been recorded yet. Use this to
@@ -397,30 +396,29 @@ readScrollPos = getScrollState
 writeScrollPos :: Ord e => e -> Double -> UI e s ()
 writeScrollPos trackId v = setScrollState trackId (max 0 (min 1 v))
 
--- | Computes the bounding rectangle of a scrollbar thumb within a track.
--- Exported for callers that build custom scroll surfaces or need to hit-test
--- the thumb independently of the standard 'scrollBar' widget. @pos@ and
--- @ratio@ are both in @[0, 1]@; the result is a sub-rectangle of @r@.
-scrollThumbRect :: Orientation -> Double -> Double -> Rectangle -> Rectangle
-scrollThumbRect Vertical pos ratio r =
+-- | Computes the bounding rectangle of a thumb within a track. @pos@ is the
+-- position along the track and @ratio@ is the fraction of the track the thumb
+-- fills (visible \/ total); both are in @[0, 1]@. The result is a
+-- sub-rectangle of @r@.
+thumbRect :: Orientation -> Double -> Double -> Rectangle -> Rectangle
+thumbRect Vertical pos ratio r =
   let h = rectHeight r * ratio
   in r { rectY = rectY r + (rectHeight r - h) * pos, rectHeight = h }
-scrollThumbRect Horizontal pos ratio r =
+thumbRect Horizontal pos ratio r =
   let w = rectWidth r * ratio
   in r { rectX = rectX r + (rectWidth r - w) * pos, rectWidth = w }
 
--- | Converts a mouse position to a scroll position in @[0, 1]@, centring the
--- thumb on the cursor. This is the inverse of 'scrollThumbRect' and is
--- exported for the same reason: callers building custom drag handlers can
--- reuse it rather than duplicating the clamping arithmetic. Returns @0@ when
--- the thumb fills the track (@ratio = 1@) and there is no range to scroll.
-scrollPosFromMouse :: Orientation -> Double -> Rectangle -> Point -> Double
-scrollPosFromMouse Vertical ratio r mouse =
+-- | Converts a mouse position to a track position in @[0, 1]@, centring the
+-- thumb on the cursor. This is the inverse of 'thumbRect': exported for
+-- callers building custom drag handlers. Returns @0@ when the thumb fills
+-- the track (@ratio = 1@) and there is no range to move.
+mouseToTrackPos :: Orientation -> Double -> Rectangle -> Point -> Double
+mouseToTrackPos Vertical ratio r mouse =
   let thumbH = rectHeight r * ratio
       range  = rectHeight r - thumbH
   in if range <= 0 then 0
      else max 0 (min 1 ((pointY mouse - rectY r - thumbH / 2) / range))
-scrollPosFromMouse Horizontal ratio r mouse =
+mouseToTrackPos Horizontal ratio r mouse =
   let thumbW = rectWidth r * ratio
       range  = rectWidth r - thumbW
   in if range <= 0 then 0
@@ -562,13 +560,13 @@ slider mkId ori value onChange = do
         Horizontal -> (rectHeight contentRect, rectWidth contentRect)
         Vertical   -> (rectWidth contentRect,  rectHeight contentRect)
       thumbRatio  = if mainSz > 0 then crossSz / mainSz else 0
-      thumbR      = sliderThumbRect ori clamped contentRect
+      thumbR      = thumbRect ori clamped thumbRatio contentRect
   control trackId $
     withBounds thumbR $ renderControl (mkId SliderThumb) $ pure ()
   dragging <- isDragging trackId
   when dragging $ do
     mousePos <- getMousePos
-    dispatch (onChange (scrollPosFromMouse ori thumbRatio contentRect mousePos))
+    dispatch (onChange (mouseToTrackPos ori thumbRatio contentRect mousePos))
   let step = 0.05
       (decrKey, incrKey) = case ori of
         Horizontal -> (KeyLeft,  KeyRight)
@@ -578,19 +576,6 @@ slider mkId ori value onChange = do
   when decrPressed $ dispatch (onChange (max 0 (clamped - step)))
   when incrPressed $ dispatch (onChange (min 1 (clamped + step)))
 
--- | Computes the bounding rectangle of a slider thumb within a track. The
--- thumb is square: its side equals the cross-axis of @r@. Exported alongside
--- 'scrollThumbRect' for callers building custom slider rendering or hit-testing
--- outside the standard 'slider' widget. @pos@ is in @[0, 1]@.
-sliderThumbRect :: Orientation -> Double -> Rectangle -> Rectangle
-sliderThumbRect Horizontal pos r =
-  let sz    = rectHeight r
-      range = max 0 (rectWidth r - sz)
-  in r { rectX = rectX r + range * pos, rectWidth = sz }
-sliderThumbRect Vertical pos r =
-  let sz    = rectWidth r
-      range = max 0 (rectHeight r - sz)
-  in r { rectY = rectY r + range * pos, rectHeight = sz }
 
 -- | Style-aware rendering for a control. Applies the element's margin, draws
 -- its background and border, and runs @content@ within the padded content
