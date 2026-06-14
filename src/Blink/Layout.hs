@@ -70,6 +70,10 @@ module Blink.Layout
   , BoxConfig (..)
   , defaultBoxConfig
   , boxTotalSpacing
+    -- * Border layout
+  , borderLayout
+  , BorderContent (..)
+  , emptyBorderContent
     -- * Utilities
   , preferredSize
   ) where
@@ -79,7 +83,7 @@ import Data.Ord  (comparing)
 
 import Blink.Geometry (Alignment (..), Rectangle (..), alignRect, insetRect, uniform)
 import Blink.UI (UI, clipToCurrent, getBounds, withBounds)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (catMaybes, fromMaybe)
 
 -- | Describes how a child should be sized along a single axis.
 data Length
@@ -292,3 +296,44 @@ distributeSurplusSpace surplus constraints =
     cap (AtMost w)    = w
     cap (Between l h) = h - l
     cap _             = 1 / 0
+
+-- | Specifies which panels to show in a 'borderLayout'.
+data BorderContent e s = BorderContent
+  { topPanel    :: Maybe (Double, UI e s ())
+  , bottomPanel :: Maybe (Double, UI e s ())
+  , leftPanel   :: Maybe (Double, UI e s ())
+  , rightPanel  :: Maybe (Double, UI e s ())
+  , centrePanel :: Maybe (UI e s ())
+  }
+
+-- | All panels absent; use record update to populate only the ones you need.
+emptyBorderContent :: BorderContent e s
+emptyBorderContent = BorderContent
+  { topPanel    = Nothing
+  , bottomPanel = Nothing
+  , leftPanel   = Nothing
+  , rightPanel  = Nothing
+  , centrePanel = Nothing
+  }
+
+-- | Divides the available space into up to five named regions.
+--
+-- Implemented as a 'vBox' of three rows where the middle row is an 'hBox'
+-- containing the left, centre, and right panels. No spacing or margin is
+-- applied; panels are clipped to their allocated region.
+borderLayout :: BorderContent e s -> UI e s ()
+borderLayout bc =
+  vBox defaultBoxConfig (catMaybes [topRow, middleRow, bottomRow])
+  where
+    topRow    = (\(h, ui) -> (Layout Fill (Exactly h) TopLeft, ui)) <$> topPanel bc
+    bottomRow = (\(h, ui) -> (Layout Fill (Exactly h) TopLeft, ui)) <$> bottomPanel bc
+
+    middleCells = catMaybes
+      [ (\(w, ui) -> (Layout (Exactly w) Fill TopLeft, ui)) <$> leftPanel bc
+      , (\ui      -> (Layout Fill        Fill TopLeft, ui)) <$> centrePanel bc
+      , (\(w, ui) -> (Layout (Exactly w) Fill TopLeft, ui)) <$> rightPanel bc
+      ]
+
+    middleRow
+      | null middleCells = Nothing
+      | otherwise        = Just (Layout Fill Fill TopLeft, hBox defaultBoxConfig middleCells)
