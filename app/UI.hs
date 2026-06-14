@@ -44,11 +44,22 @@ data ProgressState = ProgressState
 initialProgressState :: ProgressState
 initialProgressState = ProgressState False
 
+data LayoutPageState = LayoutPageState
+  { hboxFillCross :: Bool
+  , vboxFillCross :: Bool
+  }
+
+initialLayoutState :: LayoutPageState
+initialLayoutState = LayoutPageState
+  { hboxFillCross = True
+  , vboxFillCross = True
+  }
+
 data Page
   = BasicControlsPage BasicControlsState
   | ScrollPage ScrollPageState
   | ProgressPage ProgressState
-  | LayoutPage
+  | LayoutPage LayoutPageState
 
 -- Shared state
 
@@ -97,7 +108,7 @@ pageForIndex :: Int -> Page
 pageForIndex 0 = BasicControlsPage initialBasicControls
 pageForIndex 1 = ScrollPage initialScrollState
 pageForIndex 2 = ProgressPage initialProgressState
-pageForIndex _ = LayoutPage
+pageForIndex _ = LayoutPage initialLayoutState
 
 footer :: AppState -> (Int, Int) -> DemoUI ()
 footer s (winW, winH) = do
@@ -127,7 +138,7 @@ centrePane s = case currentPage s of
   BasicControlsPage ps -> basicControlsView ps
   ScrollPage ps        -> scrollView ps
   ProgressPage ps      -> progressView ps
-  LayoutPage           -> layoutView
+  LayoutPage ps        -> layoutView ps
 
 -- Basic Controls page
 
@@ -300,12 +311,70 @@ updateProgressState s f = case currentPage s of
   ProgressPage p -> s { currentPage = ProgressPage (f p) }
   _              -> s
 
--- Layout page (placeholder)
+-- Layout page
 
-layoutView :: DemoUI ()
-layoutView =
-  vBox (defaultBoxConfig { boxMargin = 8 })
-    [ (Layout Fill Fill TopLeft, label Label "Layout page — coming soon") ]
+layoutView :: LayoutPageState -> DemoUI ()
+layoutView ps =
+  vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
+    [ (Layout Fill (Exactly 34)  TopLeft, sectionHeader "Border Layout" (pure ()))
+    , (Layout Fill (Exactly 200) TopLeft, borderLayoutDemo)
+    , (Layout Fill (Exactly 34)  TopLeft, sectionHeader "hBox" $
+         checkbox CheckboxBox4 "Fill cross axis" (hboxFillCross ps)
+           (\v s -> updateLayoutState s (\p -> p { hboxFillCross = v })))
+    , (Layout Fill (Exactly 100) TopLeft, hboxDemo (hboxFillCross ps))
+    , (Layout Fill (Exactly 34)  TopLeft, sectionHeader "vBox" $
+         checkbox CheckboxBox5 "Fill cross axis" (vboxFillCross ps)
+           (\v s -> updateLayoutState s (\p -> p { vboxFillCross = v })))
+    , (Layout Fill Fill          TopLeft, vboxDemo (vboxFillCross ps))
+    ]
+
+sectionHeader :: Text -> DemoUI () -> DemoUI ()
+sectionHeader title extra =
+  hBox defaultBoxConfig
+    [ (Layout Fill          Fill TopLeft, label Label title)
+    , (Layout (Exactly 180) Fill TopLeft, extra)
+    ]
+
+colorPane :: Colour -> Text -> DemoUI ()
+colorPane col lbl = do
+  fillRect col
+  label Label lbl
+
+borderLayoutDemo :: DemoUI ()
+borderLayoutDemo =
+  borderLayout emptyBorderContent
+    { topPanel    = Just (40,  colorPane (RGBA 0.95 0.72 0.25 1) "top")
+    , bottomPanel = Just (30,  colorPane (RGBA 0.60 0.40 0.85 1) "bottom")
+    , leftPanel   = Just (80,  colorPane (RGBA 0.18 0.56 0.90 1) "left")
+    , rightPanel  = Just (80,  colorPane (RGBA 0.25 0.70 0.48 1) "right")
+    , centrePanel = Just      (colorPane (RGBA 0.96 0.92 0.78 1) "centre")
+    }
+
+-- Four children with different width constraints; vertical alignment is visible
+-- when boxFillCross is off (children are Exactly 48px tall in an Exactly 100px box).
+hboxDemo :: Bool -> DemoUI ()
+hboxDemo fillCross =
+  hBox (defaultBoxConfig { boxFillCross = fillCross })
+    [ (Layout (Exactly 80)     (Exactly 48) TopLeft,    colorPane (RGBA 0.95 0.72 0.25 1) "Exactly 80")
+    , (Layout Fill             (Exactly 48) MiddleLeft, colorPane (RGBA 0.18 0.56 0.90 1) "Fill")
+    , (Layout (AtLeast 60)     (Exactly 48) BottomLeft, colorPane (RGBA 0.25 0.70 0.48 1) "\x2265 60")
+    , (Layout (Between 40 120) (Exactly 48) MiddleLeft, colorPane (RGBA 0.60 0.40 0.85 1) "40\x2013\&120")
+    ]
+
+-- Three children with different width constraints; horizontal alignment is visible
+-- when boxFillCross is off (children are narrower than the full panel width).
+vboxDemo :: Bool -> DemoUI ()
+vboxDemo fillCross =
+  vBox (defaultBoxConfig { boxFillCross = fillCross })
+    [ (Layout (Exactly 180) (Exactly 48) TopLeft,    colorPane (RGBA 0.95 0.72 0.25 1) "Exactly 180 / TopLeft")
+    , (Layout (Exactly 120) Fill         Center,      colorPane (RGBA 0.18 0.56 0.90 1) "Exactly 120 / Center")
+    , (Layout (AtLeast 80)  (Exactly 48) TopRight,   colorPane (RGBA 0.25 0.70 0.48 1) "\x2265 80 / TopRight")
+    ]
+
+updateLayoutState :: AppState -> (LayoutPageState -> LayoutPageState) -> AppState
+updateLayoutState s f = case currentPage s of
+  LayoutPage p -> s { currentPage = LayoutPage (f p) }
+  _            -> s
 
 -- Top-level view
 

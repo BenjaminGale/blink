@@ -11,7 +11,7 @@ data Element = Label
              | Btn Int
              | NavBtn Int
              | TextInput1
-             | CheckboxBox1 | CheckboxBox2 | CheckboxBox3
+             | CheckboxBox1 | CheckboxBox2 | CheckboxBox3 | CheckboxBox4 | CheckboxBox5
              | ProgressBar1 | ProgressBar2
              | Slider1 SliderPart
              | RadioOpt Int
@@ -246,6 +246,8 @@ mkTheme p = Theme
       , (CheckboxBox1,              mkCheckboxBoxStyle p)
       , (CheckboxBox2,              mkCheckboxBoxStyle p)
       , (CheckboxBox3,              mkCheckboxBoxStyle p)
+      , (CheckboxBox4,              mkCheckboxBoxStyle p)
+      , (CheckboxBox5,              mkCheckboxBoxStyle p)
       , (Slider1 SliderTrack,       mkScrollTrackStyle p)
       , (Slider1 SliderThumb,       mkScrollThumbStyle p)
       ] ++ [(RadioOpt i,                        mkRadioItemStyle p) | i <- [0..9]]
