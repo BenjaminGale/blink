@@ -8,83 +8,193 @@ import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 
-data AppState = AppState
-  { clickCount :: Int
-  , inputText  :: Text
-  , isChecked1 :: Bool
-  , isChecked2 :: Bool
-  , animating  :: Bool
-  , sliderValue       :: Double
-  , radioSelection    :: Int
-  , radioSelection2   :: Int
-  , lastInput         :: Text
-  , lastInputCount    :: Int
-  , isHovering        :: Bool
-  , lastClickedStatic  :: Maybe Int
+-- Per-page state
+
+data BasicControlsState = BasicControlsState
+  { clickCount      :: Int
+  , inputText       :: Text
+  , editingEnabled  :: Bool
+  , sliderValue     :: Double
+  , radioSelection  :: Int
+  , radioSelection2 :: Int
+  }
+
+initialBasicControls :: BasicControlsState
+initialBasicControls = BasicControlsState
+  { clickCount      = 0
+  , inputText       = ""
+  , editingEnabled  = False
+  , sliderValue     = 0.5
+  , radioSelection  = 0
+  , radioSelection2 = 0
+  }
+
+data ScrollPageState = ScrollPageState
+  { lastClickedStatic  :: Maybe Int
   , lastClickedDynamic :: Maybe Int
+  }
+
+initialScrollState :: ScrollPageState
+initialScrollState = ScrollPageState Nothing Nothing
+
+data ProgressState = ProgressState
+  { animating :: Bool
+  }
+
+initialProgressState :: ProgressState
+initialProgressState = ProgressState False
+
+data Page
+  = BasicControlsPage BasicControlsState
+  | ScrollPage ScrollPageState
+  | ProgressPage ProgressState
+  | LayoutPage
+
+-- Shared state
+
+data AppState = AppState
+  { currentPage    :: Page
+  , darkMode       :: Bool
+  , isHovering     :: Bool
+  , lastInput      :: Text
+  , lastInputCount :: Int
   }
 
 demoApp :: App Element AppState
 demoApp = App
-  { startUp = pure (AppState 0 "" False False False 0.5 0 0 "" 0 False Nothing Nothing)
-  , theme   = \s -> if isChecked2 s then darkTheme else lightTheme
+  { startUp = pure AppState
+      { currentPage    = BasicControlsPage initialBasicControls
+      , darkMode       = False
+      , isHovering     = False
+      , lastInput      = ""
+      , lastInputCount = 0
+      }
+  , theme   = \s -> if darkMode s then darkTheme else lightTheme
   , view    = demoView
   }
 
 type DemoUI = UI Element AppState
 
-btn :: Int -> Text -> DemoUI ()
-btn i txt = do
-  clicked <- button (Btn i) txt
-  when clicked $ dispatch (\s -> s { clickCount = min 50 (clickCount s + i) })
+-- Shell
 
-resetBtn :: DemoUI ()
-resetBtn = do
-  clicked <- button (Btn 0) "Reset"
-  when clicked $ dispatch (\s -> s { clickCount = 0 })
+sidebar :: AppState -> DemoUI ()
+sidebar s =
+  vBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 8 })
+    [ (Layout Fill (Exactly 32) TopLeft, navBtn 0 "Basic Controls")
+    , (Layout Fill (Exactly 32) TopLeft, navBtn 1 "Scroll")
+    , (Layout Fill (Exactly 32) TopLeft, navBtn 2 "Progress")
+    , (Layout Fill (Exactly 32) TopLeft, navBtn 3 "Layout")
+    , (Layout Fill Fill         TopLeft, pure ())
+    , (Layout Fill (Exactly 30) TopLeft,
+         checkbox CheckboxBox2 "Dark mode" (darkMode s) (\v st -> st { darkMode = v }))
+    ]
+  where
+    navBtn i lbl = do
+      clicked <- button (NavBtn i) lbl
+      when clicked $ dispatch $ \st -> st { currentPage = pageForIndex i }
 
-rowButtons :: AppState -> DemoUI ()
-rowButtons s =
+pageForIndex :: Int -> Page
+pageForIndex 0 = BasicControlsPage initialBasicControls
+pageForIndex 1 = ScrollPage initialScrollState
+pageForIndex 2 = ProgressPage initialProgressState
+pageForIndex _ = LayoutPage
+
+footer :: AppState -> (Int, Int) -> DemoUI ()
+footer s (winW, winH) = do
+  pos   <- getMousePos
+  input <- getInput
+  let winText    = "Window: " <> T.pack (show winW) <> " x " <> T.pack (show winH)
+      mx         = T.pack (show (round (pointX pos) :: Int))
+      my         = T.pack (show (round (pointY pos) :: Int))
+      mouseText  = "Mouse: " <> mx <> ", " <> my
+      buttonText = "Button: " <> T.pack (show (inputLeftButtonDown input))
+      hoverText  = "Hover: " <> if isHovering s then "Yes" else "No"
+      countSuffix = if lastInputCount s > 1
+                      then " (" <> T.pack (show (lastInputCount s)) <> ")"
+                      else ""
+      keyText    = "Last Key Press: "
+                <> if T.null (lastInput s) then "none" else lastInput s <> countSuffix
+  hBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 4, boxAlignment = Center })
+    [ (Layout (Exactly 160) Fill MiddleLeft, label Label winText)
+    , (Layout (Exactly 130) Fill MiddleLeft, label Label mouseText)
+    , (Layout (Exactly 140) Fill MiddleLeft, label Label buttonText)
+    , (Layout (Exactly 80)  Fill MiddleLeft, label Label hoverText)
+    , (Layout Fill          Fill MiddleLeft, label Label keyText)
+    ]
+
+centrePane :: AppState -> DemoUI ()
+centrePane s = case currentPage s of
+  BasicControlsPage ps -> basicControlsView ps
+  ScrollPage ps        -> scrollView ps
+  ProgressPage ps      -> progressView ps
+  LayoutPage           -> layoutView
+
+-- Basic Controls page
+
+basicControlsView :: BasicControlsState -> DemoUI ()
+basicControlsView ps =
+  vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
+    [ (Layout Fill (Exactly 50)  TopLeft, rowCheckboxes ps)
+    , (Layout Fill (Exactly 70)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowButtons ps)
+    , (Layout Fill (Exactly 50)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowInput ps)
+    , (Layout Fill (Exactly 38)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowSlider ps)
+    , (Layout Fill Fill          TopLeft, disableWhen (not (editingEnabled ps)) $ rowRadio ps)
+    ]
+
+rowCheckboxes :: BasicControlsState -> DemoUI ()
+rowCheckboxes ps =
+  hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
+    [ (Layout (Exactly 160) (Exactly 30) MiddleLeft,
+         checkbox CheckboxBox1 "Enable editing" (editingEnabled ps) (\v s ->
+           updateBasicControls s (\p -> p { editingEnabled = v })))
+    ]
+
+rowButtons :: BasicControlsState -> DemoUI ()
+rowButtons ps =
   vBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4 })
     [ (Layout Fill Fill         TopLeft,
          hBox (defaultBoxConfig { boxSpacing = 4, boxAlignment = Center })
            [ (Layout (Exactly 80) Fill TopLeft,    btn 1 "One")
            , (Layout (Exactly 80) Fill TopLeft,    btn 2 "Two")
            , (Layout (Exactly 80) Fill TopLeft,    btn 3 "Three")
-           , (Layout Fill         Fill MiddleLeft, label Label ("Clicks: " <> T.pack (show (clickCount s))))
+           , (Layout Fill         Fill MiddleLeft, label Label ("Clicks: " <> T.pack (show (clickCount ps))))
            , (Layout (Exactly 80) Fill TopLeft,    resetBtn)
            ])
-    , (Layout Fill (Exactly 20) TopLeft, progressBar ProgressBar1 (Progress (fromIntegral (clickCount s) / 50)))
+    , (Layout Fill (Exactly 20) TopLeft,
+         progressBar ProgressBar1 (Progress (fromIntegral (clickCount ps) / 50)))
     ]
+  where
+    btn i txt = do
+      clicked <- button (Btn i) txt
+      when clicked $ dispatch $
+        \s -> updateBasicControls s (\p -> p { clickCount = min 50 (clickCount p + i) })
+    resetBtn = do
+      clicked <- button (Btn 0) "Reset"
+      when clicked $ dispatch $
+        \s -> updateBasicControls s (\p -> p { clickCount = 0 })
 
-rowInput :: AppState -> DemoUI ()
-rowInput s =
+rowInput :: BasicControlsState -> DemoUI ()
+rowInput ps =
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
     [ (Layout (Exactly 200) Fill         MiddleLeft, label Label "Text input")
-    , (Layout Fill          (Exactly 30) TopLeft,    textInput TextInput1 (inputText s) (\t st -> st { inputText = t }))
+    , (Layout Fill          (Exactly 30) TopLeft,
+         textInput TextInput1 (inputText ps) (\t s ->
+           updateBasicControls s (\p -> p { inputText = t })))
     ]
 
-rowCheckboxes :: AppState -> DemoUI ()
-rowCheckboxes s =
-  hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
-    [ (Layout (Exactly 160) (Exactly 30) MiddleLeft,
-         checkbox CheckboxBox1 "Enable editing" (isChecked1 s) (\v st -> st { isChecked1 = v }))
-    , (Layout (Exactly 120) (Exactly 30) MiddleLeft,
-         checkbox CheckboxBox2 "Dark mode" (isChecked2 s) (\v st -> st { isChecked2 = v }))
-    , (Layout (Exactly 100) (Exactly 30) MiddleLeft,
-         checkbox CheckboxBox3 "Animate" (animating s) (\v st -> st { animating = v }))
-    ]
-
-rowSlider :: AppState -> DemoUI ()
-rowSlider s =
+rowSlider :: BasicControlsState -> DemoUI ()
+rowSlider ps =
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
     [ (Layout (Exactly 200) Fill         MiddleLeft, label Label "Slider")
-    , (Layout Fill          (Exactly 30) TopLeft,    slider Slider1 Horizontal (sliderValue s) (\v st -> st { sliderValue = v }))
-    , (Layout (Exactly 60)  Fill         MiddleLeft, label Label (T.pack (show (round (sliderValue s * 100) :: Int) <> "%")))
+    , (Layout Fill          (Exactly 30) TopLeft,
+         slider Slider1 Horizontal (sliderValue ps) (\v s ->
+           updateBasicControls s (\p -> p { sliderValue = v })))
+    , (Layout (Exactly 60)  Fill         MiddleLeft,
+         label Label (T.pack (show (round (sliderValue ps * 100) :: Int)) <> "%"))
     ]
 
-rowRadio :: AppState -> DemoUI ()
-rowRadio s =
+rowRadio :: BasicControlsState -> DemoUI ()
+rowRadio ps =
   hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
     [ (Layout Fill Fill TopLeft,
          vBox defaultBoxConfig
@@ -92,8 +202,8 @@ rowRadio s =
            , (Layout Fill Fill TopLeft,
                 radioGroup RadioOpt
                   [(0, "Small"), (1, "Medium"), (2, "Large")]
-                  (radioSelection s)
-                  (\v st -> st { radioSelection = v }))
+                  (radioSelection ps)
+                  (\v s -> updateBasicControls s (\p -> p { radioSelection = v })))
            ])
     , (Layout Fill Fill TopLeft,
          vBox defaultBoxConfig
@@ -101,23 +211,21 @@ rowRadio s =
            , (Layout Fill Fill TopLeft,
                 radioGroup RadioOpt2
                   [(0, "Low"), (1, "Medium"), (2, "High"), (3, "Critical")]
-                  (radioSelection2 s)
-                  (\v st -> st { radioSelection2 = v }))
+                  (radioSelection2 ps)
+                  (\v s -> updateBasicControls s (\p -> p { radioSelection2 = v })))
            ])
     ]
 
-rowProgress :: AppState -> DemoUI ()
-rowProgress s =
-  vBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4 })
-    [ (Layout Fill Fill TopLeft,
-         if animating s
-           then progressBar ProgressBar2 Indeterminate
-           else progressBar ProgressBar2 (Progress 0))
-    ]
+updateBasicControls :: AppState -> (BasicControlsState -> BasicControlsState) -> AppState
+updateBasicControls s f = case currentPage s of
+  BasicControlsPage p -> s { currentPage = BasicControlsPage (f p) }
+  _                   -> s
 
-rowScrollRegions :: AppState -> DemoUI ()
-rowScrollRegions s =
-  vBox (defaultBoxConfig { boxMargin = 4, boxSpacing = 4 })
+-- Scroll page
+
+scrollView :: ScrollPageState -> DemoUI ()
+scrollView ps =
+  vBox (defaultBoxConfig { boxMargin = 8, boxSpacing = 4 })
     [ (Layout Fill (Exactly 26) TopLeft,
          hBox defaultBoxConfig
            [ (Layout Fill Fill MiddleLeft, label Label "Known size (scrollableRegion)")
@@ -125,13 +233,13 @@ rowScrollRegions s =
            ])
     , (Layout Fill Fill TopLeft,
          hBox (defaultBoxConfig { boxSpacing = 8 })
-           [ (Layout Fill Fill TopLeft, staticScrollList s)
-           , (Layout Fill Fill TopLeft, dynamicScrollList s)
+           [ (Layout Fill Fill TopLeft, staticScrollList ps)
+           , (Layout Fill Fill TopLeft, dynamicScrollList ps)
            ])
     ]
 
-staticScrollList :: AppState -> DemoUI ()
-staticScrollList s =
+staticScrollList :: ScrollPageState -> DemoUI ()
+staticScrollList ps =
   scrollableRegion ScrollRegion1 (Size 400 (20 * 32)) $
     vBox defaultBoxConfig
       [ (Layout Fill (Exactly 32) TopLeft, item i)
@@ -139,13 +247,13 @@ staticScrollList s =
       ]
   where
     item i = do
-      let isSelected = lastClickedStatic s == Just i
+      let isSelected = lastClickedStatic ps == Just i
           txt = (if isSelected then "✓ " else "") <> "Item " <> T.pack (show i)
       clicked <- button (ScrollItem1 i) txt
-      when clicked $ dispatch (\st -> st { lastClickedStatic = Just i })
+      when clicked $ dispatch $ \s -> updateScrollState s (\p -> p { lastClickedStatic = Just i })
 
-dynamicScrollList :: AppState -> DemoUI ()
-dynamicScrollList s = do
+dynamicScrollList :: ScrollPageState -> DemoUI ()
+dynamicScrollList ps = do
   bounds <- getBounds
   let itemH      = 32 :: Double
       totalItems = 100 :: Int
@@ -162,49 +270,57 @@ dynamicScrollList s = do
       let i     = firstIdx + j
           itemR = Rectangle (rectX vp) (rectY vp + fromIntegral j * itemH - subOff) (rectWidth vp) itemH
       in when (i < totalItems) $ withBounds itemR $ do
-           let isSelected = lastClickedDynamic s == Just i
+           let isSelected = lastClickedDynamic ps == Just i
                txt = (if isSelected then "✓ " else "") <> "Item " <> T.pack (show (i + 1))
            clicked <- button (ScrollItem2 i) txt
-           when clicked $ dispatch (\st -> st { lastClickedDynamic = Just i })
+           when clicked $ dispatch $ \s ->
+             updateScrollState s (\p -> p { lastClickedDynamic = Just i })
 
-rowDebugInfo :: AppState -> (Int, Int) -> DemoUI ()
-rowDebugInfo s (winW, winH) = do
-  pos   <- getMousePos
-  input <- getInput
-  let winText    = "Window: " <> T.pack (show winW) <> " x " <> T.pack (show winH)
-      mx         = T.pack (show (round (pointX pos) :: Int))
-      my         = T.pack (show (round (pointY pos) :: Int))
-      mouseText  = "Mouse: " <> mx <> ", " <> my
-      buttonText = "Button: " <> T.pack (show (inputLeftButtonDown input))
-      hoverText  = "Hover: " <> if isHovering s then "Yes" else "No"
-      countSuffix = if lastInputCount s > 1 then " (" <> T.pack (show (lastInputCount s)) <> ")" else ""
-      keyText     = "Last Key Press: " <> if T.null (lastInput s) then "none" else lastInput s <> countSuffix
-  hBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 4, boxAlignment = Center })
-    [ (Layout (Exactly 160) Fill MiddleLeft, label Label winText)
-    , (Layout (Exactly 130) Fill MiddleLeft, label Label mouseText)
-    , (Layout (Exactly 140) Fill MiddleLeft, label Label buttonText)
-    , (Layout (Exactly 80)  Fill MiddleLeft, label Label hoverText)
-    , (Layout Fill          Fill MiddleLeft, label Label keyText)
+updateScrollState :: AppState -> (ScrollPageState -> ScrollPageState) -> AppState
+updateScrollState s f = case currentPage s of
+  ScrollPage p -> s { currentPage = ScrollPage (f p) }
+  _            -> s
+
+-- Progress page
+
+progressView :: ProgressState -> DemoUI ()
+progressView ps =
+  vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
+    [ (Layout Fill (Exactly 30) TopLeft,
+         checkbox CheckboxBox3 "Animate" (animating ps) (\v s ->
+           updateProgressState s (\p -> p { animating = v })))
+    , (Layout Fill Fill TopLeft,
+         if animating ps
+           then progressBar ProgressBar2 Indeterminate
+           else progressBar ProgressBar2 (Progress 0))
     ]
+
+updateProgressState :: AppState -> (ProgressState -> ProgressState) -> AppState
+updateProgressState s f = case currentPage s of
+  ProgressPage p -> s { currentPage = ProgressPage (f p) }
+  _              -> s
+
+-- Layout page (placeholder)
+
+layoutView :: DemoUI ()
+layoutView =
+  vBox (defaultBoxConfig { boxMargin = 8 })
+    [ (Layout Fill Fill TopLeft, label Label "Layout page — coming soon") ]
+
+-- Top-level view
 
 demoView :: DemoUI ()
 demoView = do
   s     <- getAppState
-  -- Snapshot input before controls consume key events (e.g. Tab navigation)
   input <- getInput
   win   <- getBounds
   let winSize = (round (rectWidth win) :: Int, round (rectHeight win) :: Int)
-  when (isChecked2 s) $ fillRect (RGBA 0.082 0.102 0.129 1)
-  vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
-    [ (Layout Fill (Exactly 40) TopLeft, rowDebugInfo s winSize)
-    , (Layout Fill (Exactly 50) TopLeft, rowCheckboxes s)
-    , (Layout Fill (Exactly 70) TopLeft, disableWhen (not (isChecked1 s)) $ rowButtons s)
-    , (Layout Fill (Exactly 50) TopLeft, disableWhen (not (isChecked1 s)) $ rowInput s)
-    , (Layout Fill (Exactly 38) TopLeft, disableWhen (not (isChecked1 s)) $ rowSlider s)
-    , (Layout Fill (Exactly 130) TopLeft, disableWhen (not (isChecked1 s)) $ rowRadio s)
-    , (Layout Fill (Exactly 280) TopLeft, rowScrollRegions s)
-    , (Layout Fill Fill          TopLeft, rowProgress s)
-    ]
+  when (darkMode s) $ fillRect (RGBA 0.082 0.102 0.129 1)
+  borderLayout emptyBorderContent
+    { leftPanel   = Just (180, sidebar s)
+    , centrePanel = Just (centrePane s)
+    , bottomPanel = Just (32, footer s winSize)
+    }
   mHov  <- getHoveredElement
   let typed   = T.concat (inputTypedText input)
       keyName = case inputKeyEvents input of

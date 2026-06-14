@@ -9,6 +9,7 @@ import qualified Data.Map.Strict as Map
 
 data Element = Label
              | Btn Int
+             | NavBtn Int
              | TextInput1
              | CheckboxBox1 | CheckboxBox2 | CheckboxBox3
              | ProgressBar1 | ProgressBar2
