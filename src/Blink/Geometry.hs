@@ -7,9 +7,11 @@ The four core types are 'Point', 'Size', 'Rectangle', and 'Insets'.
 'Rectangle' is the central type: most of the library passes bounding
 rectangles around to describe where components are drawn. 'Insets'
 describes four-sided offsets and is used to derive margin and padding
-rectangles from a base 'Rectangle' via 'insetRect'. 'Alignment'
-describes a 2D anchor position within a containing rectangle and is
-used with 'alignRect' to place a child rectangle inside a parent.
+rectangles from a base 'Rectangle' via 'insetRect'. 'BorderEdges'
+describes per-side border widths; convert to 'Insets' with
+'borderInsets' to apply with 'insetRect'. 'Alignment' describes a 2D
+anchor position within a containing rectangle and is used with
+'alignRect' to place a child rectangle inside a parent.
 -}
 module Blink.Geometry
   ( -- * Types
@@ -21,6 +23,11 @@ module Blink.Geometry
   , Insets (..)
   , uniform
   , insetRect
+    -- * Border edges
+  , BorderEdges (..)
+  , noBorder
+  , uniformBorder
+  , borderInsets
     -- * Rectangle operations
   , rectFromSize
   , resizeRect
@@ -64,6 +71,26 @@ data Insets = Insets
 -- | Creates 'Insets' with the same value on all four sides.
 uniform :: Double -> Insets
 uniform n = Insets { topInset = n, rightInset = n, bottomInset = n, leftInset = n }
+
+-- | Per-side border widths in pixels.
+data BorderEdges = BorderEdges
+  { edgeTop    :: Double  -- ^ Width of the top border.
+  , edgeRight  :: Double  -- ^ Width of the right border.
+  , edgeBottom :: Double  -- ^ Width of the bottom border.
+  , edgeLeft   :: Double  -- ^ Width of the left border.
+  } deriving (Eq, Show)
+
+-- | No border on any side.
+noBorder :: BorderEdges
+noBorder = BorderEdges 0 0 0 0
+
+-- | Equal border width on all four sides.
+uniformBorder :: Double -> BorderEdges
+uniformBorder w = BorderEdges w w w w
+
+-- | Converts 'BorderEdges' to 'Insets' so it can be applied with 'insetRect'.
+borderInsets :: BorderEdges -> Insets
+borderInsets be = Insets (edgeTop be) (edgeRight be) (edgeBottom be) (edgeLeft be)
 
 -- | Shrinks @r@ by @ins@ on each edge. Width and height are clamped to
 -- zero if the insets exceed the rectangle's dimensions.

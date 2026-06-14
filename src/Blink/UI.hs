@@ -208,7 +208,7 @@ import Data.Maybe (isNothing, fromMaybe, listToMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..), TextMeasurer (..), noOpTextMeasurer)
-import Blink.Geometry (Point, Rectangle, Size, containsPoint, intersectRect)
+import Blink.Geometry (Point, Rectangle, Size, BorderEdges, containsPoint, intersectRect)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 
@@ -680,11 +680,11 @@ fillRect colour = do
   r <- getBounds
   draw $ FillRect r colour
 
--- | Strokes the border of the current bounds with the given colour and line width.
-strokeRect :: Colour -> Double -> UI e s ()
-strokeRect colour width = do
+-- | Strokes the border of the current bounds with the given colour and per-side widths.
+strokeRect :: Colour -> BorderEdges -> UI e s ()
+strokeRect colour edges = do
   r <- getBounds
-  draw $ StrokeRect r colour width
+  draw $ StrokeBorder r colour edges
 
 -- | Renders text within the current bounds using the given colour and alignment.
 drawText :: Colour -> TextAlign -> Text -> UI e s ()
@@ -717,10 +717,10 @@ withBackground colour content = do
 
 -- | Runs @content@, then strokes a border around the current bounds on top.
 -- Drawing the border after content ensures it is always visible over children.
-withBorder :: Colour -> Double -> UI e s a -> UI e s a
-withBorder colour width content = do
+withBorder :: Colour -> BorderEdges -> UI e s a -> UI e s a
+withBorder colour edges content = do
   result <- content
-  strokeRect colour width
+  strokeRect colour edges
   pure result
 
 -- | The application state as it was at the start of the frame. Modifiers

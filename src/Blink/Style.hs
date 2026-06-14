@@ -21,11 +21,15 @@ module Blink.Style
   , Theme (..)
     -- * Construction
   , emptyTheme
+    -- * Re-exports
+  , BorderEdges (..)
+  , noBorder
+  , uniformBorder
   ) where
 
 import qualified Data.Map.Strict as Map
 import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Geometry (Insets (..))
+import Blink.Geometry (Insets (..), BorderEdges (..), noBorder, uniformBorder)
 
 -- | Visual properties for a control in a single interaction state.
 -- Resolved from the active 'StyleSet' by 'Blink.UI.getStyle'.
@@ -36,7 +40,7 @@ data Style = Style
   , styleMargin :: Insets           -- ^ Space between the slot edge and the background rectangle.
   , stylePadding :: Insets          -- ^ Space between the background rectangle and the content rectangle.
   , styleBorderColour :: Maybe Colour -- ^ Stroke colour for the border; 'Nothing' suppresses the border.
-  , styleBorderWidth :: Double      -- ^ Border stroke width in pixels.
+  , styleBorderEdges :: BorderEdges  -- ^ Per-side border widths in pixels.
   }
 
 -- | The five per-state 'Style' variants for a control. The active

@@ -136,13 +136,14 @@ footer s (winW, winH) = do
   mouseW'  <- labelWidth mouseText
   buttonW' <- labelWidth buttonText
   hoverW'  <- labelWidth hoverText
-  hBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 4, boxAlignment = Center })
-    [ (Layout winW'    Fill MiddleLeft, label Label winText)
-    , (Layout mouseW'  Fill MiddleLeft, label Label mouseText)
-    , (Layout buttonW' Fill MiddleLeft, label Label buttonText)
-    , (Layout hoverW'  Fill MiddleLeft, label Label hoverText)
-    , (Layout Fill               Fill MiddleLeft, label Label keyText)
-    ]
+  renderControl StatusBar $
+    hBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 4, boxAlignment = Center })
+      [ (Layout winW'    Fill MiddleLeft, label Label winText)
+      , (Layout mouseW'  Fill MiddleLeft, label Label mouseText)
+      , (Layout buttonW' Fill MiddleLeft, label Label buttonText)
+      , (Layout hoverW'  Fill MiddleLeft, label Label hoverText)
+      , (Layout Fill               Fill MiddleLeft, label Label keyText)
+      ]
 
 centrePane :: AppState -> DemoUI ()
 centrePane s = case currentPage s of

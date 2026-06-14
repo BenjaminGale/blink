@@ -11,7 +11,7 @@ import Blink.Geometry (Alignment (..), Point (..), Rectangle (..), uniform)
 import Blink.Input (KeyEvent, InputState (..))
 import Blink.Layout
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Style (..), StyleSet (..), Theme (..), noBorder)
 import Blink.UI
 
 -- Test infrastructure
@@ -32,7 +32,7 @@ emptyStyle = Style
   , styleMargin       = uniform 0
   , stylePadding      = uniform 0
   , styleBorderColour = Nothing
-  , styleBorderWidth  = 0
+  , styleBorderEdges  = noBorder
   }
 
 emptyStyleSet :: StyleSet

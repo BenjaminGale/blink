@@ -7,6 +7,7 @@ module Rendering
   ) where
 
 import Blink
+import Control.Monad (when)
 import SDL (($=))
 import qualified SDL
 import qualified SDL.Font as Font
@@ -62,10 +63,21 @@ renderFill renderer r color = do
   SDL.rendererDrawColor renderer $= toSDLColor color
   SDL.fillRect renderer (Just (toSDLRect r))
 
-renderStroke :: SDL.Renderer -> Rectangle -> Colour -> IO ()
-renderStroke renderer r color = do
+renderBorder :: SDL.Renderer -> Rectangle -> Colour -> BorderEdges -> IO ()
+renderBorder renderer r color edges = do
   SDL.rendererDrawColor renderer $= toSDLColor color
-  SDL.drawRect renderer (Just (toSDLRect r))
+  let x = rectX r
+      y = rectY r
+      w = rectWidth r
+      h = rectHeight r
+      t = edgeTop edges
+      ri = edgeRight edges
+      b = edgeBottom edges
+      l = edgeLeft edges
+  when (t > 0) $ SDL.fillRect renderer (Just (toSDLRect (Rectangle x y w t)))
+  when (b > 0) $ SDL.fillRect renderer (Just (toSDLRect (Rectangle x (y + h - b) w b)))
+  when (l > 0) $ SDL.fillRect renderer (Just (toSDLRect (Rectangle x (y + t) l (h - t - b))))
+  when (ri > 0) $ SDL.fillRect renderer (Just (toSDLRect (Rectangle (x + w - ri) (y + t) ri (h - t - b))))
 
 renderText :: SDL.Renderer -> Font.Font -> TextureCache -> Rectangle -> Text -> Colour -> TextAlign -> IO ()
 renderText renderer font cache r text color align = do
@@ -104,7 +116,7 @@ popClip renderer clipRef = do
 
 submitDrawCommand :: SDL.Renderer -> Font.Font -> TextureCache -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
 submitDrawCommand renderer _ _ _        (FillRect r color)            = renderFill   renderer r color
-submitDrawCommand renderer _ _ _        (StrokeRect r color _)        = renderStroke renderer r color
+submitDrawCommand renderer _ _ _        (StrokeBorder r color edges)  = renderBorder renderer r color edges
 submitDrawCommand _ _ _ _               (DrawText _ text _ _) | T.null text = pure ()
 submitDrawCommand renderer font cache _ (DrawText r text color align) = renderText   renderer font cache r text color align
 submitDrawCommand renderer _ _ clipRef  (PushClip r)                  = pushClip     renderer clipRef r

@@ -69,7 +69,7 @@ import Data.List (foldl', find)
 import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Geometry (Alignment (..), Insets (..), Orientation (..), Point (..), Rectangle (..), Size (..), insetRect)
+import Blink.Geometry (Alignment (..), Insets (..), Orientation (..), Point (..), Rectangle (..), Size (..), borderInsets, insetRect, noBorder)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (Layout (..), Length (..), BoxConfig (..), hBox, vBox, defaultBoxConfig)
 import Blink.Rendering (Colour (..), TextAlign (..))
@@ -141,7 +141,7 @@ checkbox boxId text checked onToggle = do
     styleSet <- getStyleSet boxId
     let s = styleSetFocused styleSet
     case styleBorderColour s of
-      Just c  -> strokeRect c (styleBorderWidth s)
+      Just c  -> strokeRect c (styleBorderEdges s)
       Nothing -> pure ()
 
 -- | A group of mutually exclusive options. Each item renders as a radio mark
@@ -173,9 +173,9 @@ radioGroup mkId items selected onChange = do
              -- same vBox pass must not also fire navigation. Allow same-frame
              -- clicks as an additional trigger since initialFocus predates applyFocus.
              clicked <- isClicked eid
-             when (initialFocus == Just eid || clicked) $ do
-               upPressed   <- isActivatedBy eid [KeyUp]
-               downPressed <- isActivatedBy eid [KeyDown]
+             whenEnabled $ when (initialFocus == Just eid || clicked) $ do
+               upPressed   <- isKeyPressed eid KeyUp
+               downPressed <- isKeyPressed eid KeyDown
                when upPressed   $ setFocus (mkId (max 0 (idx - 1)))
                when downPressed $ setFocus (mkId (min lastIdx (idx + 1)))
          )
@@ -585,8 +585,11 @@ measureChrome eid = do
   style <- getStyle eid
   let m  = styleMargin style
       p  = stylePadding style
-      dw = leftInset m + rightInset m + leftInset p + rightInset p
-      dh = topInset m  + bottomInset m  + topInset p  + bottomInset p
+      be = case styleBorderColour style of
+             Just _  -> borderInsets (styleBorderEdges style)
+             Nothing -> borderInsets noBorder
+      dw = leftInset m + rightInset m + leftInset be + rightInset be + leftInset p + rightInset p
+      dh = topInset m  + bottomInset m  + topInset be + bottomInset be + topInset p  + bottomInset p
   pure (Exactly dw, Exactly dh)
 
 -- | Style-aware rendering for a control. Applies the element's margin, draws
@@ -599,12 +602,15 @@ renderControl eid content = do
   style <- getStyle eid
   r     <- getBounds
   let bgRect      = insetRect (styleMargin style) r
-      contentRect = insetRect (stylePadding style) bgRect
+      borderRect  = case styleBorderColour style of
+                      Just _  -> insetRect (borderInsets (styleBorderEdges style)) bgRect
+                      Nothing -> bgRect
+      contentRect = insetRect (stylePadding style) borderRect
       inner       = withBounds contentRect $ clipToCurrent content
   withBounds bgRect $
     withBackground (styleBackground style) $
     case styleBorderColour style of
-      Just c  -> withBorder c (styleBorderWidth style) inner
+      Just c  -> withBorder c (styleBorderEdges style) inner
       Nothing -> inner
 
 -- | The standard entry point for interactive controls. Applies hover detection,
@@ -656,7 +662,7 @@ applyFocus eid = do
         -- in that case — the drag origin retains focus.
         isDragRelease = released && isJust captured && captured /= Just eid
         wasClicked    = isHit && released && not isDragRelease
-    setFocusWhen ((nothingIsFocused || isRetainingFocus || wasClicked) && not isDragRelease) eid
+    setFocusWhen (isRetainingFocus || ((nothingIsFocused || wasClicked) && not isDragRelease)) eid
 
 applyTabNavigation :: Ord e => e -> UI e s ()
 applyTabNavigation eid = do

@@ -7,7 +7,7 @@ import Test.Hspec
 
 import Data.Text (Text)
 import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), button, checkbox, checkboxMark, control, isHitControl, mouseToTrackPos, progressBar, radioGroup, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
-import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, uniform)
+import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
@@ -27,7 +27,7 @@ testStyle = Style
   , styleMargin       = uniform 10
   , stylePadding      = uniform 5
   , styleBorderColour = Nothing
-  , styleBorderWidth  = 0
+  , styleBorderEdges  = noBorder
   }
 
 testStyleSet :: StyleSet
@@ -108,7 +108,7 @@ testBorderColour :: Colour
 testBorderColour = RGBA 1 0 0 1
 
 testStyleWithBorder :: Style
-testStyleWithBorder = testStyle { styleBorderColour = Just testBorderColour, styleBorderWidth = 1 }
+testStyleWithBorder = testStyle { styleBorderColour = Just testBorderColour, styleBorderEdges = uniformBorder 1 }
 
 testStyleSetWithBorder :: StyleSet
 testStyleSetWithBorder = StyleSet
@@ -170,8 +170,8 @@ focusBorderTheme = testTheme
   { themeElementStyles = Map.fromList [(TestControl, focusBorderStyleSet)] }
 
 isStrokeRect :: DrawCommand -> Bool
-isStrokeRect (StrokeRect {}) = True
-isStrokeRect _               = False
+isStrokeRect (StrokeBorder {}) = True
+isStrokeRect _                 = False
 
 type WidgetRunner = UIContext TestElement () -> IO (UIContext TestElement ())
 
@@ -198,6 +198,15 @@ controlBehaviourSpec run hitPoint = do
           ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just OtherControl } }
       ctx' <- run ctx
       getFocused ctx' `shouldBe` Nothing
+
+    it "retains focus on the previously focused element when a drag releases elsewhere" $ do
+      -- OtherControl has focus; TestControl is being dragged (captured). On the
+      -- drag-release frame the focused element must re-assert its own focus so it
+      -- is not cleared by nextFocusFrame on the following frame.
+      let base = withFocus (Just OtherControl) (withButtonReleased (mkCtx (mouseAt hitPoint False [])))
+          ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just OtherControl } }
+      ctx' <- run ctx
+      getFocused ctx' `shouldBe` Just OtherControl
 
   describe "tab navigation" $ do
     it "passes focus to the next control when Tab is pressed" $ do
@@ -260,11 +269,11 @@ backgroundAndBorderSpec run = do
 
   it "draws a border when borderColour is set" $ do
     ctx' <- runWithBorder (mkCtx noInput)
-    getDrawCommands ctx' `shouldContain` [StrokeRect bgRect testBorderColour 1]
+    getDrawCommands ctx' `shouldContain` [StrokeBorder bgRect testBorderColour (uniformBorder 1)]
 
   it "draws a border even when the background is transparent" $ do
     ctx' <- run ((mkCtx noInput) { ctxTheme = transparentBgWithBorderTheme })
-    getDrawCommands ctx' `shouldContain` [StrokeRect bgRect testBorderColour 1]
+    getDrawCommands ctx' `shouldContain` [StrokeBorder bgRect testBorderColour (uniformBorder 1)]
 
 runProgressBar :: Double -> WidgetRunner
 runProgressBar value ctx = fmap snd $ runUI (progressBar TestControl (Progress value)) ctx
@@ -578,11 +587,11 @@ spec = describe "Controls" $ do
     describe "focus ring" $ do
       it "draws a focus ring around the full control when focused" $ do
         ctx' <- runCheckbox False (withFocus (Just TestControl) (mkCheckboxCtx noInput) { ctxTheme = focusBorderTheme })
-        getDrawCommands ctx' `shouldContain` [StrokeRect controlRect testBorderColour 1]
+        getDrawCommands ctx' `shouldContain` [StrokeBorder controlRect testBorderColour (uniformBorder 1)]
 
       it "does not draw a focus ring when unfocused" $ do
         ctx' <- runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput) { ctxTheme = focusBorderTheme })
-        getDrawCommands ctx' `shouldNotContain` [StrokeRect controlRect testBorderColour 1]
+        getDrawCommands ctx' `shouldNotContain` [StrokeBorder controlRect testBorderColour (uniformBorder 1)]
 
   describe "textInput" $ do
     controlBehaviourSpec runTextInputControl (Point 50 50)

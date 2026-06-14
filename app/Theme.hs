@@ -8,6 +8,7 @@ import Blink
 import qualified Data.Map.Strict as Map
 
 data Element = Label
+             | StatusBar
              | Btn Int
              | NavBtn Int
              | TextInput1
@@ -100,7 +101,7 @@ mkBtnStyle p = StyleSet
       , styleMargin       = controlMargin
       , stylePadding      = controlPadding
       , styleBorderColour = Nothing
-      , styleBorderWidth  = 0
+      , styleBorderEdges  = uniformBorder 1
       }
 
 mkTextInputStyle :: Palette -> StyleSet
@@ -119,7 +120,7 @@ mkTextInputStyle p = StyleSet
       , styleMargin       = controlMargin
       , stylePadding      = controlPadding
       , styleBorderColour = Nothing
-      , styleBorderWidth  = 1
+      , styleBorderEdges  = uniformBorder 1
       }
 
 mkProgressBarStyle :: Palette -> StyleSet
@@ -138,7 +139,7 @@ mkProgressBarStyle p = StyleSet
       , styleMargin       = controlMargin
       , stylePadding      = uniform 0
       , styleBorderColour = Nothing
-      , styleBorderWidth  = 0
+      , styleBorderEdges  = noBorder
       }
 
 mkCheckboxBoxStyle :: Palette -> StyleSet
@@ -157,7 +158,7 @@ mkCheckboxBoxStyle p = StyleSet
       , styleMargin       = controlMargin
       , stylePadding      = uniform 2
       , styleBorderColour = Nothing
-      , styleBorderWidth  = 1
+      , styleBorderEdges  = uniformBorder 1
       }
 
 mkLabelStyle :: Palette -> StyleSet
@@ -176,7 +177,7 @@ mkLabelStyle p = StyleSet
       , styleMargin       = uniform 0
       , stylePadding      = controlPadding
       , styleBorderColour = Nothing
-      , styleBorderWidth  = 0
+      , styleBorderEdges  = noBorder
       }
 
 mkRadioItemStyle :: Palette -> StyleSet
@@ -195,7 +196,7 @@ mkRadioItemStyle p = StyleSet
       , styleMargin       = uniform 0
       , stylePadding      = Insets { topInset = 2, rightInset = 6, bottomInset = 2, leftInset = 6 }
       , styleBorderColour = Nothing
-      , styleBorderWidth  = 1
+      , styleBorderEdges  = uniformBorder 1
       }
 
 mkScrollTrackStyle :: Palette -> StyleSet
@@ -214,7 +215,7 @@ mkScrollTrackStyle p = StyleSet
       , styleMargin       = uniform 0
       , stylePadding      = uniform 2
       , styleBorderColour = Nothing
-      , styleBorderWidth  = 1
+      , styleBorderEdges  = uniformBorder 1
       }
 
 mkScrollThumbStyle :: Palette -> StyleSet
@@ -233,13 +234,33 @@ mkScrollThumbStyle p = StyleSet
       , styleMargin       = uniform 0
       , stylePadding      = uniform 0
       , styleBorderColour = Nothing
-      , styleBorderWidth  = 0
+      , styleBorderEdges  = noBorder
+      }
+
+mkStatusBarStyle :: Palette -> StyleSet
+mkStatusBarStyle p = StyleSet
+  { styleSetNormal   = base
+  , styleSetHovered  = base
+  , styleSetPressed  = base
+  , styleSetFocused  = base
+  , styleSetDisabled = base
+  }
+  where
+    base = Style
+      { styleBackground   = RGBA 0 0 0 0
+      , styleTextColour   = palTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleMargin       = uniform 0
+      , stylePadding      = uniform 0
+      , styleBorderColour = Just (palBorderDefault p)
+      , styleBorderEdges  = BorderEdges { edgeTop = 1, edgeRight = 0, edgeBottom = 0, edgeLeft = 0 }
       }
 
 mkTheme :: Palette -> Theme Element
 mkTheme p = Theme
   { themeElementStyles = Map.fromList $
       [ (Label,                     mkLabelStyle p)
+      , (StatusBar,                 mkStatusBarStyle p)
       , (ProgressBar1,              mkProgressBarStyle p)
       , (ProgressBar2,              mkProgressBarStyle p)
       , (TextInput1,                mkTextInputStyle p)

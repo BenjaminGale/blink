@@ -7,7 +7,7 @@ import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (forAll, choose)
 
-import Blink.Geometry (Point (..), Rectangle (..), uniform)
+import Blink.Geometry (Point (..), Rectangle (..), uniform, noBorder, uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
@@ -45,7 +45,7 @@ emptyStyle = Style
   , styleMargin = uniform 0
   , stylePadding = uniform 0
   , styleBorderColour = Nothing
-  , styleBorderWidth = 0
+  , styleBorderEdges = noBorder
   }
 
 emptyStyleSet :: StyleSet
@@ -422,10 +422,10 @@ spec = describe "Blink.UI" $ do
       (_, ctx) <- run0 (fillRect colour)
       getDrawCommands ctx `shouldBe` [FillRect testBounds colour]
 
-    it "strokeRect emits a StrokeRect command for the current bounds" $ do
+    it "strokeRect emits a StrokeBorder command for the current bounds" $ do
       let colour = RGBA 0 1 0 1
-      (_, ctx) <- run0 (strokeRect colour 2)
-      getDrawCommands ctx `shouldBe` [StrokeRect testBounds colour 2]
+      (_, ctx) <- run0 (strokeRect colour (uniformBorder 2))
+      getDrawCommands ctx `shouldBe` [StrokeBorder testBounds colour (uniformBorder 2)]
 
     it "drawText emits a DrawText command for the current bounds" $ do
       let colour = RGBA 0 0 1 1
@@ -462,10 +462,10 @@ spec = describe "Blink.UI" $ do
       it "strokes the border after the content" $ do
         let bgColour     = RGBA 1 0 0 1
             borderColour = RGBA 0 0 1 1
-        (_, ctx) <- run0 (withBorder borderColour 1 (fillRect bgColour))
+        (_, ctx) <- run0 (withBorder borderColour (uniformBorder 1) (fillRect bgColour))
         getDrawCommands ctx `shouldBe`
           [ FillRect testBounds bgColour
-          , StrokeRect testBounds borderColour 1
+          , StrokeBorder testBounds borderColour (uniformBorder 1)
           ]
 
   describe "disableWhen" $ do
