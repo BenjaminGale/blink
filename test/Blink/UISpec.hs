@@ -309,25 +309,29 @@ spec = describe "Blink.UI" $ do
 
   describe "button interaction" $ do
     context "when advancing to the next frame" $ do
-      it "ixnButtonDown is True when the button is currently held" $ do
+      it "isButtonDown is True when the button is currently held" $ do
         ctx0 <- freshCtx
         let ctx = nextFrameContext testBounds buttonDown ctx0
-        ixnButtonDown (ctxInteraction ctx) `shouldBe` True
+        (b, _) <- runUI isButtonDown ctx
+        b `shouldBe` True
 
-      it "ixnButtonReleased is True on the frame the button goes up" $ do
+      it "isButtonReleased is True on the frame the button goes up" $ do
         (_, ctx0) <- runWith buttonDown (pure ())
         let ctx = nextFrameContext testBounds noInput ctx0
-        ixnButtonReleased (ctxInteraction ctx) `shouldBe` True
+        (b, _) <- runUI isButtonReleased ctx
+        b `shouldBe` True
 
-      it "ixnButtonReleased is False when the button stays up" $ do
+      it "isButtonReleased is False when the button stays up" $ do
         ctx0 <- freshCtx
         let ctx = nextFrameContext testBounds noInput ctx0
-        ixnButtonReleased (ctxInteraction ctx) `shouldBe` False
+        (b, _) <- runUI isButtonReleased ctx
+        b `shouldBe` False
 
-      it "ixnButtonReleased is False when the button stays down" $ do
+      it "isButtonReleased is False when the button stays down" $ do
         (_, ctx0) <- runWith buttonDown (pure ())
         let ctx = nextFrameContext testBounds buttonDown ctx0
-        ixnButtonReleased (ctxInteraction ctx) `shouldBe` False
+        (b, _) <- runUI isButtonReleased ctx
+        b `shouldBe` False
 
     it "isButtonDown returns True when the button is held" $ do
       (b, _) <- runWith buttonDown isButtonDown
@@ -401,7 +405,8 @@ spec = describe "Blink.UI" $ do
     it "nextFrameContext carries focus forward when the element was visited this frame" $ do
       (_, ctx) <- run0 (setFocus ())
       let ctx' = nextFrameContext testBounds noInput ctx
-      focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just ()
+      (f, _) <- runUI getFocus ctx'
+      f `shouldBe` Just ()
 
     it "nextFrameContext clears focus when the element was not visited this frame" $ do
       (_, ctx0) <- run0 (setFocus ())
@@ -591,14 +596,12 @@ spec = describe "Blink.UI" $ do
       e `shouldBe` 1.5
 
     it "withAnimationFrame runs its body on tick frames" $ do
-      ref <- newIORef False
-      _ <- runUI (withAnimationFrame (UI $ \ctx -> writeIORef ref True >> pure ((), ctx))) tickCtx
-      readIORef ref `shouldReturn` True
+      (_, ctx) <- runUI (withAnimationFrame (dispatch (const 1))) tickCtx
+      applyDispatches ctx `shouldBe` 1
 
     it "withAnimationFrame skips its body on non-tick frames" $ do
-      ref <- newIORef False
-      _ <- runUI (withAnimationFrame (UI $ \ctx -> writeIORef ref True >> pure ((), ctx))) nonTickCtx
-      readIORef ref `shouldReturn` False
+      (_, ctx) <- runUI (withAnimationFrame (dispatch (const 1))) nonTickCtx
+      applyDispatches ctx `shouldBe` 0
 
     it "requiresAnimation sets the animation continuation flag" $ do
       (_, ctx) <- runUI requiresAnimation tickCtx
