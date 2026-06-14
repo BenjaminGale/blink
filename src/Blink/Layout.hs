@@ -284,15 +284,15 @@ canExpand _           = True
 distributeSurplusSpace :: Double -> [Length] -> [Double]
 distributeSurplusSpace surplus constraints =
   let flexible = sortBy (comparing snd) [(i, cap c) | (i, c) <- zip [0..] constraints, canExpand c]
-      shares   = go surplus flexible
+      shares   = go surplus (length flexible) flexible
   in [fromMaybe 0 (lookup i shares) | i <- [0 .. length constraints - 1]]
   where
-    go _ [] = []
-    go s slots@((i, c) : rest) =
-      let share = s / fromIntegral (length slots)
+    go _ _ [] = []
+    go s n ((i, c) : rest) =
+      let share = s / fromIntegral n
       in if c <= share
-         then (i, c) : go (s - c) rest
-         else [(j, share) | (j, _) <- slots]
+         then (i, c) : go (s - c) (n - 1) rest
+         else [(j, share) | (j, _) <- (i, c) : rest]
     cap (AtMost w)    = w
     cap (Between l h) = h - l
     cap _             = 1 / 0
