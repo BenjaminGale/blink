@@ -81,9 +81,10 @@ module Blink.Layout
 import Data.List (sortBy)
 import Data.Ord  (comparing)
 
+import qualified Data.IntMap.Strict as IntMap
 import Blink.Geometry (Alignment (..), Rectangle (..), alignRect, insetRect, uniform)
 import Blink.UI (UI, clipToCurrent, getBounds, withBounds)
-import Data.Maybe (catMaybes, fromMaybe)
+import Data.Maybe (catMaybes)
 
 -- | Describes how a child should be sized along a single axis.
 data Length
@@ -285,7 +286,8 @@ distributeSurplusSpace :: Double -> [Length] -> [Double]
 distributeSurplusSpace surplus constraints =
   let flexible = sortBy (comparing snd) [(i, cap c) | (i, c) <- zip [0..] constraints, canExpand c]
       shares   = go surplus (length flexible) flexible
-  in [fromMaybe 0 (lookup i shares) | i <- [0 .. length constraints - 1]]
+  in let shareMap = IntMap.fromList shares
+     in [IntMap.findWithDefault 0 i shareMap | i <- [0 .. length constraints - 1]]
   where
     go _ _ [] = []
     go s n ((i, c) : rest) =
