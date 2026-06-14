@@ -125,12 +125,17 @@ footer s (winW, winH) = do
                       else ""
       keyText    = "Last Key Press: "
                 <> if T.null (lastInput s) then "none" else lastInput s <> countSuffix
+  let labelWidth t = (+ 12) . sizeWidth <$> measureText t
+  winW'    <- labelWidth winText
+  mouseW'  <- labelWidth mouseText
+  buttonW' <- labelWidth buttonText
+  hoverW'  <- labelWidth hoverText
   hBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 4, boxAlignment = Center })
-    [ (Layout (Exactly 160) Fill MiddleLeft, label Label winText)
-    , (Layout (Exactly 130) Fill MiddleLeft, label Label mouseText)
-    , (Layout (Exactly 140) Fill MiddleLeft, label Label buttonText)
-    , (Layout (Exactly 80)  Fill MiddleLeft, label Label hoverText)
-    , (Layout Fill          Fill MiddleLeft, label Label keyText)
+    [ (Layout (Exactly winW')    Fill MiddleLeft, label Label winText)
+    , (Layout (Exactly mouseW')  Fill MiddleLeft, label Label mouseText)
+    , (Layout (Exactly buttonW') Fill MiddleLeft, label Label buttonText)
+    , (Layout (Exactly hoverW')  Fill MiddleLeft, label Label hoverText)
+    , (Layout Fill               Fill MiddleLeft, label Label keyText)
     ]
 
 centrePane :: AppState -> DemoUI ()

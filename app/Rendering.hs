@@ -121,6 +121,12 @@ mkTextMeasurer font = do
     , tmCharAtOffset = \t x -> do
         offsets <- getOffsets offsetCache font t
         pure $ findCharAt offsets x
+
+    , tmTextSize     = \t -> do
+        offsets <- getOffsets offsetCache font t
+        h <- Font.height font
+        let w = case offsets of { [] -> 0; _ -> last offsets }
+        pure (Size (realToFrac w) (fromIntegral h))
     }
 
 getOffsets :: IORef (Map Text [Float]) -> Font.Font -> Text -> IO [Float]

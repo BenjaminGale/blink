@@ -187,6 +187,7 @@ module Blink.UI
     -- * Text measurement
   , charOffsetUI
   , charAtOffsetUI
+  , measureText
     -- * Disabled state
   , isDisabled
   , disableWhen
@@ -207,7 +208,7 @@ import Data.Maybe (isNothing, fromMaybe, listToMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..), TextMeasurer (..), noOpTextMeasurer)
-import Blink.Geometry (Point, Rectangle, containsPoint, intersectRect)
+import Blink.Geometry (Point, Rectangle, Size, containsPoint, intersectRect)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 
@@ -815,4 +816,10 @@ charOffsetUI text n = UI $ \ctx -> do
 charAtOffsetUI :: Text -> Float -> UI e s Int
 charAtOffsetUI text x = UI $ \ctx -> do
   v <- tmCharAtOffset (ctxTextMeasure ctx) text x
+  pure (v, ctx)
+
+-- | Returns the pixel dimensions of @text@ as rendered by the current font.
+measureText :: Text -> UI e s Size
+measureText text = UI $ \ctx -> do
+  v <- tmTextSize (ctxTextMeasure ctx) text
   pure (v, ctx)

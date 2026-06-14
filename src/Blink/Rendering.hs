@@ -21,7 +21,7 @@ module Blink.Rendering
   ) where
 
 import Data.Text (Text)
-import Blink.Geometry (Rectangle)
+import Blink.Geometry (Rectangle, Size (..))
 
 -- | Text measurement operations provided to the UI for cursor positioning.
 -- Construct one from your platform's font API and pass it to
@@ -31,6 +31,8 @@ data TextMeasurer = TextMeasurer
     -- ^ X offset (pixels) of character index @n@ from the start of the string.
   , tmCharAtOffset :: Text -> Float -> IO Int
     -- ^ Character index closest to the given x offset.
+  , tmTextSize     :: Text -> IO Size
+    -- ^ Pixel dimensions of the rendered string.
   }
 
 -- | A 'TextMeasurer' whose operations always return @0@. Use in tests or
@@ -39,6 +41,7 @@ noOpTextMeasurer :: TextMeasurer
 noOpTextMeasurer = TextMeasurer
   { tmCharOffset   = \_ _ -> pure 0
   , tmCharAtOffset = \_ _ -> pure 0
+  , tmTextSize     = \_ -> pure (Size 0 0)
   }
 
 -- | An RGBA colour with components in @[0, 1]@.
