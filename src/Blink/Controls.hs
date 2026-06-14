@@ -328,6 +328,11 @@ data ScrollBarPart
   | ScrollIncrBtn -- ^ The increment arrow button.
   deriving (Eq, Ord, Show)
 
+contentRectFor :: StyleSet -> Rectangle -> Rectangle
+contentRectFor ss r =
+  let s = styleSetNormal ss
+  in insetRect (stylePadding s) (insetRect (styleMargin s) r)
+
 -- | A scrollbar with decrement\/increment buttons flanking a draggable thumb.
 -- The scroll position in @[0, 1]@ is stored in the 'UIContext', keyed by
 -- @mkId ScrollTrack@; the control reads and writes it itself. @thumbRatio@ is
@@ -381,9 +386,7 @@ scrollBar mkId ori thumbRatio = do
     track pos' ratio' = do
       slotBounds <- getBounds
       styleSet   <- getStyleSet trackId
-      let normalStyle = styleSetNormal styleSet
-          bgRect      = insetRect (styleMargin normalStyle) slotBounds
-          contentRect = insetRect (stylePadding normalStyle) bgRect
+      let contentRect = contentRectFor styleSet slotBounds
           thumbR      = thumbRect ori pos' ratio' contentRect
       control trackId $
         withBounds thumbR $ renderControl (mkId ScrollThumb) $ pure ()
@@ -540,9 +543,7 @@ slider mkId ori value onChange = do
       clamped = max 0 (min 1 value)
   slotBounds <- getBounds
   styleSet   <- getStyleSet trackId
-  let normalStyle = styleSetNormal styleSet
-      bgRect      = insetRect (styleMargin normalStyle) slotBounds
-      contentRect = insetRect (stylePadding normalStyle) bgRect
+  let contentRect = contentRectFor styleSet slotBounds
       (crossSz, mainSz) = case ori of
         Horizontal -> (rectHeight contentRect, rectWidth contentRect)
         Vertical   -> (rectWidth contentRect,  rectHeight contentRect)
