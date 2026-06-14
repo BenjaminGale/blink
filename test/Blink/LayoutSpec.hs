@@ -327,3 +327,55 @@ spec = describe "layout" $ do
     it "aligns to TopLeft with cross-axis fill enabled" $ do
       boxAlignment defaultBoxConfig `shouldBe` TopLeft
       boxFillCross defaultBoxConfig `shouldBe` True
+
+  describe "borderLayout" $ do
+    let bounds = Rectangle 0 0 300 200
+
+    let runBorder bc = runLayout bounds (borderLayout bc)
+
+    it "produces no output when all panels are absent" $ do
+      result <- runBorder emptyBorderContent
+      result `shouldBe` []
+
+    it "top panel occupies the full width at the top" $ do
+      result <- runBorder emptyBorderContent { topPanel = Just (30, fill) }
+      result `shouldBe` [Rectangle 0 0 300 30]
+
+    it "bottom panel occupies the full width at its fixed height" $ do
+      result <- runBorder emptyBorderContent { bottomPanel = Just (20, fill) }
+      result `shouldBe` [Rectangle 0 0 300 20]
+
+    it "left panel occupies the full height on the left" $ do
+      result <- runBorder emptyBorderContent { leftPanel = Just (50, fill) }
+      result `shouldBe` [Rectangle 0 0 50 200]
+
+    it "right panel occupies the full height at its fixed width" $ do
+      result <- runBorder emptyBorderContent { rightPanel = Just (40, fill) }
+      result `shouldBe` [Rectangle 0 0 40 200]
+
+    it "centre panel fills all available space when alone" $ do
+      result <- runBorder emptyBorderContent { centrePanel = Just fill }
+      result `shouldBe` [Rectangle 0 0 300 200]
+
+    it "top and bottom panels stack when no middle content is present" $ do
+      result <- runBorder emptyBorderContent
+        { topPanel    = Just (30, fill)
+        , bottomPanel = Just (20, fill)
+        }
+      result `shouldBe` [Rectangle 0 0 300 30, Rectangle 0 30 300 20]
+
+    it "all five panels occupy their correct regions" $ do
+      result <- runBorder BorderContent
+        { topPanel    = Just (30, fill)
+        , bottomPanel = Just (20, fill)
+        , leftPanel   = Just (50, fill)
+        , rightPanel  = Just (40, fill)
+        , centrePanel = Just fill
+        }
+      result `shouldBe`
+        [ Rectangle 0   0   300  30   -- top
+        , Rectangle 0   30  50   150  -- left
+        , Rectangle 50  30  210  150  -- centre
+        , Rectangle 260 30  40   150  -- right
+        , Rectangle 0   180 300  20   -- bottom
+        ]
