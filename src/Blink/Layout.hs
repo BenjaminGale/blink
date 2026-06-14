@@ -76,6 +76,10 @@ module Blink.Layout
   , emptyBorderContent
     -- * Utilities
   , preferredSize
+  , AddLength (..)
+  , MaxLength (..)
+  , addLength
+  , maxLength
   ) where
 
 import Data.List (foldl', scanl', sortBy)
@@ -261,6 +265,73 @@ preferredSize Fill            available  = available
 preferredSize (AtLeast w)     available  = max w available
 preferredSize (AtMost w)      available  = min w available
 preferredSize (Between lo hi) available  = max lo (min hi available)
+
+-- | Wraps 'Length' for the additive monoid: @'mempty' = 'Exactly' 0@,
+-- @('<>') = 'addLength'@. Use 'mconcat' to sum a list of lengths.
+newtype AddLength = AddLength { getAddLength :: Length }
+
+instance Semigroup AddLength where
+  AddLength a <> AddLength b = AddLength (add a b)
+    where
+      add Fill              _                   = Fill
+      add _                 Fill                = Fill
+      add (Exactly a')      (Exactly b')         = Exactly     (a' + b')
+      add (AtLeast a')      (Exactly b')         = AtLeast     (a' + b')
+      add (Exactly a')      (AtLeast b')         = AtLeast     (a' + b')
+      add (AtMost a')       (Exactly b')         = AtMost      (a' + b')
+      add (Exactly a')      (AtMost b')          = AtMost      (a' + b')
+      add (Between lo hi)   (Exactly b')         = Between     (lo + b') (hi + b')
+      add (Exactly a')      (Between lo hi)      = Between     (a' + lo) (a' + hi)
+      add (AtLeast a')      (AtLeast b')         = AtLeast     (a' + b')
+      add (AtMost a')       (AtMost b')          = AtMost      (a' + b')
+      add (Between lo1 hi1) (Between lo2 hi2)    = Between     (lo1 + lo2) (hi1 + hi2)
+      add (AtLeast a')      (AtMost _)           = AtLeast     a'
+      add (AtMost _)        (AtLeast b')         = AtLeast     b'
+      add (AtLeast a')      (Between lo _)       = AtLeast     (a' + lo)
+      add (Between lo _)    (AtLeast b')         = AtLeast     (lo + b')
+      add (AtMost a')       (Between lo hi)      = Between     lo (a' + hi)
+      add (Between lo hi)   (AtMost b')          = Between     lo (hi + b')
+
+instance Monoid AddLength where
+  mempty = AddLength (Exactly 0)
+
+-- | Wraps 'Length' for the max monoid: @'mempty' = 'Exactly' 0@,
+-- @('<>') = 'maxLength' of two@. Use 'mconcat' to find the largest in a list.
+newtype MaxLength = MaxLength { getMaxLength :: Length }
+
+instance Semigroup MaxLength where
+  MaxLength a <> MaxLength b = MaxLength (maxL a b)
+    where
+      maxL Fill              _                   = Fill
+      maxL _                 Fill                = Fill
+      maxL (Exactly a')      (Exactly b')         = Exactly     (max a' b')
+      maxL (AtLeast a')      (AtLeast b')         = AtLeast     (max a' b')
+      maxL (AtMost a')       (AtMost b')          = AtMost      (max a' b')
+      maxL (Between lo1 hi1) (Between lo2 hi2)    = Between     (max lo1 lo2) (max hi1 hi2)
+      maxL (Exactly a')      (AtLeast b')         = AtLeast     (max a' b')
+      maxL (AtLeast a')      (Exactly b')         = AtLeast     (max a' b')
+      maxL (Exactly a')      (AtMost b')          = AtMost      (max a' b')
+      maxL (AtMost a')       (Exactly b')         = AtMost      (max a' b')
+      maxL (Exactly a')      (Between lo hi)      = Between     (max a' lo) (max a' hi)
+      maxL (Between lo hi)   (Exactly b')         = Between     (max lo b') (max hi b')
+      maxL (AtLeast a')      (AtMost _)           = AtLeast     a'
+      maxL (AtMost _)        (AtLeast b')         = AtLeast     b'
+      maxL (AtLeast a')      (Between lo _)       = AtLeast     (max a' lo)
+      maxL (Between lo _)    (AtLeast b')         = AtLeast     (max lo b')
+      maxL (AtMost a')       (Between _ hi)       = AtMost      (max a' hi)
+      maxL (Between _ hi)    (AtMost b')          = AtMost      (max hi b')
+
+instance Monoid MaxLength where
+  mempty = MaxLength (Exactly 0)
+
+-- | Add two 'Length' constraints. Convenience wrapper around 'AddLength'.
+addLength :: Length -> Length -> Length
+addLength a b = getAddLength (AddLength a <> AddLength b)
+
+-- | Return the maximum 'Length' across a list. Convenience wrapper around 'MaxLength'.
+-- Returns @'Exactly' 0@ for an empty list.
+maxLength :: [Length] -> Length
+maxLength = getMaxLength . mconcat . map MaxLength
 
 preferredSizes :: Double -> [Length] -> [Double]
 preferredSizes available constraints =

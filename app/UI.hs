@@ -125,16 +125,17 @@ footer s (winW, winH) = do
                       else ""
       keyText    = "Last Key Press: "
                 <> if T.null (lastInput s) then "none" else lastInput s <> countSuffix
-  let labelWidth t = (+ 12) . sizeWidth <$> measureText t
+  (chromW, _) <- measureChrome Label
+  let labelWidth t = flip addLength chromW . Exactly . sizeWidth <$> measureText t
   winW'    <- labelWidth winText
   mouseW'  <- labelWidth mouseText
   buttonW' <- labelWidth buttonText
   hoverW'  <- labelWidth hoverText
   hBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 4, boxAlignment = Center })
-    [ (Layout (Exactly winW')    Fill MiddleLeft, label Label winText)
-    , (Layout (Exactly mouseW')  Fill MiddleLeft, label Label mouseText)
-    , (Layout (Exactly buttonW') Fill MiddleLeft, label Label buttonText)
-    , (Layout (Exactly hoverW')  Fill MiddleLeft, label Label hoverText)
+    [ (Layout winW'    Fill MiddleLeft, label Label winText)
+    , (Layout mouseW'  Fill MiddleLeft, label Label mouseText)
+    , (Layout buttonW' Fill MiddleLeft, label Label buttonText)
+    , (Layout hoverW'  Fill MiddleLeft, label Label hoverText)
     , (Layout Fill               Fill MiddleLeft, label Label keyText)
     ]
 

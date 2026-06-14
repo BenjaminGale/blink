@@ -53,6 +53,8 @@ module Blink.Controls
     -- * Slider
   , SliderPart (..)
   , slider
+    -- * Measurement
+  , measureChrome
     -- * Building controls
   , control
   , renderControl
@@ -67,7 +69,7 @@ import Data.List (foldl', find)
 import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Geometry (Alignment (..), Orientation (..), Point (..), Rectangle (..), Size (..), insetRect)
+import Blink.Geometry (Alignment (..), Insets (..), Orientation (..), Point (..), Rectangle (..), Size (..), insetRect)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (Layout (..), Length (..), BoxConfig (..), hBox, vBox, defaultBoxConfig)
 import Blink.Rendering (Colour (..), TextAlign (..))
@@ -574,6 +576,18 @@ slider mkId ori value onChange = do
   when decrPressed $ dispatch (onChange (max 0 (clamped - step)))
   when incrPressed $ dispatch (onChange (min 1 (clamped + step)))
 
+
+-- | Returns the @(width, height)@ overhead consumed by a control's margin and
+-- padding as 'Length' constraints. Add these to a content size with 'addLength'
+-- to get the total size needed for the control to display without clipping.
+measureChrome :: Ord e => e -> UI e s (Length, Length)
+measureChrome eid = do
+  style <- getStyle eid
+  let m  = styleMargin style
+      p  = stylePadding style
+      dw = leftInset m + rightInset m + leftInset p + rightInset p
+      dh = topInset m  + bottomInset m  + topInset p  + bottomInset p
+  pure (Exactly dw, Exactly dh)
 
 -- | Style-aware rendering for a control. Applies the element's margin, draws
 -- its background and border, and runs @content@ within the padded content
