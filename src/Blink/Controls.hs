@@ -464,27 +464,18 @@ scrollableRegion mkId (Size cw ch) content = do
       vpH     = if needsH  then oh - scrollRegionBarSize else oh
       needsV  = ch > vpH
       vpW     = if needsV  then ow - scrollRegionBarSize else ow
-      hThumb  = max 0 (min 1 (vpW / cw))
-      vThumb  = max 0 (min 1 (vpH / ch))
-      vpRect  = outer { rectWidth = vpW,                    rectHeight = vpH }
-      hBar    = outer { rectY = rectY outer + vpH,          rectHeight = scrollRegionBarSize, rectWidth = vpW }
-      vBar    = outer { rectX = rectX outer + vpW,          rectWidth  = scrollRegionBarSize, rectHeight = vpH }
-  -- Render scrollbars first so position updates take effect before the content
-  -- offset is computed.
-  when needsH $ withBounds hBar $ scrollBar (mkId . ScrollRegionH) Horizontal hThumb
-  when needsV $ withBounds vBar $ scrollBar (mkId . ScrollRegionV) Vertical   vThumb
-  hPos <- if needsH then getScrollState (mkId (ScrollRegionH ScrollTrack)) else pure 0
-  vPos <- if needsV then getScrollState (mkId (ScrollRegionV ScrollTrack)) else pure 0
-  let offsetX    = hPos * max 0 (cw - vpW)
-      offsetY    = vPos * max 0 (ch - vpH)
-      virtBounds = outer
-        { rectX      = rectX outer - offsetX
-        , rectY      = rectY outer - offsetY
-        , rectWidth  = cw
-        , rectHeight = ch
-        }
-  withBounds vpRect $ clipToCurrent $
-    withBounds virtBounds content
+      hThumb  = if needsH then Just (max 0 (min 1 (vpW / cw))) else Nothing
+      vThumb  = if needsV then Just (max 0 (min 1 (vpH / ch))) else Nothing
+  scrollableDynamic mkId hThumb vThumb $ \hPos vPos ->
+    let offsetX    = hPos * max 0 (cw - vpW)
+        offsetY    = vPos * max 0 (ch - vpH)
+        virtBounds = outer
+          { rectX      = rectX outer - offsetX
+          , rectY      = rectY outer - offsetY
+          , rectWidth  = cw
+          , rectHeight = ch
+          }
+    in withBounds virtBounds content
 
 -- | A scrollable region where the caller controls content rendering. Renders
 -- scrollbars for the axes where a thumb ratio is supplied, then calls
