@@ -107,6 +107,8 @@ progressBar eid Indeterminate = do
     r       <- getBounds
     style   <- getStyle eid
     elapsed <- getAnimElapsed
+    -- Band width (0.3) and speed (0.5) are fixed; expose as parameters if
+    -- callers need to distinguish multiple simultaneous indeterminate bars.
     let t     = realToFrac elapsed * (0.5 :: Double)
         phase = t - fromIntegral (floor t :: Int)
         bandW = rectWidth r * 0.3
