@@ -264,9 +264,9 @@ preferredSize (Between lo hi) available  = max lo (min hi available)
 
 preferredSizes :: Double -> [Length] -> [Double]
 preferredSizes available constraints =
-  let mins    = map minLength constraints
-      surplus = max 0 (available - foldl' (+) 0 mins)
-  in zipWith (+) mins (distributeSurplusSpace surplus constraints)
+  let (mins, cs) = unzip [(minLength c, c) | c <- constraints]
+      surplus    = max 0 (available - foldl' (+) 0 mins)
+  in zipWith (+) mins (distributeSurplusSpace surplus cs)
 
 minLength :: Length -> Double
 minLength (Exactly w)    = w
