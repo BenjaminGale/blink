@@ -50,10 +50,10 @@ intersectSDLRect (SDL.Rectangle (SDL.P (SDL.V2 x1 y1)) (SDL.V2 w1 h1))
 
 alignedTextRect :: Rectangle -> TextAlign -> CInt -> CInt -> SDL.Rectangle CInt
 alignedTextRect r align tw th =
-  let cy = round (rectY r + rectHeight r / 2) - th `div` 2
+  let cy = round (rectY r + (rectHeight r - fromIntegral th) / 2)
       cx = case align of
         AlignLeft   -> round (rectX r)
-        AlignCenter -> round (rectX r + rectWidth r / 2) - tw `div` 2
+        AlignCenter -> round (rectX r + (rectWidth r - fromIntegral tw) / 2)
         AlignRight  -> round (rectX r + rectWidth r) - tw
   in SDL.Rectangle (SDL.P (SDL.V2 cx cy)) (SDL.V2 tw th)
 
@@ -122,11 +122,12 @@ mkTextMeasurer font = do
         offsets <- getOffsets offsetCache font t
         pure $ findCharAt offsets x
 
-    , tmTextSize     = \t -> do
-        offsets <- getOffsets offsetCache font t
-        h <- Font.height font
-        let w = case offsets of { [] -> 0; _ -> last offsets }
-        pure (Size (realToFrac w) (fromIntegral h))
+    , tmTextSize     = \t ->
+        if T.null t
+          then do h <- Font.height font
+                  pure (Size 0 (fromIntegral h))
+          else do (w, h) <- Font.size font t
+                  pure (Size (fromIntegral w) (fromIntegral h))
     }
 
 getOffsets :: IORef (Map Text [Float]) -> Font.Font -> Text -> IO [Float]
