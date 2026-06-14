@@ -808,6 +808,15 @@ spec = describe "Controls" $ do
           (withItemFocus (Just 0) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyDown []] } radioGroupTheme "a" noOpTextMeasurer))
         focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just 0
 
+      it "handles arrow keys on the frame focus is gained by click" $ do
+        -- Click on item 0 (centre Point 50 15) and press Down in the same frame
+        -- with no prior focus. The newly focused item should handle the key.
+        ctx' <- fmap snd $ runUI (radioGroup id radioItems "a" (\v _ -> v))
+          (withButtonReleased (emptyUIContext radioGroupRect
+            noInput { inputMousePosition = Point 50 15, inputKeyEvents = [KeyEvent KeyDown []] }
+            radioGroupTheme "a" noOpTextMeasurer))
+        focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just 1
+
     describe "rendering" $ do
       it "shows the selected mark on the selected item" $ do
         ctx' <- runRadioGroup "b" (mkRadioGroupCtx "b" noInput)

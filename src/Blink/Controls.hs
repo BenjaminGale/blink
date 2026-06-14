@@ -162,7 +162,12 @@ radioGroup mkId items selected onChange = do
              drawText (styleTextColour style) AlignLeft $
                (if selected == val then "● " else "○ ") <> lbl
              when activated $ dispatch (onChange val)
-             when (initialFocus == Just eid) $ do
+             -- Use initialFocus (captured before any item renders) to prevent
+             -- cascade: an item that gained focus via setFocus earlier in this
+             -- same vBox pass must not also fire navigation. Allow same-frame
+             -- clicks as an additional trigger since initialFocus predates applyFocus.
+             clicked <- isClicked eid
+             when (initialFocus == Just eid || clicked) $ do
                upPressed   <- isActivatedBy eid [KeyUp]
                downPressed <- isActivatedBy eid [KeyDown]
                when upPressed   $ setFocus (mkId (max 0 (idx - 1)))
