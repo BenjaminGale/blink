@@ -226,14 +226,14 @@ box ax cfg children = do
       contentBlock = alignRect (boxAlignment cfg) contentArea
                        (makeSlot ax 0 0 (foldl' (+) 0 slotSizes + totalSpacing) crossLen)
       slotOrigins  = scanl' (\o s -> o + s + boxSpacing cfg) (mainOrigin ax contentBlock) slotSizes
-      placeChild (slotOrigin, slotSize, (rc, ui)) =
-        let slotRect    = makeSlot ax slotOrigin crossOrig slotSize crossLen
-            effectiveRc = if boxFillCross cfg then fillCross ax rc else rc
-        in withBounds slotRect $ layoutWithConstraints effectiveRc ui
-
   withBounds contentArea $ do
     clipToCurrent $ do
-      mapM_ placeChild (zip3 slotOrigins slotSizes children)
+      sequence_ $ zipWith3
+        (\slotOrigin slotSize (rc, ui) ->
+          let slotRect    = makeSlot ax slotOrigin crossOrig slotSize crossLen
+              effectiveRc = if boxFillCross cfg then fillCross ax rc else rc
+          in withBounds slotRect $ layoutWithConstraints effectiveRc ui)
+        slotOrigins slotSizes children
 
 -- | Returns the preferred size for a 'Constraint' given the amount of available space.
 --
