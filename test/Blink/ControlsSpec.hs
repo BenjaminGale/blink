@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), button, checkbox, control, mouseToTrackPos, progressBar, radioGroup, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
+import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), button, checkbox, checkboxMark, control, isHitControl, mouseToTrackPos, progressBar, radioGroup, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, uniform)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -282,6 +282,20 @@ mkTextCtx value input = emptyUIContext controlRect input testTheme value noOpTex
 runTextInput :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
 runTextInput value ctx = fmap snd $ runUI (textInput TestControl value (\t _ -> t)) ctx
 
+-- checkboxMark setup: zero margin/padding so the full controlRect is hittable.
+-- App state is Maybe Bool so dispatches can be observed.
+checkboxMarkTheme :: Theme TestElement
+checkboxMarkTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = zeroMarginStyleSet }
+
+mkCheckboxMarkCtx :: InputState -> UIContext TestElement (Maybe Bool)
+mkCheckboxMarkCtx input = emptyUIContext controlRect input checkboxMarkTheme Nothing noOpTextMeasurer
+
+runCheckboxMark :: Bool -> UIContext TestElement (Maybe Bool) -> IO (UIContext TestElement (Maybe Bool))
+runCheckboxMark checked ctx = fmap snd $ runUI (checkboxMark TestControl checked (\v _ -> Just v)) ctx
+
+runCheckboxMarkControl :: WidgetRunner
+runCheckboxMarkControl ctx = fmap snd $ runUI (checkboxMark TestControl False (\_ s -> s)) (ctx { ctxTheme = checkboxMarkTheme })
+
 -- Forces checkboxTheme so the 20×20 box slot is hittable regardless of mkCtx's theme.
 runCheckboxControl :: WidgetRunner
 runCheckboxControl ctx = fmap snd $ runUI (checkbox TestControl "test label" False (\_ s -> s)) (ctx { ctxTheme = checkboxTheme })
@@ -466,6 +480,50 @@ spec = describe "Controls" $ do
       it "is not activated by Enter when disabled" $ do
         result <- fst <$> runUI (disableWhen True (button TestControl "label")) (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         result `shouldBe` False
+
+  describe "checkboxMark" $ do
+    controlBehaviourSpec runCheckboxMarkControl (Point 50 50)
+
+    describe "rendering" $ do
+      it "draws the checkmark when checked" $ do
+        ctx' <- runCheckboxMark True (mkCheckboxMarkCtx noInput)
+        drawnTexts ctx' `shouldContain` ["✓"]
+
+      it "does not draw the checkmark when unchecked" $ do
+        ctx' <- runCheckboxMark False (mkCheckboxMarkCtx noInput)
+        drawnTexts ctx' `shouldNotContain` ["✓"]
+
+    describe "toggle behaviour" $ do
+      it "dispatches True when clicked while unchecked" $ do
+        ctx' <- runCheckboxMark False (withButtonReleased (mkCheckboxMarkCtx (mouseAt (Point 50 50) False [])))
+        applyDispatches ctx' `shouldBe` Just True
+
+      it "dispatches False when clicked while checked" $ do
+        ctx' <- runCheckboxMark True (withButtonReleased (mkCheckboxMarkCtx (mouseAt (Point 50 50) False [])))
+        applyDispatches ctx' `shouldBe` Just False
+
+      it "dispatches toggle when Enter is pressed while focused" $ do
+        ctx' <- runCheckboxMark False (withFocus (Just TestControl) (mkCheckboxMarkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        applyDispatches ctx' `shouldBe` Just True
+
+      it "dispatches toggle when Space is pressed while focused" $ do
+        ctx' <- runCheckboxMark False (withFocus (Just TestControl) (mkCheckboxMarkCtx noInput { inputKeyEvents = [KeyEvent KeySpace []] }))
+        applyDispatches ctx' `shouldBe` Just True
+
+      it "does not dispatch when there is no interaction" $ do
+        ctx' <- runCheckboxMark False (mkCheckboxMarkCtx noInput)
+        applyDispatches ctx' `shouldBe` Nothing
+
+    describe "disabled" $ do
+      it "does not dispatch when clicked while disabled" $ do
+        ctx' <- fmap snd $ runUI (disableWhen True (checkboxMark TestControl False (\v _ -> Just v)))
+          (withButtonReleased (mkCheckboxMarkCtx (mouseAt (Point 50 50) False [])))
+        applyDispatches ctx' `shouldBe` Nothing
+
+      it "does not dispatch when Enter is pressed while disabled" $ do
+        ctx' <- fmap snd $ runUI (disableWhen True (checkboxMark TestControl False (\v _ -> Just v)))
+          (withFocus (Just TestControl) (mkCheckboxMarkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        applyDispatches ctx' `shouldBe` Nothing
 
   describe "checkbox" $ do
     controlBehaviourSpec runCheckboxControl boxPoint
@@ -917,4 +975,19 @@ spec = describe "Controls" $ do
   describe "scrollRegionBarSize" $
     it "is 16" $
       scrollRegionBarSize `shouldBe` 16
+
+  -- isHitControl uses testTheme (margin = uniform 10), so:
+  --   bgRect = Rectangle 10 10 80 80 within controlRect = Rectangle 0 0 100 100
+  describe "isHitControl" $ do
+    it "returns True when the mouse is inside the background rect" $ do
+      result <- fst <$> runUI (isHitControl TestControl) (mkCtx (mouseAt (Point 50 50) False []))
+      result `shouldBe` True
+
+    it "returns False when the mouse is in the margin area" $ do
+      result <- fst <$> runUI (isHitControl TestControl) (mkCtx (mouseAt (Point 5 5) False []))
+      result `shouldBe` False
+
+    it "returns False when the mouse is outside the bounds" $ do
+      result <- fst <$> runUI (isHitControl TestControl) (mkCtx (mouseAt (Point 200 200) False []))
+      result `shouldBe` False
 

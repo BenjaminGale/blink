@@ -37,6 +37,7 @@ module Blink.Controls
     -- * Input
   , button
   , checkbox
+  , checkboxMark
   , radioGroup
   , textInput
     -- * Scroll
