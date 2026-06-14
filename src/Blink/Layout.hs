@@ -78,7 +78,7 @@ module Blink.Layout
   , preferredSize
   ) where
 
-import Data.List (sortBy)
+import Data.List (scanl', sortBy)
 import Data.Ord  (comparing)
 
 import qualified Data.IntMap.Strict as IntMap
@@ -225,7 +225,7 @@ box ax cfg children = do
       crossLen     = crossLength ax contentArea
       contentBlock = alignRect (boxAlignment cfg) contentArea
                        (makeSlot ax 0 0 (sum slotSizes + totalSpacing) crossLen)
-      slotOrigins  = scanl (\o s -> o + s + boxSpacing cfg) (mainOrigin ax contentBlock) slotSizes
+      slotOrigins  = scanl' (\o s -> o + s + boxSpacing cfg) (mainOrigin ax contentBlock) slotSizes
       placeChild (slotOrigin, slotSize, (rc, ui)) =
         let slotRect    = makeSlot ax slotOrigin crossOrig slotSize crossLen
             effectiveRc = if boxFillCross cfg then fillCross ax rc else rc
