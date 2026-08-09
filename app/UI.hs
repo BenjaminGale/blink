@@ -13,6 +13,8 @@ import qualified Data.Text as T
 data BasicControlsState = BasicControlsState
   { clickCount      :: Int
   , inputText       :: Text
+  , numberText      :: Text
+  , passwordText    :: Text
   , editingEnabled  :: Bool
   , sliderValue     :: Double
   , radioSelection  :: Int
@@ -23,6 +25,8 @@ initialBasicControls :: BasicControlsState
 initialBasicControls = BasicControlsState
   { clickCount      = 0
   , inputText       = ""
+  , numberText      = ""
+  , passwordText    = ""
   , editingEnabled  = False
   , sliderValue     = 0.5
   , radioSelection  = 0
@@ -160,6 +164,8 @@ basicControlsView ps =
     [ (Layout Fill (Exactly 50)  TopLeft, rowCheckboxes ps)
     , (Layout Fill (Exactly 70)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowButtons ps)
     , (Layout Fill (Exactly 50)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowInput ps)
+    , (Layout Fill (Exactly 50)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowNumberInput ps)
+    , (Layout Fill (Exactly 50)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowPasswordInput ps)
     , (Layout Fill (Exactly 38)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowSlider ps)
     , (Layout Fill Fill          TopLeft, disableWhen (not (editingEnabled ps)) $ rowRadio ps)
     ]
@@ -210,8 +216,32 @@ rowInput ps = do
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
     [ (Layout labelW Fill         MiddleLeft, label Label "Text input")
     , (Layout Fill   (Exactly 30) TopLeft,
-         textInput TextInput1 (inputText ps) (\t s ->
+         textField TextInput1 (inputText ps) (\t s ->
            updateBasicControls s (\p -> p { inputText = t })))
+    ]
+
+rowNumberInput :: BasicControlsState -> DemoUI ()
+rowNumberInput ps = do
+  (chromW, _) <- measureChrome Label
+  Size tw _   <- measureText "Number input"
+  let labelW = addLength (Exactly tw) chromW
+  hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
+    [ (Layout labelW Fill         MiddleLeft, label Label "Number input")
+    , (Layout Fill   (Exactly 30) TopLeft,
+         numberField NumberInput1 (numberText ps) (\t s ->
+           updateBasicControls s (\p -> p { numberText = t })))
+    ]
+
+rowPasswordInput :: BasicControlsState -> DemoUI ()
+rowPasswordInput ps = do
+  (chromW, _) <- measureChrome Label
+  Size tw _   <- measureText "Password input"
+  let labelW = addLength (Exactly tw) chromW
+  hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
+    [ (Layout labelW Fill         MiddleLeft, label Label "Password input")
+    , (Layout Fill   (Exactly 30) TopLeft,
+         passwordField PasswordInput1 (passwordText ps) (\t s ->
+           updateBasicControls s (\p -> p { passwordText = t })))
     ]
 
 rowSlider :: BasicControlsState -> DemoUI ()

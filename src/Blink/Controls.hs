@@ -97,7 +97,7 @@ producing a state modifier from an updated value, dispatched whenever the
 user makes a change:
 
 @
-textInput NameInput (userName s) (\\t st -> st { userName = t })
+textField NameInput (userName s) (\\t st -> st { userName = t })
 @
 
 The host applies the modifier once the frame completes; the control reads the
@@ -138,7 +138,10 @@ module Blink.Controls
   , checkboxMark
   , radioGroup
   , selector
-  , textInput
+  , textInputControl
+  , textField
+  , numberField
+  , passwordField
     -- * Scroll
   , ScrollBarPart (..)
   , scrollBar
@@ -158,6 +161,7 @@ module Blink.Controls
   ) where
 
 import Control.Monad (when, forM_)
+import Data.Char (isDigit)
 import Data.List (foldl', find)
 import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
@@ -373,10 +377,12 @@ resolveKeyboardSelection hasFocus keyEvts len (anchor1, active1)
     plainRight = hasFocus && any (\e -> key e == KeyRight && Shift `notElem` modifiers e) keyEvts
 
 -- | Backspace and typed text edit the value, selection-aware; dispatches
--- @onChange@ when the text actually changes. Assumes the caller has already
--- checked the control is focused and enabled.
-applyEdit :: Ord e => (Text -> s -> s) -> Text -> InputState -> (Int, Int) -> UI e s (Int, Int)
-applyEdit onChange value input (anchor2, active2)
+-- @onChange@ when the text actually changes. @inputFilter@ is applied to the
+-- newly typed text before insertion, letting callers reject or transform
+-- keystrokes (e.g. digits only). Assumes the caller has already checked the
+-- control is focused and enabled.
+applyEdit :: Ord e => (Text -> Text) -> (Text -> s -> s) -> Text -> InputState -> (Int, Int) -> UI e s (Int, Int)
+applyEdit inputFilter onChange value input (anchor2, active2)
   | backspace || hasTyped = do
       when (newText /= value) $ dispatch (onChange newText)
       pure (newCursor, newCursor)
@@ -384,7 +390,7 @@ applyEdit onChange value input (anchor2, active2)
   where
     keyEvts   = inputKeyEvents input
     backspace = any (\e -> key e == KeyBackspace) keyEvts
-    typed     = foldl' (<>) T.empty (inputTypedText input)
+    typed     = inputFilter (foldl' (<>) T.empty (inputTypedText input))
     hasTyped  = not (T.null typed)
     hasSel2   = anchor2 /= active2
     selLo2    = min anchor2 active2
@@ -439,20 +445,33 @@ drawTextInputContent style bounds value hasFocus enabled ox (anchor3, active3) =
     drawLo = min anchor3 active3
     drawHi = max anchor3 active3
 
--- | A single-line text entry field. Supports click-to-place cursor, drag
--- selection, Shift+arrow extension, and selection-aware editing. Long text
--- scrolls horizontally to keep the cursor visible.
+-- | A single-line text entry field, and the base every other text-entry
+-- control ('textField', 'numberField', 'passwordField') is built on.
+-- Supports click-to-place cursor, drag selection, Shift+arrow extension, and
+-- selection-aware editing. Long text scrolls horizontally to keep the cursor
+-- visible.
 --
--- @
--- textInput NameInput (userName s) (\\t st -> st { userName = t })
--- @
+-- @inputFilter@ is applied to newly typed text before it's inserted, letting
+-- callers restrict which keystrokes are accepted (e.g. digits only).
+-- Reformatting the value itself (e.g. inserting punctuation as the user
+-- types) is application concern, not this control's — do it in @onChange@
+-- and pass the already-formatted value back in on the next frame, same as
+-- any other value-callback control.
+--
+-- @displayFilter@ is applied to the value everywhere it is measured or
+-- drawn — the rendered text, and every character-offset calculation used for
+-- cursor placement, click hit-testing, and auto-scroll — so what's on screen
+-- and where the cursor lands always agree. It must be length- and
+-- position-preserving (e.g. masking each character of a password with @•@);
+-- the underlying value edited by @inputFilter@\/@onChange@ is never affected
+-- by it.
 --
 -- Cursor position and selection are control state (see "Blink.Style" and the
--- Concepts section above), not application data — 'textInput' reads and
--- writes them itself via 'getSelection'\/'setSelection' and
+-- Concepts section above), not application data — 'textInputControl' reads
+-- and writes them itself via 'getSelection'\/'setSelection' and
 -- 'getScrollState'\/'setScrollState', keyed by @eid@.
-textInput :: Ord e => e -> Text -> (Text -> s -> s) -> UI e s ()
-textInput eid value onChange = do
+textInputControl :: Ord e => (Text -> Text) -> (Text -> Text) -> e -> Text -> (Text -> s -> s) -> UI e s ()
+textInputControl inputFilter displayFilter eid value onChange = do
   wasFocused   <- isFocused eid
   wasCapturing <- isDragging eid
   control eid $ do
@@ -464,7 +483,8 @@ textInput eid value onChange = do
     sel      <- getSelection eid
     scrollX  <- getScrollState eid
 
-    let w           = rectWidth bounds
+    let displayValue = displayFilter value
+        w           = rectWidth bounds
         defPos      = T.length value
         anchor0     = maybe defPos selectionAnchor sel
         active0     = maybe defPos selectionActive sel
@@ -476,7 +496,7 @@ textInput eid value onChange = do
 
     (anchor1, active1) <-
       if enabled
-        then resolveMouseSelection eid bounds wasCapturing justFocused value scrollX (anchor0, active0)
+        then resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX (anchor0, active0)
         else pure (anchor0, active0)
 
     let (anchor2, active2) =
@@ -484,18 +504,38 @@ textInput eid value onChange = do
 
     (anchor3, active3) <-
       if enabled
-        then applyEdit onChange value input (anchor2, active2)
+        then applyEdit inputFilter onChange value input (anchor2, active2)
         else pure (anchor2, active2)
 
     when enabled $ setSelection eid (Selection anchor3 active3)
 
     when enabled $ do
-      curX <- charOffset value active3
+      curX <- charOffset displayValue active3
       let newScrollX = resolveScroll w scrollX (realToFrac curX)
       when (newScrollX /= scrollX) $ setScrollState eid newScrollX
 
     scrollX' <- getScrollState eid
-    drawTextInputContent style bounds value hasFocus enabled scrollX' (anchor3, active3)
+    drawTextInputContent style bounds displayValue hasFocus enabled scrollX' (anchor3, active3)
+
+-- | A plain single-line text entry field, with no keystroke filtering or
+-- display masking.
+--
+-- @
+-- textField NameInput (userName s) (\\t st -> st { userName = t })
+-- @
+textField :: Ord e => e -> Text -> (Text -> s -> s) -> UI e s ()
+textField = textInputControl id id
+
+-- | A text field that only accepts digit keystrokes; all other typed
+-- characters are silently dropped. Built on 'textInputControl'.
+numberField :: Ord e => e -> Text -> (Text -> s -> s) -> UI e s ()
+numberField = textInputControl (T.filter isDigit) id
+
+-- | A text field that masks its displayed value with @•@, one per character,
+-- while editing the real underlying text as normal. Built on
+-- 'textInputControl'.
+passwordField :: Ord e => e -> Text -> (Text -> s -> s) -> UI e s ()
+passwordField = textInputControl id (T.map (const '•'))
 
 -- | Sub-parts of a scrollbar, used as the inner tag when building the
 -- control's element IDs via a tagging function:

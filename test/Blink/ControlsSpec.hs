@@ -6,7 +6,8 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, button, checkbox, checkboxMark, control, focusRing, isControlHit, listBox, mouseToTrackPos, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textInput, thumbRect, viewport, virtualContent)
+import qualified Data.Text as T
+import Blink.Controls (ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, button, checkbox, checkboxMark, control, focusRing, isControlHit, listBox, mouseToTrackPos, numberField, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -293,8 +294,8 @@ runButton ctx = fmap snd $ runUI (button TestControl "label") ctx
 runActivatable :: WidgetRunner
 runActivatable ctx = fmap snd $ runUI (activatable TestControl (drawText testColour AlignCenter "x") [KeyReturn]) ctx
 
-runTextInputControl :: WidgetRunner
-runTextInputControl ctx = fmap snd $ runUI (textInput TestControl "" (\_ s -> s)) ctx
+runTextFieldControl :: WidgetRunner
+runTextFieldControl ctx = fmap snd $ runUI (textField TestControl "" (\_ s -> s)) ctx
 
 -- Text editing tests use the entered text itself as the application state.
 mkTextCtx :: Text -> InputState -> UIContext TestElement Text
@@ -313,8 +314,14 @@ fixedCharWidth = TextMeasurer
 mkTextCtxWith :: TextMeasurer -> Text -> InputState -> UIContext TestElement Text
 mkTextCtxWith measurer value input = emptyUIContext controlRect input testTheme value measurer
 
-runTextInput :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
-runTextInput value ctx = fmap snd $ runUI (textInput TestControl value (\t _ -> t)) ctx
+runTextField :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
+runTextField value ctx = fmap snd $ runUI (textField TestControl value (\t _ -> t)) ctx
+
+runNumberField :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
+runNumberField value ctx = fmap snd $ runUI (numberField TestControl value (\t _ -> t)) ctx
+
+runPasswordField :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
+runPasswordField value ctx = fmap snd $ runUI (passwordField TestControl value (\t _ -> t)) ctx
 
 -- checkboxMark setup: zero margin/padding so the full controlRect is hittable.
 -- App state is Maybe Bool so dispatches can be observed.
@@ -719,60 +726,60 @@ spec = describe "Controls" $ do
         ctx' <- runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput) { ctxTheme = focusBorderTheme })
         getDrawCommands ctx' `shouldNotContain` [StrokeBorder controlRect testBorderColour (uniformBorder 1)]
 
-  describe "textInput" $ do
-    controlBehaviourSpec runTextInputControl (Point 50 50)
-    describe "background and border" $ backgroundAndBorderSpec runTextInputControl
+  describe "textField" $ do
+    controlBehaviourSpec runTextFieldControl (Point 50 50)
+    describe "background and border" $ backgroundAndBorderSpec runTextFieldControl
 
     describe "rendering" $ do
       it "displays the value without a cursor when unfocused" $ do
-        ctx' <- runTextInput "hello" (withFocus (Just OtherControl) (mkTextCtx "hello" noInput))
+        ctx' <- runTextField "hello" (withFocus (Just OtherControl) (mkTextCtx "hello" noInput))
         drawnTexts ctx' `shouldContain` ["hello"]
 
       it "displays the value with a cursor when focused" $ do
-        ctx' <- runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
+        ctx' <- runTextField "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
         drawnTexts ctx' `shouldContain` ["hello"]
         getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 1 70) testColour]
 
     describe "text editing" $ do
       it "appends typed characters to the value" $ do
-        ctx' <- runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] }))
+        ctx' <- runTextField "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] }))
         applyDispatches ctx' `shouldBe` "hello!"
 
       it "removes the last character on backspace" $ do
-        ctx' <- runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] }))
+        ctx' <- runTextField "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] }))
         applyDispatches ctx' `shouldBe` "hell"
 
       it "does not dispatch when backspace is pressed on an empty value" $ do
-        ctx' <- runTextInput "" (withFocus (Just TestControl) (mkTextCtx "" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] }))
+        ctx' <- runTextField "" (withFocus (Just TestControl) (mkTextCtx "" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] }))
         dispatchCount ctx' `shouldBe` 0
 
       it "does not dispatch when there is no input" $ do
-        ctx' <- runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
+        ctx' <- runTextField "hello" (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
         dispatchCount ctx' `shouldBe` 0
 
       it "does not process input when unfocused" $ do
-        ctx' <- runTextInput "hello" (withFocus (Just OtherControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"], inputKeyEvents = [KeyEvent KeyBackspace []] }))
+        ctx' <- runTextField "hello" (withFocus (Just OtherControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"], inputKeyEvents = [KeyEvent KeyBackspace []] }))
         dispatchCount ctx' `shouldBe` 0
 
     describe "disabled" $ do
       it "does not process input when disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (textInput TestControl "hello" (\t _ -> t))) (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] }))
+        ctx' <- fmap snd $ runUI (disableWhen True (textField TestControl "hello" (\t _ -> t))) (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] }))
         dispatchCount ctx' `shouldBe` 0
 
       it "does not show a cursor when focused and disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (textInput TestControl "hello" (\t _ -> t))) (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
+        ctx' <- fmap snd $ runUI (disableWhen True (textField TestControl "hello" (\t _ -> t))) (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
         getDrawCommands ctx' `shouldNotContain` [FillRect (Rectangle 15 15 1 70) testColour]
 
     describe "cursor placement" $ do
       it "sets the cursor to the clicked position on mouse press" $ do
         -- noOpTextMeasurer maps every offset to 0, so any click → position 0
-        ctx' <- runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" (mouseAt (Point 50 50) True [])))
+        ctx' <- runTextField "hello" (withFocus (Just TestControl) (mkTextCtx "hello" (mouseAt (Point 50 50) True [])))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 0 0]
 
       it "extends the active end on drag while keeping anchor" $ do
         -- First frame: click starts drag; second frame: drag extends selection.
-        frame1 <- runTextInput "hello" (withFocus (Just TestControl) (mkTextCtx "hello" (mouseAt (Point 50 50) True [])))
-        frame2 <- fmap snd $ runUI (textInput TestControl "hello" (\t _ -> t))
+        frame1 <- runTextField "hello" (withFocus (Just TestControl) (mkTextCtx "hello" (mouseAt (Point 50 50) True [])))
+        frame2 <- fmap snd $ runUI (textField TestControl "hello" (\t _ -> t))
                     (nextFrameContext controlRect (mouseAt (Point 70 50) True []) frame1)
         -- With noOpTextMeasurer both positions are 0, so selection is (0,0); the
         -- key check is that anchor was NOT reset on the second frame.
@@ -784,63 +791,63 @@ spec = describe "Controls" $ do
       let withSel a v ctx = ctx { ctxElements = (ctxElements ctx) { elmSelections = Map.singleton TestControl [Selection a v] } }
 
       it "moves cursor left with Left" $ do
-        ctx' <- runTextInput "hello" (withSel 3 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyLeft []] })))
+        ctx' <- runTextField "hello" (withSel 3 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyLeft []] })))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 2 2]
 
       it "moves cursor right with Right" $ do
-        ctx' <- runTextInput "hello" (withSel 2 2 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyRight []] })))
+        ctx' <- runTextField "hello" (withSel 2 2 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyRight []] })))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 3 3]
 
       it "collapses selection to low end on plain Left" $ do
-        ctx' <- runTextInput "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyLeft []] })))
+        ctx' <- runTextField "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyLeft []] })))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 1 1]
 
       it "collapses selection to high end on plain Right" $ do
-        ctx' <- runTextInput "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyRight []] })))
+        ctx' <- runTextField "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyRight []] })))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 3 3]
 
       it "extends selection left with Shift+Left" $ do
-        ctx' <- runTextInput "hello" (withSel 3 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyLeft [Shift]] })))
+        ctx' <- runTextField "hello" (withSel 3 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyLeft [Shift]] })))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 3 2]
 
       it "extends selection right with Shift+Right" $ do
-        ctx' <- runTextInput "hello" (withSel 3 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyRight [Shift]] })))
+        ctx' <- runTextField "hello" (withSel 3 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyRight [Shift]] })))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 3 4]
 
       it "does not move cursor past the beginning" $ do
-        ctx' <- runTextInput "hello" (withSel 0 0 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyLeft []] })))
+        ctx' <- runTextField "hello" (withSel 0 0 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyLeft []] })))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 0 0]
 
       it "does not move cursor past the end" $ do
-        ctx' <- runTextInput "hello" (withSel 5 5 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyRight []] })))
+        ctx' <- runTextField "hello" (withSel 5 5 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyRight []] })))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 5 5]
 
     describe "selection editing" $ do
       let withSel a v ctx = ctx { ctxElements = (ctxElements ctx) { elmSelections = Map.singleton TestControl [Selection a v] } }
 
       it "deletes the selected range on backspace" $ do
-        ctx' <- runTextInput "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] })))
+        ctx' <- runTextField "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] })))
         applyDispatches ctx' `shouldBe` "hlo"
 
       it "replaces the selected range with typed text" $ do
-        ctx' <- runTextInput "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["X"] })))
+        ctx' <- runTextField "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["X"] })))
         applyDispatches ctx' `shouldBe` "hXlo"
 
       it "collapses cursor to insertion point after replacing selection" $ do
-        ctx' <- runTextInput "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["XY"] })))
+        ctx' <- runTextField "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["XY"] })))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 3 3]
 
     describe "focus persistence" $ do
       let withSel a v ctx = ctx { ctxElements = (ctxElements ctx) { elmSelections = Map.singleton TestControl [Selection a v] } }
 
       it "leaves the selection unchanged on a frame where the control is not focused" $ do
-        ctx' <- runTextInput "hello" (withSel 1 3 (withFocus (Just OtherControl) (mkTextCtx "hello" noInput)))
+        ctx' <- runTextField "hello" (withSel 1 3 (withFocus (Just OtherControl) (mkTextCtx "hello" noInput)))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 1 3]
 
       it "restores the previous selection when focus returns without a click" $ do
         -- No withFocus: focus starts at Nothing, so TestControl auto-focuses
         -- this frame via the same path as gaining focus by Tab, not by click.
-        ctx' <- runTextInput "hello" (withSel 2 4 (mkTextCtx "hello" noInput))
+        ctx' <- runTextField "hello" (withSel 2 4 (mkTextCtx "hello" noInput))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 2 4]
 
     describe "scrolling" $ do
@@ -852,13 +859,68 @@ spec = describe "Controls" $ do
         -- Content width is 70px; fixedCharWidth puts the cursor at 100px
         -- (index 5 * 20px), past the visible window.
         let base = withSel 5 5 (withFocus (Just TestControl) (mkTextCtxWith fixedCharWidth "hello" noInput))
-        ctx' <- runTextInput "hello" base
+        ctx' <- runTextField "hello" base
         textScrollX ctx' `shouldBe` 31
 
       it "scrolls left to keep the cursor visible when it moves before the left edge" $ do
         let base = withScrollX 50 (withSel 0 0 (withFocus (Just TestControl) (mkTextCtxWith fixedCharWidth "hello" noInput)))
-        ctx' <- runTextInput "hello" base
+        ctx' <- runTextField "hello" base
         textScrollX ctx' `shouldBe` 0
+
+  describe "numberField" $ do
+    describe "input filter" $ do
+      it "inserts digits typed alongside non-digits, dropping the non-digits" $ do
+        ctx' <- runNumberField "12" (withFocus (Just TestControl) (mkTextCtx "12" noInput { inputTypedText = ["a3b"] }))
+        applyDispatches ctx' `shouldBe` "123"
+
+      it "does not dispatch when the only typed characters are non-digits" $ do
+        ctx' <- runNumberField "12" (withFocus (Just TestControl) (mkTextCtx "12" noInput { inputTypedText = ["!"] }))
+        dispatchCount ctx' `shouldBe` 0
+
+      it "still allows backspace to remove digits" $ do
+        ctx' <- runNumberField "12" (withFocus (Just TestControl) (mkTextCtx "12" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] }))
+        applyDispatches ctx' `shouldBe` "1"
+
+    describe "rendering" $ do
+      it "displays the value unmasked" $ do
+        ctx' <- runNumberField "42" (withFocus (Just TestControl) (mkTextCtx "42" noInput))
+        drawnTexts ctx' `shouldContain` ["42"]
+
+  describe "passwordField" $ do
+    describe "rendering" $ do
+      it "displays a mask character per character of the value instead of the value itself" $ do
+        ctx' <- runPasswordField "hunter2" (withFocus (Just TestControl) (mkTextCtx "hunter2" noInput))
+        drawnTexts ctx' `shouldContain` ["•••••••"]
+        drawnTexts ctx' `shouldNotContain` ["hunter2"]
+
+    describe "editing" $ do
+      it "appends typed characters to the real (unmasked) value" $ do
+        ctx' <- runPasswordField "hunter2" (withFocus (Just TestControl) (mkTextCtx "hunter2" noInput { inputTypedText = ["!"] }))
+        applyDispatches ctx' `shouldBe` "hunter2!"
+
+    describe "cursor placement" $ do
+      it "places the cursor using offsets measured against the masked text, not the real value" $ do
+        -- fixedCharWidth advances 20px per character regardless of content, so
+        -- this only demonstrates the masked text (not the real value) is what
+        -- gets measured; a measurer sensitive to character identity would be
+        -- needed to fully distinguish the two, but passing the wrong text here
+        -- would still be a bug even if this measurer can't see it.
+        let base = withFocus (Just TestControl) (mkTextCtxWith fixedCharWidth "hunter2" (mouseAt (Point 35 50) True []))
+        ctx' <- runPasswordField "hunter2" base
+        case Map.lookup TestControl (elmSelections (ctxElements ctx')) of
+          Just [Selection a v] -> (a, v) `shouldBe` (1, 1)
+          other                 -> expectationFailure $ "expected Just [Selection 1 1], got: " <> show other
+
+  describe "textInputControl" $ do
+    it "lets a custom input filter reject keystrokes entirely" $ do
+      ctx' <- fmap snd $ runUI (textInputControl (const T.empty) id TestControl "hello" (\t _ -> t))
+        (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["x"] }))
+      dispatchCount ctx' `shouldBe` 0
+
+    it "lets a custom display filter change what is rendered without changing the value" $ do
+      ctx' <- fmap snd $ runUI (textInputControl id T.toUpper TestControl "hello" (\t _ -> t))
+        (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
+      drawnTexts ctx' `shouldContain` ["HELLO"]
 
   describe "rangeControl" $ do
     controlBehaviourSpec runRangeControl (Point 50 50)

@@ -12,6 +12,8 @@ data Element = Label
              | Btn Int
              | NavBtn Int
              | TextInput1
+             | NumberInput1
+             | PasswordInput1
              | CheckboxBox1 | CheckboxBox2 | CheckboxBox3 | CheckboxBox4 | CheckboxBox5
              | ProgressBar1 | ProgressBar2
              | Slider1 SliderPart
@@ -263,6 +265,8 @@ mkTheme p = Theme
       , (ProgressBar1,              mkProgressBarStyle p)
       , (ProgressBar2,              mkProgressBarStyle p)
       , (TextInput1,                mkTextInputStyle p)
+      , (NumberInput1,              mkTextInputStyle p)
+      , (PasswordInput1,            mkTextInputStyle p)
       , (CheckboxBox1,              mkCheckboxBoxStyle p)
       , (CheckboxBox2,              mkCheckboxBoxStyle p)
       , (CheckboxBox3,              mkCheckboxBoxStyle p)
