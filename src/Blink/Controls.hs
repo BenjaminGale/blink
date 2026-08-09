@@ -2,11 +2,95 @@
 {- |
 Module: Blink.Controls
 
-Standard UI controls built on top of "Blink.UI". Each control takes an element
-ID of type @e@ used for styling and interaction tracking; see "Blink.UI" for an
-explanation of element IDs, commands, and the render loop.
+= Purpose
 
-= Value-callback pattern
+The standard widget library, built on top of "Blink.UI". Where "Blink.UI"
+provides the render loop, input state, and low-level drawing primitives, and
+"Blink.Layout" provides sizing and arrangement, this module fuses the two
+with interaction (hover, focus, tab order, drag) and style-driven chrome
+rendering to produce ready-to-use controls — buttons, checkboxes, sliders,
+scrollable regions, and so on.
+
+This module is organised in three tiers, each building on the last. Read
+them in order:
+
+  1. /Concepts/ (this section) — shared vocabulary used throughout the rest
+     of the module.
+  2. /Building blocks/ — the primitives every control below is assembled
+     from. Reach for these when composing a custom control that isn't
+     provided directly.
+  3. /Controls/ — the ready-to-use widgets themselves, grouped by kind. Each
+     one's Haddock notes which building blocks it's made of.
+
+== Element ID hierarchy
+
+Every control takes an element ID of type @e@, used as the key for styling
+("Blink.Style"), interaction state (hover, focus, drag), and persisted
+control state (scroll position, text selection). A simple screen might use
+one sum-type constructor per control:
+
+@
+data Element = NameInput | SaveButton | VolumeSlider
+  deriving (Eq, Ord, Show)
+@
+
+Composite controls — those made of several interactive parts, like
+'scrollBar' (a track plus two buttons) or 'selector' (one entry per item) —
+take a /tagging function/ that maps a part to its own element ID, rather
+than a single ID. By convention this parameter is named @mkId@. This lets
+each part be styled, hit-tested, and focused independently while keeping the
+whole composite addressable through one sum-type branch of the caller's
+element type:
+
+@
+data Element = ... | VScroll ScrollBarPart
+              | ItemList Int
+
+scrollBar VScroll Vertical 0.3          -- mkId = VScroll
+selector  ItemList items selected onChange renderItem  -- mkId = ItemList
+@
+
+The element ID space therefore forms a tree that mirrors the widget tree:
+each composite control's sub-parts (see 'ScrollBarPart', 'SliderPart',
+'ScrollRegionPart') nest inside the caller's own element type the same way
+the widgets they identify nest inside the caller's UI tree. A
+'scrollableRegion' nested inside a custom panel, for example, produces IDs
+like @MyPanel (ScrollRegionV ScrollThumb)@.
+
+== Chrome and the box model
+
+/Chrome/ is the style-driven decoration around a control's content: margin,
+border, background, and padding, applied in that order from the outside in,
+the same as the CSS box model.
+
+>  +----------------- margin -----------------+
+>  |  +-------------- border --------------+  |
+>  |  |  +---------- padding -----------+  |  |
+>  |  |  |                              |  |  |
+>  |  |  |           content            |  |  |
+>  |  |  |                              |  |  |
+>  |  |  +------------------------------+  |  |
+>  |  +------------------------------------+  |
+>  +------------------------------------------+
+
+These insets and colours come from a control's 'StyleSet' (see
+"Blink.Style"), which holds a normal and focused variant. 'renderChrome'
+applies margin, background, and border, then runs its content action within
+the padded content rectangle — this is what @content@ means for every
+control below. 'measureChrome' returns the total width\/height overhead this
+adds, for callers that need to size a control from the inside out.
+
+== Activation pattern
+
+Input controls treat "the user chose this" uniformly: a left-click, or one
+of a designated set of keys pressed while the control holds keyboard focus —
+provided the control isn't disabled. 'isActivatedBy' implements this test;
+'activatable' pairs it with 'control' so a control's draw action and its
+activation result are produced together. 'button' is the direct expression
+of this pattern; 'checkboxMark' and 'selector''s per-item handling build on
+it too.
+
+== Value-callback pattern
 
 Controls that edit application data receive the current value and a function
 producing a state modifier from an updated value, dispatched whenever the
@@ -20,7 +104,10 @@ The host applies the modifier once the frame completes; the control reads the
 new value back from the application state on the next frame. This keeps all
 application data outside the UI tree.
 
-= Control state
+'button' is the deliberate exception — see its Haddock for why it returns a
+'Bool' instead.
+
+== Control state
 
 Controls whose state is presentational rather than application data — a
 scrollbar's position, for example — read and write it directly through the
@@ -30,8 +117,19 @@ first write, and persists across frames inside the 'UIContext'. The application
 never sees the traffic.
 -}
 module Blink.Controls
-  ( -- * Display
-    label
+  ( -- * Building controls
+    control
+  , renderChrome
+  , measureChrome
+  , activatable
+  , rangeControl
+  , focusRing
+  , isActivatedBy
+  , isControlHit
+  , whenFocused
+  , isKeyPressed
+    -- * Display
+  , label
   , ProgressValue (..)
   , progressBar
     -- * Input
@@ -54,18 +152,6 @@ module Blink.Controls
     -- * Slider
   , SliderPart (..)
   , slider
-    -- * Measurement
-  , measureChrome
-    -- * Building controls
-  , control
-  , renderChrome
-  , activatable
-  , rangeControl
-  , focusRing
-  , isActivatedBy
-  , isControlHit
-  , whenFocused
-  , isKeyPressed
   ) where
 
 import Control.Monad (when, forM_)
@@ -122,6 +208,10 @@ progressBar eid Indeterminate = do
     withBounds (r { rectX = left, rectWidth = bandW }) $
       fillRect (styleTextColour style)
 
+-- | The interactive checkmark box on its own, with no adjacent label. An
+-- 'activatable' control (click, Enter, or Space) that draws a checkmark when
+-- @checked@. Exported separately from 'checkbox' so callers that need
+-- non-standard label placement can still get the standard toggle behaviour.
 checkboxMark :: Ord e => e -> Bool -> (Bool -> s -> s) -> UI e s ()
 checkboxMark boxId checked onToggle = do
   activated <- activatable boxId draw [KeyReturn, KeySpace]
@@ -131,11 +221,20 @@ checkboxMark boxId checked onToggle = do
       style <- getStyle boxId
       when checked $ drawText (styleTextColour style) AlignCenter "✓"
 
+-- | Draws left-aligned label text in the given style. A small helper shared
+-- by 'checkbox' so its label rendering is a one-line call.
 checkboxLabel :: Style -> Text -> UI e s ()
 checkboxLabel style = drawText (styleTextColour style) AlignLeft
 
 -- | A togglable checkbox with an adjacent label. Dispatches the state modifier
 -- @onToggle (not checked)@ when activated by a click or the Enter key.
+-- Composed from 'checkboxMark' (the interactive box) laid out beside
+-- 'checkboxLabel' (plain text) via 'hBox', with 'focusRing' drawn around the
+-- pair since neither half alone spans the whole composite.
+--
+-- @
+-- checkbox NotifyMe "Notify me by email" (notifyMe s) $ \\v st -> st { notifyMe = v }
+-- @
 checkbox :: Ord e => e -> Text -> Bool -> (Bool -> s -> s) -> UI e s ()
 checkbox boxId text checked onToggle = do
   style <- getStyle boxId
@@ -152,7 +251,18 @@ checkbox boxId text checked onToggle = do
 -- itself owns the selection comparison, activation, and Up\/Down navigation.
 -- Multiple selectors on screen each bind to their own application-state
 -- field; no shared state is required. See 'radioGroup' for the radio-mark
--- rendering built on top of this.
+-- rendering built on top of this. Each item is a 'control' internally, so
+-- it gets its own hover, focus, and tab-stop; 'selector' layers Up\/Down
+-- navigation and the shared selection value on top.
+--
+-- @
+-- data Element = ... | SizeItem Int
+--
+-- selector SizeItem [(Small, "Small"), (Medium, "Medium"), (Large, "Large")]
+--   (size s) (\\v st -> st { size = v }) $ \\eid isSelected (_, lbl) -> do
+--     style <- getStyle eid
+--     drawText (styleTextColour style) AlignLeft (if isSelected then "> " <> lbl else lbl)
+-- @
 selector :: (Eq e, Ord e, Eq a)
          => (Int -> e)                          -- ^ maps item index to an element ID
          -> [(a, Text)]                         -- ^ @(value, label)@ pairs
@@ -226,6 +336,15 @@ button eid txt = activatable eid draw [KeyReturn]
 -- | A single-line text entry field. Supports click-to-place cursor, drag
 -- selection, Shift+arrow extension, and selection-aware editing. Long text
 -- scrolls horizontally to keep the cursor visible.
+--
+-- @
+-- textInput NameInput (userName s) (\\t st -> st { userName = t })
+-- @
+--
+-- Cursor position and selection are control state (see "Blink.Style" and the
+-- Concepts section above), not application data — 'textInput' reads and
+-- writes them itself via 'getSelection'\/'setSelection' and
+-- 'getScrollState'\/'setScrollState', keyed by @eid@.
 textInput :: Ord e => e -> Text -> (Text -> s -> s) -> UI e s ()
 textInput eid value onChange = do
   wasFocused   <- isFocused eid
@@ -740,7 +859,18 @@ isActivatedBy eid keys = do
 -- control, then reports whether it was activated (a click or one of @keys@)
 -- this frame. The shape shared by simple activatable controls — a button, a
 -- checkbox's mark — whose draw action does not itself depend on whether
--- activation occurred.
+-- activation occurred. This is 'button' with a fixed set of keys and a
+-- fixed draw action; most custom activatable controls are exactly this
+-- shape with the specifics filled in:
+--
+-- @
+-- starRating :: Ord e => e -> Bool -> UI e s Bool
+-- starRating eid lit = activatable eid draw [KeyReturn, KeySpace]
+--   where
+--     draw = do
+--       style <- getStyle eid
+--       drawText (styleTextColour style) AlignCenter (if lit then "\9733" else "\9734")
+-- @
 activatable :: Ord e => e -> UI e s () -> [Key] -> UI e s Bool
 activatable eid draw keys = do
   control eid draw
