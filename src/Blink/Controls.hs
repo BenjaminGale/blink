@@ -163,8 +163,11 @@ radioGroup mkId items selected onChange = do
       let eid = mkId idx
       in ( Layout Fill Fill TopLeft
          , control eid $ do
-             style     <- getStyle eid
-             activated <- isActivatedBy eid [KeyReturn, KeySpace]
+             style        <- getStyle eid
+             clicked      <- isClicked eid
+             keyActivated <- or <$> mapM (isKeyPressed eid) [KeyReturn, KeySpace]
+             disabled     <- isDisabled
+             let activated = not disabled && (clicked || keyActivated)
              drawText (styleTextColour style) AlignLeft $
                (if selected == val then "● " else "○ ") <> lbl
              when activated $ dispatch (onChange val)
@@ -172,7 +175,6 @@ radioGroup mkId items selected onChange = do
              -- cascade: an item that gained focus via setFocus earlier in this
              -- same vBox pass must not also fire navigation. Allow same-frame
              -- clicks as an additional trigger since initialFocus predates applyFocus.
-             clicked <- isClicked eid
              whenEnabled $ when (initialFocus == Just eid || clicked) $ do
                upPressed   <- isKeyPressed eid KeyUp
                downPressed <- isKeyPressed eid KeyDown
@@ -344,6 +346,27 @@ contentRectFor ss r =
   let s = styleSetNormal ss
   in insetRect (stylePadding s) (insetRect (styleMargin s) r)
 
+-- | The content rectangle of a track-style element (its slot bounds inset by
+-- margin and padding), used by both 'scrollBar' and 'slider' to size and
+-- place their thumb.
+trackContentRect :: Ord e => e -> UI e s Rectangle
+trackContentRect trackId = do
+  bounds   <- getBounds
+  styleSet <- getStyleSet trackId
+  pure (contentRectFor styleSet bounds)
+
+-- | While @trackId@ is being dragged with the button held, returns the track
+-- position under the cursor; 'Nothing' otherwise. Shared drag-handling for
+-- 'scrollBar' and 'slider', both of which map a thumb drag to a position via
+-- 'mouseToTrackPos'.
+dragToTrackPos :: Ord e => e -> Orientation -> Double -> Rectangle -> UI e s (Maybe Double)
+dragToTrackPos trackId ori ratio contentRect = do
+  dragging <- isDragging trackId
+  btnDown  <- isButtonDown
+  if dragging && btnDown
+    then Just . mouseToTrackPos ori ratio contentRect <$> getMousePos
+    else pure Nothing
+
 -- | A scrollbar with decrement\/increment buttons flanking a draggable thumb.
 -- The scroll position in @[0, 1]@ is stored in the 'UIContext', keyed by
 -- @mkId ScrollTrack@; the control reads and writes it itself. @thumbRatio@ is
@@ -395,17 +418,12 @@ scrollBar mkId ori thumbRatio = do
       when clicked $ writePos (min 1 (pos' + ratio'))
 
     track pos' ratio' = do
-      slotBounds <- getBounds
-      styleSet   <- getStyleSet trackId
-      let contentRect = contentRectFor styleSet slotBounds
-          thumbR      = thumbRect ori pos' ratio' contentRect
+      contentRect <- trackContentRect trackId
+      let thumbR = thumbRect ori pos' ratio' contentRect
       control trackId $
         withBounds thumbR $ renderControl (mkId ScrollThumb) $ pure ()
-      dragging <- isDragging trackId
-      btnDown  <- isButtonDown
-      when (dragging && btnDown) $ do
-        mousePos <- getMousePos
-        writePos (mouseToTrackPos ori ratio' contentRect mousePos)
+      newPos <- dragToTrackPos trackId ori ratio' contentRect
+      forM_ newPos writePos
 
 -- | Computes the bounding rectangle of a thumb within a track. @pos@ is the
 -- position along the track and @ratio@ is the fraction of the track the thumb
@@ -552,21 +570,16 @@ slider :: Ord e
 slider mkId ori value onChange = do
   let trackId = mkId SliderTrack
       clamped = max 0 (min 1 value)
-  slotBounds <- getBounds
-  styleSet   <- getStyleSet trackId
-  let contentRect = contentRectFor styleSet slotBounds
-      (crossSz, mainSz) = case ori of
+  contentRect <- trackContentRect trackId
+  let (crossSz, mainSz) = case ori of
         Horizontal -> (rectHeight contentRect, rectWidth contentRect)
         Vertical   -> (rectWidth contentRect,  rectHeight contentRect)
       thumbRatio  = if mainSz > 0 then crossSz / mainSz else 0
       thumbR      = thumbRect ori clamped thumbRatio contentRect
   control trackId $
     withBounds thumbR $ renderControl (mkId SliderThumb) $ pure ()
-  dragging <- isDragging trackId
-  btnDown  <- isButtonDown
-  when (dragging && btnDown) $ do
-    mousePos <- getMousePos
-    dispatch (onChange (mouseToTrackPos ori thumbRatio contentRect mousePos))
+  newPos <- dragToTrackPos trackId ori thumbRatio contentRect
+  forM_ newPos $ \p -> dispatch (onChange p)
   let step = 0.05
       (decrKey, incrKey) = case ori of
         Horizontal -> (KeyLeft,  KeyRight)
