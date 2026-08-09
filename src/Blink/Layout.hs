@@ -48,7 +48,9 @@ import Blink.Geometry (Alignment (..), Rectangle (..), alignRect, insetRect, uni
 import Blink.UI (UI, clipToCurrent, getBounds, withBounds)
 import Data.Maybe (catMaybes)
 
--- | Describes how a child should be sized along a single axis.
+-- | Describes how a child should be sized along a single axis. See
+--   'preferredSize' for worked examples of how each constructor resolves
+--   against different amounts of available space.
 data Length
   = Exactly Double
     -- ^ A fixed size. The available space is ignored.
@@ -83,6 +85,37 @@ data BoxConfig = BoxConfig
     -- ^ Positions the content block within the content area on the main axis.
     --   Controls where whitespace falls when children are smaller than the
     --   content area, and which side clips when they overflow.
+    --
+    --   When the children take up less space than the panel, this is where
+    --   the leftover whitespace goes:
+    --
+    --   >  +----------------------+-----------------+
+    --   >  |       children       |                 |
+    --   >  +----------------------+-----------------+
+    --   >  TopLeft: children lead, whitespace trails
+    --
+    --   >  +--------+----------------------+--------+
+    --   >  |        |       children       |        |
+    --   >  +--------+----------------------+--------+
+    --   >  Center: whitespace is split evenly
+    --
+    --   >  +-----------------+----------------------+
+    --   >  |                 |       children       |
+    --   >  +-----------------+----------------------+
+    --   >  BottomRight: whitespace leads, children trail
+    --
+    --   When the children take up more space than the panel, this is which
+    --   side gets clipped:
+    --
+    --   >  +------------------------------------------+
+    --   >  | children (too wide) -->                  |
+    --   >  +------------------------------------------+
+    --   >  TopLeft: the left edge is anchored, right side clips
+    --
+    --   >  +------------------------------------------+
+    --   >  |                  <-- children (too wide) |
+    --   >  +------------------------------------------+
+    --   >  BottomRight: the right edge is anchored, left side clips
   , boxFillCross  :: Bool
     -- ^ Whether children stretch to fill the full cross-axis extent.
   }
@@ -91,7 +124,10 @@ data BoxConfig = BoxConfig
 --   'boxFillCross' set to 'True'. Override only the fields you need:
 --
 -- @
--- defaultBoxConfig { boxSpacing = 8, boxMargin = 4 }
+-- hBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 4 })
+--   [ (Layout (Exactly 80) Fill TopLeft, sidebar)
+--   , (Layout Fill         Fill TopLeft, content)
+--   ]
 -- @
 defaultBoxConfig :: BoxConfig
 defaultBoxConfig = BoxConfig
@@ -103,6 +139,11 @@ defaultBoxConfig = BoxConfig
 
 -- | Total space consumed by all gaps between @n@ children — the sum of
 --   @(n - 1)@ spacings.
+--
+-- >>> boxTotalSpacing (defaultBoxConfig { boxSpacing = 8 }) 3
+-- 16.0
+-- >>> boxTotalSpacing (defaultBoxConfig { boxSpacing = 8 }) 1
+-- 0.0
 boxTotalSpacing :: BoxConfig -> Int -> Double
 boxTotalSpacing cfg n = boxSpacing cfg * fromIntegral (max 0 (n - 1))
 
@@ -111,7 +152,10 @@ boxTotalSpacing cfg n = boxSpacing cfg * fromIntegral (max 0 (n - 1))
 --   hatch for sizing and aligning one that shouldn't fill its parent.
 --   'layoutWidth' and 'layoutHeight' control how much of the parent space the
 --   component takes up on each axis. 'layoutAlignment' controls where it
---   sits within that space.
+--   sits within that space. If the resulting size is larger than the parent
+--   bounds, this function does not clip it: the component draws in full,
+--   spilling past the parent's edges and potentially over any siblings,
+--   unless something further up the tree (such as 'hBox' or 'vBox') clips it.
 --
 -- @
 -- layoutWithConstraints (Layout (Exactly 120) (Exactly 32) Center) $
@@ -216,7 +260,14 @@ vertical = Axis
 --
 --   The axis along which children are stacked (here, horizontal) is called
 --   the /main axis/, and the perpendicular axis is the /cross axis/. 'vBox'
---   uses the same algorithm with the axes swapped.
+--   uses the same algorithm with the axes swapped, so its main axis runs
+--   top-to-bottom and its cross axis runs left-to-right.
+--
+--   >  main axis (width) ------------------------->
+--   >  +------------+--------------+------------+
+--   >  |     A      |      B       |     C      |
+--   >  +------------+--------------+------------+
+--   >  cross axis (height)
 --
 --   * The panel fills its available space, minus an optional margin.
 --   * Children are laid out in a line with optional gaps between them.
@@ -234,7 +285,9 @@ vertical = Axis
 --   * By default children are stretched to fill the panel on the cross axis,
 --     but this can be disabled to let each child control its own size on
 --     that axis.
---   * Children are clipped to the panel's content area.
+--   * Children are clipped to the panel's content area as a group, not
+--     individually. An oversized child can still overlap its neighbours; it
+--     is only cut off once it reaches the edge of the panel itself.
 --
 -- @
 -- hBox (defaultBoxConfig { boxSpacing = 4 })
@@ -401,11 +454,31 @@ instance Monoid MaxLength where
   mempty = MaxLength (Exactly 0)
 
 -- | Add two 'Length' constraints. Convenience wrapper around 'AddLength'.
+--
+-- >>> addLength (Exactly 10) (Exactly 20)
+-- Exactly 30.0
+-- >>> addLength (Exactly 10) Fill
+-- Fill
+-- >>> addLength (AtLeast 10) (Exactly 5)
+-- AtLeast 15.0
+-- >>> addLength (AtLeast 10) (AtMost 20)
+-- AtLeast 10.0
+-- >>> addLength (Between 10 20) (Exactly 5)
+-- Between 15.0 25.0
 addLength :: Length -> Length -> Length
 addLength a b = getAddLength (AddLength a <> AddLength b)
 
 -- | Return the maximum 'Length' across a list. Convenience wrapper around 'MaxLength'.
 -- Returns @'Exactly' 0@ for an empty list.
+--
+-- >>> maxLength [Exactly 10, Exactly 30, Exactly 20]
+-- Exactly 30.0
+-- >>> maxLength [Fill, Exactly 100]
+-- Fill
+-- >>> maxLength [AtLeast 10, AtMost 20]
+-- AtLeast 10.0
+-- >>> maxLength []
+-- Exactly 0.0
 maxLength :: [Length] -> Length
 maxLength = getMaxLength . mconcat . map MaxLength
 
@@ -456,6 +529,13 @@ data BorderContent e s = BorderContent
   }
 
 -- | All panels absent; use record update to populate only the ones you need.
+--
+-- @
+-- borderLayout emptyBorderContent
+--   { topPanel    = Just (3, header)
+--   , centrePanel = Just body
+--   }
+-- @
 emptyBorderContent :: BorderContent e s
 emptyBorderContent = BorderContent
   { topPanel    = Nothing
@@ -483,8 +563,11 @@ emptyBorderContent = BorderContent
 -- omitted (see 'emptyBorderContent'), in which case the remaining panels
 -- expand to fill the gap.
 --
--- No spacing or margin is applied, and panels are clipped to their allocated
--- region.
+-- No spacing or margin is applied. Clipping follows 'vBox' and 'hBox': the
+-- top, middle, and bottom rows are clipped as a group to the whole region,
+-- and within the middle row the left, centre, and right panels are further
+-- clipped as a group to that row. An oversized panel can still overlap its
+-- neighbours within the same row.
 borderLayout :: BorderContent e s -> UI e s ()
 borderLayout bc =
   vBox defaultBoxConfig (catMaybes [topRow, middleRow, bottomRow])
