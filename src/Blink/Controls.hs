@@ -828,7 +828,7 @@ applyFocus eid = do
     setFocusWhen (isRetainingFocus || ((nothingIsFocused || wasClicked) && not isDragRelease)) eid
 
 applyTabNavigation :: Ord e => e -> UI e s ()
-applyTabNavigation eid = do
+applyTabNavigation eid = whenEnabled $ do
   hasFocus <- isFocused eid
   input    <- getInput
   prevCtrl <- getPreviousTabStop
@@ -842,8 +842,7 @@ applyTabNavigation eid = do
     forM_ prevCtrl $ \prev -> do
       setFocus prev
       consumeKey KeyTab
-  whenEnabled $ do
-    setPreviousTabStop eid
+  setPreviousTabStop eid
 
 -- | 'True' when the element is clicked or any of the given keys are pressed
 -- while it is focused, and the element is not disabled. Use this to implement

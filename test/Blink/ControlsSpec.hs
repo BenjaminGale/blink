@@ -246,6 +246,15 @@ controlBehaviourSpec run hitPoint = do
       ctx' <- disabledRun (mkCtx noInput)
       ixnPrevTabStop (ctxInteraction ctx') `shouldBe` Nothing
 
+    it "does not consume Tab or lose focus when disabled while focused" $ do
+      ctx' <- disabledRun (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab []] }))
+      getFocused ctx' `shouldBe` Just TestControl
+
+    it "does not hand focus to the previous tab stop on Shift+Tab when disabled while focused" $ do
+      let base = withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab [Shift]] })
+      ctx' <- disabledRun (base { ctxInteraction = (ctxInteraction base) { ixnPrevTabStop = Just OtherControl } })
+      getFocused ctx' `shouldBe` Just TestControl
+
 -- | Background and border rendering tests. Only applicable to single controls
 --   that fill controlRect directly (not composite widgets).
 backgroundAndBorderSpec :: WidgetRunner -> Spec
