@@ -596,8 +596,11 @@ slider mkId ori value onChange = do
       (decrKey, incrKey) = case ori of
         Horizontal -> (KeyLeft,  KeyRight)
         Vertical   -> (KeyUp,    KeyDown)
-  decrPressed <- isActivatedBy trackId [decrKey]
-  incrPressed <- isActivatedBy trackId [incrKey]
+  disabled  <- isDisabled
+  decrKeyed <- isKeyPressed trackId decrKey
+  incrKeyed <- isKeyPressed trackId incrKey
+  let decrPressed = not disabled && decrKeyed
+      incrPressed = not disabled && incrKeyed
   when decrPressed $ dispatch (onChange (max 0 (clamped - step)))
   when incrPressed $ dispatch (onChange (min 1 (clamped + step)))
 

@@ -854,6 +854,18 @@ spec = describe "Controls" $ do
                                    (nextFrameContext sliderRect (mouseAt (Point 300 15) False []) frame1)
         dispatchCount frame2 `shouldBe` 0
 
+      -- Regression: releasing the mouse while it is still over the track (as
+      -- opposed to having dragged off it) must not dispatch a further change.
+      -- The arrow-key nudge check used to treat any click release as
+      -- satisfying both the decrement and increment keys at once, queuing a
+      -- spurious +step jump on release.
+      it "does not dispatch on the release frame when the mouse is still over the track" $ do
+        frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
+        let val1 = applyDispatches frame1
+        frame2 <- fmap snd $ runUI (slider id Horizontal val1 (\v _ -> v))
+                                   (nextFrameContext sliderRect (mouseAt (Point 100 15) False []) frame1)
+        dispatchCount frame2 `shouldBe` 0
+
     describe "keyboard nudging" $ do
       it "increases value by 0.05 when Right is pressed (Horizontal)" $ do
         ctx' <- runSlider Horizontal 0.5 noInput { inputKeyEvents = [KeyEvent KeyRight []] }
