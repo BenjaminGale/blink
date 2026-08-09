@@ -60,6 +60,7 @@ module Blink.Controls
   , renderChrome
   , activatable
   , rangeControl
+  , focusRing
   , isActivatedBy
   , isControlHit
   , whenFocused
@@ -141,12 +142,7 @@ checkbox boxId text checked onToggle = do
     [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, checkboxMark boxId checked onToggle)
     , (Layout Fill Fill MiddleLeft, checkboxLabel style text)
     ]
-  whenFocused boxId $ do
-    styleSet <- getStyleSet boxId
-    let s = styleSetFocused styleSet
-    case styleBorderColour s of
-      Just c  -> strokeRect c (styleBorderEdges s)
-      Nothing -> pure ()
+  focusRing boxId
 
 -- | A group of mutually exclusive options. Each item renders as a radio mark
 -- and label; activating one — by click, Enter, or Space — dispatches
@@ -733,6 +729,20 @@ activatable eid draw keys = do
 -- | Runs an action only when the given element holds keyboard focus.
 whenFocused :: Eq e => e -> UI e s () -> UI e s ()
 whenFocused eid action = isFocused eid >>= \f -> when f action
+
+-- | Draws @eid@'s focused-style border around the current bounds when @eid@
+-- holds focus, and nothing otherwise. Composite controls made of several
+-- non-'control' pieces (a checkbox's mark and label, say) have no single
+-- element whose own chrome can show a focus indicator spanning the whole
+-- composite; call this after laying out the composite's children, while the
+-- current bounds are still the composite's own outer bounds.
+focusRing :: Ord e => e -> UI e s ()
+focusRing eid = whenFocused eid $ do
+  styleSet <- getStyleSet eid
+  let s = styleSetFocused styleSet
+  case styleBorderColour s of
+    Just c  -> strokeRect c (styleBorderEdges s)
+    Nothing -> pure ()
 
 -- | 'True' when the element holds focus and a key event for @k@ is present
 -- in the current frame's input queue.

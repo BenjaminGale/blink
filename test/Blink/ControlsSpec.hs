@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), activatable, button, checkbox, checkboxMark, control, isControlHit, mouseToTrackPos, progressBar, radioGroup, rangeControl, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
+import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), activatable, button, checkbox, checkboxMark, control, focusRing, isControlHit, mouseToTrackPos, progressBar, radioGroup, rangeControl, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -585,6 +585,21 @@ spec = describe "Controls" $ do
         ctx' <- fmap snd $ runUI (disableWhen True (checkboxMark TestControl False (\v _ -> Just v)))
           (withFocus (Just TestControl) (mkCheckboxMarkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         applyDispatches ctx' `shouldBe` Nothing
+
+  describe "focusRing" $ do
+    it "draws the focused style's border around the current bounds when focused" $ do
+      ctx' <- fmap snd $ runUI (focusRing TestControl)
+        ((withFocus (Just TestControl) (mkCtx noInput)) { ctxTheme = focusBorderTheme })
+      getDrawCommands ctx' `shouldContain` [StrokeBorder controlRect testBorderColour (uniformBorder 1)]
+
+    it "draws nothing when unfocused" $ do
+      ctx' <- fmap snd $ runUI (focusRing TestControl)
+        ((withFocus (Just OtherControl) (mkCtx noInput)) { ctxTheme = focusBorderTheme })
+      getDrawCommands ctx' `shouldBe` []
+
+    it "draws nothing when focused but the style has no border colour" $ do
+      ctx' <- fmap snd $ runUI (focusRing TestControl) (withFocus (Just TestControl) (mkCtx noInput))
+      getDrawCommands ctx' `shouldBe` []
 
   describe "checkbox" $ do
     controlBehaviourSpec runCheckboxControl boxPoint
