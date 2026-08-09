@@ -333,6 +333,109 @@ button eid txt = activatable eid draw [KeyReturn]
       style <- getStyle eid
       drawText (styleTextColour style) (styleTextAlign style) txt
 
+-- | Click sets both selection ends at the clicked character; dragging
+-- extends only the active end, keeping the anchor from before the drag
+-- started. Assumes the caller has already checked the control is focused
+-- and enabled.
+resolveMouseSelection
+  :: Ord e => e -> Rectangle -> Bool -> Bool -> Text -> Double -> (Int, Int) -> UI e s (Int, Int)
+resolveMouseSelection eid bounds wasCapturing justFocused value scrollX (anchor0, active0) = do
+  isCapturing <- isDragging eid
+  if isCapturing
+    then do
+      mousePos <- getMousePos
+      let localX = realToFrac (pointX mousePos - rectX bounds) + realToFrac scrollX :: Float
+      clickedPos <- charAtOffset value localX
+      pure $ if not wasCapturing || justFocused
+        then (clickedPos, clickedPos)
+        else (anchor0, clickedPos)
+    else pure (anchor0, active0)
+
+-- | Shift+Left\/Right extend the selection; plain Left\/Right collapse an
+-- existing selection to its near end, or step by one otherwise.
+resolveKeyboardSelection :: Bool -> [KeyEvent] -> Int -> (Int, Int) -> (Int, Int)
+resolveKeyboardSelection hasFocus keyEvts len (anchor1, active1)
+  | shiftLeft  = (anchor1, max 0    (active1 - 1))
+  | shiftRight = (anchor1, min len  (active1 + 1))
+  | plainLeft  = let p = if hasSel1 then selLo1 else max 0   (active1 - 1) in (p, p)
+  | plainRight = let p = if hasSel1 then selHi1 else min len (active1 + 1) in (p, p)
+  | otherwise  = (anchor1, active1)
+  where
+    hasSel1    = anchor1 /= active1
+    selLo1     = min anchor1 active1
+    selHi1     = max anchor1 active1
+    shiftLeft  = hasFocus && any (\e -> key e == KeyLeft  && Shift `elem`    modifiers e) keyEvts
+    shiftRight = hasFocus && any (\e -> key e == KeyRight && Shift `elem`    modifiers e) keyEvts
+    plainLeft  = hasFocus && any (\e -> key e == KeyLeft  && Shift `notElem` modifiers e) keyEvts
+    plainRight = hasFocus && any (\e -> key e == KeyRight && Shift `notElem` modifiers e) keyEvts
+
+-- | Backspace and typed text edit the value, selection-aware; dispatches
+-- @onChange@ when the text actually changes. Assumes the caller has already
+-- checked the control is focused and enabled.
+applyEdit :: Ord e => (Text -> s -> s) -> Text -> InputState -> (Int, Int) -> UI e s (Int, Int)
+applyEdit onChange value input (anchor2, active2)
+  | backspace || hasTyped = do
+      when (newText /= value) $ dispatch (onChange newText)
+      pure (newCursor, newCursor)
+  | otherwise = pure (anchor2, active2)
+  where
+    keyEvts   = inputKeyEvents input
+    backspace = any (\e -> key e == KeyBackspace) keyEvts
+    typed     = foldl' (<>) T.empty (inputTypedText input)
+    hasTyped  = not (T.null typed)
+    hasSel2   = anchor2 /= active2
+    selLo2    = min anchor2 active2
+    selHi2    = max anchor2 active2
+    (newText, newCursor)
+      | hasSel2 && backspace =
+          (T.take selLo2 value <> T.drop selHi2 value, selLo2)
+      | hasSel2 =
+          (T.take selLo2 value <> typed <> T.drop selHi2 value, selLo2 + T.length typed)
+      | backspace && active2 > 0 =
+          (T.take (active2 - 1) value <> T.drop active2 value, active2 - 1)
+      | hasTyped =
+          (T.take active2 value <> typed <> T.drop active2 value, active2 + T.length typed)
+      | otherwise = (value, active2)
+
+-- | The scroll offset needed to keep a cursor at @cursorAbs@ visible within
+-- a viewport of width @w@ currently scrolled to @scrollX@.
+resolveScroll :: Double -> Double -> Double -> Double
+resolveScroll w scrollX cursorAbs
+  | cursorAbs < scrollX         = cursorAbs
+  | cursorAbs > scrollX + w - 1 = max 0 (cursorAbs - w + 1)
+  | otherwise                   = scrollX
+
+-- | Draws the selection highlight (focused with a non-empty selection), the
+-- text itself, and the cursor (focused and enabled), all offset by the
+-- current horizontal scroll.
+drawTextInputContent
+  :: Ord e => Style -> Rectangle -> Text -> Bool -> Bool -> Double -> (Int, Int) -> UI e s ()
+drawTextInputContent style bounds value hasFocus enabled ox (anchor3, active3) = do
+  when (hasFocus && drawLo < drawHi) $ do
+    loX <- charOffset value drawLo
+    hiX <- charOffset value drawHi
+    let selRect = Rectangle
+          (rectX bounds + realToFrac loX - ox)
+          (rectY bounds)
+          (realToFrac (hiX - loX))
+          (rectHeight bounds)
+    withBounds selRect $ fillRect (RGBA 0.3 0.5 1.0 0.4)
+
+  let textBounds = bounds { rectX = rectX bounds - ox }
+  withBounds textBounds $ drawText (styleTextColour style) AlignLeft value
+
+  when enabled $ do
+    curX <- charOffset value active3
+    let cursorRect = Rectangle
+          (rectX bounds + realToFrac curX - ox)
+          (rectY bounds)
+          1
+          (rectHeight bounds)
+    withBounds cursorRect $ fillRect (styleTextColour style)
+  where
+    drawLo = min anchor3 active3
+    drawHi = max anchor3 active3
+
 -- | A single-line text entry field. Supports click-to-place cursor, drag
 -- selection, Shift+arrow extension, and selection-aware editing. Long text
 -- scrolls horizontally to keep the cursor visible.
@@ -366,105 +469,30 @@ textInput eid value onChange = do
         -- element). Treat as a fresh click rather than a drag continuation so
         -- the old anchor is not inherited.
         justFocused = hasFocus && not wasFocused
+        enabled     = hasFocus && not disabled
 
-    -- Mouse: click sets both ends; drag extends active only. Account for the
-    -- current horizontal scroll offset when converting mouse X to a character index.
     (anchor1, active1) <-
-      if hasFocus && not disabled then do
-        isCapturing <- isDragging eid
-        if isCapturing then do
-          mousePos <- getMousePos
-          let localX = realToFrac (pointX mousePos - rectX bounds) + realToFrac scrollX :: Float
-          clickedPos <- charAtOffset value localX
-          pure $ if not wasCapturing || justFocused
-            then (clickedPos, clickedPos)
-            else (anchor0, clickedPos)
+      if enabled
+        then resolveMouseSelection eid bounds wasCapturing justFocused value scrollX (anchor0, active0)
         else pure (anchor0, active0)
-      else pure (anchor0, active0)
 
-    -- Keyboard: Shift+arrows extend selection; plain arrows collapse it.
-    let keyEvts    = inputKeyEvents input
-        len        = T.length value
-        hasSel1    = anchor1 /= active1
-        selLo1     = min anchor1 active1
-        selHi1     = max anchor1 active1
-        shiftLeft  = hasFocus && any (\e -> key e == KeyLeft  && Shift `elem`    modifiers e) keyEvts
-        shiftRight = hasFocus && any (\e -> key e == KeyRight && Shift `elem`    modifiers e) keyEvts
-        plainLeft  = hasFocus && any (\e -> key e == KeyLeft  && Shift `notElem` modifiers e) keyEvts
-        plainRight = hasFocus && any (\e -> key e == KeyRight && Shift `notElem` modifiers e) keyEvts
-        (anchor2, active2)
-          | shiftLeft  = (anchor1, max 0    (active1 - 1))
-          | shiftRight = (anchor1, min len  (active1 + 1))
-          | plainLeft  = let p = if hasSel1 then selLo1 else max 0   (active1 - 1) in (p, p)
-          | plainRight = let p = if hasSel1 then selHi1 else min len (active1 + 1) in (p, p)
-          | otherwise  = (anchor1, active1)
+    let (anchor2, active2) =
+          resolveKeyboardSelection hasFocus (inputKeyEvents input) (T.length value) (anchor1, active1)
 
-    -- Editing: typed text and backspace, selection-aware.
     (anchor3, active3) <-
-      if hasFocus && not disabled then do
-        let backspace = any (\e -> key e == KeyBackspace) keyEvts
-            typed     = foldl' (<>) T.empty (inputTypedText input)
-            hasTyped  = not (T.null typed)
-            hasSel2   = anchor2 /= active2
-            selLo2    = min anchor2 active2
-            selHi2    = max anchor2 active2
-        if backspace || hasTyped
-          then do
-            let (newText, newCursor)
-                  | hasSel2 && backspace =
-                      (T.take selLo2 value <> T.drop selHi2 value, selLo2)
-                  | hasSel2 =
-                      (T.take selLo2 value <> typed <> T.drop selHi2 value, selLo2 + T.length typed)
-                  | backspace && active2 > 0 =
-                      (T.take (active2 - 1) value <> T.drop active2 value, active2 - 1)
-                  | hasTyped =
-                      (T.take active2 value <> typed <> T.drop active2 value, active2 + T.length typed)
-                  | otherwise = (value, active2)
-            when (newText /= value) $ dispatch (onChange newText)
-            pure (newCursor, newCursor)
-          else pure (anchor2, active2)
-      else pure (anchor2, active2)
+      if enabled
+        then applyEdit onChange value input (anchor2, active2)
+        else pure (anchor2, active2)
 
-    when (hasFocus && not disabled) $
-      setSelection eid (Selection anchor3 active3)
+    when enabled $ setSelection eid (Selection anchor3 active3)
 
-    -- Scroll horizontally to keep the cursor visible.
-    when (hasFocus && not disabled) $ do
+    when enabled $ do
       curX <- charOffset value active3
-      let cursorAbs  = realToFrac curX :: Double
-          newScrollX
-            | cursorAbs < scrollX         = cursorAbs
-            | cursorAbs > scrollX + w - 1 = max 0 (cursorAbs - w + 1)
-            | otherwise                   = scrollX
+      let newScrollX = resolveScroll w scrollX (realToFrac curX)
       when (newScrollX /= scrollX) $ setScrollState eid newScrollX
 
     scrollX' <- getScrollState eid
-    let ox     = scrollX'
-        drawLo = min anchor3 active3
-        drawHi = max anchor3 active3
-
-    -- Drawing: selection highlight, text, then cursor.
-    when (hasFocus && drawLo < drawHi) $ do
-      loX <- charOffset value drawLo
-      hiX <- charOffset value drawHi
-      let selRect = Rectangle
-            (rectX bounds + realToFrac loX - ox)
-            (rectY bounds)
-            (realToFrac (hiX - loX))
-            (rectHeight bounds)
-      withBounds selRect $ fillRect (RGBA 0.3 0.5 1.0 0.4)
-
-    let textBounds = bounds { rectX = rectX bounds - ox }
-    withBounds textBounds $ drawText (styleTextColour style) AlignLeft value
-
-    when (hasFocus && not disabled) $ do
-      curX <- charOffset value active3
-      let cursorRect = Rectangle
-            (rectX bounds + realToFrac curX - ox)
-            (rectY bounds)
-            1
-            (rectHeight bounds)
-      withBounds cursorRect $ fillRect (styleTextColour style)
+    drawTextInputContent style bounds value hasFocus enabled scrollX' (anchor3, active3)
 
 -- | Sub-parts of a scrollbar, used as the inner tag when building the
 -- control's element IDs via a tagging function:

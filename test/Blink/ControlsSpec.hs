@@ -300,6 +300,19 @@ runTextInputControl ctx = fmap snd $ runUI (textInput TestControl "" (\_ s -> s)
 mkTextCtx :: Text -> InputState -> UIContext TestElement Text
 mkTextCtx value input = emptyUIContext controlRect input testTheme value noOpTextMeasurer
 
+-- A measurer with a fixed 20px advance per character, for scroll tests where
+-- noOpTextMeasurer's all-zero offsets can't produce a cursor position past
+-- the viewport edge.
+fixedCharWidth :: TextMeasurer
+fixedCharWidth = TextMeasurer
+  { tmCharOffset   = \_ n -> pure (fromIntegral n * 20)
+  , tmCharAtOffset = \_ x -> pure (round (x / 20))
+  , tmTextSize     = \_ -> pure (Size 0 0)
+  }
+
+mkTextCtxWith :: TextMeasurer -> Text -> InputState -> UIContext TestElement Text
+mkTextCtxWith measurer value input = emptyUIContext controlRect input testTheme value measurer
+
 runTextInput :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
 runTextInput value ctx = fmap snd $ runUI (textInput TestControl value (\t _ -> t)) ctx
 
@@ -779,6 +792,36 @@ spec = describe "Controls" $ do
       it "collapses cursor to insertion point after replacing selection" $ do
         ctx' <- runTextInput "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["XY"] })))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 3 3]
+
+    describe "focus persistence" $ do
+      let withSel a v ctx = ctx { ctxElements = (ctxElements ctx) { elmSelections = Map.singleton TestControl [Selection a v] } }
+
+      it "leaves the selection unchanged on a frame where the control is not focused" $ do
+        ctx' <- runTextInput "hello" (withSel 1 3 (withFocus (Just OtherControl) (mkTextCtx "hello" noInput)))
+        Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 1 3]
+
+      it "restores the previous selection when focus returns without a click" $ do
+        -- No withFocus: focus starts at Nothing, so TestControl auto-focuses
+        -- this frame via the same path as gaining focus by Tab, not by click.
+        ctx' <- runTextInput "hello" (withSel 2 4 (mkTextCtx "hello" noInput))
+        Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 2 4]
+
+    describe "scrolling" $ do
+      let withSel a v ctx = ctx { ctxElements = (ctxElements ctx) { elmSelections = Map.singleton TestControl [Selection a v] } }
+          withScrollX x ctx = ctx { ctxElements = (ctxElements ctx) { elmScrollStates = Map.singleton TestControl (ScrollState x) } }
+          textScrollX ctx = scrollPosition (Map.findWithDefault (ScrollState 0) TestControl (elmScrollStates (ctxElements ctx)))
+
+      it "scrolls right to keep the cursor visible when it moves past the right edge" $ do
+        -- Content width is 70px; fixedCharWidth puts the cursor at 100px
+        -- (index 5 * 20px), past the visible window.
+        let base = withSel 5 5 (withFocus (Just TestControl) (mkTextCtxWith fixedCharWidth "hello" noInput))
+        ctx' <- runTextInput "hello" base
+        textScrollX ctx' `shouldBe` 31
+
+      it "scrolls left to keep the cursor visible when it moves before the left edge" $ do
+        let base = withScrollX 50 (withSel 0 0 (withFocus (Just TestControl) (mkTextCtxWith fixedCharWidth "hello" noInput)))
+        ctx' <- runTextInput "hello" base
+        textScrollX ctx' `shouldBe` 0
 
   describe "rangeControl" $ do
     controlBehaviourSpec runRangeControl (Point 50 50)
