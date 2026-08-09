@@ -3,9 +3,7 @@ Module: Blink.Layout
 
 = How layout works
 
-Every UI component in Blink receives a bounding rectangle and occupies it
-entirely by default. The layout system controls what rectangle each component
-receives.
+By default, a 'UI' action fills the full space it is given by its parent.
 
 >  +------------------------------------------+
 >  |                                          |
@@ -14,10 +12,10 @@ receives.
 >  |                                          |
 >  +------------------------------------------+
 
-There are three ways to control that rectangle: 'layoutWithConstraints' sizes
-and aligns a single component within its parent bounds; 'hBox' and 'vBox'
-arrange a row or column of children; and 'borderLayout' divides space into up
-to five named regions.
+This module provides combinators that allow more control over layout. They
+are described below in order of increasing scope, from sizing and positioning
+a single action, to arranging several actions together, to dividing a whole
+screen into named regions. Reach for the smallest one that does what you need.
 -}
 module Blink.Layout
   ( -- * Single control layout
@@ -109,12 +107,10 @@ boxTotalSpacing :: BoxConfig -> Int -> Double
 boxTotalSpacing cfg n = boxSpacing cfg * fromIntegral (max 0 (n - 1))
 
 -- | Sizes and positions a component within its parent bounds according to a
---   'Layout'. Used directly to constrain a single component, and used
---   internally by 'hBox' and 'vBox' to position each child within its
---   allocated slot. Since components are greedy by default, this is the
---   escape hatch for sizing and aligning one that shouldn't fill its parent.
+--   'Layout'. Since components are greedy by default, this is the escape
+--   hatch for sizing and aligning one that shouldn't fill its parent.
 --   'layoutWidth' and 'layoutHeight' control how much of the parent space the
---   component takes up on each axis; 'layoutAlignment' controls where it
+--   component takes up on each axis. 'layoutAlignment' controls where it
 --   sits within that space.
 --
 -- @
@@ -123,7 +119,7 @@ boxTotalSpacing cfg n = boxSpacing cfg * fromIntegral (max 0 (n - 1))
 -- @
 --
 -- This renders the button at 120×32 pixels, centred in whatever space the
--- parent provides, regardless of how large that space is:
+-- parent provides, regardless of how large that space is.
 --
 -- >  +----------------------------------------+
 -- >  |                                        |
@@ -134,14 +130,14 @@ boxTotalSpacing cfg n = boxSpacing cfg * fromIntegral (max 0 (n - 1))
 -- >  +----------------------------------------+
 -- >                   parent bounds
 --
--- A few more variations to build intuition:
+-- A few more variations help build intuition.
 --
 -- @
 -- layoutWithConstraints (Layout Fill (Exactly 3) TopLeft) toolbar
 -- @
 --
 -- 'Fill' on one axis and a fixed size on the other pins a full-width bar to
--- the top, regardless of the parent's height:
+-- the top, regardless of the parent's height.
 --
 -- >  +------------------------------------------+
 -- >  |            Toolbar (Fill x 3)            |
@@ -155,7 +151,7 @@ boxTotalSpacing cfg n = boxSpacing cfg * fromIntegral (max 0 (n - 1))
 -- layoutWithConstraints (Layout (Exactly 14) (Exactly 3) BottomRight) badge
 -- @
 --
--- A fixed size with 'BottomRight' alignment pins a component to a corner:
+-- A fixed size with 'BottomRight' alignment pins a component to a corner.
 --
 -- >  +------------------------------------------+
 -- >  |                                          |
@@ -219,8 +215,8 @@ vertical = Axis
 --   that inset.
 --
 --   The axis along which children are stacked (here, horizontal) is called
---   the /main axis/; the perpendicular axis is the /cross axis/. 'vBox' uses
---   the same algorithm with the axes swapped:
+--   the /main axis/, and the perpendicular axis is the /cross axis/. 'vBox'
+--   uses the same algorithm with the axes swapped.
 --
 --   * The panel fills its available space, minus an optional margin.
 --   * Children are laid out in a line with optional gaps between them.
@@ -231,13 +227,13 @@ vertical = Axis
 --     others.
 --   * The group is aligned within the content area according to
 --     'boxAlignment'. When children are smaller than the content area this
---     controls where the whitespace goes; when they overflow it controls
+--     controls where the whitespace goes. When they overflow it controls
 --     which side clips.
---   * Once each child's space is allocated, 'layoutWithConstraints' positions
---     the child within its slot.
---   * By default children are stretched to fill the panel on the cross axis;
---     this can be disabled to let each child control its own size on that
---     axis.
+--   * Once each child's space is allocated, it is positioned and aligned
+--     within its slot according to its own 'Layout'.
+--   * By default children are stretched to fill the panel on the cross axis,
+--     but this can be disabled to let each child control its own size on
+--     that axis.
 --   * Children are clipped to the panel's content area.
 --
 -- @
@@ -248,19 +244,19 @@ vertical = Axis
 --   ]
 -- @
 --
--- Here the two outer buttons are fixed at 80px wide; the centre button
+-- Here the two outer buttons are fixed at 80px wide. The centre button
 -- expands to fill whatever space remains. The 'Fill' height constraint in
--- each child means height is determined by the panel, not the child:
+-- each child means height is determined by the panel, not the child.
 --
 -- >  +--------+------------------------------------+--------+
 -- >  |  Back  |               Title                |  Next  |
 -- >  |  80px  |                Fill                |  80px  |
 -- >  +--------+------------------------------------+--------+
 --
--- 'boxFillCross' (default 'True') controls the cross axis — here, height.
--- When 'True', each child is stretched to the panel's full height, as in
--- the diagram above. When 'False', each child keeps its own height (here,
--- 'TopLeft'-aligned), leaving the rest of the panel blank:
+-- 'boxFillCross' (default 'True') controls the cross axis, which is height
+-- in this example. When 'True', each child is stretched to the panel's full
+-- height, as in the diagram above. When 'False', each child keeps its own
+-- height (here, 'TopLeft'-aligned), leaving the rest of the panel blank.
 --
 -- >  +------------+--------------+------------+
 -- >  |     A      |      B       |     C      |
@@ -273,7 +269,7 @@ hBox = box horizontal
 -- | Arranges children top-to-bottom. Each child is paired with a 'Layout'
 --   governing its height and, when 'boxFillCross' is 'False', its width and
 --   horizontal alignment. Uses the same algorithm as 'hBox' with the axes
---   swapped — see its documentation for the full behaviour.
+--   swapped. See its documentation for the full behaviour.
 --
 -- @
 -- vBox (defaultBoxConfig { boxSpacing = 1 })
@@ -283,8 +279,8 @@ hBox = box horizontal
 --   ]
 -- @
 --
--- The header and footer are fixed at 3 rows tall; the body expands to fill
--- whatever space remains:
+-- The header and footer are fixed at 3 rows tall. The body expands to fill
+-- whatever space remains.
 --
 -- >  +------------------------------------------+
 -- >  |           Header (Exactly 3px)           |
@@ -482,14 +478,13 @@ emptyBorderContent = BorderContent
 -- >  +------------------------------------------+
 --
 -- 'topPanel' and 'bottomPanel' each take a fixed height and span the full
--- width; 'leftPanel' and 'rightPanel' each take a fixed width within the
--- middle row; 'centrePanel' fills whatever space is left. Any panel may be
+-- width. 'leftPanel' and 'rightPanel' each take a fixed width within the
+-- middle row. 'centrePanel' fills whatever space is left. Any panel may be
 -- omitted (see 'emptyBorderContent'), in which case the remaining panels
 -- expand to fill the gap.
 --
--- Implemented as a 'vBox' of three rows where the middle row is an 'hBox'
--- containing the left, centre, and right panels. No spacing or margin is
--- applied; panels are clipped to their allocated region.
+-- No spacing or margin is applied, and panels are clipped to their allocated
+-- region.
 borderLayout :: BorderContent e s -> UI e s ()
 borderLayout bc =
   vBox defaultBoxConfig (catMaybes [topRow, middleRow, bottomRow])
