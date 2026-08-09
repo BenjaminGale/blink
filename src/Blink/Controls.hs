@@ -39,6 +39,7 @@ module Blink.Controls
   , checkbox
   , checkboxMark
   , radioGroup
+  , selector
   , textInput
     -- * Scroll
   , ScrollBarPart (..)
@@ -144,32 +145,35 @@ checkbox boxId text checked onToggle = do
     ]
   focusRing boxId
 
--- | A group of mutually exclusive options. Each item renders as a radio mark
--- and label; activating one — by click, Enter, or Space — dispatches
--- @onChange value@. Multiple groups on screen each bind to their own
--- application-state field; no shared state is required.
-radioGroup :: (Eq e, Ord e, Eq a)
-           => (Int -> e)     -- ^ maps item index to an element ID
-           -> [(a, Text)]    -- ^ @(value, label)@ pairs
-           -> a              -- ^ currently selected value
-           -> (a -> s -> s)
-           -> UI e s ()
-radioGroup mkId items selected onChange = do
+-- | A vertical list of items, each activated by click, Enter, or Space, with
+-- arrow-key navigation between items and one item designated as selected.
+-- Dispatches @onChange value@ when a different item is activated.
+-- @renderItem eid isSelected item@ draws each item's content; @selector@
+-- itself owns the selection comparison, activation, and Up\/Down navigation.
+-- Multiple selectors on screen each bind to their own application-state
+-- field; no shared state is required. See 'radioGroup' for the radio-mark
+-- rendering built on top of this.
+selector :: (Eq e, Ord e, Eq a)
+         => (Int -> e)                          -- ^ maps item index to an element ID
+         -> [(a, Text)]                         -- ^ @(value, label)@ pairs
+         -> a                                   -- ^ currently selected value
+         -> (a -> s -> s)
+         -> (e -> Bool -> (a, Text) -> UI e s ()) -- ^ @eid isSelected item@
+         -> UI e s ()
+selector mkId items selected onChange renderItem = do
   initialFocus <- getFocus
   vBox defaultBoxConfig (zipWith (mkItem initialFocus) [0..] items)
   where
     lastIdx = length items - 1
-    mkItem initialFocus idx (val, lbl) =
+    mkItem initialFocus idx item@(val, _) =
       let eid = mkId idx
       in ( Layout Fill Fill TopLeft
          , control eid $ do
-             style        <- getStyle eid
              clicked      <- isClicked eid
              keyActivated <- or <$> mapM (isKeyPressed eid) [KeyReturn, KeySpace]
              disabled     <- isDisabled
              let activated = not disabled && (clicked || keyActivated)
-             drawText (styleTextColour style) AlignLeft $
-               (if selected == val then "● " else "○ ") <> lbl
+             renderItem eid (selected == val) item
              when activated $ dispatch (onChange val)
              -- Use initialFocus (captured before any item renders) to prevent
              -- cascade: an item that gained focus via setFocus earlier in this
@@ -181,6 +185,22 @@ radioGroup mkId items selected onChange = do
                when upPressed   $ setFocus (mkId (max 0 (idx - 1)))
                when downPressed $ setFocus (mkId (min lastIdx (idx + 1)))
          )
+
+-- | A group of mutually exclusive options, rendered as a radio mark and
+-- label per item. A thin wrapper over 'selector' supplying the radio-mark
+-- rendering; see 'selector' for the selection, activation, and navigation
+-- behaviour.
+radioGroup :: (Eq e, Ord e, Eq a)
+           => (Int -> e)     -- ^ maps item index to an element ID
+           -> [(a, Text)]    -- ^ @(value, label)@ pairs
+           -> a              -- ^ currently selected value
+           -> (a -> s -> s)
+           -> UI e s ()
+radioGroup mkId items selected onChange =
+  selector mkId items selected onChange $ \eid isSelected (_, lbl) -> do
+    style <- getStyle eid
+    drawText (styleTextColour style) AlignLeft $
+      (if isSelected then "● " else "○ ") <> lbl
 
 -- | A clickable button labelled @txt@. Returns 'True' on the frame the button
 -- is activated — by a left-click or by pressing Enter while focused.

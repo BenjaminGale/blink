@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), activatable, button, checkbox, checkboxMark, control, focusRing, isControlHit, mouseToTrackPos, progressBar, radioGroup, rangeControl, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
+import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), activatable, button, checkbox, checkboxMark, control, focusRing, isControlHit, mouseToTrackPos, progressBar, radioGroup, rangeControl, scrollBar, scrollableRegion, scrollRegionBarSize, selector, slider, textInput, thumbRect)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -920,6 +920,63 @@ spec = describe "Controls" $ do
       it "does not dispatch when there is no input" $ do
         ctx' <- runSlider Horizontal 0.5 noInput
         dispatchCount ctx' `shouldBe` 0
+
+  describe "selector" $ do
+    let renderItem :: Int -> Bool -> (String, Text) -> UI Int String ()
+        renderItem _eid isSelected (_val, lbl) =
+          drawText testColour AlignLeft ((if isSelected then "SEL:" else "UNSEL:") <> lbl)
+
+        runSelector :: String -> UIContext Int String -> IO (UIContext Int String)
+        runSelector sel = fmap snd . runUI (selector id radioItems sel (\v _ -> v) renderItem)
+
+    describe "selection" $ do
+      it "dispatches the value of a clicked item" $ do
+        ctx' <- runSelector "a" (withButtonReleased (mkRadioGroupCtx "a" (mouseAt (Point 50 45) False [])))
+        applyDispatches ctx' `shouldBe` "b"
+
+      it "dispatches the value when Enter is pressed while an item is focused" $ do
+        ctx' <- fmap snd $ runUI (selector id radioItems "a" (\v _ -> v) renderItem)
+          (withItemFocus (Just 1) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyReturn []] } radioGroupTheme "a" noOpTextMeasurer))
+        applyDispatches ctx' `shouldBe` "b"
+
+      it "does not dispatch when clicked while disabled" $ do
+        ctx' <- fmap snd $ runUI (disableWhen True (selector id radioItems "a" (\v _ -> v) renderItem))
+          (withButtonReleased (mkRadioGroupCtx "a" (mouseAt (Point 50 45) False [])))
+        dispatchCount ctx' `shouldBe` 0
+
+      it "does not dispatch when there is no interaction" $ do
+        ctx' <- runSelector "b" (mkRadioGroupCtx "b" noInput)
+        dispatchCount ctx' `shouldBe` 0
+
+    describe "keyboard navigation" $ do
+      let nav focusIdx k = do
+            ctx' <- fmap snd $ runUI (selector id radioItems "a" (\v _ -> v) renderItem)
+              (withItemFocus (Just focusIdx)
+                (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent k []] } radioGroupTheme "a" noOpTextMeasurer))
+            pure $ focusedElement (ixnFocus (ctxInteraction ctx'))
+
+      it "moves focus to the next item when Down is pressed" $ do
+        result <- nav 0 KeyDown
+        result `shouldBe` Just 1
+
+      it "moves focus to the previous item when Up is pressed" $ do
+        result <- nav 1 KeyUp
+        result `shouldBe` Just 0
+
+      it "does not move focus when disabled" $ do
+        ctx' <- fmap snd $ runUI (disableWhen True (selector id radioItems "a" (\v _ -> v) renderItem))
+          (withItemFocus (Just 0) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyDown []] } radioGroupTheme "a" noOpTextMeasurer))
+        focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just 0
+
+    describe "rendering" $ do
+      it "passes isSelected=True for the selected item" $ do
+        ctx' <- runSelector "b" (mkRadioGroupCtx "b" noInput)
+        drawnTexts ctx' `shouldContain` ["SEL:Beta"]
+
+      it "passes isSelected=False for other items" $ do
+        ctx' <- runSelector "b" (mkRadioGroupCtx "b" noInput)
+        drawnTexts ctx' `shouldContain` ["UNSEL:Alpha"]
+        drawnTexts ctx' `shouldContain` ["UNSEL:Gamma"]
 
   describe "radioGroup" $ do
     controlBehaviourSpec runRadioControl (Point 50 50)
