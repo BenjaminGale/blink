@@ -1,10 +1,11 @@
 {- |
 Module: Blink
 
-Blink is a retained-mode UI library: the UI is a pure function of state, and
-state changes only through modifiers dispatched by the UI. Blink acts as a
-library — it does not own the main loop. The backend drives the loop and calls
-into Blink each frame.
+Blink is an immediate-mode UI library: the whole UI tree is rebuilt from
+scratch every frame as a pure function of state, rather than retained and
+mutated incrementally. State changes only through modifiers dispatched by
+the UI. Blink acts as a library — it does not own the main loop. The backend
+drives the loop and calls into Blink each frame.
 
 = Architecture
 

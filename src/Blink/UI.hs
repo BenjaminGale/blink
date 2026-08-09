@@ -683,6 +683,7 @@ setHovered eid = modify $ \ctx ->
        then ixn' { ixnCaptured = Just eid }
        else ixn' }
 
+-- | The element that currently holds keyboard focus, or 'Nothing' if none does.
 getFocus :: UI e s (Maybe e)
 getFocus = gets (focusedElement . ixnFocus . ctxInteraction)
 
