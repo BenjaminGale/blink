@@ -57,7 +57,7 @@ module Blink.Controls
   , measureChrome
     -- * Building controls
   , control
-  , renderControl
+  , renderChrome
   , isActivatedBy
   , isControlHit
   , whenFocused
@@ -80,7 +80,7 @@ import Blink.UI
 -- rectangle using the active style. Does not participate in interaction or
 -- keyboard navigation.
 label :: Ord e => e -> Text -> UI e s ()
-label eid text = renderControl eid $ do
+label eid text = renderChrome eid $ do
   style <- getStyle eid
   drawText (styleTextColour style) (styleTextAlign style) text
 
@@ -97,7 +97,7 @@ data ProgressValue
 -- unknown duration. The animation runs only on ticker frames; 'requiresAnimation'
 -- keeps the ticker active while an 'Indeterminate' bar is visible.
 progressBar :: Ord e => e -> ProgressValue -> UI e s ()
-progressBar eid (Progress value) = renderControl eid $ do
+progressBar eid (Progress value) = renderChrome eid $ do
   style <- getStyle eid
   r     <- getBounds
   let clamped  = max 0 (min 1 value)
@@ -105,7 +105,7 @@ progressBar eid (Progress value) = renderControl eid $ do
   withBounds fillRect' $ fillRect (styleTextColour style)
 progressBar eid Indeterminate = do
   requiresAnimation
-  renderControl eid $ do
+  renderChrome eid $ do
     r       <- getBounds
     style   <- getStyle eid
     elapsed <- getAnimElapsed
@@ -421,7 +421,7 @@ scrollBar mkId ori thumbRatio = do
       contentRect <- trackContentRect trackId
       let thumbR = thumbRect ori pos' ratio' contentRect
       control trackId $
-        withBounds thumbR $ renderControl (mkId ScrollThumb) $ pure ()
+        withBounds thumbR $ renderChrome (mkId ScrollThumb) $ pure ()
       newPos <- dragToTrackPos trackId ori ratio' contentRect
       forM_ newPos writePos
 
@@ -577,7 +577,7 @@ slider mkId ori value onChange = do
       thumbRatio  = if mainSz > 0 then crossSz / mainSz else 0
       thumbR      = thumbRect ori clamped thumbRatio contentRect
   control trackId $
-    withBounds thumbR $ renderControl (mkId SliderThumb) $ pure ()
+    withBounds thumbR $ renderChrome (mkId SliderThumb) $ pure ()
   newPos <- dragToTrackPos trackId ori thumbRatio contentRect
   forM_ newPos $ \p -> dispatch (onChange p)
   let step = 0.05
@@ -610,8 +610,8 @@ measureChrome eid = do
 -- rectangle. Does not perform hover detection, focus management, or tab
 -- navigation — use this for display-only elements that should not participate
 -- in interaction. See 'control' for the interactive counterpart.
-renderControl :: Ord e => e -> UI e s () -> UI e s ()
-renderControl eid content = do
+renderChrome :: Ord e => e -> UI e s () -> UI e s ()
+renderChrome eid content = do
   style <- getStyle eid
   r     <- getBounds
   let bgRect      = insetRect (styleMargin style) r
@@ -628,7 +628,7 @@ renderControl eid content = do
 
 -- | The standard entry point for interactive controls. Applies hover detection,
 -- focus management, and Tab\/Shift-Tab navigation, then delegates to
--- 'renderControl' for style-aware rendering. @content@ runs inside the padded
+-- 'renderChrome' for style-aware rendering. @content@ runs inside the padded
 -- content rectangle.
 --
 -- @
@@ -641,7 +641,7 @@ control eid content = do
   applyHover eid
   applyFocus eid
   applyTabNavigation eid
-  renderControl eid content
+  renderChrome eid content
 
 -- | 'True' when the mouse is over the element's background rectangle (bounds
 -- inset by its margin) — the control-specific hit area. Built on 'isRegionHit';

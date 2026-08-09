@@ -136,7 +136,7 @@ footer s (winW, winH) = do
   mouseW'  <- labelWidth mouseText
   buttonW' <- labelWidth buttonText
   hoverW'  <- labelWidth hoverText
-  renderControl StatusBar $
+  renderChrome StatusBar $
     hBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 4, boxAlignment = Center })
       [ (Layout winW'    Fill MiddleLeft, label Label winText)
       , (Layout mouseW'  Fill MiddleLeft, label Label mouseText)
