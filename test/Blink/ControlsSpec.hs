@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), activatable, button, checkbox, checkboxMark, control, focusRing, isControlHit, mouseToTrackPos, progressBar, radioGroup, rangeControl, scrollBar, scrollableRegion, scrollRegionBarSize, selector, slider, textInput, thumbRect)
+import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), activatable, button, checkbox, checkboxMark, control, focusRing, isControlHit, mouseToTrackPos, progressBar, radioGroup, rangeControl, scrollBar, scrollableRegion, scrollRegionBarSize, selector, slider, textInput, thumbRect, virtualContent)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -1122,6 +1122,47 @@ spec = describe "Controls" $ do
       it "hovers the child item when the mouse is within the viewport" $ do
         ctx' <- runScrollableRegion (Point 100 42)
         ixnHovered (ctxInteraction ctx') `shouldBe` Just SRChild
+
+  describe "virtualContent" $ do
+    -- Viewport is controlRect: 100×100. Each item marks itself with a
+    -- FillRect whose colour encodes its index, so a test can assert both
+    -- which indices were rendered and at what rectangle.
+    let marker :: Int -> Rectangle -> DrawCommand
+        marker i r = FillRect r (RGBA (fromIntegral i) 0 0 1)
+        runVirtualContent pos itemH count =
+          fmap snd $ runUI (virtualContent pos itemH count (\i -> fillRect (RGBA (fromIntegral i) 0 0 1))) (mkCtx noInput)
+
+    it "renders items starting from the top when unscrolled" $ do
+      -- itemHeight 20, viewport 100 tall -> exactly 5 full items fit.
+      ctx' <- runVirtualContent 0 20 10
+      getDrawCommands ctx' `shouldContain` [marker 0 (Rectangle 0 0 100 20)]
+      getDrawCommands ctx' `shouldContain` [marker 4 (Rectangle 0 80 100 20)]
+      getDrawCommands ctx' `shouldNotContain` [marker 5 (Rectangle 0 100 100 20)]
+
+    it "clips the first item by the fractional scroll offset" $ do
+      -- scrollPos 25 with itemHeight 20 -> first visible item is index 1,
+      -- pushed up 5px above the viewport top.
+      ctx' <- runVirtualContent 25 20 10
+      getDrawCommands ctx' `shouldContain` [marker 1 (Rectangle 0 (-5) 100 20)]
+      getDrawCommands ctx' `shouldNotContain` [marker 0 (Rectangle 0 0 100 20)]
+
+    it "renders one extra item to cover the clipped final row" $ do
+      ctx' <- runVirtualContent 25 20 10
+      -- 6 items are needed to cover a 100px viewport once offset by 5px.
+      getDrawCommands ctx' `shouldContain` [marker 6 (Rectangle 0 95 100 20)]
+
+    it "does not render past the last item" $ do
+      ctx' <- runVirtualContent 0 20 3
+      getDrawCommands ctx' `shouldContain` [marker 2 (Rectangle 0 40 100 20)]
+      getDrawCommands ctx' `shouldNotContain` [marker 3 (Rectangle 0 60 100 20)]
+
+    it "renders nothing when there are no items" $ do
+      ctx' <- runVirtualContent 0 20 0
+      [c | c@(FillRect _ _) <- getDrawCommands ctx'] `shouldBe` []
+
+    it "clips content to the current bounds" $ do
+      ctx' <- runVirtualContent 0 20 10
+      getDrawCommands ctx' `shouldContain` [PushClip controlRect]
 
   -- Geometry: Rectangle 0 0 100 200 (vertical) / Rectangle 0 0 200 100 (horizontal)
   -- thumbH/thumbW = trackLen * ratio; range = trackLen - thumbH/W

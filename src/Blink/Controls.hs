@@ -152,6 +152,8 @@ module Blink.Controls
     -- * Slider
   , SliderPart (..)
   , slider
+    -- * Virtualized content
+  , virtualContent
   ) where
 
 import Control.Monad (when, forM_)
@@ -767,6 +769,27 @@ slider mkId ori value onChange = do
   when decrPressed $ dispatch (onChange (max 0 (clamped - step)))
   when incrPressed $ dispatch (onChange (min 1 (clamped + step)))
 
+-- | Renders a windowed slice of a uniform-height item list: given the current
+-- scroll position (in pixels), the height of one item, and the total item
+-- count, calls @renderItem i@ only for the items that intersect the current
+-- bounds, clipped to those bounds. The first and\/or last rendered item may
+-- be partially clipped if the scroll position doesn't land on an item
+-- boundary — this is correct: no virtual canvas or coordinate translation is
+-- needed, since only the content that will actually be visible is ever
+-- generated, at the right position.
+--
+-- Does not draw a scrollbar or manage scroll state itself — pair with
+-- 'scrollBar' and 'getScrollState'\/'setScrollState' (see 'listBox').
+virtualContent :: Double -> Double -> Int -> (Int -> UI e s ()) -> UI e s ()
+virtualContent scrollPos itemHeight itemCount renderItem = do
+  vp <- getBounds
+  let firstIdx = floor (scrollPos / itemHeight) :: Int
+      subOffset = scrollPos - fromIntegral firstIdx * itemHeight
+      visibleN = ceiling ((rectHeight vp + subOffset) / itemHeight) :: Int
+  clipToCurrent $ forM_ [0 .. visibleN - 1] $ \j ->
+    let i       = firstIdx + j
+        itemRect = vp { rectY = rectY vp + fromIntegral j * itemHeight - subOffset, rectHeight = itemHeight }
+    in when (i >= 0 && i < itemCount) $ withBounds itemRect (renderItem i)
 
 -- | Returns the @(width, height)@ overhead consumed by a control's margin and
 -- padding as 'Length' constraints. Add these to a content size with 'addLength'
