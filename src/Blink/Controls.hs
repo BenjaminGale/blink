@@ -59,6 +59,7 @@ module Blink.Controls
   , control
   , renderChrome
   , activatable
+  , rangeControl
   , isActivatedBy
   , isControlHit
   , whenFocused
@@ -370,6 +371,21 @@ dragToTrackPos trackId ori ratio contentRect = do
     then Just . mouseToTrackPos ori ratio contentRect <$> getMousePos
     else pure Nothing
 
+-- | A track with a draggable thumb, positioned within @[0, 1]@ by @pos@ and
+-- sized within the track by @ratio@ (visible \/ total, also @[0, 1]@).
+-- @trackId@ is the interactive element — it receives chrome, hover, focus,
+-- and tab navigation via 'control' — and @thumbId@ is a purely decorative
+-- child positioned inside it. Returns the new position while @trackId@ is
+-- being dragged, 'Nothing' otherwise; the caller decides how to store or
+-- dispatch it. Shared by 'scrollBar' and 'slider'.
+rangeControl :: Ord e => e -> e -> Orientation -> Double -> Double -> UI e s (Maybe Double)
+rangeControl trackId thumbId ori pos ratio = do
+  contentRect <- trackContentRect trackId
+  let thumbR = thumbRect ori pos ratio contentRect
+  control trackId $
+    withBounds thumbR $ renderChrome thumbId $ pure ()
+  dragToTrackPos trackId ori ratio contentRect
+
 -- | A scrollbar with decrement\/increment buttons flanking a draggable thumb.
 -- The scroll position in @[0, 1]@ is stored in the 'UIContext', keyed by
 -- @mkId ScrollTrack@; the control reads and writes it itself. @thumbRatio@ is
@@ -421,11 +437,7 @@ scrollBar mkId ori thumbRatio = do
       when clicked $ writePos (min 1 (pos' + ratio'))
 
     track pos' ratio' = do
-      contentRect <- trackContentRect trackId
-      let thumbR = thumbRect ori pos' ratio' contentRect
-      control trackId $
-        withBounds thumbR $ renderChrome (mkId ScrollThumb) $ pure ()
-      newPos <- dragToTrackPos trackId ori ratio' contentRect
+      newPos <- rangeControl trackId (mkId ScrollThumb) ori pos' ratio'
       forM_ newPos writePos
 
 -- | Computes the bounding rectangle of a thumb within a track. @pos@ is the
@@ -578,10 +590,7 @@ slider mkId ori value onChange = do
         Horizontal -> (rectHeight contentRect, rectWidth contentRect)
         Vertical   -> (rectWidth contentRect,  rectHeight contentRect)
       thumbRatio  = if mainSz > 0 then crossSz / mainSz else 0
-      thumbR      = thumbRect ori clamped thumbRatio contentRect
-  control trackId $
-    withBounds thumbR $ renderChrome (mkId SliderThumb) $ pure ()
-  newPos <- dragToTrackPos trackId ori thumbRatio contentRect
+  newPos <- rangeControl trackId (mkId SliderThumb) ori clamped thumbRatio
   forM_ newPos $ \p -> dispatch (onChange p)
   let step = 0.05
       (decrKey, incrKey) = case ori of

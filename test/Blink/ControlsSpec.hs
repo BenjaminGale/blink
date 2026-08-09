@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), activatable, button, checkbox, checkboxMark, control, isControlHit, mouseToTrackPos, progressBar, radioGroup, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
+import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), activatable, button, checkbox, checkboxMark, control, isControlHit, mouseToTrackPos, progressBar, radioGroup, rangeControl, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -325,6 +325,9 @@ boxPoint = Point 10 50
 
 drawnTexts :: UIContext e s -> [Text]
 drawnTexts ctx = [t | DrawText _ t _ _ <- getDrawCommands ctx]
+
+runRangeControl :: WidgetRunner
+runRangeControl ctx = fmap snd $ runUI (rangeControl TestControl OtherControl Vertical 0 1) ctx
 
 -- runSliderControl maps SliderTrack -> TestControl and SliderThumb -> OtherControl
 -- so the control suite helpers work without modification.
@@ -752,6 +755,33 @@ spec = describe "Controls" $ do
       it "collapses cursor to insertion point after replacing selection" $ do
         ctx' <- runTextInput "hello" (withSel 1 3 (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["XY"] })))
         Map.lookup TestControl (elmSelections (ctxElements ctx')) `shouldBe` Just [Selection 3 3]
+
+  describe "rangeControl" $ do
+    controlBehaviourSpec runRangeControl (Point 50 50)
+    describe "background and border" $ backgroundAndBorderSpec runRangeControl
+
+    describe "drag interaction" $ do
+      it "returns the drag position via mouseToTrackPos while dragging" $ do
+        result <- fst <$> runUI (rangeControl TestControl OtherControl Vertical 0 0.5)
+          (mkCtx (mouseAt (Point 50 50) True []))
+        result `shouldBe` Just 0.5
+
+      it "returns Nothing when the button is not held" $ do
+        result <- fst <$> runUI (rangeControl TestControl OtherControl Vertical 0 0.5)
+          (mkCtx (mouseAt (Point 50 50) False []))
+        result `shouldBe` Nothing
+
+      it "returns Nothing when not dragging even if the button is held elsewhere" $ do
+        result <- fst <$> runUI (rangeControl TestControl OtherControl Vertical 0 0.5)
+          (mkCtx (mouseAt (Point 200 200) True []))
+        result `shouldBe` Nothing
+
+    describe "thumb placement" $ do
+      it "renders the thumb's chrome within the track's content rectangle when the thumb fills the track" $ do
+        drawCtx <- fmap snd $ runUI (rangeControl TestControl OtherControl Vertical 0 1) (mkCtx noInput)
+        -- With pos=0, ratio=1 the thumb fills the track's content rectangle
+        -- exactly, so the thumb's own margin-inset background lands here.
+        getDrawCommands drawCtx `shouldContain` [FillRect (insetRect (uniform 10) contentRect) testColour]
 
   describe "scrollBar" $ do
     describe "button stepping" $ do
