@@ -18,9 +18,8 @@ data Element = Label
              | RadioOpt Int
              | RadioOpt2 Int
              | ScrollRegion1 ScrollRegionPart
-             | ScrollRegion2 ScrollRegionPart
              | ScrollItem1 Int
-             | ScrollItem2 Int
+             | ScrollList2 ListBoxPart
   deriving (Eq, Ord)
 
 data Palette = Palette
@@ -277,10 +276,8 @@ mkTheme p = Theme
            , (ScrollRegion1 (ScrollRegionH ScrollThumb), mkScrollThumbStyle p)
            , (ScrollRegion1 (ScrollRegionV ScrollTrack), mkScrollTrackStyle p)
            , (ScrollRegion1 (ScrollRegionV ScrollThumb), mkScrollThumbStyle p)
-           , (ScrollRegion2 (ScrollRegionH ScrollTrack), mkScrollTrackStyle p)
-           , (ScrollRegion2 (ScrollRegionH ScrollThumb), mkScrollThumbStyle p)
-           , (ScrollRegion2 (ScrollRegionV ScrollTrack), mkScrollTrackStyle p)
-           , (ScrollRegion2 (ScrollRegionV ScrollThumb), mkScrollThumbStyle p)
+           , (ScrollList2 (ListBoxScroll ScrollTrack), mkScrollTrackStyle p)
+           , (ScrollList2 (ListBoxScroll ScrollThumb), mkScrollThumbStyle p)
            ]
   , themeDefaultStyle = mkBtnStyle p
   }

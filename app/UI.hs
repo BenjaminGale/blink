@@ -3,7 +3,7 @@ module UI (Element, AppState (..), demoApp) where
 
 import Blink
 import Theme (Element (..), lightTheme, darkTheme)
-import Control.Monad (when, forM_)
+import Control.Monad (when)
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -272,7 +272,7 @@ scrollView ps = do
     [ (Layout Fill headerH TopLeft,
          hBox defaultBoxConfig
            [ (Layout Fill Fill MiddleLeft, label Label "Known size (scrollableRegion)")
-           , (Layout Fill Fill MiddleLeft, label Label "Dynamic (scrollableDynamic, 100 items)")
+           , (Layout Fill Fill MiddleLeft, label Label "Virtualized (listBox, 100 items)")
            ])
     , (Layout Fill Fill TopLeft,
          hBox (defaultBoxConfig { boxSpacing = 8 })
@@ -296,28 +296,19 @@ staticScrollList ps =
       when clicked $ dispatch $ \s -> updateScrollState s (\p -> p { lastClickedStatic = Just i })
 
 dynamicScrollList :: ScrollPageState -> DemoUI ()
-dynamicScrollList ps = do
-  bounds <- getBounds
-  let itemH      = 32 :: Double
-      totalItems = 100 :: Int
-      contentH   = fromIntegral totalItems * itemH
-      vRatio     = max 0 (min 1 (rectHeight bounds / contentH))
-  scrollableDynamic ScrollRegion2 Nothing (Just vRatio) $ \_ vFrac -> do
-    vp <- getBounds
-    let vpH      = rectHeight vp
-        offset   = vFrac * max 0 (contentH - vpH)
-        firstIdx = floor (offset / itemH) :: Int
-        subOff   = offset - fromIntegral firstIdx * itemH
-        visibleN = ceiling ((vpH + subOff) / itemH) :: Int
-    forM_ [0 .. visibleN - 1] $ \j ->
-      let i     = firstIdx + j
-          itemR = Rectangle (rectX vp) (rectY vp + fromIntegral j * itemH - subOff) (rectWidth vp) itemH
-      in when (i < totalItems) $ withBounds itemR $ do
-           let isSelected = lastClickedDynamic ps == Just i
-               txt = (if isSelected then "✓ " else "") <> "Item " <> T.pack (show (i + 1))
-           clicked <- button (ScrollItem2 i) txt
-           when clicked $ dispatch $ \s ->
-             updateScrollState s (\p -> p { lastClickedDynamic = Just i })
+dynamicScrollList ps =
+  listBox ScrollList2 itemH items selected onChangeSelection renderRow
+  where
+    itemH  = 32 :: Double
+    items  = [ (i, "Item " <> T.pack (show (i + 1))) | i <- [0 .. 99 :: Int] ]
+    selected = maybe (-1) id (lastClickedDynamic ps)
+
+    onChangeSelection i s = updateScrollState s (\p -> p { lastClickedDynamic = Just i })
+
+    renderRow eid isSelected (_, txt) = do
+      style <- getStyle eid
+      let rowText = (if isSelected then "✓ " else "") <> txt
+      drawText (styleTextColour style) (styleTextAlign style) rowText
 
 updateScrollState :: AppState -> (ScrollPageState -> ScrollPageState) -> AppState
 updateScrollState s f = case currentPage s of
