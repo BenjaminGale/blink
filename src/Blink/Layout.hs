@@ -7,57 +7,17 @@ Every UI component in Blink receives a bounding rectangle and occupies it
 entirely by default. The layout system controls what rectangle each component
 receives.
 
-= Single control layout
+>  +------------------------------------------+
+>  |                                          |
+>  |                component                 |
+>  |        (fills parent by default)         |
+>  |                                          |
+>  +------------------------------------------+
 
-Since components are greedy, 'layoutWithConstraints' is the escape hatch for
-sizing and aligning a single component within its parent bounds. A
-'RectConstraint' specifies a 'Constraint' on each axis — controlling how much
-of the parent space the component takes up — and an 'Alignment' controlling
-where it sits within that space.
-
-@
-layoutWithConstraints (RectConstraint (Exactly 120) (Exactly 32) Center) $
-  button MyBtn "Click me"
-@
-
-This renders the button at 120×32 pixels, centred in whatever space the parent
-provides, regardless of how large that space is.
-
-= Box layout
-
-'hBox' lays out its children in a single horizontal row; 'vBox' lays them out
-in a single vertical column. If a margin is set, children are laid out within
-that inset.
-
-Both share the same layout algorithm. The axis along which children are stacked
-is called the /main axis/; the perpendicular axis is the /cross axis/.
-
-  * The panel fills its available space, minus an optional margin.
-  * Children are laid out in a line with optional gaps between them.
-  * Fixed-size children take exactly the space they ask for.
-  * Flexible children share whatever space is left over equally.
-  * If a flexible child has a maximum size and its share would exceed it, it
-    takes only its maximum and the remainder is shared among the others.
-  * The group is aligned within the content area according to 'boxAlignment'.
-    When children are smaller than the content area this controls where the
-    whitespace goes; when they overflow it controls which side clips.
-  * Once each child's space is allocated, 'layoutWithConstraints' positions
-    the child within its slot.
-  * By default children are stretched to fill the panel on the cross axis;
-    this can be disabled to let each child control its own size on that axis.
-  * Children are clipped to the panel's content area.
-
-@
-hBox (defaultBoxConfig { boxSpacing = 4 })
-  [ (RectConstraint (Exactly 80) Fill TopLeft, button Btn1 "Back")
-  , (RectConstraint Fill         Fill TopLeft, button Btn2 "Title")
-  , (RectConstraint (Exactly 80) Fill TopLeft, button Btn3 "Next")
-  ]
-@
-
-Here the two outer buttons are fixed at 80px wide; the centre button expands
-to fill whatever space remains. The 'Fill' height constraint in each child
-means height is determined by the panel, not the child.
+There are three ways to control that rectangle: 'layoutWithConstraints' sizes
+and aligns a single component within its parent bounds; 'hBox' and 'vBox'
+arrange a row or column of children; and 'borderLayout' divides space into up
+to five named regions.
 -}
 module Blink.Layout
   ( -- * Single control layout
@@ -149,14 +109,61 @@ boxTotalSpacing :: BoxConfig -> Int -> Double
 boxTotalSpacing cfg n = boxSpacing cfg * fromIntegral (max 0 (n - 1))
 
 -- | Sizes and positions a component within its parent bounds according to a
---   'RectConstraint'. Used directly to constrain a single component, and used
+--   'Layout'. Used directly to constrain a single component, and used
 --   internally by 'hBox' and 'vBox' to position each child within its
---   allocated slot.
+--   allocated slot. Since components are greedy by default, this is the
+--   escape hatch for sizing and aligning one that shouldn't fill its parent.
+--   'layoutWidth' and 'layoutHeight' control how much of the parent space the
+--   component takes up on each axis; 'layoutAlignment' controls where it
+--   sits within that space.
 --
 -- @
--- layoutWithConstraints (RectConstraint (Exactly 120) (Exactly 32) Center) $
---   button MyBtn "OK"
+-- layoutWithConstraints (Layout (Exactly 120) (Exactly 32) Center) $
+--   button MyBtn "Click me"
 -- @
+--
+-- This renders the button at 120×32 pixels, centred in whatever space the
+-- parent provides, regardless of how large that space is:
+--
+-- >  +----------------------------------------+
+-- >  |                                        |
+-- >  |            +------------+              |
+-- >  |            |   MyBtn    |  120 x 32    |
+-- >  |            +------------+              |
+-- >  |                                        |
+-- >  +----------------------------------------+
+-- >                   parent bounds
+--
+-- A few more variations to build intuition:
+--
+-- @
+-- layoutWithConstraints (Layout Fill (Exactly 3) TopLeft) toolbar
+-- @
+--
+-- 'Fill' on one axis and a fixed size on the other pins a full-width bar to
+-- the top, regardless of the parent's height:
+--
+-- >  +------------------------------------------+
+-- >  |            Toolbar (Fill x 3)            |
+-- >  +------------------------------------------+
+-- >  |                                          |
+-- >  |                                          |
+-- >  |                                          |
+-- >  +------------------------------------------+
+--
+-- @
+-- layoutWithConstraints (Layout (Exactly 14) (Exactly 3) BottomRight) badge
+-- @
+--
+-- A fixed size with 'BottomRight' alignment pins a component to a corner:
+--
+-- >  +------------------------------------------+
+-- >  |                                          |
+-- >  |                                          |
+-- >  |                                          |
+-- >  |                            +-------------+
+-- >  |                            |    Badge    |
+-- >  +----------------------------+-------------+
 layoutWithConstraints :: Layout -> UI e s a -> UI e s a
 layoutWithConstraints rc ui = do
   r <- getBounds
@@ -206,15 +213,88 @@ vertical = Axis
   , fillCross      = \rc -> rc { layoutWidth = Fill }
   }
 
--- | Arranges children left-to-right. Each child is paired with a
---   'RectConstraint' governing its width and, when 'boxFillCross' is 'False',
---   its height and vertical alignment.
+-- | Arranges children left-to-right. Each child is paired with a 'Layout'
+--   governing its width and, when 'boxFillCross' is 'False', its height and
+--   vertical alignment. If a margin is set, children are laid out within
+--   that inset.
+--
+--   The axis along which children are stacked (here, horizontal) is called
+--   the /main axis/; the perpendicular axis is the /cross axis/. 'vBox' uses
+--   the same algorithm with the axes swapped:
+--
+--   * The panel fills its available space, minus an optional margin.
+--   * Children are laid out in a line with optional gaps between them.
+--   * Fixed-size children take exactly the space they ask for.
+--   * Flexible children share whatever space is left over equally.
+--   * If a flexible child has a maximum size and its share would exceed it,
+--     it takes only its maximum and the remainder is shared among the
+--     others.
+--   * The group is aligned within the content area according to
+--     'boxAlignment'. When children are smaller than the content area this
+--     controls where the whitespace goes; when they overflow it controls
+--     which side clips.
+--   * Once each child's space is allocated, 'layoutWithConstraints' positions
+--     the child within its slot.
+--   * By default children are stretched to fill the panel on the cross axis;
+--     this can be disabled to let each child control its own size on that
+--     axis.
+--   * Children are clipped to the panel's content area.
+--
+-- @
+-- hBox (defaultBoxConfig { boxSpacing = 4 })
+--   [ (Layout (Exactly 80) Fill TopLeft, button Btn1 "Back")
+--   , (Layout Fill         Fill TopLeft, button Btn2 "Title")
+--   , (Layout (Exactly 80) Fill TopLeft, button Btn3 "Next")
+--   ]
+-- @
+--
+-- Here the two outer buttons are fixed at 80px wide; the centre button
+-- expands to fill whatever space remains. The 'Fill' height constraint in
+-- each child means height is determined by the panel, not the child:
+--
+-- >  +--------+------------------------------------+--------+
+-- >  |  Back  |               Title                |  Next  |
+-- >  |  80px  |                Fill                |  80px  |
+-- >  +--------+------------------------------------+--------+
+--
+-- 'boxFillCross' (default 'True') controls the cross axis — here, height.
+-- When 'True', each child is stretched to the panel's full height, as in
+-- the diagram above. When 'False', each child keeps its own height (here,
+-- 'TopLeft'-aligned), leaving the rest of the panel blank:
+--
+-- >  +------------+--------------+------------+
+-- >  |     A      |      B       |     C      |
+-- >  +------------+--------------+------------+
+-- >  |                                        |
+-- >  +----------------------------------------+
 hBox :: BoxConfig -> [(Layout, UI e s ())] -> UI e s ()
 hBox = box horizontal
 
--- | Arranges children top-to-bottom. Each child is paired with a
---   'RectConstraint' governing its height and, when 'boxFillCross' is 'False',
---   its width and horizontal alignment.
+-- | Arranges children top-to-bottom. Each child is paired with a 'Layout'
+--   governing its height and, when 'boxFillCross' is 'False', its width and
+--   horizontal alignment. Uses the same algorithm as 'hBox' with the axes
+--   swapped — see its documentation for the full behaviour.
+--
+-- @
+-- vBox (defaultBoxConfig { boxSpacing = 1 })
+--   [ (Layout Fill (Exactly 3) TopLeft, header)
+--   , (Layout Fill Fill        TopLeft, body)
+--   , (Layout Fill (Exactly 3) TopLeft, footer)
+--   ]
+-- @
+--
+-- The header and footer are fixed at 3 rows tall; the body expands to fill
+-- whatever space remains:
+--
+-- >  +------------------------------------------+
+-- >  |           Header (Exactly 3px)           |
+-- >  +------------------------------------------+
+-- >  |                                          |
+-- >  |               Body (Fill)                |
+-- >  |                                          |
+-- >  +------------------------------------------+
+-- >  |           Footer (Exactly 3px)           |
+-- >  +------------------------------------------+
 vBox :: BoxConfig -> [(Layout, UI e s ())] -> UI e s ()
 vBox = box vertical
 
@@ -239,7 +319,7 @@ box ax cfg children = do
           in withBounds slotRect $ layoutWithConstraints effectiveRc ui)
         slotOrigins slotSizes children
 
--- | Returns the preferred size for a 'Constraint' given the amount of available space.
+-- | Returns the preferred size for a 'Length' given the amount of available space.
 --
 -- >>> preferredSize (Exactly 80) 200
 -- 80.0
@@ -390,6 +470,22 @@ emptyBorderContent = BorderContent
   }
 
 -- | Divides the available space into up to five named regions.
+--
+-- >  +------------------------------------------+
+-- >  |                   top                    |
+-- >  +--------+------------------------+--------+
+-- >  |        |                        |        |
+-- >  |  left  |         centre         | right  |
+-- >  |        |                        |        |
+-- >  +--------+------------------------+--------+
+-- >  |                  bottom                  |
+-- >  +------------------------------------------+
+--
+-- 'topPanel' and 'bottomPanel' each take a fixed height and span the full
+-- width; 'leftPanel' and 'rightPanel' each take a fixed width within the
+-- middle row; 'centrePanel' fills whatever space is left. Any panel may be
+-- omitted (see 'emptyBorderContent'), in which case the remaining panels
+-- expand to fill the gap.
 --
 -- Implemented as a 'vBox' of three rows where the middle row is an 'hBox'
 -- containing the left, centre, and right panels. No spacing or margin is
