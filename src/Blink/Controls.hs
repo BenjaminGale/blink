@@ -52,10 +52,10 @@ selector  ItemList items selected onChange renderItem  -- mkId = ItemList
 
 The element ID space therefore forms a tree that mirrors the widget tree:
 each composite control's sub-parts (see 'ScrollBarPart', 'SliderPart',
-'ScrollRegionPart') nest inside the caller's own element type the same way
-the widgets they identify nest inside the caller's UI tree. A
-'scrollableRegion' nested inside a custom panel, for example, produces IDs
-like @MyPanel (ScrollRegionV ScrollThumb)@.
+'ViewportPart') nest inside the caller's own element type the same way
+the widgets they identify nest inside the caller's UI tree. A 'viewport'
+nested inside a custom panel, for example, produces IDs like
+@MyPanel (ViewportV ScrollThumb)@.
 
 == Chrome and the box model
 
@@ -144,10 +144,9 @@ module Blink.Controls
   , scrollBar
   , thumbRect
   , mouseToTrackPos
-    -- * Scrollable regions
-  , ScrollRegionPart (..)
-  , scrollableRegion
-  , scrollableDynamic
+    -- * Viewport
+  , ViewportPart (..)
+  , viewport
   , scrollRegionBarSize
     -- * Slider
   , SliderPart (..)
@@ -635,38 +634,44 @@ mouseToTrackPos Horizontal ratio r mouse =
   in if range <= 0 then 0
      else max 0 (min 1 ((pointX mouse - rectX r - thumbW / 2) / range))
 
--- | Sub-parts of a scrollable region's element ID hierarchy. Wraps
--- 'ScrollBarPart' for the horizontal and vertical scrollbars:
+-- | Sub-parts of a viewport's element ID hierarchy. Wraps 'ScrollBarPart'
+-- for the horizontal and vertical scrollbars:
 --
 -- @
--- data Element = ... | MyRegion ScrollRegionPart
--- scrollableRegion MyRegion (Size 600 400) content
+-- data Element = ... | MyRegion ViewportPart
+-- viewport MyRegion (Size 600 400) content
 -- @
-data ScrollRegionPart
-  = ScrollRegionH ScrollBarPart -- ^ A part of the horizontal scrollbar.
-  | ScrollRegionV ScrollBarPart -- ^ A part of the vertical scrollbar.
+data ViewportPart
+  = ViewportH ScrollBarPart -- ^ A part of the horizontal scrollbar.
+  | ViewportV ScrollBarPart -- ^ A part of the vertical scrollbar.
   deriving (Eq, Ord, Show)
 
--- | The pixel width of a scrollbar strip used by 'scrollableRegion' and
--- 'scrollableDynamic'. Exported so callers that compose a scrollable region
--- inside their own layout can account for the strip in their geometry without
--- hard-coding the value.
+-- | The pixel width of a scrollbar strip used by 'viewport'. Exported so
+-- callers that compose a viewport inside their own layout can account for
+-- the strip in their geometry without hard-coding the value.
 scrollRegionBarSize :: Double
 scrollRegionBarSize = 16
 
--- | A scrollable region with a known virtual content size. Scrollbars appear
--- automatically on axes where the content exceeds the viewport. The content
--- action runs with virtual bounds — the full content rectangle translated so
--- the scrolled portion aligns with the viewport — clipped to the visible area.
--- Mouse interaction works naturally because translated bounds are in window
--- coordinates; the clip region hides the rest.
-scrollableRegion
+-- | A scrollable window onto a fixed-size virtual content area. Scrollbars
+-- appear automatically on axes where the content exceeds the viewport, and
+-- are drawn first so that a drag or click this frame is reflected
+-- immediately. The content action then runs with virtual bounds — the full
+-- content rectangle translated so the scrolled portion aligns with the
+-- viewport — clipped to the visible area. Mouse interaction works naturally
+-- because translated bounds are in window coordinates; the clip region
+-- hides the rest.
+--
+-- For large, uniform item collections where building the whole content
+-- every frame would be wasteful, or where scrolling needs to be driven by
+-- keyboard selection, use 'listBox' instead — it manages its own scroll
+-- state directly rather than wrapping content in a viewport.
+viewport
   :: Ord e
-  => (ScrollRegionPart -> e)  -- ^ maps region parts to element IDs
-  -> Size                      -- ^ virtual content size
-  -> UI e s ()                 -- ^ content
+  => (ViewportPart -> e)  -- ^ maps viewport parts to element IDs
+  -> Size                  -- ^ virtual content size
+  -> UI e s ()             -- ^ content
   -> UI e s ()
-scrollableRegion mkId (Size cw ch) content = do
+viewport mkId (Size cw ch) content = do
   outer <- getBounds
   let ow      = rectWidth outer
       oh      = rectHeight outer
@@ -680,51 +685,26 @@ scrollableRegion mkId (Size cw ch) content = do
       vpW     = if needsV  then ow - scrollRegionBarSize else ow
       hThumb  = if needsH then Just (max 0 (min 1 (vpW / cw))) else Nothing
       vThumb  = if needsV then Just (max 0 (min 1 (vpH / ch))) else Nothing
-  scrollableDynamic mkId hThumb vThumb $ \hPos vPos ->
-    let offsetX    = hPos * max 0 (cw - vpW)
-        offsetY    = vPos * max 0 (ch - vpH)
-        virtBounds = outer
-          { rectX      = rectX outer - offsetX
-          , rectY      = rectY outer - offsetY
-          , rectWidth  = cw
-          , rectHeight = ch
-          }
-    in withBounds virtBounds content
-
--- | A scrollable region where the caller controls content rendering. Renders
--- scrollbars for the axes where a thumb ratio is supplied, then calls
--- @content hFrac vFrac@ with the current scroll fractions in @[0, 1]@. The
--- content runs within the viewport rectangle (full bounds minus scrollbar
--- strips) so @getBounds@ returns the available content area.
---
--- Pass 'Nothing' to suppress a scrollbar on an axis entirely. A typical thumb
--- ratio is @viewportSize / contentSize@; the caller uses the returned fractions
--- to determine which portion of the virtual content to render.
-scrollableDynamic
-  :: Ord e
-  => (ScrollRegionPart -> e)           -- ^ maps region parts to element IDs
-  -> Maybe Double                       -- ^ horizontal scrollbar thumb ratio
-  -> Maybe Double                       -- ^ vertical scrollbar thumb ratio
-  -> (Double -> Double -> UI e s ())   -- ^ @content hFrac vFrac@
-  -> UI e s ()
-scrollableDynamic mkId hThumb vThumb content = do
-  outer <- getBounds
-  let ow     = rectWidth outer
-      oh     = rectHeight outer
-      vpW    = maybe ow (\_ -> ow - scrollRegionBarSize) vThumb
-      vpH    = maybe oh (\_ -> oh - scrollRegionBarSize) hThumb
-      vpRect = outer { rectWidth = vpW,               rectHeight = vpH }
-      hBar   = outer { rectY = rectY outer + vpH,     rectHeight = scrollRegionBarSize, rectWidth = vpW }
-      vBar   = outer { rectX = rectX outer + vpW,     rectWidth  = scrollRegionBarSize, rectHeight = vpH }
+      vpRect  = outer { rectWidth = vpW, rectHeight = vpH }
+      hBar    = outer { rectY = rectY outer + vpH, rectHeight = scrollRegionBarSize, rectWidth = vpW }
+      vBar    = outer { rectX = rectX outer + vpW, rectWidth  = scrollRegionBarSize, rectHeight = vpH }
   case hThumb of
     Nothing -> pure ()
-    Just r  -> withBounds hBar $ scrollBar (mkId . ScrollRegionH) Horizontal r
+    Just r  -> withBounds hBar $ scrollBar (mkId . ViewportH) Horizontal r
   case vThumb of
     Nothing -> pure ()
-    Just r  -> withBounds vBar $ scrollBar (mkId . ScrollRegionV) Vertical r
-  hPos <- maybe (pure 0) (\_ -> getScrollState (mkId (ScrollRegionH ScrollTrack))) hThumb
-  vPos <- maybe (pure 0) (\_ -> getScrollState (mkId (ScrollRegionV ScrollTrack))) vThumb
-  withBounds vpRect $ clipToCurrent $ content hPos vPos
+    Just r  -> withBounds vBar $ scrollBar (mkId . ViewportV) Vertical r
+  hPos <- maybe (pure 0) (\_ -> getScrollState (mkId (ViewportH ScrollTrack))) hThumb
+  vPos <- maybe (pure 0) (\_ -> getScrollState (mkId (ViewportV ScrollTrack))) vThumb
+  let offsetX    = hPos * max 0 (cw - vpW)
+      offsetY    = vPos * max 0 (ch - vpH)
+      virtBounds = outer
+        { rectX      = rectX outer - offsetX
+        , rectY      = rectY outer - offsetY
+        , rectWidth  = cw
+        , rectHeight = ch
+        }
+  withBounds vpRect $ clipToCurrent $ withBounds virtBounds content
 
 -- | Sub-parts of a slider, used as the inner tag when building the
 -- control's element IDs via a tagging function:

@@ -266,12 +266,12 @@ updateBasicControls s f = case currentPage s of
 scrollView :: ScrollPageState -> DemoUI ()
 scrollView ps = do
   (_, chromH) <- measureChrome Label
-  Size _ th   <- measureText "Known size (scrollableRegion)"
+  Size _ th   <- measureText "Known size (viewport)"
   let headerH = addLength (Exactly th) chromH
   vBox (defaultBoxConfig { boxMargin = 8, boxSpacing = 4 })
     [ (Layout Fill headerH TopLeft,
          hBox defaultBoxConfig
-           [ (Layout Fill Fill MiddleLeft, label Label "Known size (scrollableRegion)")
+           [ (Layout Fill Fill MiddleLeft, label Label "Known size (viewport)")
            , (Layout Fill Fill MiddleLeft, label Label "Virtualized (listBox, 100 items)")
            ])
     , (Layout Fill Fill TopLeft,
@@ -283,7 +283,7 @@ scrollView ps = do
 
 staticScrollList :: ScrollPageState -> DemoUI ()
 staticScrollList ps =
-  scrollableRegion ScrollRegion1 (Size 400 (20 * 32)) $
+  viewport ScrollRegion1 (Size 400 (20 * 32)) $
     vBox defaultBoxConfig
       [ (Layout Fill (Exactly 32) TopLeft, item i)
       | i <- [1 .. 20 :: Int]

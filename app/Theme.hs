@@ -17,7 +17,7 @@ data Element = Label
              | Slider1 SliderPart
              | RadioOpt Int
              | RadioOpt2 Int
-             | ScrollRegion1 ScrollRegionPart
+             | ScrollRegion1 ViewportPart
              | ScrollItem1 Int
              | ScrollList2 ListBoxPart
   deriving (Eq, Ord)
@@ -272,10 +272,10 @@ mkTheme p = Theme
       , (Slider1 SliderThumb,       mkScrollThumbStyle p)
       ] ++ [(RadioOpt i,                        mkRadioItemStyle p) | i <- [0..9]]
         ++ [(RadioOpt2 i,                      mkRadioItemStyle p) | i <- [0..9]]
-        ++ [ (ScrollRegion1 (ScrollRegionH ScrollTrack), mkScrollTrackStyle p)
-           , (ScrollRegion1 (ScrollRegionH ScrollThumb), mkScrollThumbStyle p)
-           , (ScrollRegion1 (ScrollRegionV ScrollTrack), mkScrollTrackStyle p)
-           , (ScrollRegion1 (ScrollRegionV ScrollThumb), mkScrollThumbStyle p)
+        ++ [ (ScrollRegion1 (ViewportH ScrollTrack), mkScrollTrackStyle p)
+           , (ScrollRegion1 (ViewportH ScrollThumb), mkScrollThumbStyle p)
+           , (ScrollRegion1 (ViewportV ScrollTrack), mkScrollTrackStyle p)
+           , (ScrollRegion1 (ViewportV ScrollThumb), mkScrollThumbStyle p)
            , (ScrollList2 (ListBoxScroll ScrollTrack), mkScrollTrackStyle p)
            , (ScrollList2 (ListBoxScroll ScrollThumb), mkScrollThumbStyle p)
            ]

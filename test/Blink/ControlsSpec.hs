@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), activatable, button, checkbox, checkboxMark, control, focusRing, isControlHit, listBox, mouseToTrackPos, progressBar, radioGroup, rangeControl, scrollBar, scrollableRegion, scrollRegionBarSize, selector, slider, textInput, thumbRect, virtualContent)
+import Blink.Controls (ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, button, checkbox, checkboxMark, control, focusRing, isControlHit, listBox, mouseToTrackPos, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textInput, thumbRect, viewport, virtualContent)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -468,22 +468,22 @@ mkScrollBarCtx pos input =
 runScrollBar :: UIContext ScrollBarPart () -> IO (UIContext ScrollBarPart ())
 runScrollBar = fmap snd . runUI (scrollBar id Vertical 0.25)
 
-data ScrollRegionElem = SRPart ScrollRegionPart | SRChild
+data ViewportElem = VPPart ViewportPart | VPChild
   deriving (Eq, Ord, Show)
 
-srTheme :: Theme ScrollRegionElem
-srTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = zeroMarginStyleSet }
+vpTheme :: Theme ViewportElem
+vpTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = zeroMarginStyleSet }
 
 -- outer: 200×100, virtual content: 400×100
 -- viewport: 200×84 (H scrollbar takes 16px at bottom: y 84–100)
-srOuterRect :: Rectangle
-srOuterRect = Rectangle 0 0 200 100
+vpOuterRect :: Rectangle
+vpOuterRect = Rectangle 0 0 200 100
 
-runScrollableRegion :: Point -> IO (UIContext ScrollRegionElem ())
-runScrollableRegion mousePos =
+runViewport :: Point -> IO (UIContext ViewportElem ())
+runViewport mousePos =
   let input = noInput { inputMousePosition = mousePos }
-      ctx = emptyUIContext srOuterRect input srTheme () noOpTextMeasurer
-  in fmap snd $ runUI (scrollableRegion SRPart (Size 400 100) (control SRChild (pure ()))) ctx
+      ctx = emptyUIContext vpOuterRect input vpTheme () noOpTextMeasurer
+  in fmap snd $ runUI (viewport VPPart (Size 400 100) (control VPChild (pure ()))) ctx
 
 
 spec :: Spec
@@ -1229,15 +1229,15 @@ spec = describe "Controls" $ do
         drawnTexts ctx' `shouldContain` ["UNSEL:Item3"]
         drawnTexts ctx' `shouldNotContain` ["UNSEL:Item0"]
 
-  describe "scrollableRegion" $ do
+  describe "viewport" $ do
     describe "interaction clipping" $ do
       it "does not hover a child item when the mouse is over the horizontal scrollbar strip" $ do
-        ctx' <- runScrollableRegion (Point 100 92)
-        ixnHovered (ctxInteraction ctx') `shouldNotBe` Just SRChild
+        ctx' <- runViewport (Point 100 92)
+        ixnHovered (ctxInteraction ctx') `shouldNotBe` Just VPChild
 
       it "hovers the child item when the mouse is within the viewport" $ do
-        ctx' <- runScrollableRegion (Point 100 42)
-        ixnHovered (ctxInteraction ctx') `shouldBe` Just SRChild
+        ctx' <- runViewport (Point 100 42)
+        ixnHovered (ctxInteraction ctx') `shouldBe` Just VPChild
 
   describe "virtualContent" $ do
     -- Viewport is controlRect: 100×100. Each item marks itself with a
