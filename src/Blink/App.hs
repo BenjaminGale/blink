@@ -34,6 +34,20 @@ Pass an 'App' to 'configureContinuous' or 'configureEventDriven' to obtain a
     callback is invoked when async work completes, allowing the backend to
     unblock its event wait (e.g. @glfwPostEmptyEvent@).
 
+>  Continuous:                          Event-driven:
+>
+>  run view -----> submit draws         run view (pass 1)
+>       (stale state may flash              |
+>        briefly on the next frame          v
+>        redraw instead)               apply dispatches
+>                                            |
+>                                            v
+>                                       run view again (pass 2)
+>                                            |
+>                                            v
+>                                       submit draws
+>                                       (never shows stale state)
+
 = Backend integration
 
 'BlinkHandle' is the interface the backend uses each frame. Drive the render
@@ -190,9 +204,8 @@ data FrameResult s
     -- ^ The application has quit. Render the draw commands (the final frame)
     -- then exit the loop.
 
--- | Identifies a font for text measurement. Passed to 'measureFont',
--- 'measureText', 'charOffset', and 'charAtOffset' to select the font.
--- Mutable state shared across frames, allocated once at configure time.
+-- | Mutable state carried between frames, allocated once at configure time
+-- and threaded through every 'stepFrame' call via closure.
 data AppRefs e s = AppRefs
   { refsAsyncQueue :: IORef [s -> s]
     -- Modifiers posted by completed async jobs, waiting to be applied at the

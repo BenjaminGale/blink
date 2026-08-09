@@ -1,4 +1,6 @@
 {- |
+Module: Blink.Style
+
 Theming types for Blink. Controls are styled through a three-level hierarchy:
 
   * 'Style' — visual properties (colours, spacing, border) for a control
@@ -13,6 +15,44 @@ When the UI resolves the active style for a control, it looks up its
 element ID in the 'Theme' (falling back to 'themeDefaultStyle' if none
 is registered), then selects the appropriate state variant based on the
 control's current interaction state. Construct a theme with 'emptyTheme'.
+
+= Building a theme
+
+There is no default 'Style' or 'StyleSet' — every field of every state
+variant must be given explicitly. A typical theme starts from one base
+style, derives the other four variants from it with record update, and
+registers only the elements that need to look different from the default:
+
+@
+baseStyle :: Style
+baseStyle = Style
+  { styleBackground   = RGBA 0.2 0.2 0.2 1
+  , styleTextColour   = RGBA 1 1 1 1
+  , styleTextAlign    = AlignCenter
+  , styleMargin       = uniform 2
+  , stylePadding      = uniform 4
+  , styleBorderColour = Nothing
+  , styleBorderEdges  = noBorder
+  }
+
+baseStyleSet :: StyleSet
+baseStyleSet = StyleSet
+  { styleSetNormal   = baseStyle
+  , styleSetHovered  = baseStyle { styleBackground = RGBA 0.3 0.3 0.3 1 }
+  , styleSetPressed  = baseStyle { styleBackground = RGBA 0.15 0.15 0.15 1 }
+  , styleSetFocused  = baseStyle { styleBorderColour = Just (RGBA 0.4 0.6 1 1)
+                                  , styleBorderEdges = uniformBorder 1 }
+  , styleSetDisabled = baseStyle { styleTextColour = RGBA 0.5 0.5 0.5 1 }
+  }
+
+myTheme :: Theme Element
+myTheme = (emptyTheme baseStyleSet)
+  { themeElementStyles = Map.fromList
+      [ (DangerButton, baseStyleSet
+          { styleSetNormal = baseStyle { styleBackground = RGBA 0.7 0.1 0.1 1 } })
+      ]
+  }
+@
 -}
 module Blink.Style
   ( -- * Types

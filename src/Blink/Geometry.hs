@@ -1,4 +1,6 @@
 {- |
+Module: Blink.Geometry
+
 Primitive geometry types and operations used throughout Blink. All
 coordinates are in pixels, measured from a top-left origin with Y
 increasing downward.

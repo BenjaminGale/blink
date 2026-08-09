@@ -1,4 +1,6 @@
 {- |
+Module: Blink.Rendering
+
 The draw command list produced by the UI each frame. After running the
 UI tree, 'Blink.UI.getDrawCommands' extracts an ordered list of
 'DrawCommand' values that the backend interprets to render the frame.

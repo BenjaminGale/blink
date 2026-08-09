@@ -1,4 +1,6 @@
 {- |
+Module: Blink.Input
+
 Raw input types assembled by the backend each frame and passed to
 'Blink.App.stepFrame' inside a 'Blink.App.FrameInput'. The 'InputState'
 record aggregates pointer position, primary mouse button state, and keyboard

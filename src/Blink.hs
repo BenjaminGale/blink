@@ -48,6 +48,8 @@ Every 'App' is parameterised over two types:
   * "Blink.Style"    — Themes and per-state styles.
   * "Blink.Rendering"— The draw command list produced each frame.
   * "Blink.Geometry" — Primitive geometry types.
+  * "Blink.Input"    — Raw keyboard and mouse types assembled by the backend
+                       each frame.
 -}
 module Blink
   ( module Blink.App
