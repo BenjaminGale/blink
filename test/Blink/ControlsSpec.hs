@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), button, checkbox, checkboxMark, control, isHitControl, mouseToTrackPos, progressBar, radioGroup, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
+import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), button, checkbox, checkboxMark, control, isControlHit, mouseToTrackPos, progressBar, radioGroup, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -985,18 +985,18 @@ spec = describe "Controls" $ do
     it "is 16" $
       scrollRegionBarSize `shouldBe` 16
 
-  -- isHitControl uses testTheme (margin = uniform 10), so:
+  -- isControlHit uses testTheme (margin = uniform 10), so:
   --   bgRect = Rectangle 10 10 80 80 within controlRect = Rectangle 0 0 100 100
-  describe "isHitControl" $ do
+  describe "isControlHit" $ do
     it "returns True when the mouse is inside the background rect" $ do
-      result <- fst <$> runUI (isHitControl TestControl) (mkCtx (mouseAt (Point 50 50) False []))
+      result <- fst <$> runUI (isControlHit TestControl) (mkCtx (mouseAt (Point 50 50) False []))
       result `shouldBe` True
 
     it "returns False when the mouse is in the margin area" $ do
-      result <- fst <$> runUI (isHitControl TestControl) (mkCtx (mouseAt (Point 5 5) False []))
+      result <- fst <$> runUI (isControlHit TestControl) (mkCtx (mouseAt (Point 5 5) False []))
       result `shouldBe` False
 
     it "returns False when the mouse is outside the bounds" $ do
-      result <- fst <$> runUI (isHitControl TestControl) (mkCtx (mouseAt (Point 200 200) False []))
+      result <- fst <$> runUI (isControlHit TestControl) (mkCtx (mouseAt (Point 200 200) False []))
       result `shouldBe` False
 

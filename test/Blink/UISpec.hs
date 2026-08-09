@@ -504,13 +504,13 @@ spec = describe "Blink.UI" $ do
       (result, _) <- runUI isMouseFree ctx
       result `shouldBe` False
 
-  describe "regionHit" $ do
+  describe "isRegionHit" $ do
     it "is True when the mouse is inside the current bounds" $ do
-      (hit, _) <- runWith mouseOnCenter regionHit
+      (hit, _) <- runWith mouseOnCenter isRegionHit
       hit `shouldBe` True
 
     it "is False when the mouse is outside the current bounds" $ do
-      (hit, _) <- runWith (noInput { inputMousePosition = Point 200 200 }) regionHit
+      (hit, _) <- runWith (noInput { inputMousePosition = Point 200 200 }) isRegionHit
       hit `shouldBe` False
 
   describe "keyboard" $ do

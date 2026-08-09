@@ -59,7 +59,7 @@ module Blink.Controls
   , control
   , renderControl
   , isActivatedBy
-  , isHitControl
+  , isControlHit
   , whenFocused
   , isKeyPressed
   ) where
@@ -644,13 +644,13 @@ control eid content = do
   renderControl eid content
 
 -- | 'True' when the mouse is over the element's background rectangle (bounds
--- inset by its margin). Use this to test hit areas in custom controls without
--- reimplementing the margin geometry.
-isHitControl :: Ord e => e -> UI e s Bool
-isHitControl eid = do
+-- inset by its margin) — the control-specific hit area. Built on 'isRegionHit';
+-- use this rather than reimplementing the margin geometry in custom controls.
+isControlHit :: Ord e => e -> UI e s Bool
+isControlHit eid = do
   s <- getStyle eid
   r <- getBounds
-  withBounds (insetRect (styleMargin s) r) regionHit
+  withBounds (insetRect (styleMargin s) r) isRegionHit
 
 applyHover :: Ord e => e -> UI e s ()
 applyHover eid = do
@@ -658,7 +658,7 @@ applyHover eid = do
     free     <- isMouseFree
     dragging <- isDragging eid
     when (free || dragging) $ do
-      isHit <- isHitControl eid
+      isHit <- isControlHit eid
       when isHit $ setHovered eid
 
 applyFocus :: Ord e => e -> UI e s ()

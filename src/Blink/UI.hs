@@ -80,7 +80,7 @@ the element has registered a hover hit via 'setHovered' (or the high-level
   * 'isPressed' — the left button is held while the element is hovered.
   * 'isClicked' — the left button was just released while the element is hovered.
 
-'regionHit' is the lower-level primitive: it checks whether the mouse is within
+'isRegionHit' is the lower-level primitive: it checks whether the mouse is within
 the /current bounds/, without reference to any element ID.
 
 = Focus and keyboard navigation
@@ -161,7 +161,7 @@ module Blink.UI
     -- * Interaction
   , getInput
   , getMousePos
-  , regionHit
+  , isRegionHit
   , isHovered
   , setHovered
   , isButtonDown
@@ -313,7 +313,7 @@ data UIContext e s = UIContext
   , ctxAppState        :: s
   , ctxDisabled        :: Bool
   , ctxInteractionClip :: Maybe Rectangle
-    -- ^ When set, 'regionHit' additionally requires the mouse to fall within
+    -- ^ When set, 'isRegionHit' additionally requires the mouse to fall within
     -- this rectangle. Set by 'clipToCurrent' and restored on exit, so it
     -- tracks the innermost enclosing clip region.
   , ctxAnimation       :: AnimationState
@@ -756,9 +756,11 @@ getAsyncJobs :: UIContext e s -> [s -> IO (s -> s)]
 getAsyncJobs = reverse . outAsyncJobs . ctxOutputs
 
 -- | 'True' when the mouse cursor is within the current bounds and within the
--- active interaction clip region (set by 'clipToCurrent').
-regionHit :: UI e s Bool
-regionHit = do
+-- active interaction clip region (set by 'clipToCurrent'). This is the
+-- lower-level, element-agnostic primitive; for a specific control's hit area
+-- (bounds inset by its margin), see @isControlHit@ in "Blink.Controls".
+isRegionHit :: UI e s Bool
+isRegionHit = do
   r    <- getBounds
   p    <- getMousePos
   clip <- gets ctxInteractionClip
