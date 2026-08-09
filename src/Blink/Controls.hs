@@ -236,7 +236,7 @@ textInput eid value onChange = do
         if isCapturing then do
           mousePos <- getMousePos
           let localX = realToFrac (pointX mousePos - rectX bounds) + realToFrac scrollX :: Float
-          clickedPos <- charAtOffsetUI value localX
+          clickedPos <- charAtOffset value localX
           pure $ if not wasCapturing || justFocused
             then (clickedPos, clickedPos)
             else (anchor0, clickedPos)
@@ -291,7 +291,7 @@ textInput eid value onChange = do
 
     -- Scroll horizontally to keep the cursor visible.
     when (hasFocus && not disabled) $ do
-      curX <- charOffsetUI value active3
+      curX <- charOffset value active3
       let cursorAbs  = realToFrac curX :: Double
           newScrollX
             | cursorAbs < scrollX         = cursorAbs
@@ -306,8 +306,8 @@ textInput eid value onChange = do
 
     -- Drawing: selection highlight, text, then cursor.
     when (hasFocus && drawLo < drawHi) $ do
-      loX <- charOffsetUI value drawLo
-      hiX <- charOffsetUI value drawHi
+      loX <- charOffset value drawLo
+      hiX <- charOffset value drawHi
       let selRect = Rectangle
             (rectX bounds + realToFrac loX - ox)
             (rectY bounds)
@@ -319,7 +319,7 @@ textInput eid value onChange = do
     withBounds textBounds $ drawText (styleTextColour style) AlignLeft value
 
     when (hasFocus && not disabled) $ do
-      curX <- charOffsetUI value active3
+      curX <- charOffset value active3
       let cursorRect = Rectangle
             (rectX bounds + realToFrac curX - ox)
             (rectY bounds)

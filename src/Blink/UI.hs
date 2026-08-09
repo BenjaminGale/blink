@@ -185,8 +185,8 @@ module Blink.UI
   , getStyleSet
   , getStyle
     -- * Text measurement
-  , charOffsetUI
-  , charAtOffsetUI
+  , charOffset
+  , charAtOffset
   , measureText
     -- * Disabled state
   , isDisabled
@@ -321,7 +321,7 @@ data UIContext e s = UIContext
     -- backend at the start of each frame via 'buildCtx'.
   , ctxTextMeasure     :: TextMeasurer
     -- ^ Text measurement service supplied at configure time. Controls call
-    -- 'charOffsetUI' and 'charAtOffsetUI' rather than accessing this directly.
+    -- 'charOffset' and 'charAtOffset' rather than accessing this directly.
   , ctxInteraction     :: InteractionState e
   , ctxElements        :: ElementState e
   , ctxOutputs         :: FrameOutputs s
@@ -806,15 +806,15 @@ getAnimElapsed = gets (animElapsed . ctxAnimation)
 
 -- | Returns the x offset (pixels) of character index @n@ from the start of
 -- @text@, using the backend's text measurer.
-charOffsetUI :: Text -> Int -> UI e s Float
-charOffsetUI text n = UI $ \ctx -> do
+charOffset :: Text -> Int -> UI e s Float
+charOffset text n = UI $ \ctx -> do
   v <- tmCharOffset (ctxTextMeasure ctx) text n
   pure (v, ctx)
 
 -- | Returns the character index closest to x offset @x@ in @text@, using the
 -- backend's text measurer.
-charAtOffsetUI :: Text -> Float -> UI e s Int
-charAtOffsetUI text x = UI $ \ctx -> do
+charAtOffset :: Text -> Float -> UI e s Int
+charAtOffset text x = UI $ \ctx -> do
   v <- tmCharAtOffset (ctxTextMeasure ctx) text x
   pure (v, ctx)
 
