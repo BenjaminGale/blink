@@ -55,12 +55,41 @@ later reads in the same frame see the new value.
 
 Each frame follows the same three steps:
 
+>  1. buildCtx  ---->  2. runUI  ---->  3. extract
+>  (emptyUIContext /       (walk the           (getDrawCommands,
+>   nextFrameContext)       UI tree)            applyDispatches,
+>                                                getAsyncJobs)
+
   1. Build a fresh 'UIContext' with 'emptyUIContext' (first frame) or advance an
      existing one with 'nextFrameContext'.
   2. Run the UI tree via 'runUI'.
   3. Pass the resulting context to 'getDrawCommands' to obtain the renderer
      input, and to 'applyDispatches' and 'getAsyncJobs' to advance the
      application state.
+
+The 'TextMeasurer' re-exported from "Blink.Rendering" is threaded through
+'emptyUIContext' at step 1; see /Text measurement/ below for how controls use
+it during step 2.
+
+= Animation
+
+Two frame kinds drive the loop: those triggered by a platform input event
+(mouse, keyboard) and those triggered by an animation ticker running on a
+fixed interval. 'AnimationState' — set by the backend, not application code —
+records which kind the current frame is and how much wall-clock time has
+passed.
+
+A component that animates (a progress spinner, say) calls 'requiresAnimation'
+unconditionally on every frame it is visible, to keep the ticker alive, and
+wraps the code that advances its animation state in 'withAnimationFrame' so
+that advance happens once per tick rather than once per input event too:
+
+@
+withAnimationFrame $ do
+  dt <- getAnimDelta
+  dispatch (\\s -> s { spinnerPhase = spinnerPhase s + dt })
+requiresAnimation
+@
 
 = Drawing
 
@@ -102,11 +131,41 @@ over hovered, which takes priority over focused; the normal style is the
 fallback. 'getStyleSet' returns all states at once for cases where more than
 one is needed simultaneously.
 
+= Text measurement
+
+'drawText' renders whatever text it is given without needing to know its
+pixel size. Controls that must — placing a cursor, computing where a click
+landed, sizing a box to fit its label — go through the backend's
+'TextMeasurer' instead, via 'charOffset', 'charAtOffset', and 'measureText'.
+These wrap the raw 'TextMeasurer' functions so callers never touch
+'ctxTextMeasure' directly.
+
 = Disabled state
 
 'disableWhen' marks an entire sub-tree as disabled. Disabled controls render
 normally but ignore all input. 'whenEnabled' is a guard that skips its body
 when disabled.
+
+= Putting it together
+
+Higher-level controls in "Blink.Controls" are built entirely from the
+primitives above. A minimal button, stripped of styling and focus handling,
+shows how the pieces interlock:
+
+@
+miniButton :: Ord e => e -> Text -> UI e s Bool
+miniButton eid label = do
+  isHit <- isRegionHit
+  when isHit $ setHovered eid
+  fillRect (if isHit then RGBA 0.3 0.3 0.3 1 else RGBA 0.2 0.2 0.2 1)
+  drawText (RGBA 1 1 1 1) AlignCenter label
+  isClicked eid
+@
+
+'setHovered' registers the hit so 'isClicked' has something to check next
+frame; 'fillRect' and 'drawText' read the current bounds implicitly. See
+'control' in "Blink.Controls" for the full version, which adds focus, tab
+navigation, and style-driven chrome on top of exactly this shape.
 -}
 module Blink.UI
   ( -- * The UI monad
@@ -117,6 +176,9 @@ module Blink.UI
   , ElementState (..)
   , FrameOutputs (..)
     -- * Re-export for convenience
+    -- | From "Blink.Rendering"; re-exported since 'emptyUIContext' takes a
+    -- 'TextMeasurer' and 'noOpTextMeasurer' is the usual choice outside a
+    -- real backend (tests, headless rendering).
   , TextMeasurer (..)
   , noOpTextMeasurer
     -- * The render loop
