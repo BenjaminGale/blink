@@ -58,6 +58,7 @@ module Blink.Controls
     -- * Building controls
   , control
   , renderChrome
+  , activatable
   , isActivatedBy
   , isControlHit
   , whenFocused
@@ -119,11 +120,13 @@ progressBar eid Indeterminate = do
       fillRect (styleTextColour style)
 
 checkboxMark :: Ord e => e -> Bool -> (Bool -> s -> s) -> UI e s ()
-checkboxMark boxId checked onToggle = control boxId $ do
-  style     <- getStyle boxId
-  activated <- isActivatedBy boxId [KeyReturn, KeySpace]
-  when checked   $ drawText (styleTextColour style) AlignCenter "✓"
+checkboxMark boxId checked onToggle = do
+  activated <- activatable boxId draw [KeyReturn, KeySpace]
   when activated $ dispatch (onToggle (not checked))
+  where
+    draw = do
+      style <- getStyle boxId
+      when checked $ drawText (styleTextColour style) AlignCenter "✓"
 
 checkboxLabel :: Style -> Text -> UI e s ()
 checkboxLabel style = drawText (styleTextColour style) AlignLeft
@@ -197,11 +200,11 @@ radioGroup mkId items selected onChange = do
 --   setFocus ConfirmDialog
 -- @
 button :: Ord e => e -> Text -> UI e s Bool
-button eid txt = do
-  control eid $ do
-    style <- getStyle eid
-    drawText (styleTextColour style) (styleTextAlign style) txt
-  isActivatedBy eid [KeyReturn]
+button eid txt = activatable eid draw [KeyReturn]
+  where
+    draw = do
+      style <- getStyle eid
+      drawText (styleTextColour style) (styleTextAlign style) txt
 
 -- | A single-line text entry field. Supports click-to-place cursor, drag
 -- selection, Shift+arrow extension, and selection-aware editing. Long text
@@ -704,6 +707,16 @@ isActivatedBy eid keys = do
   keyPress <- or <$> mapM (isKeyPressed eid) keys
   disabled <- isDisabled
   return (not disabled && (clicked || keyPress))
+
+-- | 'control' plus 'isActivatedBy': runs @draw@ as a normal interactive
+-- control, then reports whether it was activated (a click or one of @keys@)
+-- this frame. The shape shared by simple activatable controls — a button, a
+-- checkbox's mark — whose draw action does not itself depend on whether
+-- activation occurred.
+activatable :: Ord e => e -> UI e s () -> [Key] -> UI e s Bool
+activatable eid draw keys = do
+  control eid draw
+  isActivatedBy eid keys
 
 -- | Runs an action only when the given element holds keyboard focus.
 whenFocused :: Eq e => e -> UI e s () -> UI e s ()

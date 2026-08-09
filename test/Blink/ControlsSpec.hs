@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
-import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), button, checkbox, checkboxMark, control, isControlHit, mouseToTrackPos, progressBar, radioGroup, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
+import Blink.Controls (ProgressValue (..), ScrollBarPart (..), ScrollRegionPart (..), SliderPart (..), activatable, button, checkbox, checkboxMark, control, isControlHit, mouseToTrackPos, progressBar, radioGroup, scrollBar, scrollableRegion, scrollRegionBarSize, slider, textInput, thumbRect)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -281,6 +281,9 @@ runProgressBar value ctx = fmap snd $ runUI (progressBar TestControl (Progress v
 runButton :: WidgetRunner
 runButton ctx = fmap snd $ runUI (button TestControl "label") ctx
 
+runActivatable :: WidgetRunner
+runActivatable ctx = fmap snd $ runUI (activatable TestControl (drawText testColour AlignCenter "x") [KeyReturn]) ctx
+
 runTextInputControl :: WidgetRunner
 runTextInputControl ctx = fmap snd $ runUI (textInput TestControl "" (\_ s -> s)) ctx
 
@@ -447,6 +450,52 @@ spec = describe "Controls" $ do
       it "clamps values below 0.0 to zero width" $ do
         ctx' <- runProgressBar (-0.5) (mkCtx noInput)
         getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 0 70) testColour]
+
+  describe "activatable" $ do
+    controlBehaviourSpec runActivatable (Point 50 50)
+    describe "background and border" $ backgroundAndBorderSpec runActivatable
+
+    describe "draw action" $ do
+      it "runs the supplied draw action" $ do
+        ctx' <- runActivatable (mkCtx noInput)
+        drawnTexts ctx' `shouldContain` ["x"]
+
+    describe "activation" $ do
+      forM_ insidePoints $ \(desc, pt) ->
+        it ("activates when the mouse is released " <> desc) $ do
+          result <- fst <$> runUI (activatable TestControl (pure ()) [KeyReturn]) (withButtonReleased (mkCtx (mouseAt pt False [])))
+          result `shouldBe` True
+
+      forM_ outsidePoints $ \(desc, pt) ->
+        it ("does not activate when the mouse is released " <> desc) $ do
+          result <- fst <$> runUI (activatable TestControl (pure ()) [KeyReturn]) (withButtonReleased (mkCtx (mouseAt pt False [])))
+          result `shouldBe` False
+
+      it "activates when a listed key is pressed while focused" $ do
+        result <- fst <$> runUI (activatable TestControl (pure ()) [KeyReturn])
+          (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        result `shouldBe` True
+
+      it "does not activate when an unlisted key is pressed while focused" $ do
+        result <- fst <$> runUI (activatable TestControl (pure ()) [KeyReturn])
+          (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeySpace []] }))
+        result `shouldBe` False
+
+      it "does not activate when a listed key is pressed without focus" $ do
+        result <- fst <$> runUI (activatable TestControl (pure ()) [KeyReturn])
+          (withFocus (Just OtherControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        result `shouldBe` False
+
+    describe "disabled" $ do
+      it "does not activate on click when disabled" $ do
+        result <- fst <$> runUI (disableWhen True (activatable TestControl (pure ()) [KeyReturn]))
+          (withButtonReleased (mkCtx (mouseAt (Point 50 50) False [])))
+        result `shouldBe` False
+
+      it "does not activate on a listed key when disabled" $ do
+        result <- fst <$> runUI (disableWhen True (activatable TestControl (pure ()) [KeyReturn]))
+          (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        result `shouldBe` False
 
   describe "button" $ do
     controlBehaviourSpec runButton (Point 50 50)
