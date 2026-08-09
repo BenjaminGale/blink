@@ -38,6 +38,91 @@ module Blink.Layout
   , MaxLength (..)
   , addLength
   , maxLength
+    -- * Advanced layout
+    -- | Everything above covers a fixed arrangement decided in advance.
+    --   Sometimes that isn't enough, in one of two ways:
+    --
+    --   * The arrangement itself needs to depend on something only known at
+    --     render time — the current context.
+    --   * A slot needs a constraint more specific than 'Fill' or a single
+    --     hardcoded 'Exactly' — a finer-grained choice of 'Length'.
+    --
+    --   Both are special cases: they draw on 'getBounds' \/ 'withBounds',
+    --   'Blink.UI.getAppState', a box combinator ('hBox' \/ 'vBox'),
+    --   'layoutWithConstraints', and the 'Length' arithmetic above all at
+    --   once, rather than being handled by any one of them.
+    --
+    --   == Depending on the current context
+    --
+    --   \"Context\" here means either half of the 'UI' monad's state: the UI
+    --   context ('getBounds', for the space actually available) or the
+    --   application state ('Blink.UI.getAppState', for whatever the host decided).
+    --   Branch on either, or both, with ordinary @if@\/@case@ — there is no
+    --   dedicated combinator for this because a plain 'UI' action already
+    --   does the job:
+    --
+    --   @
+    --   contextual :: UI e s ()
+    --   contextual = do
+    --     bounds  <- getBounds
+    --     compact <- appCompactMode \<$\> getAppState
+    --     if compact || rectWidth bounds < 600
+    --       then vBox defaultBoxConfig [ (Layout Fill (Exactly 200) TopLeft, sidebar)
+    --                                   , (Layout Fill Fill        TopLeft, content)
+    --                                   ]
+    --       else hBox defaultBoxConfig [ (Layout (Exactly 200) Fill TopLeft, sidebar)
+    --                                   , (Layout Fill         Fill TopLeft, content)
+    --                                   ]
+    --   @
+    --
+    --   Both branches use ordinary 'hBox'\/'vBox' — only the choice of
+    --   which one to call, and how the two children are ordered, depends on
+    --   the context. Here that context is a window narrower than 600px /or/
+    --   an explicit compact-mode flag the application chose to set;
+    --   'getBounds' and 'Blink.UI.getAppState' compose freely, so either can drive
+    --   the decision on its own or together.
+    --
+    --   == Choosing a finer-grained constraint
+    --
+    --   A slot's 'Length' does not have to be a value you wrote down ahead
+    --   of time as 'Fill' or 'Exactly' — it can be computed, and it does
+    --   not have to be either of those two constructors. 'AtLeast',
+    --   'AtMost', and 'Between' give a slot room to flex within bounds
+    --   instead of being either fully rigid or fully flexible; picking the
+    --   right one is itself a form of custom layout:
+    --
+    --   @
+    --   -- A sidebar that shrinks with the window but never drops below a
+    --   -- readable width, alongside content that takes whatever is left.
+    --   hBox defaultBoxConfig
+    --     [ (Layout (AtLeast 180) Fill TopLeft, sidebar)
+    --     , (Layout Fill          Fill TopLeft, content)
+    --     ]
+    --   @
+    --
+    --   An exact constraint can be computed the same way, rather than
+    --   hardcoded. A control's chrome (margin, border, padding — see the
+    --   Chrome section of "Blink.Controls") is not known until render time
+    --   either, so sizing a slot tightly around a control's content plus
+    --   its own chrome means computing an 'Exactly' rather than writing
+    --   one down:
+    --
+    --   @
+    --   -- Sizes a button tightly around its label plus its own chrome,
+    --   -- instead of stretching to fill the parent.
+    --   tightButton :: Ord e => e -> Text -> UI e s Bool
+    --   tightButton eid txt = do
+    --     (chromeW, chromeH) <- measureChrome eid
+    --     Size textW textH    <- measureText txt
+    --     let w = addLength chromeW (Exactly (realToFrac textW))
+    --         h = addLength chromeH (Exactly (realToFrac textH))
+    --     layoutWithConstraints (Layout w h TopLeft) (button eid txt)
+    --   @
+    --
+    --   The same pattern extends to a row of controls that must each be
+    --   exactly as wide as their own content demands: compute a 'Length'
+    --   per child this way, then pass the list straight to 'hBox' instead
+    --   of a fixed 'Layout' for every slot.
   ) where
 
 import Data.List (foldl', scanl', sortBy)
