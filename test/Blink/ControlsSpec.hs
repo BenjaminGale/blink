@@ -7,7 +7,7 @@ import Test.Hspec
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Controls (ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, button, checkbox, checkboxMark, control, focusRing, isControlHit, listBox, mouseToTrackPos, numberField, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
+import Blink.Controls (ButtonEvent (..), ControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, button, checkbox, checkboxMark, control, focusRing, isControlHit, listBox, mouseToTrackPos, numberField, onAny, onClick, onClickTo, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -338,7 +338,7 @@ runProgressBar :: Double -> WidgetRunner
 runProgressBar value ctx = fmap (settle . snd) $ runUI (progressBar TestControl (Progress value)) ctx
 
 runButton :: WidgetRunner
-runButton ctx = fmap (settle . snd) $ runUI (button TestControl "label") ctx
+runButton ctx = fmap (settle . snd) $ runUI (button TestControl "label" []) ctx
 
 runActivatable :: WidgetRunner
 runActivatable ctx = fmap (settle . snd) $ runUI (activatable TestControl (drawText testColour AlignCenter "x") [KeyReturn]) ctx
@@ -630,35 +630,61 @@ spec = describe "Controls" $ do
     describe "click behaviour" $ do
       forM_ insidePoints $ \(desc, pt) ->
         it ("is clicked when the mouse is released " <> desc) $ do
-          result <- fst <$> runUI (button TestControl "label") (withButtonReleased (mkCtx (mouseAt pt False [])))
-          result `shouldBe` True
+          (_, ctx') <- runUI (button TestControl "label" [onClick ()]) (withButtonReleased (mkCtx (mouseAt pt False [])))
+          getMessages ctx' `shouldBe` [()]
 
       forM_ outsidePoints $ \(desc, pt) ->
         it ("is not clicked when the mouse is released " <> desc) $ do
-          result <- fst <$> runUI (button TestControl "label") (withButtonReleased (mkCtx (mouseAt pt False [])))
-          result `shouldBe` False
+          (_, ctx') <- runUI (button TestControl "label" [onClick ()]) (withButtonReleased (mkCtx (mouseAt pt False [])))
+          getMessages ctx' `shouldBe` []
 
       it "is clicked when Enter is pressed and the button has focus" $ do
-        result <- fst <$> runUI (button TestControl "label") (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })
-        result `shouldBe` True
+        (_, ctx') <- runUI (button TestControl "label" [onClick ()]) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] })
+        getMessages ctx' `shouldBe` [()]
 
       it "is not clicked when Enter is pressed and the button does not have focus" $ do
-        result <- fst <$> runUI (button TestControl "label") (withFocus (Just OtherControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
-        result `shouldBe` False
+        (_, ctx') <- runUI (button TestControl "label" [onClick ()]) (withFocus (Just OtherControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        getMessages ctx' `shouldBe` []
 
       it "is not clicked when Tab and Enter are pressed simultaneously" $ do
-        result <- fst <$> runUI (button TestControl "label")
+        (_, ctx') <- runUI (button TestControl "label" [onClick ()])
           (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab [], KeyEvent KeyReturn []] }))
-        result `shouldBe` False
+        getMessages ctx' `shouldBe` []
 
     describe "disabled" $ do
       it "is not activated by a click when disabled" $ do
-        result <- fst <$> runUI (disableWhen True (button TestControl "label")) (withButtonReleased (mkCtx (mouseAt (Point 50 50) False [])))
-        result `shouldBe` False
+        (_, ctx') <- runUI (disableWhen True (button TestControl "label" [onClick ()])) (withButtonReleased (mkCtx (mouseAt (Point 50 50) False [])))
+        getMessages ctx' `shouldBe` []
 
       it "is not activated by Enter when disabled" $ do
-        result <- fst <$> runUI (disableWhen True (button TestControl "label")) (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
-        result `shouldBe` False
+        (_, ctx') <- runUI (disableWhen True (button TestControl "label" [onClick ()])) (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        getMessages ctx' `shouldBe` []
+
+    describe "onClickTo" $
+      it "queues the given UiEffect when clicked, instead of emitting a message" $ do
+        (_, ctx') <- runUI (button TestControl "label" [onClickTo (SetSelectionAt TestControl (cursor 0))])
+          (withButtonReleased (mkCtx (mouseAt (Point 50 50) False [])))
+        getUiEffects ctx' `shouldContain` [SetSelectionAt TestControl (cursor 0)]
+        getMessages ctx' `shouldBe` []
+
+    describe "control events" $ do
+      let mkEventCtx :: InputState -> UIContext TestElement ButtonEvent
+          mkEventCtx input = emptyUIContext controlRect input testTheme noOpTextMeasurer
+
+      it "reports FocusGained via ButtonEvent's Control constructor when it gains focus" $ do
+        (_, ctx') <- runUI (button TestControl "label" [onAny (\ev -> [OutMsg ev])])
+          (withButtonReleased (mkEventCtx (mouseAt (Point 50 50) False [])))
+        getMessages ctx' `shouldContain` [Control FocusGained]
+
+      it "reports FocusLost via ButtonEvent's Control constructor when it loses focus" $ do
+        (_, ctx') <- runUI (button TestControl "label" [onAny (\ev -> [OutMsg ev])])
+          (withFocus (Just TestControl) (mkEventCtx noInput { inputKeyEvents = [KeyEvent KeyTab []] }))
+        getMessages ctx' `shouldContain` [Control FocusLost]
+
+      it "does not report a lifecycle event when focus is retained" $ do
+        (_, ctx') <- runUI (button TestControl "label" [onAny (\ev -> [OutMsg ev])])
+          (withFocus (Just TestControl) (mkEventCtx noInput))
+        getMessages ctx' `shouldBe` []
 
   describe "checkboxMark" $ do
     controlBehaviourSpec runCheckboxMarkControl (Point 50 50)

@@ -109,9 +109,7 @@ sidebar s = do
          checkbox CheckboxBox2 "Dark mode" (darkMode s) (\v st -> st { darkMode = v }))
     ]
   where
-    navBtn i lbl = do
-      clicked <- button (NavBtn i) lbl
-      when clicked $ emit $ \st -> st { currentPage = pageForIndex i }
+    navBtn i lbl = button (NavBtn i) lbl [onClick (\st -> st { currentPage = pageForIndex i })]
 
 pageForIndex :: Int -> Page
 pageForIndex 0 = BasicControlsPage initialBasicControls
@@ -142,11 +140,11 @@ footer s (winW, winH) = do
   hoverW'  <- labelWidth hoverText
   renderChrome StatusBar $
     hBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 4, boxAlignment = Center })
-      [ (Layout winW'    Fill MiddleLeft, label Label winText)
-      , (Layout mouseW'  Fill MiddleLeft, label Label mouseText)
-      , (Layout buttonW' Fill MiddleLeft, label Label buttonText)
-      , (Layout hoverW'  Fill MiddleLeft, label Label hoverText)
-      , (Layout Fill               Fill MiddleLeft, label Label keyText)
+      [ (Layout winW'    Fill MiddleLeft, label Label winText [])
+      , (Layout mouseW'  Fill MiddleLeft, label Label mouseText [])
+      , (Layout buttonW' Fill MiddleLeft, label Label buttonText [])
+      , (Layout hoverW'  Fill MiddleLeft, label Label hoverText [])
+      , (Layout Fill               Fill MiddleLeft, label Label keyText [])
       ]
 
 centrePane :: AppState -> DemoUI ()
@@ -192,21 +190,17 @@ rowButtons ps = do
            [ (Layout btnW Fill TopLeft,    btn 1 "One")
            , (Layout btnW Fill TopLeft,    btn 2 "Two")
            , (Layout btnW Fill TopLeft,    btn 3 "Three")
-           , (Layout Fill Fill MiddleLeft, label Label ("Clicks: " <> T.pack (show (clickCount ps))))
+           , (Layout Fill Fill MiddleLeft, label Label ("Clicks: " <> T.pack (show (clickCount ps))) [])
            , (Layout btnW Fill TopLeft,    resetBtn)
            ])
     , (Layout Fill (Exactly 20) TopLeft,
          progressBar ProgressBar1 (Progress (fromIntegral (clickCount ps) / 50)))
     ]
   where
-    btn i txt = do
-      clicked <- button (Btn i) txt
-      when clicked $ emit $
-        \s -> updateBasicControls s (\p -> p { clickCount = min 50 (clickCount p + i) })
-    resetBtn = do
-      clicked <- button (Btn 0) "Reset"
-      when clicked $ emit $
-        \s -> updateBasicControls s (\p -> p { clickCount = 0 })
+    btn i txt = button (Btn i) txt
+      [onClick (\s -> updateBasicControls s (\p -> p { clickCount = min 50 (clickCount p + i) }))]
+    resetBtn = button (Btn 0) "Reset"
+      [onClick (\s -> updateBasicControls s (\p -> p { clickCount = 0 }))]
 
 rowInput :: BasicControlsState -> DemoUI ()
 rowInput ps = do
@@ -214,7 +208,7 @@ rowInput ps = do
   Size tw _   <- measureText "Text input"
   let labelW = addLength (Exactly tw) chromW
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
-    [ (Layout labelW Fill         MiddleLeft, label Label "Text input")
+    [ (Layout labelW Fill         MiddleLeft, label Label "Text input" [])
     , (Layout Fill   (Exactly 30) TopLeft,
          textField TextInput1 (inputText ps) (\t s ->
            updateBasicControls s (\p -> p { inputText = t })))
@@ -226,7 +220,7 @@ rowNumberInput ps = do
   Size tw _   <- measureText "Number input"
   let labelW = addLength (Exactly tw) chromW
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
-    [ (Layout labelW Fill         MiddleLeft, label Label "Number input")
+    [ (Layout labelW Fill         MiddleLeft, label Label "Number input" [])
     , (Layout Fill   (Exactly 30) TopLeft,
          numberField NumberInput1 (numberText ps) (\t s ->
            updateBasicControls s (\p -> p { numberText = t })))
@@ -238,7 +232,7 @@ rowPasswordInput ps = do
   Size tw _   <- measureText "Password input"
   let labelW = addLength (Exactly tw) chromW
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
-    [ (Layout labelW Fill         MiddleLeft, label Label "Password input")
+    [ (Layout labelW Fill         MiddleLeft, label Label "Password input" [])
     , (Layout Fill   (Exactly 30) TopLeft,
          passwordField PasswordInput1 (passwordText ps) (\t s ->
            updateBasicControls s (\p -> p { passwordText = t })))
@@ -252,12 +246,12 @@ rowSlider ps = do
   let labelW = addLength (Exactly lw) chromW
       valueW = addLength (Exactly vw) chromW
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
-    [ (Layout labelW Fill         MiddleLeft, label Label "Slider")
+    [ (Layout labelW Fill         MiddleLeft, label Label "Slider" [])
     , (Layout Fill   (Exactly 30) TopLeft,
          slider Slider1 Horizontal (sliderValue ps) (\v s ->
            updateBasicControls s (\p -> p { sliderValue = v })))
     , (Layout valueW Fill         MiddleLeft,
-         label Label (T.pack (show (round (sliderValue ps * 100) :: Int)) <> "%"))
+         label Label (T.pack (show (round (sliderValue ps * 100) :: Int)) <> "%") [])
     ]
 
 rowRadio :: BasicControlsState -> DemoUI ()
@@ -268,7 +262,7 @@ rowRadio ps = do
   hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
     [ (Layout Fill Fill TopLeft,
          vBox defaultBoxConfig
-           [ (Layout Fill labelH TopLeft, label Label "Size")
+           [ (Layout Fill labelH TopLeft, label Label "Size" [])
            , (Layout Fill Fill    TopLeft,
                 radioGroup RadioOpt
                   [(0, "Small"), (1, "Medium"), (2, "Large")]
@@ -277,7 +271,7 @@ rowRadio ps = do
            ])
     , (Layout Fill Fill TopLeft,
          vBox defaultBoxConfig
-           [ (Layout Fill labelH TopLeft, label Label "Priority")
+           [ (Layout Fill labelH TopLeft, label Label "Priority" [])
            , (Layout Fill Fill    TopLeft,
                 radioGroup RadioOpt2
                   [(0, "Low"), (1, "Medium"), (2, "High"), (3, "Critical")]
@@ -301,8 +295,8 @@ scrollView ps = do
   vBox (defaultBoxConfig { boxMargin = 8, boxSpacing = 4 })
     [ (Layout Fill headerH TopLeft,
          hBox defaultBoxConfig
-           [ (Layout Fill Fill MiddleLeft, label Label "Known size (viewport)")
-           , (Layout Fill Fill MiddleLeft, label Label "Virtualized (listBox, 100 items)")
+           [ (Layout Fill Fill MiddleLeft, label Label "Known size (viewport)" [])
+           , (Layout Fill Fill MiddleLeft, label Label "Virtualized (listBox, 100 items)" [])
            ])
     , (Layout Fill Fill TopLeft,
          hBox (defaultBoxConfig { boxSpacing = 8 })
@@ -322,8 +316,8 @@ staticScrollList ps =
     item i = do
       let isSelected = lastClickedStatic ps == Just i
           txt = (if isSelected then "✓ " else "") <> "Item " <> T.pack (show i)
-      clicked <- button (ScrollItem1 i) txt
-      when clicked $ emit $ \s -> updateScrollState s (\p -> p { lastClickedStatic = Just i })
+      button (ScrollItem1 i) txt
+        [onClick (\s -> updateScrollState s (\p -> p { lastClickedStatic = Just i }))]
 
 dynamicScrollList :: ScrollPageState -> DemoUI ()
 dynamicScrollList ps =
@@ -391,14 +385,14 @@ layoutView ps = do
 sectionHeader :: Text -> DemoUI () -> DemoUI ()
 sectionHeader title extra =
   hBox defaultBoxConfig
-    [ (Layout Fill          Fill TopLeft, label Label title)
+    [ (Layout Fill          Fill TopLeft, label Label title [])
     , (Layout (Exactly 180) Fill TopLeft, extra)
     ]
 
 colorPane :: Colour -> Text -> DemoUI ()
 colorPane col lbl = do
   fillRect col
-  label Label lbl
+  label Label lbl []
 
 borderLayoutDemo :: DemoUI ()
 borderLayoutDemo =

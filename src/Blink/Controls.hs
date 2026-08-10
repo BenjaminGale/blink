@@ -118,8 +118,18 @@ first write, and persists across frames inside the 'UIContext'. The application
 never sees the traffic.
 -}
 module Blink.Controls
-  ( -- * Building controls
-    control
+  ( -- * Attributes and events
+    Attr (..)
+  , ControlConfig
+  , defaultControlConfig
+  , configure
+  , fire
+  , onAny
+  , controlEvents
+  , ControlEvent (..)
+  , HasControlEvent (..)
+    -- * Building controls
+  , control
   , renderChrome
   , measureChrome
   , activatable
@@ -135,6 +145,9 @@ module Blink.Controls
   , progressBar
     -- * Input
   , button
+  , ButtonEvent (..)
+  , onClick
+  , onClickTo
   , checkbox
   , checkboxMark
   , radioGroup
@@ -167,6 +180,7 @@ import Data.List (foldl', find)
 import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Void (Void)
 import Blink.Geometry (Alignment (..), Insets (..), Orientation (..), Point (..), Rectangle (..), Size (..), borderInsets, insetRect, noBorder)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (Layout (..), Length (..), BoxConfig (..), hBox, vBox, defaultBoxConfig)
@@ -174,14 +188,94 @@ import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
 import Blink.UI
 
+-- | The lifecycle events every focusable control shares, regardless of what
+-- else it reports. Raised by 'controlEvents' by comparing focus just before
+-- and just after a control's own hover\/focus\/tab handling runs.
+data ControlEvent
+  = FocusGained
+  | FocusLost
+  deriving (Eq, Show)
+
+-- | Lets a control's own event type carry the shared 'ControlEvent's
+-- alongside its domain-specific ones (a click, an edit), so combinators
+-- like a hypothetical @onFocusLost@ can be written once against any @ev@
+-- rather than once per control.
+class HasControlEvent ev where
+  liftControl  :: ControlEvent -> ev
+  matchControl :: ev -> Maybe ControlEvent
+
+-- | One attribute in a control's attribute list: either an event handler
+-- ('On', usually built with 'onClick', 'onInput', etc.) or a piece of
+-- configuration ('Config', built by a control-specific attribute such as a
+-- future @arrowStep@). A single list carries both, in any order.
+data Attr e ev msg
+  = On (ev -> [Out e msg])
+  | Config (ControlConfig -> ControlConfig)
+
+-- | Per-control configuration, overridden via 'Config' attrs. Empty for
+-- now — gains fields as individual controls move their hardcoded constants
+-- (a slider's arrow-key step, a progress bar's band width) into attributes.
+data ControlConfig = ControlConfig
+  deriving (Eq, Show)
+
+defaultControlConfig :: ControlConfig
+defaultControlConfig = ControlConfig
+
+-- | Folds the 'Config' attrs in an attribute list onto a base configuration,
+-- left to right; 'On' attrs are ignored.
+configure :: ControlConfig -> [Attr e ev msg] -> ControlConfig
+configure = foldl' apply
+  where
+    apply cfg (Config f) = f cfg
+    apply cfg (On _)     = cfg
+
+-- | Runs every 'On' handler in @attrs@ against every event in @evs@,
+-- emitting the messages and\/or 'UiEffect's each one returns. Deterministic:
+-- control event order first, handler-list order within an event — so if two
+-- attrs both handle the same event, they fire in the order they were
+-- written.
+fire :: [Attr e ev msg] -> [ev] -> UI e msg ()
+fire attrs evs = forM_ evs $ \ev -> forM_ handlers $ \h -> mapM_ dispatch (h ev)
+  where
+    handlers = [h | On h <- attrs]
+    dispatch (OutMsg msg) = emit msg
+    dispatch (OutUi eff)  = emitUi eff
+
+-- | Escape hatch: handle an event with full access to 'Out', for a handler
+-- that needs to fan out to both a message and a 'UiEffect' — or for
+-- internal handlers, written where no @msg@ value is in scope, that only
+-- ever emit effects.
+onAny :: (ev -> [Out e msg]) -> Attr e ev msg
+onAny = On
+
+-- | Runs 'applyHover', 'applyFocus', and 'applyTabNavigation' for the given
+-- element, then reports the 'ControlEvent's derived by comparing whether it
+-- was focused just before that and whether it's focused just after:
+-- 'FocusGained' on the frame it takes focus, 'FocusLost' on the frame it
+-- gives it up. Shared by every attribute-based control so this detection
+-- lives in one place rather than being reimplemented per control.
+controlEvents :: (Ord e, HasControlEvent ev) => e -> UI e msg [ev]
+controlEvents eid = do
+  wasFocused <- isFocused eid
+  applyHover eid
+  applyFocus eid
+  applyTabNavigation eid
+  nowFocused <- isFocused eid
+  pure $ concat
+    [ [liftControl FocusGained | not wasFocused && nowFocused]
+    , [liftControl FocusLost   | wasFocused && not nowFocused]
+    ]
+
 -- | Read-only text display. Renders @text@ within the element's content
 -- rectangle using the active style. Does not participate in interaction or
 -- keyboard navigation.
 label :: Ord e
       => e     -- ^ element ID
       -> Text  -- ^ text to display
+      -> [Attr e Void msg]  -- ^ attributes; 'label' is non-interactive, so
+                             -- only 'Config' attrs are meaningful (none yet)
       -> UI e msg ()
-label eid text = renderChrome eid $ do
+label eid text _attrs = renderChrome eid $ do
   style <- getStyle eid
   drawText (styleTextColour style) (styleTextAlign style) text
 
@@ -338,29 +432,56 @@ radioGroup mkId items selected onChange =
     drawText (styleTextColour style) AlignLeft $
       (if isSelected then "● " else "○ ") <> lbl
 
--- | A clickable button labelled @txt@. Returns 'True' on the frame the button
--- is activated — by a left-click or by pressing Enter while focused.
---
--- Unlike the other input controls, @button@ returns a 'Bool' rather than
--- accepting a value-callback. This is intentional: button clicks often
--- trigger UI actions ('setFocus', opening a dialog) that cannot be
--- expressed as a single message, so the caller responds directly:
+-- | A clickable button labelled @txt@. Fires 'Clicked' — via 'onClick' or
+-- 'onClickTo' — on the frame it's activated, by a left-click or by pressing
+-- Enter while focused. Also reports 'ControlEvent's through 'ButtonEvent's
+-- @Control@ constructor; use 'onAny' to observe those directly.
 --
 -- @
--- clicked <- button eid "Save"
--- when clicked $ do
---   emit Saved
---   setFocus ConfirmDialog
+-- button eid "Save" [onClick Saved]
 -- @
+--
+-- A click that needs to do more than emit one message — set focus onto a
+-- confirmation dialog, say — can use 'onAny' to return several 'Out's, or
+-- combine multiple attrs that each handle 'Clicked'.
 button :: Ord e
        => e     -- ^ element ID
        -> Text  -- ^ button label
-       -> UI e msg Bool
-button eid txt = activatable eid draw [KeyReturn]
+       -> [Attr e ButtonEvent msg]
+       -> UI e msg ()
+button eid txt attrs = do
+  ctrlEvs   <- controlEvents eid
+  renderChrome eid draw
+  activated <- isActivatedBy eid [KeyReturn]
+  fire attrs (ctrlEvs ++ [Clicked | activated])
   where
     draw = do
       style <- getStyle eid
       drawText (styleTextColour style) (styleTextAlign style) txt
+
+-- | Events reported by 'button': 'Clicked' when activated, or a lifecycle
+-- event via 'Control' (see 'ControlEvent').
+data ButtonEvent = Clicked | Control ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent ButtonEvent where
+  liftControl = Control
+  matchControl (Control ce) = Just ce
+  matchControl _             = Nothing
+
+-- | Emits @msg@ when the button is 'Clicked'.
+onClick :: msg -> Attr e ButtonEvent msg
+onClick msg = On $ \ev -> case ev of
+  Clicked -> [OutMsg msg]
+  _       -> []
+
+-- | Queues a 'UiEffect' when the button is 'Clicked', for effects such as
+-- 'ScrollTo' \/ 'ScrollBy' that don't have a @msg@ to emit — 'scrollBar's
+-- own increment\/decrement buttons are built this way.
+onClickTo :: UiEffect e -> Attr e ButtonEvent msg
+onClickTo eff = On $ \ev -> case ev of
+  Clicked -> [OutUi eff]
+  _       -> []
 
 -- | Click sets both selection ends at the clicked character; dragging
 -- extends only the active end, keeping the anchor from before the drag
@@ -712,8 +833,7 @@ scrollBar mkId ori thumbRatio = do
 
     readPos = getScrollState trackId
 
-    writePosAbs v  = emitUi (ScrollTo trackId v)
-    writePosDelta v = emitUi (ScrollBy trackId v)
+    writePosAbs v = emitUi (ScrollTo trackId v)
 
     layoutFn = case ori of
       Vertical   -> vBox
@@ -726,13 +846,11 @@ scrollBar mkId ori thumbRatio = do
       Vertical   -> "▼"
       Horizontal -> "▶"
 
-    decrBtn _ ratio' = do
-      clicked <- button (mkId ScrollDecrBtn) decrSym
-      when clicked $ writePosDelta (negate ratio')
+    decrBtn _ ratio' =
+      button (mkId ScrollDecrBtn) decrSym [onClickTo (ScrollBy trackId (negate ratio'))]
 
-    incrBtn _ ratio' = do
-      clicked <- button (mkId ScrollIncrBtn) incrSym
-      when clicked $ writePosDelta ratio'
+    incrBtn _ ratio' =
+      button (mkId ScrollIncrBtn) incrSym [onClickTo (ScrollBy trackId ratio')]
 
     track pos' ratio' = do
       newPos <- rangeControl trackId (mkId ScrollThumb) ori pos' ratio'
