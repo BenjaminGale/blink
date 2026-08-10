@@ -267,7 +267,7 @@ rowRadio ps = do
                 radioGroup RadioOpt
                   [(0, "Small"), (1, "Medium"), (2, "Large")]
                   (radioSelection ps)
-                  (\v s -> updateBasicControls s (\p -> p { radioSelection = v })))
+                  [onSelect (\v s -> updateBasicControls s (\p -> p { radioSelection = v }))])
            ])
     , (Layout Fill Fill TopLeft,
          vBox defaultBoxConfig
@@ -276,7 +276,7 @@ rowRadio ps = do
                 radioGroup RadioOpt2
                   [(0, "Low"), (1, "Medium"), (2, "High"), (3, "Critical")]
                   (radioSelection2 ps)
-                  (\v s -> updateBasicControls s (\p -> p { radioSelection2 = v })))
+                  [onSelect (\v s -> updateBasicControls s (\p -> p { radioSelection2 = v }))])
            ])
     ]
 

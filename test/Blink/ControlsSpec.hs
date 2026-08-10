@@ -7,7 +7,7 @@ import Test.Hspec
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Controls (ButtonEvent (..), ControlEvent (..), HasControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, button, checkbox, checkboxMark, control, controlEvents, focusRing, isControlHit, listBox, mouseToTrackPos, numberField, onAny, onClick, onClickTo, onToggle, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
+import Blink.Controls (ButtonEvent (..), ControlEvent (..), HasControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, button, checkbox, checkboxMark, control, controlEvents, focusRing, isControlHit, listBox, mouseToTrackPos, numberField, onAny, onClick, onClickTo, onSelect, onToggle, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -469,7 +469,7 @@ withSliderFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus =
 -- runRadioControl maps index 0 -> TestControl for the control suite helpers.
 -- A single-item group is enough to exercise focus, tab, hover, and background.
 runRadioControl :: WidgetRunner
-runRadioControl ctx = fmap (settle . snd) $ runUI (radioGroup tag [("a" :: String, "Option")] "a" (const ())) ctx
+runRadioControl ctx = fmap (settle . snd) $ runUI (radioGroup tag [("a" :: String, "Option")] "a" [onSelect (const ())]) ctx
   where
     tag 0 = TestControl
     tag _ = OtherControl
@@ -492,7 +492,7 @@ mkRadioGroupCtx :: String -> InputState -> UIContext Int String
 mkRadioGroupCtx _sel input = emptyUIContext radioGroupRect input radioGroupTheme noOpTextMeasurer
 
 runRadioGroup :: String -> UIContext Int String -> IO (UIContext Int String)
-runRadioGroup sel = fmap (settle . snd) . runUI (radioGroup id radioItems sel id)
+runRadioGroup sel = fmap (settle . snd) . runUI (radioGroup id radioItems sel [onSelect id])
 
 withItemFocus :: Maybe Int -> UIContext Int String -> UIContext Int String
 withItemFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus = (ixnFocus (ctxInteraction ctx)) { focusedElement = e } } }
@@ -1179,7 +1179,7 @@ spec = describe "Controls" $ do
           drawText testColour AlignLeft ((if isSelected then "SEL:" else "UNSEL:") <> lbl)
 
         runSelector :: String -> UIContext Int String -> IO (UIContext Int String)
-        runSelector sel = fmap (settle . snd) . runUI (selector id radioItems sel id renderItem)
+        runSelector sel = fmap (settle . snd) . runUI (selector id radioItems sel [onSelect id] renderItem)
 
     describe "selection" $ do
       it "dispatches the value of a clicked item" $ do
@@ -1187,12 +1187,12 @@ spec = describe "Controls" $ do
         getMessages ctx' `shouldBe` ["b"]
 
       it "dispatches the value when Enter is pressed while an item is focused" $ do
-        ctx' <- fmap (settle . snd) $ runUI (selector id radioItems "a" id renderItem)
+        ctx' <- fmap (settle . snd) $ runUI (selector id radioItems "a" [onSelect id] renderItem)
           (withItemFocus (Just 1) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyReturn []] } radioGroupTheme noOpTextMeasurer))
         getMessages ctx' `shouldBe` ["b"]
 
       it "does not dispatch when clicked while disabled" $ do
-        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (selector id radioItems "a" id renderItem))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (selector id radioItems "a" [onSelect id] renderItem))
           (withButtonReleased (mkRadioGroupCtx "a" (mouseAt (Point 50 45) False [])))
         dispatchCount ctx' `shouldBe` 0
 
@@ -1202,7 +1202,7 @@ spec = describe "Controls" $ do
 
     describe "keyboard navigation" $ do
       let nav focusIdx k = do
-            ctx' <- fmap (settle . snd) $ runUI (selector id radioItems "a" id renderItem)
+            ctx' <- fmap (settle . snd) $ runUI (selector id radioItems "a" [onSelect id] renderItem)
               (withItemFocus (Just focusIdx)
                 (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent k []] } radioGroupTheme noOpTextMeasurer))
             pure $ focusedElement (ixnFocus (ctxInteraction ctx'))
@@ -1216,7 +1216,7 @@ spec = describe "Controls" $ do
         result `shouldBe` Just 0
 
       it "does not move focus when disabled" $ do
-        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (selector id radioItems "a" id renderItem))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (selector id radioItems "a" [onSelect id] renderItem))
           (withItemFocus (Just 0) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyDown []] } radioGroupTheme noOpTextMeasurer))
         focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just 0
 
@@ -1244,17 +1244,17 @@ spec = describe "Controls" $ do
         getMessages ctx' `shouldBe` ["c"]
 
       it "dispatches the value when Enter is pressed while an item is focused" $ do
-        ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" id)
+        ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" [onSelect id])
           (withItemFocus (Just 1) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyReturn []] } radioGroupTheme noOpTextMeasurer))
         getMessages ctx' `shouldBe` ["b"]
 
       it "dispatches the value when Space is pressed while an item is focused" $ do
-        ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" id)
+        ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" [onSelect id])
           (withItemFocus (Just 2) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeySpace []] } radioGroupTheme noOpTextMeasurer))
         getMessages ctx' `shouldBe` ["c"]
 
       it "does not dispatch when no item is focused and a key is pressed" $ do
-        ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" id)
+        ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" [onSelect id])
           (withItemFocus (Just 99) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyReturn []] } radioGroupTheme noOpTextMeasurer))
         dispatchCount ctx' `shouldBe` 0
 
@@ -1264,7 +1264,7 @@ spec = describe "Controls" $ do
 
     describe "keyboard navigation" $ do
       let nav focusIdx k = do
-            ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" id)
+            ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" [onSelect id])
               (withItemFocus (Just focusIdx)
                 (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent k []] } radioGroupTheme noOpTextMeasurer))
             pure $ focusedElement (ixnFocus (ctxInteraction ctx'))
@@ -1286,14 +1286,14 @@ spec = describe "Controls" $ do
         result `shouldBe` Just 0
 
       it "does not move focus when disabled" $ do
-        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (radioGroup id radioItems "a" id))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (radioGroup id radioItems "a" [onSelect id]))
           (withItemFocus (Just 0) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyDown []] } radioGroupTheme noOpTextMeasurer))
         focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just 0
 
       it "handles arrow keys on the frame focus is gained by click" $ do
         -- Click on item 0 (centre Point 50 15) and press Down in the same frame
         -- with no prior focus. The newly focused item should handle the key.
-        ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" id)
+        ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" [onSelect id])
           (withButtonReleased (emptyUIContext radioGroupRect noInput { inputMousePosition = Point 50 15, inputKeyEvents = [KeyEvent KeyDown []] } radioGroupTheme noOpTextMeasurer))
         focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just 1
 

@@ -154,6 +154,8 @@ module Blink.Controls
   , onToggle
   , radioGroup
   , selector
+  , SelectorEvent (..)
+  , onSelect
   , textInputControl
   , textField
   , numberField
@@ -385,9 +387,22 @@ checkbox boxId text checked attrs = do
     ]
   focusRing boxId
 
+-- | Events reported by 'selector' and 'radioGroup': 'Selected' with the
+-- activated item's value. Lifecycle events aren't reported here — each item
+-- is its own focusable 'control', so gaining\/losing focus is a per-item
+-- concern, not a whole-selector one; a custom @renderItem@ that needs it can
+-- call 'controlEvents' itself.
+newtype SelectorEvent a = Selected a
+  deriving (Eq, Show)
+
+-- | Emits @f value@ when an item is 'Selected'.
+onSelect :: (a -> msg) -> Attr e (SelectorEvent a) msg
+onSelect f = On $ \ev -> case ev of
+  Selected v -> [OutMsg (f v)]
+
 -- | A vertical list of items, each activated by click, Enter, or Space, with
 -- arrow-key navigation between items and one item designated as selected.
--- Dispatches @onChange value@ when a different item is activated.
+-- Fires 'Selected' with the new value when a different item is activated.
 -- @renderItem eid isSelected item@ draws each item's content; @selector@
 -- itself owns the selection comparison, activation, and Up\/Down navigation.
 -- Multiple selectors on screen each bind to their own application-state
@@ -396,11 +411,18 @@ checkbox boxId text checked attrs = do
 -- it gets its own hover, focus, and tab-stop; 'selector' layers Up\/Down
 -- navigation and the shared selection value on top.
 --
+-- The same @attrs@ list is consulted for every item; 'fire' runs its
+-- handlers in the order given regardless of which item was activated
+-- ("client" handlers — attrs the caller wrote — see exactly one 'Selected'
+-- event per activated frame). Arrow-key navigation is "internal" to
+-- 'selector' and runs after that 'fire' call, so a client's 'onSelect'
+-- handler always observes the pre-navigation state.
+--
 -- @
 -- data Element = ... | SizeItem Int
 --
 -- selector SizeItem [(Small, "Small"), (Medium, "Medium"), (Large, "Large")]
---   (size model) SizeChanged $ \\eid isSelected (_, lbl) -> do
+--   (size model) [onSelect SizeChanged] $ \\eid isSelected (_, lbl) -> do
 --     style <- getStyle eid
 --     drawText (styleTextColour style) AlignLeft (if isSelected then "> " <> lbl else lbl)
 -- @
@@ -408,10 +430,10 @@ selector :: (Eq e, Ord e, Eq a)
          => (Int -> e)                          -- ^ maps item index to an element ID
          -> [(a, Text)]                         -- ^ @(value, label)@ pairs
          -> a                                   -- ^ currently selected value
-         -> (a -> msg)
+         -> [Attr e (SelectorEvent a) msg]
          -> (e -> Bool -> (a, Text) -> UI e msg ()) -- ^ @eid isSelected item@
          -> UI e msg ()
-selector mkId items selected onChange renderItem = do
+selector mkId items selected attrs renderItem = do
   initialFocus <- getFocus
   vBox defaultBoxConfig (zipWith (mkItem initialFocus) [0..] items)
   where
@@ -425,7 +447,7 @@ selector mkId items selected onChange renderItem = do
              disabled     <- isDisabled
              let activated = not disabled && (clicked || keyActivated)
              renderItem eid (selected == val) item
-             when activated $ emit (onChange val)
+             when activated $ fire attrs [Selected val]
              -- Use initialFocus (captured before any item renders) to prevent
              -- cascade: an item that gained focus via setFocus earlier in this
              -- same vBox pass must not also fire navigation. Allow same-frame
@@ -439,16 +461,16 @@ selector mkId items selected onChange renderItem = do
 
 -- | A group of mutually exclusive options, rendered as a radio mark and
 -- label per item. A thin wrapper over 'selector' supplying the radio-mark
--- rendering; see 'selector' for the selection, activation, and navigation
--- behaviour.
+-- rendering; see 'selector' for the selection, activation, navigation, and
+-- attribute-handling behaviour.
 radioGroup :: (Eq e, Ord e, Eq a)
            => (Int -> e)     -- ^ maps item index to an element ID
            -> [(a, Text)]    -- ^ @(value, label)@ pairs
            -> a              -- ^ currently selected value
-           -> (a -> msg)
+           -> [Attr e (SelectorEvent a) msg]
            -> UI e msg ()
-radioGroup mkId items selected onChange =
-  selector mkId items selected onChange $ \eid isSelected (_, lbl) -> do
+radioGroup mkId items selected attrs =
+  selector mkId items selected attrs $ \eid isSelected (_, lbl) -> do
     style <- getStyle eid
     drawText (styleTextColour style) AlignLeft $
       (if isSelected then "● " else "○ ") <> lbl
