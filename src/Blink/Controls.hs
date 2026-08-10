@@ -120,8 +120,6 @@ never sees the traffic.
 module Blink.Controls
   ( -- * Attributes and events
     Attr (..)
-  , ControlConfig
-  , defaultControlConfig
   , configure
   , fire
   , onAny
@@ -210,24 +208,23 @@ class HasControlEvent ev where
 
 -- | One attribute in a control's attribute list: either an event handler
 -- ('On', usually built with 'onClick', 'onInput', etc.) or a piece of
--- configuration ('Config', built by a control-specific attribute such as a
--- future @arrowStep@). A single list carries both, in any order.
-data Attr e ev msg
+-- configuration ('Config', built by a control-specific attribute such as
+-- 'inputFilter'). A single list carries both, in any order.
+--
+-- @cfg@ is each control's own configuration type (e.g. a future
+-- @TextInputConfig@), not one type shared across every control — a
+-- 'Config' attr built for one control's @cfg@ cannot be passed to a
+-- control expecting a different one, the same way an 'On' handler built
+-- for one control's @ev@ cannot be passed to a control expecting a
+-- different event type. A control with no configuration yet (every one
+-- converted so far) simply leaves @cfg@ unconstrained.
+data Attr e ev msg cfg
   = On (ev -> [Out e msg])
-  | Config (ControlConfig -> ControlConfig)
-
--- | Per-control configuration, overridden via 'Config' attrs. Empty for
--- now — gains fields as individual controls move their hardcoded constants
--- (a slider's arrow-key step, a progress bar's band width) into attributes.
-data ControlConfig = ControlConfig
-  deriving (Eq, Show)
-
-defaultControlConfig :: ControlConfig
-defaultControlConfig = ControlConfig
+  | Config (cfg -> cfg)
 
 -- | Folds the 'Config' attrs in an attribute list onto a base configuration,
 -- left to right; 'On' attrs are ignored.
-configure :: ControlConfig -> [Attr e ev msg] -> ControlConfig
+configure :: cfg -> [Attr e ev msg cfg] -> cfg
 configure = foldl' apply
   where
     apply cfg (Config f) = f cfg
@@ -238,7 +235,7 @@ configure = foldl' apply
 -- control event order first, handler-list order within an event — so if two
 -- attrs both handle the same event, they fire in the order they were
 -- written.
-fire :: [Attr e ev msg] -> [ev] -> UI e msg ()
+fire :: [Attr e ev msg cfg] -> [ev] -> UI e msg ()
 fire attrs evs = forM_ evs $ \ev -> forM_ handlers $ \h -> mapM_ dispatch (h ev)
   where
     handlers = [h | On h <- attrs]
@@ -249,7 +246,7 @@ fire attrs evs = forM_ evs $ \ev -> forM_ handlers $ \h -> mapM_ dispatch (h ev)
 -- that needs to fan out to both a message and a 'UiEffect' — or for
 -- internal handlers, written where no @msg@ value is in scope, that only
 -- ever emit effects.
-onAny :: (ev -> [Out e msg]) -> Attr e ev msg
+onAny :: (ev -> [Out e msg]) -> Attr e ev msg cfg
 onAny = On
 
 -- | Runs 'applyHover', 'applyFocus', and 'applyTabNavigation' for the given
@@ -276,7 +273,7 @@ controlEvents eid = do
 label :: Ord e
       => e     -- ^ element ID
       -> Text  -- ^ text to display
-      -> [Attr e Void msg]  -- ^ attributes; 'label' is non-interactive, so
+      -> [Attr e Void msg cfg]  -- ^ attributes; 'label' is non-interactive, so
                              -- only 'Config' attrs are meaningful (none yet)
       -> UI e msg ()
 label eid text _attrs = renderChrome eid $ do
@@ -332,7 +329,7 @@ instance HasControlEvent CheckboxEvent where
   matchControl _                    = Nothing
 
 -- | Emits @f newChecked@ when 'Toggled'.
-onToggle :: (Bool -> msg) -> Attr e CheckboxEvent msg
+onToggle :: (Bool -> msg) -> Attr e CheckboxEvent msg cfg
 onToggle f = On $ \ev -> case ev of
   Toggled b -> [OutMsg (f b)]
   _         -> []
@@ -344,7 +341,7 @@ onToggle f = On $ \ev -> case ev of
 checkboxMark :: Ord e
              => e     -- ^ element ID
              -> Bool  -- ^ current checked state
-             -> [Attr e CheckboxEvent msg]
+             -> [Attr e CheckboxEvent msg cfg]
              -> UI e msg ()
 checkboxMark boxId checked attrs = do
   ctrlEvs   <- controlEvents boxId
@@ -377,7 +374,7 @@ checkbox :: Ord e
          => e     -- ^ element ID
          -> Text  -- ^ label text
          -> Bool  -- ^ current checked state
-         -> [Attr e CheckboxEvent msg]
+         -> [Attr e CheckboxEvent msg cfg]
          -> UI e msg ()
 checkbox boxId text checked attrs = do
   style <- getStyle boxId
@@ -396,7 +393,7 @@ newtype SelectorEvent a = Selected a
   deriving (Eq, Show)
 
 -- | Emits @f value@ when an item is 'Selected'.
-onSelect :: (a -> msg) -> Attr e (SelectorEvent a) msg
+onSelect :: (a -> msg) -> Attr e (SelectorEvent a) msg cfg
 onSelect f = On $ \ev -> case ev of
   Selected v -> [OutMsg (f v)]
 
@@ -430,7 +427,7 @@ selector :: (Eq e, Ord e, Eq a)
          => (Int -> e)                          -- ^ maps item index to an element ID
          -> [(a, Text)]                         -- ^ @(value, label)@ pairs
          -> a                                   -- ^ currently selected value
-         -> [Attr e (SelectorEvent a) msg]
+         -> [Attr e (SelectorEvent a) msg cfg]
          -> (e -> Bool -> (a, Text) -> UI e msg ()) -- ^ @eid isSelected item@
          -> UI e msg ()
 selector mkId items selected attrs renderItem = do
@@ -467,7 +464,7 @@ radioGroup :: (Eq e, Ord e, Eq a)
            => (Int -> e)     -- ^ maps item index to an element ID
            -> [(a, Text)]    -- ^ @(value, label)@ pairs
            -> a              -- ^ currently selected value
-           -> [Attr e (SelectorEvent a) msg]
+           -> [Attr e (SelectorEvent a) msg cfg]
            -> UI e msg ()
 radioGroup mkId items selected attrs =
   selector mkId items selected attrs $ \eid isSelected (_, lbl) -> do
@@ -490,7 +487,7 @@ radioGroup mkId items selected attrs =
 button :: Ord e
        => e     -- ^ element ID
        -> Text  -- ^ button label
-       -> [Attr e ButtonEvent msg]
+       -> [Attr e ButtonEvent msg cfg]
        -> UI e msg ()
 button eid txt attrs = do
   ctrlEvs   <- controlEvents eid
@@ -513,7 +510,7 @@ instance HasControlEvent ButtonEvent where
   matchControl _             = Nothing
 
 -- | Emits @msg@ when the button is 'Clicked'.
-onClick :: msg -> Attr e ButtonEvent msg
+onClick :: msg -> Attr e ButtonEvent msg cfg
 onClick msg = On $ \ev -> case ev of
   Clicked -> [OutMsg msg]
   _       -> []
@@ -521,7 +518,7 @@ onClick msg = On $ \ev -> case ev of
 -- | Queues a 'UiEffect' when the button is 'Clicked', for effects such as
 -- 'ScrollTo' \/ 'ScrollBy' that don't have a @msg@ to emit — 'scrollBar's
 -- own increment\/decrement buttons are built this way.
-onClickTo :: UiEffect e -> Attr e ButtonEvent msg
+onClickTo :: UiEffect e -> Attr e ButtonEvent msg cfg
 onClickTo eff = On $ \ev -> case ev of
   Clicked -> [OutUi eff]
   _       -> []
