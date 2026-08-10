@@ -194,7 +194,7 @@ rowButtons ps = do
            , (Layout btnW Fill TopLeft,    resetBtn)
            ])
     , (Layout Fill (Exactly 20) TopLeft,
-         progressBar ProgressBar1 (Progress (fromIntegral (clickCount ps) / 50)))
+         progressBar ProgressBar1 (Progress (fromIntegral (clickCount ps) / 50)) [])
     ]
   where
     btn i txt = button (Btn i) txt
@@ -351,8 +351,8 @@ progressView ps = do
            updateProgressState s (\p -> p { animating = v }))])
     , (Layout Fill Fill TopLeft,
          if animating ps
-           then progressBar ProgressBar2 Indeterminate
-           else progressBar ProgressBar2 (Progress 0))
+           then progressBar ProgressBar2 Indeterminate []
+           else progressBar ProgressBar2 (Progress 0) [])
     ]
 
 updateProgressState :: AppState -> (ProgressState -> ProgressState) -> AppState

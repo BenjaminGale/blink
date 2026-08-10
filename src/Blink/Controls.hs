@@ -142,6 +142,7 @@ module Blink.Controls
   , label
   , ProgressValue (..)
   , progressBar
+  , bandSpeed
     -- * Input
   , button
   , ButtonEvent (..)
@@ -301,6 +302,17 @@ data ProgressValue
     -- ^ Unknown progress: a band animates continuously across the bar.
   deriving (Eq, Show)
 
+-- | Configuration for 'progressBar', set via 'bandSpeed'.
+newtype ProgressBarConfig = ProgressBarConfig { configBandSpeed :: Double }
+
+defaultProgressBarConfig :: ProgressBarConfig
+defaultProgressBarConfig = ProgressBarConfig { configBandSpeed = 0.5 }
+
+-- | How fast the band sweeps across an 'Indeterminate' bar, in bar-widths
+-- per second. Defaults to 0.5.
+bandSpeed :: Double -> Attr e ev msg ProgressBarConfig
+bandSpeed v = Config $ \cfg -> cfg { configBandSpeed = v }
+
 -- | A read-only progress indicator. Pass 'Progress' for a determinate bar or
 -- 'Indeterminate' for a continuously animating band indicating activity of
 -- unknown duration. The animation runs only on ticker frames; 'requiresAnimation'
@@ -308,22 +320,24 @@ data ProgressValue
 progressBar :: Ord e
             => e             -- ^ element ID
             -> ProgressValue -- ^ determinate or indeterminate value
+            -> [Attr e Void msg ProgressBarConfig]  -- ^ attributes; 'progressBar'
+                             -- reports no events, so only 'Config' attrs
+                             -- (currently 'bandSpeed') are meaningful
             -> UI e msg ()
-progressBar eid (Progress value) = renderChrome eid $ do
+progressBar eid (Progress value) _attrs = renderChrome eid $ do
   style <- getStyle eid
   r     <- getBounds
   let clamped  = max 0 (min 1 value)
       fillRect' = r { rectWidth = rectWidth r * clamped }
   withBounds fillRect' $ fillRect (styleTextColour style)
-progressBar eid Indeterminate = do
+progressBar eid Indeterminate attrs = do
   requiresAnimation
   renderChrome eid $ do
     r       <- getBounds
     style   <- getStyle eid
     elapsed <- getAnimElapsed
-    -- Band width (0.3) and speed (0.5) are fixed; expose as parameters if
-    -- callers need to distinguish multiple simultaneous indeterminate bars.
-    let t     = realToFrac elapsed * (0.5 :: Double)
+    let speed = configBandSpeed (configure defaultProgressBarConfig attrs)
+        t     = realToFrac elapsed * speed
         phase = t - fromIntegral (floor t :: Int)
         bandW = rectWidth r * 0.3
         left  = rectX r - bandW + (rectWidth r + bandW) * phase

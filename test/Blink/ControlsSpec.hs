@@ -7,7 +7,7 @@ import Test.Hspec
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Controls (ControlEvent (..), HasControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, arrowStep, button, checkbox, checkboxMark, control, controlEvents, displayFilter, focusRing, inputFilter, isControlHit, listBox, mouseToTrackPos, numberField, onChange, onClick, onClickTo, onInput, onSelect, onSubmit, onToggle, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
+import Blink.Controls (ControlEvent (..), HasControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, arrowStep, bandSpeed, button, checkbox, checkboxMark, control, controlEvents, displayFilter, focusRing, inputFilter, isControlHit, listBox, mouseToTrackPos, numberField, onChange, onClick, onClickTo, onInput, onSelect, onSubmit, onToggle, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -367,7 +367,7 @@ backgroundAndBorderSpec run = do
     getDrawCommands ctx' `shouldContain` [StrokeBorder bgRect testBorderColour (uniformBorder 1)]
 
 runProgressBar :: Double -> WidgetRunner
-runProgressBar value ctx = fmap (settle . snd) $ runUI (progressBar TestControl (Progress value)) ctx
+runProgressBar value ctx = fmap (settle . snd) $ runUI (progressBar TestControl (Progress value) []) ctx
 
 runButton :: WidgetRunner
 runButton ctx = fmap (settle . snd) $ runUI (button TestControl "label" []) ctx
@@ -604,6 +604,13 @@ spec = describe "Controls" $ do
       it "clamps values below 0.0 to zero width" $ do
         ctx' <- runProgressBar (-0.5) (mkCtx noInput)
         getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 0 70) testColour]
+
+    describe "band speed" $
+      it "uses bandSpeed instead of the 0.5 default when given" $ do
+        let baseCtx = mkCtx noInput
+            ctx     = baseCtx { ctxAnimation = (ctxAnimation baseCtx) { animElapsed = 1 } }
+        ctx' <- fmap (settle . snd) $ runUI (progressBar TestControl Indeterminate [bandSpeed 1.0]) ctx
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle (-6) 15 21 70) testColour]
 
   describe "activatable" $ do
     controlBehaviourSpec runActivatable (Point 50 50)
