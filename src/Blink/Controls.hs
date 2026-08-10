@@ -167,6 +167,7 @@ module Blink.Controls
     -- * Scroll
   , ScrollBarPart (..)
   , scrollBar
+  , ScrollBarEvent (..)
   , thumbRect
   , mouseToTrackPos
     -- * Viewport
@@ -933,6 +934,16 @@ rangeControl trackId thumbId ori pos ratio = do
     withBounds thumbR $ renderChrome thumbId $ pure ()
   dragToTrackPos trackId ori ratio contentRect
 
+-- | Events reported by 'scrollBar': a lifecycle event via 'ScrollBarControl'
+-- (see 'ControlEvent'). The scroll position itself is control state, not
+-- reported to the caller — see "Control state" above.
+newtype ScrollBarEvent = ScrollBarControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent ScrollBarEvent where
+  liftControl = ScrollBarControl
+  matchControl (ScrollBarControl ce) = Just ce
+
 -- | A scrollbar with decrement\/increment buttons flanking a draggable thumb.
 -- The scroll position in @[0, 1]@ is stored in the 'UIContext', keyed by
 -- @mkId ScrollTrack@; the control reads and writes it itself. @thumbRatio@ is
@@ -943,10 +954,12 @@ scrollBar :: Ord e
           => (ScrollBarPart -> e)  -- ^ maps scrollbar parts to element IDs
           -> Orientation           -- ^ scrollbar orientation
           -> Double                -- ^ thumb ratio (visible / total), in @[0, 1]@
+          -> [Attr e ScrollBarEvent msg cfg]
           -> UI e msg ()
-scrollBar mkId ori thumbRatio = do
-  bounds <- getBounds
-  pos <- readPos
+scrollBar mkId ori thumbRatio attrs = do
+  bounds     <- getBounds
+  pos        <- readPos
+  wasFocused <- isFocused trackId
   let pos'      = max 0 (min 1 pos)
       ratio'    = max 0 (min 1 thumbRatio)
       btnLayout = case ori of
@@ -957,6 +970,8 @@ scrollBar mkId ori thumbRatio = do
     , (Layout Fill Fill TopLeft, track pos' ratio')
     , (btnLayout, incrBtn pos' ratio')
     ]
+  ctrlEvs <- controlEventsAfter trackId wasFocused
+  fire attrs ctrlEvs
   where
     trackId = mkId ScrollTrack
 
@@ -1079,10 +1094,10 @@ viewport mkId (Size cw ch) content = do
       vBar    = outer { rectX = rectX outer + vpW, rectWidth  = scrollRegionBarSize, rectHeight = vpH }
   case hThumb of
     Nothing -> pure ()
-    Just r  -> withBounds hBar $ scrollBar (mkId . ViewportH) Horizontal r
+    Just r  -> withBounds hBar $ scrollBar (mkId . ViewportH) Horizontal r []
   case vThumb of
     Nothing -> pure ()
-    Just r  -> withBounds vBar $ scrollBar (mkId . ViewportV) Vertical r
+    Just r  -> withBounds vBar $ scrollBar (mkId . ViewportV) Vertical r []
   hPos <- maybe (pure 0) (\_ -> getScrollState (mkId (ViewportH ScrollTrack))) hThumb
   vPos <- maybe (pure 0) (\_ -> getScrollState (mkId (ViewportV ScrollTrack))) vThumb
   let offsetX    = hPos * max 0 (cw - vpW)
@@ -1286,7 +1301,7 @@ listBox mkId itemHeight items selected onItemSelected renderItem = do
       vp <- getBounds
       let vpH        = rectHeight vp
           thumbRatio = if contentH > 0 then max 0 (min 1 (vpH / contentH)) else 1
-      scrollBar (mkId . ListBoxScroll) Vertical thumbRatio
+      scrollBar (mkId . ListBoxScroll) Vertical thumbRatio []
 
 -- | Returns the @(width, height)@ overhead consumed by a control's margin and
 -- padding as 'Length' constraints. Add these to a content size with 'addLength'

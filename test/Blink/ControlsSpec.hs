@@ -554,7 +554,7 @@ mkScrollBarCtx pos input =
   in base { ctxElements = (ctxElements base) { elmScrollStates = Map.singleton ScrollTrack (ScrollState pos) } }
 
 runScrollBar :: UIContext ScrollBarPart () -> IO (UIContext ScrollBarPart ())
-runScrollBar = fmap (settle . snd) . runUI (scrollBar id Vertical 0.25)
+runScrollBar = fmap (settle . snd) . runUI (scrollBar id Vertical 0.25 [])
 
 data ViewportElem = VPPart ViewportPart | VPChild
   deriving (Eq, Ord, Show)
@@ -1077,13 +1077,13 @@ spec = describe "Controls" $ do
 
       it "continues tracking when the mouse moves off the track while the button is held" $ do
         frame1 <- runScrollBar (mkScrollBarCtx 0 (mouseAt (Point 10 100) True []))
-        frame2 <- fmap (settle . snd) $ runUI (scrollBar id Vertical 0.25)
+        frame2 <- fmap (settle . snd) $ runUI (scrollBar id Vertical 0.25 [])
                                    (nextFrameContext scrollRect (mouseAt (Point 200 40) True []) frame1)
         scrollPos frame2 `shouldBe` 0.0
 
       it "stops tracking when the button is released after dragging off the track" $ do
         frame1 <- runScrollBar (mkScrollBarCtx 0 (mouseAt (Point 10 100) True []))
-        frame2 <- fmap (settle . snd) $ runUI (scrollBar id Vertical 0.25)
+        frame2 <- fmap (settle . snd) $ runUI (scrollBar id Vertical 0.25 [])
                                    (nextFrameContext scrollRect (mouseAt (Point 200 40) False []) frame1)
         scrollPos frame2 `shouldBe` 0.5
 
