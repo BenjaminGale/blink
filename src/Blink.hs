@@ -3,8 +3,8 @@ Module: Blink
 
 Blink is an immediate-mode UI library: the whole UI tree is rebuilt from
 scratch every frame as a pure function of state, rather than retained and
-mutated incrementally. State changes only through modifiers dispatched by
-the UI. Blink acts as a library — it does not own the main loop. The backend
+mutated incrementally. State changes only through messages emitted by the
+UI. Blink acts as a library — it does not own the main loop. The backend
 drives the loop and calls into Blink each frame.
 
 = Architecture
@@ -31,11 +31,12 @@ Every 'App' is parameterised over two types:
   * @e@ — the /element type/, a sum type with one constructor per interactive
     control. Used to look up styles from the 'Theme' and to route keyboard
     focus. See "Blink.UI".
-  * @s@ — the /application state/, owned by the host, read by the UI tree via
-    'getAppState', and changed only through modifiers queued with 'dispatch'
-    and 'dispatchAsync'. Presentational state (scroll positions, selections) is
-    baked into the 'UIContext' and accessed through dedicated primitives. See
-    "Blink.UI".
+  * @s@ — the /application state/, owned by the host and passed into the view
+    explicitly each frame. Views never mutate it directly; they queue
+    messages with 'emit', which the host reads back with 'getMessages' and
+    folds in however it likes. Presentational state (scroll positions,
+    selections) is baked into the 'UIContext' and accessed through dedicated
+    primitives. See "Blink.UI".
 
 = Module guide
 

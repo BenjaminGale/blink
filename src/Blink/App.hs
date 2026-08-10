@@ -10,15 +10,16 @@ produces the initial state, a function from state to 'Theme', and the UI tree.
 data App e s = App
   { startUp :: IO s
   , theme :: s -> Theme e
-  , view :: UI e s ()
+  , view :: s -> LegacyUI e s ()
   }
 @
 
   * @e@ is the element type — a sum type identifying each interactive control
     (see "Blink.UI").
-  * @s@ is the application state, owned by the host. The UI tree reads it with
-    'Blink.UI.getAppState' and never mutates it directly; modifiers queued
-    with 'Blink.UI.dispatch' are applied once the frame completes.
+  * @s@ is the application state, owned by the host and passed into 'view'
+    explicitly each frame. The view never mutates it directly; it queues
+    @s -> s@ modifiers with 'Blink.UI.emit', which are applied once the frame
+    completes.
 
 = Configuration
 
@@ -29,17 +30,17 @@ Pass an 'App' to 'configureContinuous' or 'configureEventDriven' to obtain a
     input (e.g. game-style loops). Draw commands from the first render pass are
     submitted immediately each frame.
   * 'configureEventDriven' — for backends that block on events. After applying
-    the frame's dispatched modifiers, a second render pass runs on the updated
+    the frame's emitted modifiers, a second render pass runs on the updated
     state so the displayed frame always reflects the latest state. The 'IO ()'
-    callback is invoked when async work completes, allowing the backend to
-    unblock its event wait (e.g. @glfwPostEmptyEvent@).
+    callback is invoked when the animation ticker fires, allowing the backend
+    to unblock its event wait (e.g. @glfwPostEmptyEvent@).
 
 >  Continuous:                          Event-driven:
 >
 >  run view -----> submit draws         run view (pass 1)
 >       (stale state may flash              |
 >        briefly on the next frame          v
->        redraw instead)               apply dispatches
+>        redraw instead)               apply emitted modifiers
 >                                            |
 >                                            v
 >                                       run view again (pass 2)
@@ -72,14 +73,6 @@ render the final frame before exiting.
 Set 'quitRequested' in 'FrameInput' when the platform detects a close signal
 (e.g. the window's close button). 'stepFrame' returns 'Quit' on the same frame.
 
-= Async updates
-
-'Blink.UI.dispatchAsync' queues a job @s -> IO (s -> s)@. 'stepFrame' forks
-each queued job with the frame's post-dispatch state, posts the modifier the
-job returns to an internal queue, and calls the async notification callback so
-the backend can unblock its event wait. Posted modifiers are applied at the
-start of the next 'stepFrame' call, before the render pass.
-
 = Text measurement
 
 'TextMeasurer' is provided at configure time for cursor positioning and layout.
@@ -104,7 +97,6 @@ module Blink.App
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Monad (when, void)
 import Data.IORef
-import Data.List (foldl')
 import Data.Text (Text)
 import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
@@ -114,10 +106,10 @@ import Blink.Input (KeyEvent, InputState (..))
 import Blink.Rendering (DrawCommand, TextMeasurer (..))
 import Blink.Style (Theme)
 import Blink.UI
-  ( UI, UIContext (..), FrameOutputs (..)
+  ( LegacyUI, UIContext (..), FrameOutputs (..)
   , AnimationState (..)
   , emptyUIContext, nextFrameContext
-  , runUI, getDrawCommands, applyDispatches, getAsyncJobs
+  , runUI, getDrawCommands, applyDispatches
   )
 
 -- | Describes a complete Blink application.
@@ -130,9 +122,9 @@ data App e s = App
   , theme :: s -> Theme e
     -- ^ Derives the active 'Theme' from the current state. Called each frame,
     -- allowing the theme to change in response to state changes.
-  , view :: UI e s ()
-    -- ^ The UI tree. Reads the application state with 'Blink.UI.getAppState'
-    -- and queues changes with 'Blink.UI.dispatch'; run once or twice per
+  , view :: s -> LegacyUI e s ()
+    -- ^ The UI tree, given the application state as it was at the start of
+    -- the frame. Queues changes with 'Blink.UI.emit'; run once or twice per
     -- frame depending on the render mode.
   }
 
@@ -142,23 +134,20 @@ configureContinuous :: Eq e => App e s -> TextMeasurer -> IO (BlinkHandle s)
 configureContinuous app measurer = do
   s <- startUp app
   refs <- AppRefs
-    <$> newIORef []
-    <*> newIORef (emptyUIContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) s measurer)
+    <$> newIORef (emptyUIContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) measurer)
     <*> newIORef s
     <*> newIORef False
     <*> newIORef Nothing
   pure BlinkHandle { stepFrame = doStepContinuous app refs }
 
--- | Produces a 'BlinkHandle' for an event-driven backend. After applying the
--- frame's dispatched modifiers, a second render pass runs on the updated state.
--- The 'IO ()' callback is called when async work completes so the backend can
+-- | Produces a 'BlinkHandle' for an event-driven backend. The 'IO ()'
+-- callback is called when the animation ticker fires so the backend can
 -- unblock its event wait.
 configureEventDriven :: Eq e => App e s -> IO () -> TextMeasurer -> IO (BlinkHandle s)
 configureEventDriven app notify measurer = do
   s <- startUp app
   refs <- AppRefs
-    <$> newIORef []
-    <*> newIORef (emptyUIContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) s measurer)
+    <$> newIORef (emptyUIContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) measurer)
     <*> newIORef s
     <*> newIORef False
     <*> newIORef Nothing
@@ -168,9 +157,8 @@ configureEventDriven app notify measurer = do
 -- or 'configureEventDriven'.
 data BlinkHandle s = BlinkHandle
   { stepFrame :: FrameInput -> IO (FrameResult s)
-    -- ^ Processes one frame: applies modifiers posted by completed async
-    -- jobs, runs the view, applies the frame's dispatched modifiers, forks
-    -- any async jobs, and returns draw commands paired with the new state.
+    -- ^ Processes one frame: runs the view, applies the frame's emitted
+    -- modifiers, and returns draw commands paired with the new state.
   }
 
 -- | All per-frame inputs from the platform, assembled by the backend each
@@ -207,10 +195,7 @@ data FrameResult s
 -- | Mutable state carried between frames, allocated once at configure time
 -- and threaded through every 'stepFrame' call via closure.
 data AppRefs e s = AppRefs
-  { refsAsyncQueue :: IORef [s -> s]
-    -- Modifiers posted by completed async jobs, waiting to be applied at the
-    -- start of the next frame. Accumulated in LIFO order; reversed on drain.
-  , refsCtx        :: IORef (UIContext e s)
+  { refsCtx        :: IORef (UIContext e (s -> s))
     -- The UIContext carried over from the previous frame.
   , refsState      :: IORef s
     -- The application state as of the end of the previous frame.
@@ -224,13 +209,12 @@ data AppRefs e s = AppRefs
     -- sequentially, so no concurrent access concerns.
   }
 
-buildCtx :: Eq e => App e s -> Rectangle -> InputState -> Float -> Bool -> s -> UIContext e s -> UIContext e s
+buildCtx :: Eq e => App e s -> Rectangle -> InputState -> Float -> Bool -> s -> UIContext e (s -> s) -> UIContext e (s -> s)
 buildCtx app winRect inputState delta isAnimTick state prevCtx =
   let elapsed   = animElapsed (ctxAnimation prevCtx) + delta
       animState = AnimationState { animDelta = delta, animElapsed = elapsed, animIsTick = isAnimTick }
       ctx = (nextFrameContext winRect inputState prevCtx)
         { ctxTheme    = theme app state
-        , ctxAppState = state
         }
   in ctx { ctxAnimation = animState }
 
@@ -238,46 +222,41 @@ runFrame
   :: Eq e
   => App e s
   -> AppRefs e s
-  -> IO ()
   -> FrameInput
-  -> IO (UIContext e s, s)
-runFrame app refs notify input = do
+  -> IO (UIContext e (s -> s), s)
+runFrame app refs input = do
   let winRect    = rectFromSize (windowSize input)
       inputState = toInputState input
 
-  asyncMods <- atomicModifyIORef (refsAsyncQueue refs) (\q -> ([], reverse q))
-  prevState <- readIORef (refsState refs)
-  let state = foldl' (flip ($)) prevState asyncMods
+  state <- readIORef (refsState refs)
 
   delta <- sampleDelta (refsLastFrame refs) (isAnimationTick input)
 
   prevCtx <- readIORef (refsCtx refs)
   let ctx = buildCtx app winRect inputState delta (isAnimationTick input) state prevCtx
-  ((), ctx') <- runUI (view app) ctx
-  let state' = applyDispatches ctx'
+  ((), ctx') <- runUI (view app state) ctx
+  let state' = applyDispatches ctx' state
 
   writeIORef (refsState refs) state'
-  mapM_ (forkJob (refsAsyncQueue refs) notify state') (getAsyncJobs ctx')
 
   pure (ctx', state')
 
 doStepContinuous :: Eq e => App e s -> AppRefs e s -> FrameInput -> IO (FrameResult s)
 doStepContinuous app refs input = do
-  (ctx', state') <- runFrame app refs (pure ()) input
+  (ctx', state') <- runFrame app refs input
   writeIORef (refsCtx refs) ctx'
   pure $ toResult input (getDrawCommands ctx') state'
 
 doStepEventDriven :: Eq e => App e s -> AppRefs e s -> IO () -> FrameInput -> IO (FrameResult s)
 doStepEventDriven app refs notify input = do
-  (firstPassCtx, state') <- runFrame app refs notify input
+  (firstPassCtx, state') <- runFrame app refs input
   let winRect    = rectFromSize (windowSize input)
       inputState = toInputState input
       freshCtx   =
-          withAppState state'
-        . withTheme (theme app state')
+          withTheme (theme app state')
         . nextFrameContext winRect (clearKeyEvents inputState)
         $ firstPassCtx
-  ((), renderedCtx) <- runUI (view app) freshCtx
+  ((), renderedCtx) <- runUI (view app state') freshCtx
   writeIORef (refsCtx refs) renderedCtx
   wasActive <- readIORef (refsAnimActive refs)
   let nowActive = outRequiresAnimation (ctxOutputs renderedCtx)
@@ -311,19 +290,8 @@ toInputState fi = InputState
 clearKeyEvents :: InputState -> InputState
 clearKeyEvents is = is { inputKeyEvents = [], inputTypedText = [] }
 
-withTheme :: Theme e -> UIContext e s -> UIContext e s
+withTheme :: Theme e -> UIContext e msg -> UIContext e msg
 withTheme t ctx = ctx { ctxTheme = t }
-
-withAppState :: s -> UIContext e s -> UIContext e s
-withAppState s ctx = ctx { ctxAppState = s }
-
-forkJob :: IORef [s -> s] -> IO () -> s -> (s -> IO (s -> s)) -> IO ()
-forkJob queue notify s job = do
-  _ <- forkIO $ do
-    f <- job s
-    atomicModifyIORef' queue (\q -> (f : q, ()))
-    notify
-  pure ()
 
 sampleDelta :: IORef (Maybe Word64) -> Bool -> IO Float
 sampleDelta _ False = pure 0

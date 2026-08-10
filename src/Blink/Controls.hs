@@ -93,16 +93,17 @@ it too.
 == Value-callback pattern
 
 Controls that edit application data receive the current value and a function
-producing a state modifier from an updated value, dispatched whenever the
-user makes a change:
+from an updated value to a message, emitted whenever the user makes a
+change:
 
 @
-textField NameInput (userName s) (\\t st -> st { userName = t })
+textField NameInput (userName model) NameChanged
 @
 
-The host applies the modifier once the frame completes; the control reads the
-new value back from the application state on the next frame. This keeps all
-application data outside the UI tree.
+The host reads the emitted messages back once the frame completes and folds
+them into its own state however it likes; the control reads the new value
+back from the application data on the next frame. This keeps all application
+data outside the UI tree.
 
 'button' is the deliberate exception — see its Haddock for why it returns a
 'Bool' instead.
@@ -179,7 +180,7 @@ import Blink.UI
 label :: Ord e
       => e     -- ^ element ID
       -> Text  -- ^ text to display
-      -> UI e s ()
+      -> UI e msg ()
 label eid text = renderChrome eid $ do
   style <- getStyle eid
   drawText (styleTextColour style) (styleTextAlign style) text
@@ -199,7 +200,7 @@ data ProgressValue
 progressBar :: Ord e
             => e             -- ^ element ID
             -> ProgressValue -- ^ determinate or indeterminate value
-            -> UI e s ()
+            -> UI e msg ()
 progressBar eid (Progress value) = renderChrome eid $ do
   style <- getStyle eid
   r     <- getBounds
@@ -228,11 +229,11 @@ progressBar eid Indeterminate = do
 checkboxMark :: Ord e
              => e                -- ^ element ID
              -> Bool             -- ^ current checked state
-             -> (Bool -> s -> s) -- ^ state modifier given the new checked state
-             -> UI e s ()
+             -> (Bool -> msg) -- ^ message given the new checked state
+             -> UI e msg ()
 checkboxMark boxId checked onToggle = do
   activated <- activatable boxId draw [KeyReturn, KeySpace]
-  when activated $ dispatch (onToggle (not checked))
+  when activated $ emit (onToggle (not checked))
   where
     draw = do
       style <- getStyle boxId
@@ -243,7 +244,7 @@ checkboxMark boxId checked onToggle = do
 checkboxLabel
   :: Style  -- ^ style to draw with
   -> Text   -- ^ label text
-  -> UI e s ()
+  -> UI e msg ()
 checkboxLabel style = drawText (styleTextColour style) AlignLeft
 
 -- | A togglable checkbox with an adjacent label. Dispatches the state modifier
@@ -253,14 +254,14 @@ checkboxLabel style = drawText (styleTextColour style) AlignLeft
 -- pair since neither half alone spans the whole composite.
 --
 -- @
--- checkbox NotifyMe "Notify me by email" (notifyMe s) $ \\v st -> st { notifyMe = v }
+-- checkbox NotifyMe "Notify me by email" (notifyMe model) NotifyMeChanged
 -- @
 checkbox :: Ord e
          => e                -- ^ element ID
          -> Text             -- ^ label text
          -> Bool             -- ^ current checked state
-         -> (Bool -> s -> s) -- ^ state modifier given the new checked state
-         -> UI e s ()
+         -> (Bool -> msg) -- ^ message given the new checked state
+         -> UI e msg ()
 checkbox boxId text checked onToggle = do
   style <- getStyle boxId
   hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
@@ -284,7 +285,7 @@ checkbox boxId text checked onToggle = do
 -- data Element = ... | SizeItem Int
 --
 -- selector SizeItem [(Small, "Small"), (Medium, "Medium"), (Large, "Large")]
---   (size s) (\\v st -> st { size = v }) $ \\eid isSelected (_, lbl) -> do
+--   (size model) SizeChanged $ \\eid isSelected (_, lbl) -> do
 --     style <- getStyle eid
 --     drawText (styleTextColour style) AlignLeft (if isSelected then "> " <> lbl else lbl)
 -- @
@@ -292,9 +293,9 @@ selector :: (Eq e, Ord e, Eq a)
          => (Int -> e)                          -- ^ maps item index to an element ID
          -> [(a, Text)]                         -- ^ @(value, label)@ pairs
          -> a                                   -- ^ currently selected value
-         -> (a -> s -> s)
-         -> (e -> Bool -> (a, Text) -> UI e s ()) -- ^ @eid isSelected item@
-         -> UI e s ()
+         -> (a -> msg)
+         -> (e -> Bool -> (a, Text) -> UI e msg ()) -- ^ @eid isSelected item@
+         -> UI e msg ()
 selector mkId items selected onChange renderItem = do
   initialFocus <- getFocus
   vBox defaultBoxConfig (zipWith (mkItem initialFocus) [0..] items)
@@ -309,7 +310,7 @@ selector mkId items selected onChange renderItem = do
              disabled     <- isDisabled
              let activated = not disabled && (clicked || keyActivated)
              renderItem eid (selected == val) item
-             when activated $ dispatch (onChange val)
+             when activated $ emit (onChange val)
              -- Use initialFocus (captured before any item renders) to prevent
              -- cascade: an item that gained focus via setFocus earlier in this
              -- same vBox pass must not also fire navigation. Allow same-frame
@@ -329,8 +330,8 @@ radioGroup :: (Eq e, Ord e, Eq a)
            => (Int -> e)     -- ^ maps item index to an element ID
            -> [(a, Text)]    -- ^ @(value, label)@ pairs
            -> a              -- ^ currently selected value
-           -> (a -> s -> s)
-           -> UI e s ()
+           -> (a -> msg)
+           -> UI e msg ()
 radioGroup mkId items selected onChange =
   selector mkId items selected onChange $ \eid isSelected (_, lbl) -> do
     style <- getStyle eid
@@ -341,20 +342,20 @@ radioGroup mkId items selected onChange =
 -- is activated — by a left-click or by pressing Enter while focused.
 --
 -- Unlike the other input controls, @button@ returns a 'Bool' rather than
--- accepting a value-callback. This is intentional: button clicks often trigger
--- UI actions ('setFocus', opening a dialog) that cannot be expressed as a pure
--- @s -> s@ state modifier, so the caller dispatches the response directly:
+-- accepting a value-callback. This is intentional: button clicks often
+-- trigger UI actions ('setFocus', opening a dialog) that cannot be
+-- expressed as a single message, so the caller responds directly:
 --
 -- @
 -- clicked <- button eid "Save"
 -- when clicked $ do
---   dispatch (\\s -> s { dirty = False })
+--   emit Saved
 --   setFocus ConfirmDialog
 -- @
 button :: Ord e
        => e     -- ^ element ID
        -> Text  -- ^ button label
-       -> UI e s Bool
+       -> UI e msg Bool
 button eid txt = activatable eid draw [KeyReturn]
   where
     draw = do
@@ -374,7 +375,7 @@ resolveMouseSelection
   -> Text        -- ^ displayed value (post-@displayFilter@)
   -> Double      -- ^ current horizontal scroll offset
   -> (Int, Int)  -- ^ current @(anchor, active)@ selection
-  -> UI e s (Int, Int)
+  -> UI e msg (Int, Int)
 resolveMouseSelection eid bounds wasCapturing justFocused value scrollX (anchor0, active0) = do
   isCapturing <- isDragging eid
   if isCapturing
@@ -410,21 +411,21 @@ resolveKeyboardSelection hasFocus keyEvts len (anchor1, active1)
     plainLeft  = hasFocus && any (\e -> key e == KeyLeft  && Shift `notElem` modifiers e) keyEvts
     plainRight = hasFocus && any (\e -> key e == KeyRight && Shift `notElem` modifiers e) keyEvts
 
--- | Backspace and typed text edit the value, selection-aware; dispatches
+-- | Backspace and typed text edit the value, selection-aware; emits
 -- @onChange@ when the text actually changes. @inputFilter@ is applied to the
 -- newly typed text before insertion, letting callers reject or transform
 -- keystrokes (e.g. digits only). Assumes the caller has already checked the
 -- control is focused and enabled.
 applyEdit :: Ord e
           => (Text -> Text)   -- ^ @inputFilter@, applied to newly typed text before insertion
-          -> (Text -> s -> s) -- ^ @onChange@, state modifier given the new value
+          -> (Text -> msg) -- ^ @onChange@, message given the new value
           -> Text             -- ^ current value
           -> InputState       -- ^ this frame's input
           -> (Int, Int)       -- ^ current @(anchor, active)@ selection
-          -> UI e s (Int, Int)
+          -> UI e msg (Int, Int)
 applyEdit inputFilter onChange value input (anchor2, active2)
   | backspace || hasTyped = do
-      when (newText /= value) $ dispatch (onChange newText)
+      when (newText /= value) $ emit (onChange newText)
       pure (newCursor, newCursor)
   | otherwise = pure (anchor2, active2)
   where
@@ -470,7 +471,7 @@ drawTextInputContent
   -> Bool        -- ^ control is focused and not disabled
   -> Double      -- ^ current horizontal scroll offset
   -> (Int, Int)  -- ^ current @(anchor, active)@ selection
-  -> UI e s ()
+  -> UI e msg ()
 drawTextInputContent style bounds value hasFocus enabled ox (anchor3, active3) = do
   when (hasFocus && drawLo < drawHi) $ do
     loX <- charOffset value drawLo
@@ -527,8 +528,8 @@ textInputControl :: Ord e
                   -> (Text -> Text)   -- ^ @displayFilter@, applied wherever the value is measured or drawn
                   -> e                -- ^ element ID
                   -> Text             -- ^ current value
-                  -> (Text -> s -> s) -- ^ @onChange@, state modifier given the new value
-                  -> UI e s ()
+                  -> (Text -> msg) -- ^ @onChange@, message given the new value
+                  -> UI e msg ()
 textInputControl inputFilter displayFilter eid value onChange = do
   wasFocused   <- isFocused eid
   wasCapturing <- isDragging eid
@@ -584,8 +585,8 @@ textInputControl inputFilter displayFilter eid value onChange = do
 textField :: Ord e
           => e                -- ^ element ID
           -> Text             -- ^ current value
-          -> (Text -> s -> s) -- ^ state modifier given the new value
-          -> UI e s ()
+          -> (Text -> msg) -- ^ message given the new value
+          -> UI e msg ()
 textField = textInputControl id id
 
 -- | A text field that only accepts digit keystrokes; all other typed
@@ -593,8 +594,8 @@ textField = textInputControl id id
 numberField :: Ord e
             => e                -- ^ element ID
             -> Text             -- ^ current value
-            -> (Text -> s -> s) -- ^ state modifier given the new value
-            -> UI e s ()
+            -> (Text -> msg) -- ^ message given the new value
+            -> UI e msg ()
 numberField = textInputControl (T.filter isDigit) id
 
 -- | A text field that masks its displayed value with @•@, one per character,
@@ -603,8 +604,8 @@ numberField = textInputControl (T.filter isDigit) id
 passwordField :: Ord e
               => e                -- ^ element ID
               -> Text             -- ^ current value
-              -> (Text -> s -> s) -- ^ state modifier given the new value
-              -> UI e s ()
+              -> (Text -> msg) -- ^ message given the new value
+              -> UI e msg ()
 passwordField = textInputControl id (T.map (const '•'))
 
 -- | Sub-parts of a scrollbar, used as the inner tag when building the
@@ -631,7 +632,7 @@ contentRectFor ss r =
 -- place their thumb.
 trackContentRect :: Ord e
                   => e  -- ^ track's element ID
-                  -> UI e s Rectangle
+                  -> UI e msg Rectangle
 trackContentRect trackId = do
   bounds   <- getBounds
   styleSet <- getStyleSet trackId
@@ -646,7 +647,7 @@ dragToTrackPos :: Ord e
                -> Orientation  -- ^ track orientation
                -> Double       -- ^ thumb ratio (visible / total), in @[0, 1]@
                -> Rectangle    -- ^ track's content rectangle
-               -> UI e s (Maybe Double)
+               -> UI e msg (Maybe Double)
 dragToTrackPos trackId ori ratio contentRect = do
   dragging <- isDragging trackId
   btnDown  <- isButtonDown
@@ -660,14 +661,14 @@ dragToTrackPos trackId ori ratio contentRect = do
 -- and tab navigation via 'control' — and @thumbId@ is a purely decorative
 -- child positioned inside it. Returns the new position while @trackId@ is
 -- being dragged, 'Nothing' otherwise; the caller decides how to store or
--- dispatch it. Shared by 'scrollBar' and 'slider'.
+-- emit it. Shared by 'scrollBar' and 'slider'.
 rangeControl :: Ord e
              => e            -- ^ track's element ID
              -> e            -- ^ thumb's element ID
              -> Orientation  -- ^ track orientation
              -> Double       -- ^ thumb position within the track, in @[0, 1]@
              -> Double       -- ^ thumb ratio (visible / total), in @[0, 1]@
-             -> UI e s (Maybe Double)
+             -> UI e msg (Maybe Double)
 rangeControl trackId thumbId ori pos ratio = do
   contentRect <- trackContentRect trackId
   let thumbR = thumbRect ori pos ratio contentRect
@@ -685,7 +686,7 @@ scrollBar :: Ord e
           => (ScrollBarPart -> e)  -- ^ maps scrollbar parts to element IDs
           -> Orientation           -- ^ scrollbar orientation
           -> Double                -- ^ thumb ratio (visible / total), in @[0, 1]@
-          -> UI e s ()
+          -> UI e msg ()
 scrollBar mkId ori thumbRatio = do
   bounds <- getBounds
   pos <- readPos
@@ -802,8 +803,8 @@ viewport
   :: Ord e
   => (ViewportPart -> e)  -- ^ maps viewport parts to element IDs
   -> Size                  -- ^ virtual content size
-  -> UI e s ()             -- ^ content
-  -> UI e s ()
+  -> UI e msg ()             -- ^ content
+  -> UI e msg ()
 viewport mkId (Size cw ch) content = do
   outer <- getBounds
   let ow      = rectWidth outer
@@ -844,7 +845,7 @@ viewport mkId (Size cw ch) content = do
 --
 -- @
 -- data Element = ... | HSlider SliderPart
--- slider HSlider Horizontal value (\\v s -> s { volume = v })
+-- slider HSlider Horizontal value VolumeChanged
 -- @
 data SliderPart
   = SliderTrack -- ^ The track area behind the thumb.
@@ -860,8 +861,8 @@ slider :: Ord e
        => (SliderPart -> e)   -- ^ maps slider parts to element IDs
        -> Orientation         -- ^ slider orientation
        -> Double              -- ^ current value, in @[0, 1]@
-       -> (Double -> s -> s)  -- ^ state modifier given the new value
-       -> UI e s ()
+       -> (Double -> msg)  -- ^ message given the new value
+       -> UI e msg ()
 slider mkId ori value onChange = do
   let trackId = mkId SliderTrack
       clamped = max 0 (min 1 value)
@@ -871,7 +872,7 @@ slider mkId ori value onChange = do
         Vertical   -> (rectWidth contentRect,  rectHeight contentRect)
       thumbRatio  = if mainSz > 0 then crossSz / mainSz else 0
   newPos <- rangeControl trackId (mkId SliderThumb) ori clamped thumbRatio
-  forM_ newPos $ \p -> dispatch (onChange p)
+  forM_ newPos $ \p -> emit (onChange p)
   let step = 0.05
       (decrKey, incrKey) = case ori of
         Horizontal -> (KeyLeft,  KeyRight)
@@ -881,8 +882,8 @@ slider mkId ori value onChange = do
   incrKeyed <- isKeyPressed trackId incrKey
   let decrPressed = not disabled && decrKeyed
       incrPressed = not disabled && incrKeyed
-  when decrPressed $ dispatch (onChange (max 0 (clamped - step)))
-  when incrPressed $ dispatch (onChange (min 1 (clamped + step)))
+  when decrPressed $ emit (onChange (max 0 (clamped - step)))
+  when incrPressed $ emit (onChange (min 1 (clamped + step)))
 
 -- | Renders a windowed slice of a uniform-height item list: given the current
 -- scroll position (in pixels), the height of one item, and the total item
@@ -899,8 +900,8 @@ virtualContent
   :: Double              -- ^ current scroll position, in pixels
   -> Double              -- ^ height of one item, in pixels
   -> Int                 -- ^ total item count
-  -> (Int -> UI e s ())  -- ^ renders the item at the given index
-  -> UI e s ()
+  -> (Int -> UI e msg ())  -- ^ renders the item at the given index
+  -> UI e msg ()
 virtualContent scrollPos itemHeight itemCount renderItem = do
   vp <- getBounds
   let firstIdx = floor (scrollPos / itemHeight) :: Int
@@ -927,16 +928,16 @@ data ListBoxPart
 --
 -- As with 'selector', the /current/ item (keyboard focus, tracked here) is
 -- distinct from the /selected/ item (application state, via @selected@\/
--- @onChange@): arrow keys move the current item without dispatching; Enter,
--- Space, or a click activates it and dispatches @onChange@.
+-- @onChange@): arrow keys move the current item without emitting; Enter,
+-- Space, or a click activates it and emits @onChange@.
 listBox :: (Eq e, Ord e, Eq a)
         => (ListBoxPart -> e)                     -- ^ maps list-box parts to element IDs
         -> Double                                  -- ^ item height, in pixels
         -> [(a, Text)]                             -- ^ @(value, label)@ pairs
         -> a                                       -- ^ currently selected value
-        -> (a -> s -> s)
-        -> (e -> Bool -> (a, Text) -> UI e s ())  -- ^ @eid isSelected item@
-        -> UI e s ()
+        -> (a -> msg)
+        -> (e -> Bool -> (a, Text) -> UI e msg ())  -- ^ @eid isSelected item@
+        -> UI e msg ()
 listBox mkId itemHeight items selected onChange renderItem = do
   initialFocus <- getFocus
   hBox defaultBoxConfig
@@ -971,7 +972,7 @@ listBox mkId itemHeight items selected onChange renderItem = do
            disabled     <- isDisabled
            let activated = not disabled && (clicked || keyActivated)
            renderItem eid (selected == val) item
-           when activated $ dispatch (onChange val)
+           when activated $ emit (onChange val)
            -- Same same-frame-cascade guard as 'selector': only the item that
            -- already held focus before this frame (or was just clicked) may
            -- move focus.
@@ -1004,7 +1005,7 @@ listBox mkId itemHeight items selected onChange renderItem = do
 -- to get the total size needed for the control to display without clipping.
 measureChrome :: Ord e
               => e  -- ^ element ID
-              -> UI e s (Length, Length)
+              -> UI e msg (Length, Length)
 measureChrome eid = do
   style <- getStyle eid
   let m  = styleMargin style
@@ -1023,8 +1024,8 @@ measureChrome eid = do
 -- in interaction. See 'control' for the interactive counterpart.
 renderChrome :: Ord e
              => e          -- ^ element ID
-             -> UI e s ()  -- ^ content, run within the padded content rectangle
-             -> UI e s ()
+             -> UI e msg ()  -- ^ content, run within the padded content rectangle
+             -> UI e msg ()
 renderChrome eid content = do
   style <- getStyle eid
   r     <- getBounds
@@ -1052,8 +1053,8 @@ renderChrome eid content = do
 -- @
 control :: Ord e
         => e          -- ^ element ID
-        -> UI e s ()  -- ^ content, run within the padded content rectangle
-        -> UI e s ()
+        -> UI e msg ()  -- ^ content, run within the padded content rectangle
+        -> UI e msg ()
 control eid content = do
   applyHover eid
   applyFocus eid
@@ -1065,13 +1066,13 @@ control eid content = do
 -- use this rather than reimplementing the margin geometry in custom controls.
 isControlHit :: Ord e
              => e  -- ^ element ID
-             -> UI e s Bool
+             -> UI e msg Bool
 isControlHit eid = do
   s <- getStyle eid
   r <- getBounds
   withBounds (insetRect (styleMargin s) r) isRegionHit
 
-applyHover :: Ord e => e -> UI e s ()
+applyHover :: Ord e => e -> UI e msg ()
 applyHover eid = do
   whenEnabled $ do
     free     <- isMouseFree
@@ -1080,7 +1081,7 @@ applyHover eid = do
       isHit <- isControlHit eid
       when isHit $ setHovered eid
 
-applyFocus :: Ord e => e -> UI e s ()
+applyFocus :: Ord e => e -> UI e msg ()
 applyFocus eid = do
   whenEnabled $ do
     currentFocus <- getFocus
@@ -1096,7 +1097,7 @@ applyFocus eid = do
         wasClicked    = isHit && released && not isDragRelease
     setFocusWhen (isRetainingFocus || ((nothingIsFocused || wasClicked) && not isDragRelease)) eid
 
-applyTabNavigation :: Ord e => e -> UI e s ()
+applyTabNavigation :: Ord e => e -> UI e msg ()
 applyTabNavigation eid = whenEnabled $ do
   hasFocus <- isFocused eid
   input    <- getInput
@@ -1119,7 +1120,7 @@ applyTabNavigation eid = whenEnabled $ do
 isActivatedBy :: Ord e
               => e      -- ^ element ID
               -> [Key]  -- ^ keys that also activate, in addition to a click
-              -> UI e s Bool
+              -> UI e msg Bool
 isActivatedBy eid keys = do
   clicked  <- isClicked eid
   keyPress <- or <$> mapM (isKeyPressed eid) keys
@@ -1135,7 +1136,7 @@ isActivatedBy eid keys = do
 -- shape with the specifics filled in:
 --
 -- @
--- starRating :: Ord e => e -> Bool -> UI e s Bool
+-- starRating :: Ord e => e -> Bool -> UI e msg Bool
 -- starRating eid lit = activatable eid draw [KeyReturn, KeySpace]
 --   where
 --     draw = do
@@ -1144,9 +1145,9 @@ isActivatedBy eid keys = do
 -- @
 activatable :: Ord e
             => e          -- ^ element ID
-            -> UI e s ()  -- ^ draw action
+            -> UI e msg ()  -- ^ draw action
             -> [Key]      -- ^ keys that also activate, in addition to a click
-            -> UI e s Bool
+            -> UI e msg Bool
 activatable eid draw keys = do
   control eid draw
   isActivatedBy eid keys
@@ -1154,8 +1155,8 @@ activatable eid draw keys = do
 -- | Runs an action only when the given element holds keyboard focus.
 whenFocused :: Eq e
             => e          -- ^ element ID
-            -> UI e s ()  -- ^ action to run when focused
-            -> UI e s ()
+            -> UI e msg ()  -- ^ action to run when focused
+            -> UI e msg ()
 whenFocused eid action = isFocused eid >>= \f -> when f action
 
 -- | Draws @eid@'s focused-style border around the current bounds when @eid@
@@ -1166,7 +1167,7 @@ whenFocused eid action = isFocused eid >>= \f -> when f action
 -- current bounds are still the composite's own outer bounds.
 focusRing :: Ord e
           => e  -- ^ element ID
-          -> UI e s ()
+          -> UI e msg ()
 focusRing eid = whenFocused eid $ do
   styleSet <- getStyleSet eid
   let s = styleSetFocused styleSet
@@ -1179,7 +1180,7 @@ focusRing eid = whenFocused eid $ do
 isKeyPressed :: Eq e
              => e    -- ^ element ID
              -> Key  -- ^ key to test for
-             -> UI e s Bool
+             -> UI e msg Bool
 isKeyPressed eid k = do
   hasFoc  <- isFocused eid
   pressed <- any (\e -> key e == k) . inputKeyEvents <$> getInput

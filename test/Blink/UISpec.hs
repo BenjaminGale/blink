@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.UISpec (spec) where
 
-import Data.IORef
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
@@ -66,20 +65,20 @@ emptyTheme = Theme
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
-run :: UI () s a -> s -> IO (a, UIContext () s)
-run ui s = runUI ui (emptyUIContext testBounds noInput emptyTheme s noOpTextMeasurer)
+run :: UI () msg a -> IO (a, UIContext () msg)
+run ui = runUI ui (emptyUIContext testBounds noInput emptyTheme noOpTextMeasurer)
 
-runWith :: InputState -> UI () Int a -> IO (a, UIContext () Int)
-runWith input ui = runUI ui (emptyUIContext testBounds input emptyTheme (0 :: Int) noOpTextMeasurer)
+runWith :: InputState -> UI () msg a -> IO (a, UIContext () msg)
+runWith input ui = runUI ui (emptyUIContext testBounds input emptyTheme noOpTextMeasurer)
 
-runTwoElem :: UI TwoElems Int a -> IO (a, UIContext TwoElems Int)
-runTwoElem ui = runUI ui (emptyUIContext testBounds noInput twoElemTheme (0 :: Int) noOpTextMeasurer)
+runTwoElem :: UI TwoElems msg a -> IO (a, UIContext TwoElems msg)
+runTwoElem ui = runUI ui (emptyUIContext testBounds noInput twoElemTheme noOpTextMeasurer)
 
 freshCtx :: IO (UIContext () Int)
-freshCtx = snd <$> run (pure ()) (0 :: Int)
+freshCtx = snd <$> run0 (pure ())
 
 run0 :: UI () Int a -> IO (a, UIContext () Int)
-run0 ui = run ui 0
+run0 = run
 
 withCapture :: e -> UIContext e s -> UIContext e s
 withCapture e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnCaptured = Just e } }
@@ -131,7 +130,7 @@ spec = describe "Blink.UI" $ do
       b `shouldBe` testBounds
 
   context "during a drag (another element holds capture)" $ do
-    let base = emptyUIContext testBounds mouseOnCenterDown twoElemTheme (0 :: Int) noOpTextMeasurer
+    let base = emptyUIContext testBounds mouseOnCenterDown twoElemTheme noOpTextMeasurer :: UIContext TwoElems Int
 
     it "does not hover an element when another element holds capture" $ do
       let ctx = withCapture ElemB base
@@ -147,37 +146,18 @@ spec = describe "Blink.UI" $ do
       (_, ctx') <- runUI (control ElemA (pure ())) base
       ixnHovered (ctxInteraction ctx') `shouldBe` Just ElemA
 
-  it "getAppState returns the frame's starting state" $ do
-    (a, _) <- run getAppState (42 :: Int)
-    a `shouldBe` 42
+  it "getMessages returns emitted messages in emit order" $ do
+    (_, ctx) <- run0 (emit (1 :: Int) >> emit 2)
+    getMessages ctx `shouldBe` [1, 2]
 
-  it "getAppState still sees the pre-dispatch state later in the same frame" $ do
-    (a, _) <- run0 (dispatch (+ 1) >> getAppState)
-    a `shouldBe` 0
-
-  it "applyDispatches applies modifiers in dispatch order" $ do
-    (_, ctx) <- run0 (dispatch (+ 1) >> dispatch (* 10))
-    applyDispatches ctx `shouldBe` 10
-
-  it "applyDispatches returns the starting state when nothing was dispatched" $ do
+  it "getMessages returns [] when nothing was emitted" $ do
     (_, ctx) <- run0 (pure ())
-    applyDispatches ctx `shouldBe` 0
+    getMessages ctx `shouldBe` []
 
-  it "dispatchAsync enqueues exactly one job" $ do
-    let job s = pure (const s)
-    (_, ctx) <- run0 (dispatchAsync job)
-    length (getAsyncJobs ctx) `shouldBe` 1
-
-  it "dispatchAsync does not execute the job immediately" $ do
-    ref <- newIORef False
-    let job s = writeIORef ref True >> pure (const s)
-    _ <- run0 (dispatchAsync job)
-    readIORef ref `shouldReturn` False
-
-  it "nextFrameContext clears queued dispatches and async jobs" $ do
-    (_, ctx) <- run0 (dispatch (+ 1) >> dispatchAsync (pure . const))
+  it "nextFrameContext clears queued messages" $ do
+    (_, ctx) <- run0 (emit (1 :: Int))
     let ctx' = nextFrameContext testBounds noInput ctx
-    (applyDispatches ctx', length (getAsyncJobs ctx')) `shouldBe` (0, 0)
+    getMessages ctx' `shouldBe` []
 
   describe "Selection helpers" $ do
     let sel = Selection
@@ -486,12 +466,12 @@ spec = describe "Blink.UI" $ do
       b `shouldBe` False
 
     it "whenEnabled skips its body when the sub-tree is disabled" $ do
-      (_, ctx) <- run0 (disableWhen True (whenEnabled (dispatch (const 1))))
-      applyDispatches ctx `shouldBe` 0
+      (_, ctx) <- run0 (disableWhen True (whenEnabled (emit 1)))
+      getMessages ctx `shouldBe` []
 
     it "whenEnabled runs its body when the sub-tree is enabled" $ do
-      (_, ctx) <- run0 (whenEnabled (dispatch (const 1)))
-      applyDispatches ctx `shouldBe` 1
+      (_, ctx) <- run0 (whenEnabled (emit 1))
+      getMessages ctx `shouldBe` [1]
 
   describe "isMouseFree" $ do
     it "is True when no element holds capture" $ do
@@ -548,8 +528,8 @@ spec = describe "Blink.UI" $ do
           { themeElementStyles = Map.singleton () distinctStyles
           , themeDefaultStyle  = emptyStyleSet
           }
-        runStyled     ui       = runUI ui (emptyUIContext testBounds noInput       styledTheme (0 :: Int) noOpTextMeasurer)
-        runStyledWith input ui = runUI ui (emptyUIContext testBounds input         styledTheme (0 :: Int) noOpTextMeasurer)
+        runStyled     ui       = runUI ui (emptyUIContext testBounds noInput       styledTheme noOpTextMeasurer)
+        runStyledWith input ui = runUI ui (emptyUIContext testBounds input         styledTheme noOpTextMeasurer)
 
     describe "getStyleSet" $ do
       it "returns the element-specific style when registered" $ do
@@ -582,7 +562,8 @@ spec = describe "Blink.UI" $ do
         styleBackground s `shouldBe` RGBA 1 1 1 1
 
   describe "animation" $ do
-    let baseAnimCtx = (emptyUIContext testBounds noInput emptyTheme (0 :: Int) noOpTextMeasurer)
+    let baseAnimCtx :: UIContext () Int
+        baseAnimCtx = (emptyUIContext testBounds noInput emptyTheme noOpTextMeasurer)
                         { ctxAnimation = AnimationState { animDelta = 0.016, animElapsed = 1.5, animIsTick = False } }
         tickCtx    = baseAnimCtx { ctxAnimation = (ctxAnimation baseAnimCtx) { animIsTick = True } }
         nonTickCtx = baseAnimCtx
@@ -596,12 +577,12 @@ spec = describe "Blink.UI" $ do
       e `shouldBe` 1.5
 
     it "withAnimationFrame runs its body on tick frames" $ do
-      (_, ctx) <- runUI (withAnimationFrame (dispatch (const 1))) tickCtx
-      applyDispatches ctx `shouldBe` 1
+      (_, ctx) <- runUI (withAnimationFrame (emit 1)) tickCtx
+      getMessages ctx `shouldBe` [1]
 
     it "withAnimationFrame skips its body on non-tick frames" $ do
-      (_, ctx) <- runUI (withAnimationFrame (dispatch (const 1))) nonTickCtx
-      applyDispatches ctx `shouldBe` 0
+      (_, ctx) <- runUI (withAnimationFrame (emit 1)) nonTickCtx
+      getMessages ctx `shouldBe` []
 
     it "requiresAnimation sets the animation continuation flag" $ do
       (_, ctx) <- runUI requiresAnimation tickCtx

@@ -88,7 +88,7 @@ demoApp = App
   , view    = demoView
   }
 
-type DemoUI = UI Element AppState
+type DemoUI = LegacyUI Element AppState
 
 -- Shell
 
@@ -111,7 +111,7 @@ sidebar s = do
   where
     navBtn i lbl = do
       clicked <- button (NavBtn i) lbl
-      when clicked $ dispatch $ \st -> st { currentPage = pageForIndex i }
+      when clicked $ emit $ \st -> st { currentPage = pageForIndex i }
 
 pageForIndex :: Int -> Page
 pageForIndex 0 = BasicControlsPage initialBasicControls
@@ -201,11 +201,11 @@ rowButtons ps = do
   where
     btn i txt = do
       clicked <- button (Btn i) txt
-      when clicked $ dispatch $
+      when clicked $ emit $
         \s -> updateBasicControls s (\p -> p { clickCount = min 50 (clickCount p + i) })
     resetBtn = do
       clicked <- button (Btn 0) "Reset"
-      when clicked $ dispatch $
+      when clicked $ emit $
         \s -> updateBasicControls s (\p -> p { clickCount = 0 })
 
 rowInput :: BasicControlsState -> DemoUI ()
@@ -323,7 +323,7 @@ staticScrollList ps =
       let isSelected = lastClickedStatic ps == Just i
           txt = (if isSelected then "✓ " else "") <> "Item " <> T.pack (show i)
       clicked <- button (ScrollItem1 i) txt
-      when clicked $ dispatch $ \s -> updateScrollState s (\p -> p { lastClickedStatic = Just i })
+      when clicked $ emit $ \s -> updateScrollState s (\p -> p { lastClickedStatic = Just i })
 
 dynamicScrollList :: ScrollPageState -> DemoUI ()
 dynamicScrollList ps =
@@ -438,9 +438,8 @@ updateLayoutState s f = case currentPage s of
 
 -- Top-level view
 
-demoView :: DemoUI ()
-demoView = do
-  s     <- getAppState
+demoView :: AppState -> DemoUI ()
+demoView s = do
   input <- getInput
   win   <- getBounds
   let winSize = (round (rectWidth win) :: Int, round (rectHeight win) :: Int)
@@ -461,7 +460,7 @@ demoView = do
       newInput = if not (T.null typed)
                    then if typed == " " then "Space" else "Character " <> typed
                    else keyName
-  dispatch $ \s' -> s'
+  emit $ \s' -> s'
     { isHovering     = isJust mHov
     , lastInput      = if T.null newInput then lastInput s' else newInput
     , lastInputCount = if T.null newInput then lastInputCount s'

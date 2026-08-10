@@ -1,9 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.AppSpec (spec) where
 
-import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
-import Control.Monad (when)
-import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Test.Hspec
@@ -80,7 +77,7 @@ counterApp = App
   { startUp        = pure 0
 
   , theme          = const (emptyTheme testStyleSet)
-  , view           = dispatch (+1)
+  , view           = \_ -> emit (+1)
   }
 
 -- Emits a FillRect covering the full window bounds each frame.
@@ -89,7 +86,7 @@ drawingApp c = App
   { startUp        = pure ()
 
   , theme          = const (emptyTheme testStyleSet)
-  , view           = fillRect c
+  , view           = \_ -> fillRect c
   }
 
 -- Dispatches (+1) and also draws the current app state as text.
@@ -100,9 +97,8 @@ stateDrawApp = App
   { startUp        = pure 0
 
   , theme          = const (emptyTheme testStyleSet)
-  , view           = do
-      n <- getAppState
-      dispatch (+1)
+  , view           = \n -> do
+      emit (+1)
       drawText (RGBA 0 0 0 1) AlignLeft (T.pack (show n))
   }
 
@@ -112,9 +108,9 @@ keyCountApp = App
   { startUp        = pure 0
 
   , theme          = const (emptyTheme testStyleSet)
-  , view           = do
+  , view           = \_ -> do
       input <- getInput
-      dispatch (+ length (inputKeyEvents input))
+      emit (+ length (inputKeyEvents input))
   }
 
 -- Reads scroll state as a counter, increments it, and dispatches the old value as app state.
@@ -122,10 +118,10 @@ uiStateApp :: App () Int
 uiStateApp = App
   { startUp = pure 0
   , theme   = const (emptyTheme testStyleSet)
-  , view    = do
+  , view    = \_ -> do
       pos <- getScrollState ()
       setScrollState () (pos + 1)
-      dispatch (\_ -> round pos)
+      emit (\_ -> round pos)
   }
 
 -- Dispatches the animation delta as state so it can be observed.
@@ -134,9 +130,9 @@ deltaApp = App
   { startUp        = pure 999
 
   , theme          = const (emptyTheme testStyleSet)
-  , view           = do
+  , view           = \_ -> do
       d <- getAnimDelta
-      dispatch (const d)
+      emit (const d)
   }
 
 spec :: Spec
@@ -203,37 +199,9 @@ spec = do
         result <- stepFrame handle oneKey
         resultState result `shouldBe` 1
 
-    describe "async dispatch" $ do
-      it "an async modifier is applied at the start of the next frame" $ do
-        done <- newEmptyMVar
-        let asyncApp = App
-              { startUp        = pure 0
-              , theme          = const (emptyTheme testStyleSet)
-              , view           = do
-                  s <- getAppState
-                  when (s == 0) $ dispatchAsync $ \_ -> pure (+10)
-              } :: App () Int
-            notify = putMVar done ()
-        handle <- configureEventDriven asyncApp notify nullMeasurer
-        _ <- stepFrame handle normalInput
-        takeMVar done
-        r2 <- stepFrame handle normalInput
-        resultState r2 `shouldBe` 10
-
-      it "the notify callback is called when an async job completes" $ do
-        notified <- newIORef False
-        done     <- newEmptyMVar
-        let notify = writeIORef notified True >> putMVar done ()
-            asyncApp = App
-              { startUp        = pure ()
-            
-              , theme          = const (emptyTheme testStyleSet)
-              , view           = dispatchAsync $ \_ -> pure id
-              } :: App () ()
-        handle <- configureEventDriven asyncApp notify nullMeasurer
-        _ <- stepFrame handle normalInput
-        takeMVar done
-        readIORef notified `shouldReturn` True
+    -- Async dispatch (dispatchAsync) is removed for the duration of the
+    -- Elm-architecture migration; it returns in a later phase as a Cmd
+    -- returned from `update`. See blink-elm-migration-plan.md.
 
     describe "frame context progression" $ do
       it "UI state written in frame N is readable in frame N+1" $ do
