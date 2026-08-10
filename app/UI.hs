@@ -106,7 +106,7 @@ sidebar s = do
     , (Layout Fill btnH TopLeft, navBtn 3 "Layout")
     , (Layout Fill Fill  TopLeft, pure ())
     , (Layout Fill cbH  TopLeft,
-         checkbox CheckboxBox2 "Dark mode" (darkMode s) (\v st -> st { darkMode = v }))
+         checkbox CheckboxBox2 "Dark mode" (darkMode s) [onToggle (\v st -> st { darkMode = v })])
     ]
   where
     navBtn i lbl = button (NavBtn i) lbl [onClick (\st -> st { currentPage = pageForIndex i })]
@@ -175,8 +175,8 @@ rowCheckboxes ps = do
       h = Exactly (max 20 th)
   hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
     [ (Layout w h MiddleLeft,
-         checkbox CheckboxBox1 "Enable editing" (editingEnabled ps) (\v s ->
-           updateBasicControls s (\p -> p { editingEnabled = v })))
+         checkbox CheckboxBox1 "Enable editing" (editingEnabled ps) [onToggle (\v s ->
+           updateBasicControls s (\p -> p { editingEnabled = v }))])
     ]
 
 rowButtons :: BasicControlsState -> DemoUI ()
@@ -347,8 +347,8 @@ progressView ps = do
   let cbH = Exactly (max 20 th)
   vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
     [ (Layout Fill cbH TopLeft,
-         checkbox CheckboxBox3 "Animate" (animating ps) (\v s ->
-           updateProgressState s (\p -> p { animating = v })))
+         checkbox CheckboxBox3 "Animate" (animating ps) [onToggle (\v s ->
+           updateProgressState s (\p -> p { animating = v }))])
     , (Layout Fill Fill TopLeft,
          if animating ps
            then progressBar ProgressBar2 Indeterminate
@@ -374,11 +374,11 @@ layoutView ps = do
     , (Layout Fill (Exactly 200) TopLeft, borderLayoutDemo)
     , (Layout Fill headerH       TopLeft, sectionHeader "hBox" $
          checkbox CheckboxBox4 "Fill cross axis" (hboxFillCross ps)
-           (\v s -> updateLayoutState s (\p -> p { hboxFillCross = v })))
+           [onToggle (\v s -> updateLayoutState s (\p -> p { hboxFillCross = v }))])
     , (Layout Fill (Exactly 100) TopLeft, hboxDemo (hboxFillCross ps))
     , (Layout Fill headerH       TopLeft, sectionHeader "vBox" $
          checkbox CheckboxBox5 "Fill cross axis" (vboxFillCross ps)
-           (\v s -> updateLayoutState s (\p -> p { vboxFillCross = v })))
+           [onToggle (\v s -> updateLayoutState s (\p -> p { vboxFillCross = v }))])
     , (Layout Fill Fill          TopLeft, vboxDemo (vboxFillCross ps))
     ]
 

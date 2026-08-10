@@ -150,6 +150,8 @@ module Blink.Controls
   , onClickTo
   , checkbox
   , checkboxMark
+  , CheckboxEvent (..)
+  , onToggle
   , radioGroup
   , selector
   , textInputControl
@@ -316,18 +318,37 @@ progressBar eid Indeterminate = do
     withBounds (r { rectX = left, rectWidth = bandW }) $
       fillRect (styleTextColour style)
 
+-- | Events reported by 'checkboxMark' and 'checkbox': 'Toggled' with the new
+-- checked state when activated, or a lifecycle event via 'CheckboxControl'
+-- (see 'ControlEvent').
+data CheckboxEvent = Toggled Bool | CheckboxControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent CheckboxEvent where
+  liftControl = CheckboxControl
+  matchControl (CheckboxControl ce) = Just ce
+  matchControl _                    = Nothing
+
+-- | Emits @f newChecked@ when 'Toggled'.
+onToggle :: (Bool -> msg) -> Attr e CheckboxEvent msg
+onToggle f = On $ \ev -> case ev of
+  Toggled b -> [OutMsg (f b)]
+  _         -> []
+
 -- | The interactive checkmark box on its own, with no adjacent label. An
--- 'activatable' control (click, Enter, or Space) that draws a checkmark when
+-- activatable control (click, Enter, or Space) that draws a checkmark when
 -- @checked@. Exported separately from 'checkbox' so callers that need
 -- non-standard label placement can still get the standard toggle behaviour.
 checkboxMark :: Ord e
-             => e                -- ^ element ID
-             -> Bool             -- ^ current checked state
-             -> (Bool -> msg) -- ^ message given the new checked state
+             => e     -- ^ element ID
+             -> Bool  -- ^ current checked state
+             -> [Attr e CheckboxEvent msg]
              -> UI e msg ()
-checkboxMark boxId checked onToggle = do
-  activated <- activatable boxId draw [KeyReturn, KeySpace]
-  when activated $ emit (onToggle (not checked))
+checkboxMark boxId checked attrs = do
+  ctrlEvs   <- controlEvents boxId
+  renderChrome boxId draw
+  activated <- isActivatedBy boxId [KeyReturn, KeySpace]
+  fire attrs (ctrlEvs ++ [Toggled (not checked) | activated])
   where
     draw = do
       style <- getStyle boxId
@@ -341,25 +362,25 @@ checkboxLabel
   -> UI e msg ()
 checkboxLabel style = drawText (styleTextColour style) AlignLeft
 
--- | A togglable checkbox with an adjacent label. Dispatches the state modifier
--- @onToggle (not checked)@ when activated by a click or the Enter key.
--- Composed from 'checkboxMark' (the interactive box) laid out beside
--- 'checkboxLabel' (plain text) via 'hBox', with 'focusRing' drawn around the
--- pair since neither half alone spans the whole composite.
+-- | A togglable checkbox with an adjacent label. Fires 'Toggled' with the
+-- new checked state when activated by a click or the Enter key. Composed
+-- from 'checkboxMark' (the interactive box) laid out beside 'checkboxLabel'
+-- (plain text) via 'hBox', with 'focusRing' drawn around the pair since
+-- neither half alone spans the whole composite.
 --
 -- @
--- checkbox NotifyMe "Notify me by email" (notifyMe model) NotifyMeChanged
+-- checkbox NotifyMe "Notify me by email" (notifyMe model) [onToggle NotifyMeChanged]
 -- @
 checkbox :: Ord e
-         => e                -- ^ element ID
-         -> Text             -- ^ label text
-         -> Bool             -- ^ current checked state
-         -> (Bool -> msg) -- ^ message given the new checked state
+         => e     -- ^ element ID
+         -> Text  -- ^ label text
+         -> Bool  -- ^ current checked state
+         -> [Attr e CheckboxEvent msg]
          -> UI e msg ()
-checkbox boxId text checked onToggle = do
+checkbox boxId text checked attrs = do
   style <- getStyle boxId
   hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
-    [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, checkboxMark boxId checked onToggle)
+    [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, checkboxMark boxId checked attrs)
     , (Layout Fill Fill MiddleLeft, checkboxLabel style text)
     ]
   focusRing boxId

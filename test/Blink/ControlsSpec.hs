@@ -7,7 +7,7 @@ import Test.Hspec
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Controls (ButtonEvent (..), ControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, button, checkbox, checkboxMark, control, focusRing, isControlHit, listBox, mouseToTrackPos, numberField, onAny, onClick, onClickTo, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
+import Blink.Controls (ButtonEvent (..), ControlEvent (..), HasControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, button, checkbox, checkboxMark, control, controlEvents, focusRing, isControlHit, listBox, mouseToTrackPos, numberField, onAny, onClick, onClickTo, onToggle, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -305,6 +305,38 @@ forwardTabNavigationSpec = describe "forward Tab navigation (multiple controls)"
       (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab []] }))
     getFocused ctx' `shouldBe` Just OtherControl
 
+-- | A minimal event type instantiating 'HasControlEvent', used to test
+-- 'controlEvents' directly rather than through any particular control.
+newtype ProbeEvent = Probe ControlEvent deriving (Eq, Show)
+
+instance HasControlEvent ProbeEvent where
+  liftControl = Probe
+  matchControl (Probe ce) = Just ce
+
+-- | Every attribute-based control derives its 'FocusGained'\/'FocusLost'
+-- reporting from 'controlEvents', so its gain\/lost\/retain logic is tested
+-- once here rather than once per control.
+controlEventsSpec :: Spec
+controlEventsSpec = describe "controlEvents" $ do
+  let runProbe :: UIContext TestElement () -> IO [ProbeEvent]
+      runProbe = fmap fst . runUI (controlEvents TestControl)
+
+  it "reports FocusGained when the element gains focus" $ do
+    evs <- runProbe (withButtonReleased (mkCtx (mouseAt (Point 50 50) False [])))
+    evs `shouldContain` [Probe FocusGained]
+
+  it "reports FocusLost when the element loses focus" $ do
+    evs <- runProbe (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab []] }))
+    evs `shouldContain` [Probe FocusLost]
+
+  it "reports nothing when focus is retained" $ do
+    evs <- runProbe (withFocus (Just TestControl) (mkCtx noInput))
+    evs `shouldBe` []
+
+  it "reports nothing when the element stays unfocused" $ do
+    evs <- runProbe (withFocus (Just OtherControl) (mkCtx noInput))
+    evs `shouldBe` []
+
 -- | Background and border rendering tests. Only applicable to single controls
 --   that fill controlRect directly (not composite widgets).
 backgroundAndBorderSpec :: WidgetRunner -> Spec
@@ -381,18 +413,18 @@ mkCheckboxMarkCtx :: InputState -> UIContext TestElement (Maybe Bool)
 mkCheckboxMarkCtx input = emptyUIContext controlRect input checkboxMarkTheme noOpTextMeasurer
 
 runCheckboxMark :: Bool -> UIContext TestElement (Maybe Bool) -> IO (UIContext TestElement (Maybe Bool))
-runCheckboxMark checked ctx = fmap (settle . snd) $ runUI (checkboxMark TestControl checked Just) ctx
+runCheckboxMark checked ctx = fmap (settle . snd) $ runUI (checkboxMark TestControl checked [onToggle Just]) ctx
 
 runCheckboxMarkControl :: WidgetRunner
-runCheckboxMarkControl ctx = fmap (settle . snd) $ runUI (checkboxMark TestControl False (const ())) (ctx { ctxTheme = checkboxMarkTheme })
+runCheckboxMarkControl ctx = fmap (settle . snd) $ runUI (checkboxMark TestControl False [onToggle (const ())]) (ctx { ctxTheme = checkboxMarkTheme })
 
 -- Forces checkboxTheme so the 20×20 box slot is hittable regardless of mkCtx's theme.
 runCheckboxControl :: WidgetRunner
-runCheckboxControl ctx = fmap (settle . snd) $ runUI (checkbox TestControl "test label" False (const ())) (ctx { ctxTheme = checkboxTheme })
+runCheckboxControl ctx = fmap (settle . snd) $ runUI (checkbox TestControl "test label" False [onToggle (const ())]) (ctx { ctxTheme = checkboxTheme })
 
 -- Toggle tests record the dispatched value in a Maybe Bool application state.
 runCheckbox :: Bool -> UIContext TestElement (Maybe Bool) -> IO (UIContext TestElement (Maybe Bool))
-runCheckbox checked ctx = fmap (settle . snd) $ runUI (checkbox TestControl "test label" checked Just) ctx
+runCheckbox checked ctx = fmap (settle . snd) $ runUI (checkbox TestControl "test label" checked [onToggle Just]) ctx
 
 mkCheckboxCtx :: InputState -> UIContext TestElement (Maybe Bool)
 mkCheckboxCtx input = emptyUIContext controlRect input checkboxTheme noOpTextMeasurer
@@ -546,6 +578,7 @@ spec :: Spec
 spec = describe "Controls" $ do
   defaultFocusArbitrationSpec
   forwardTabNavigationSpec
+  controlEventsSpec
 
   describe "progressBar" $ do
     describe "background and border" $ backgroundAndBorderSpec (runProgressBar 0.5)
@@ -667,24 +700,14 @@ spec = describe "Controls" $ do
         getUiEffects ctx' `shouldContain` [SetSelectionAt TestControl (cursor 0)]
         getMessages ctx' `shouldBe` []
 
-    describe "control events" $ do
-      let mkEventCtx :: InputState -> UIContext TestElement ButtonEvent
-          mkEventCtx input = emptyUIContext controlRect input testTheme noOpTextMeasurer
-
-      it "reports FocusGained via ButtonEvent's Control constructor when it gains focus" $ do
+    describe "control events" $
+      -- Full gain/lost/retain coverage lives in controlEventsSpec, against
+      -- 'controlEvents' directly; this just checks button wires that shared
+      -- result into its own event type via 'Control'.
+      it "reports lifecycle events via ButtonEvent's Control constructor" $ do
         (_, ctx') <- runUI (button TestControl "label" [onAny (\ev -> [OutMsg ev])])
-          (withButtonReleased (mkEventCtx (mouseAt (Point 50 50) False [])))
+          (withButtonReleased (emptyUIContext controlRect (mouseAt (Point 50 50) False []) testTheme noOpTextMeasurer))
         getMessages ctx' `shouldContain` [Control FocusGained]
-
-      it "reports FocusLost via ButtonEvent's Control constructor when it loses focus" $ do
-        (_, ctx') <- runUI (button TestControl "label" [onAny (\ev -> [OutMsg ev])])
-          (withFocus (Just TestControl) (mkEventCtx noInput { inputKeyEvents = [KeyEvent KeyTab []] }))
-        getMessages ctx' `shouldContain` [Control FocusLost]
-
-      it "does not report a lifecycle event when focus is retained" $ do
-        (_, ctx') <- runUI (button TestControl "label" [onAny (\ev -> [OutMsg ev])])
-          (withFocus (Just TestControl) (mkEventCtx noInput))
-        getMessages ctx' `shouldBe` []
 
   describe "checkboxMark" $ do
     controlBehaviourSpec runCheckboxMarkControl (Point 50 50)
@@ -721,12 +744,12 @@ spec = describe "Controls" $ do
 
     describe "disabled" $ do
       it "does not dispatch when clicked while disabled" $ do
-        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (checkboxMark TestControl False Just))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (checkboxMark TestControl False [onToggle Just]))
           (withButtonReleased (mkCheckboxMarkCtx (mouseAt (Point 50 50) False [])))
         getMessages ctx' `shouldBe` []
 
       it "does not dispatch when Enter is pressed while disabled" $ do
-        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (checkboxMark TestControl False Just))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (checkboxMark TestControl False [onToggle Just]))
           (withFocus (Just TestControl) (mkCheckboxMarkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         getMessages ctx' `shouldBe` []
 
@@ -775,11 +798,11 @@ spec = describe "Controls" $ do
 
     describe "disabled" $ do
       it "does not dispatch when clicked while disabled" $ do
-        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (checkbox TestControl "test label" False Just)) (withButtonReleased (mkCheckboxCtx (mouseAt boxPoint False [])))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (checkbox TestControl "test label" False [onToggle Just])) (withButtonReleased (mkCheckboxCtx (mouseAt boxPoint False [])))
         getMessages ctx' `shouldBe` []
 
       it "does not dispatch when Enter is pressed while disabled" $ do
-        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (checkbox TestControl "test label" False Just)) (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (checkbox TestControl "test label" False [onToggle Just])) (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         getMessages ctx' `shouldBe` []
 
     describe "rendering" $ do
