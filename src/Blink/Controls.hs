@@ -566,15 +566,22 @@ textInputControl inputFilter displayFilter eid value onChange = do
         then applyEdit inputFilter onChange value input (anchor2, active2)
         else pure (anchor2, active2)
 
-    when enabled $ setSelection eid (Selection anchor3 active3)
+    when enabled $ emitUi (SetSelectionAt eid (Selection anchor3 active3))
 
-    when enabled $ do
-      curX <- charOffset displayValue active3
-      let newScrollX = resolveScroll w scrollX (realToFrac curX)
-      when (newScrollX /= scrollX) $ setScrollState eid newScrollX
+    -- Computed locally rather than re-read via 'getScrollState': scroll
+    -- writes are deferred (applied between frames), so a same-frame re-read
+    -- would still see the pre-write value and the cursor would lag the
+    -- auto-scroll by one frame.
+    effectiveScrollX <-
+      if enabled
+        then do
+          curX <- charOffset displayValue active3
+          let newScrollX = resolveScroll w scrollX (realToFrac curX)
+          when (newScrollX /= scrollX) $ emitUi (ScrollTo eid newScrollX)
+          pure newScrollX
+        else pure scrollX
 
-    scrollX' <- getScrollState eid
-    drawTextInputContent style bounds displayValue hasFocus enabled scrollX' (anchor3, active3)
+    drawTextInputContent style bounds displayValue hasFocus enabled effectiveScrollX (anchor3, active3)
 
 -- | A plain single-line text entry field, with no keystroke filtering or
 -- display masking.
@@ -705,7 +712,8 @@ scrollBar mkId ori thumbRatio = do
 
     readPos = getScrollState trackId
 
-    writePos v = setScrollState trackId v
+    writePosAbs v  = emitUi (ScrollTo trackId v)
+    writePosDelta v = emitUi (ScrollBy trackId v)
 
     layoutFn = case ori of
       Vertical   -> vBox
@@ -718,17 +726,17 @@ scrollBar mkId ori thumbRatio = do
       Vertical   -> "▼"
       Horizontal -> "▶"
 
-    decrBtn pos' ratio' = do
+    decrBtn _ ratio' = do
       clicked <- button (mkId ScrollDecrBtn) decrSym
-      when clicked $ writePos (max 0 (pos' - ratio'))
+      when clicked $ writePosDelta (negate ratio')
 
-    incrBtn pos' ratio' = do
+    incrBtn _ ratio' = do
       clicked <- button (mkId ScrollIncrBtn) incrSym
-      when clicked $ writePos (min 1 (pos' + ratio'))
+      when clicked $ writePosDelta ratio'
 
     track pos' ratio' = do
       newPos <- rangeControl trackId (mkId ScrollThumb) ori pos' ratio'
-      forM_ newPos writePos
+      forM_ newPos writePosAbs
 
 -- | Computes the bounding rectangle of a thumb within a track. @pos@ is the
 -- position along the track and @ratio@ is the fraction of the track the thumb
@@ -992,7 +1000,7 @@ listBox mkId itemHeight items selected onChange renderItem = do
             | otherwise                   = scrollPx
           clampedPx = max 0 (min maxScroll newScrollPx)
           newFrac   = if maxScroll > 0 then clampedPx / maxScroll else 0
-      when (clampedPx /= scrollPx) $ setScrollState trackId newFrac
+      when (clampedPx /= scrollPx) $ emitUi (ScrollTo trackId newFrac)
 
     scrollBarArea = do
       vp <- getBounds

@@ -227,21 +227,23 @@ spec = describe "Blink.UI" $ do
       (ss, _) <- run0 (getSelections ())
       ss `shouldBe` []
 
-    it "returns the selections just written in the same frame" $ do
-      let s = Selection 1 4
-      (ss, _) <- run0 (setSelections () [s] >> getSelections ())
-      ss `shouldBe` [s]
-
     it "getSelection returns Nothing when no selection exists" $ do
       (s, _) <- run0 (getSelection ())
       s `shouldBe` Nothing
 
-    it "getSelection returns the first selection after setSelection" $ do
-      (s, _) <- run0 (setSelection () (cursor 3) >> getSelection ())
-      s `shouldBe` Just (cursor 3)
+    it "SetSelectionAt is queued rather than applied immediately" $ do
+      (ss, ctx) <- run0 (emitUi (SetSelectionAt () (Selection 1 4)) >> getSelections ())
+      ss `shouldBe` []
+      getUiEffects ctx `shouldBe` [SetSelectionAt () (Selection 1 4)]
 
-    it "setSelection replaces any existing selections" $ do
-      (ss, _) <- run0 (setSelections () [Selection 0 5, Selection 7 9] >> setSelection () (cursor 1) >> getSelections ())
+    it "a queued SetSelectionAt is visible via getSelections once applied" $ do
+      (_, ctx) <- run0 (emitUi (SetSelectionAt () (Selection 1 4)))
+      (ss, _) <- runUI (getSelections ()) (applyUiEffects (getUiEffects ctx) ctx)
+      ss `shouldBe` [Selection 1 4]
+
+    it "a later SetSelectionAt in the same frame overrides an earlier one" $ do
+      (_, ctx) <- run0 (emitUi (SetSelectionAt () (Selection 0 5)) >> emitUi (SetSelectionAt () (cursor 1)))
+      (ss, _) <- runUI (getSelections ()) (applyUiEffects (getUiEffects ctx) ctx)
       ss `shouldBe` [cursor 1]
 
   describe "scroll state" $ do
@@ -249,13 +251,24 @@ spec = describe "Blink.UI" $ do
       (v, _) <- run0 (getScrollState ())
       v `shouldBe` 0
 
-    it "returns the value just written in the same frame" $ do
-      (v, _) <- run0 (setScrollState () 0.5 >> getScrollState ())
+    it "ScrollTo is queued rather than applied immediately" $ do
+      (v, ctx) <- run0 (emitUi (ScrollTo () 0.5) >> getScrollState ())
+      v `shouldBe` 0
+      getUiEffects ctx `shouldBe` [ScrollTo () 0.5]
+
+    it "a queued ScrollTo is visible via getScrollState once applied" $ do
+      (_, ctx) <- run0 (emitUi (ScrollTo () 0.5))
+      (v, _) <- runUI (getScrollState ()) (applyUiEffects (getUiEffects ctx) ctx)
       v `shouldBe` 0.5
 
+    it "ScrollBy composes with the current position, clamped to [0, 1]" $ do
+      (_, ctx) <- run0 (emitUi (ScrollTo () 0.5) >> emitUi (ScrollBy () 0.7))
+      (v, _) <- runUI (getScrollState ()) (applyUiEffects (getUiEffects ctx) ctx)
+      v `shouldBe` 1.0
+
     it "keeps scroll positions separate per element" $ do
-      (v, _) <- runTwoElem
-        (setScrollState ElemA 0.3 >> setScrollState ElemB 0.7 >> getScrollState ElemA)
+      (_, ctx) <- runTwoElem (emitUi (ScrollTo ElemA 0.3) >> emitUi (ScrollTo ElemB 0.7))
+      (v, _) <- runUI (getScrollState ElemA) (applyUiEffects (getUiEffects ctx) ctx)
       v `shouldBe` 0.3
 
   describe "clampScrollPos" $ do

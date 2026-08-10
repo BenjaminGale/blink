@@ -120,7 +120,7 @@ uiStateApp = App
   , theme   = const (emptyTheme testStyleSet)
   , view    = \_ -> do
       pos <- getScrollState ()
-      setScrollState () (pos + 1)
+      emitUi (ScrollTo () (pos + 1))
       emit (\_ -> round pos)
   }
 

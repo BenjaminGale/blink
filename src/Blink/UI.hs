@@ -41,17 +41,28 @@ Host code not yet migrated off the value-callback pattern (where a control's
 callback returns a full @s -> s@ state modifier rather than a @msg@) can use
 'LegacyUI' and the compatibility 'applyDispatches' to keep working unchanged.
 
-= Scroll and selection state
+= Focus, scroll, and selection
 
-Some controls carry presentation state that is no business of the application
-— a scrollbar's position, a text input's cursor. This state is baked directly
-into the 'UIContext' via 'ctxElements': scroll positions are stored in
-'elmScrollStates' (a @Map e 'ScrollState'@) and selections in 'elmSelections'
-(a @Map e ['Selection']@). Both maps are keyed by element ID, populate lazily
-on first write, and persist across frames. Controls read and write them through
-'getScrollState' \/ 'setScrollState' and 'getSelections' \/ 'setSelections';
-the application never sees the traffic. Changes take effect immediately:
-later reads in the same frame see the new value.
+Some controls carry presentation state that is no business of the
+application — which element holds keyboard focus, a scrollbar's position, a
+text input's cursor. This state is baked directly into the 'UIContext':
+focus lives in 'InteractionState', and scroll positions ('elmScrollStates', a
+@Map e 'ScrollState'@) and selections ('elmSelections', a @Map e
+['Selection']@) live in 'ctxElements'. Both maps are keyed by element ID,
+populate lazily on first write, and persist across frames; the application
+never sees the traffic.
+
+Focus ('setFocus', 'clearFocus') changes immediately, exactly like
+'setHovered' and mouse capture: a control's decision (take focus when
+nothing else has it, hand off on Tab) is only correct if the next sibling in
+the same tree walk can see it, the same way capture arbitration needs a
+later hoverer to see that an earlier one already has the mouse. Scroll and
+selection have no such sibling-arbitration requirement — each write targets
+a specific element nobody else is contending for — so they queue a
+'UiEffect' with 'emitUi' instead of mutating immediately; a write made
+partway through a frame is not visible to a read later in that same frame.
+'nextFrameContext' applies the queued effects via 'applyUiEffects' when
+building the next frame's context, so the change takes effect starting then.
 
 = The render loop
 
@@ -175,6 +186,8 @@ module Blink.UI
   , InteractionState (..)
   , ElementState (..)
   , FrameOutputs (..)
+  , Out (..)
+  , UiEffect (..)
     -- * Re-export for convenience
     -- | From "Blink.Rendering"; re-exported since 'emptyUIContext' takes a
     -- 'TextMeasurer' and 'noOpTextMeasurer' is the usual choice outside a
@@ -186,22 +199,22 @@ module Blink.UI
   , nextFrameContext
   , getDrawCommands
   , getMessages
+  , getUiEffects
+  , applyUiEffects
     -- * Messages
   , emit
+  , emitUi
     -- * Legacy value-callback compatibility
   , LegacyUI
   , applyDispatches
     -- * Scroll state
   , ScrollState (..)
   , getScrollState
-  , setScrollState
   , clampScrollPos
     -- * Selections
   , Selection (..)
   , getSelections
-  , setSelections
   , getSelection
-  , setSelection
   , selectionLow
   , selectionHigh
   , selectionHasExtent
@@ -302,6 +315,35 @@ data Selection = Selection
   }
   deriving (Eq, Show)
 
+-- | A cross-frame presentation effect: a scroll or selection change that
+-- takes effect starting the next frame rather than immediately. Queued with
+-- 'emitUi' and applied by 'applyUiEffects', which 'nextFrameContext' runs
+-- automatically between frames. Focus is not represented here — see
+-- 'setFocus' for why it changes immediately instead.
+data UiEffect e
+  = ScrollTo e Double
+    -- ^ Sets the scroll position to an absolute value, stored as given. Most
+    -- callers ('scrollBar', 'viewport', 'listBox') use the @[0, 1]@
+    -- convention documented on 'ScrollState' and pass an already-clamped
+    -- value; 'textInputControl' is the one exception, storing an unbounded
+    -- pixel offset instead.
+  | ScrollBy e Double
+    -- ^ Adjusts the scroll position by a delta, clamped to @[0, 1]@ — this
+    -- constructor is only ever used in the normalised @[0, 1]@ convention.
+    -- Composes with other 'ScrollBy' effects queued in the same frame for
+    -- the same element rather than last-write-wins.
+  | SetSelectionAt e Selection
+  deriving (Eq, Show)
+
+-- | One item from the frame's output queue: either an application message or
+-- a 'UiEffect'. A single ordered queue holds both so that the relative
+-- ordering between a message and an effect emitted in the same frame is
+-- preserved.
+data Out e msg
+  = OutMsg msg
+  | OutUi (UiEffect e)
+  deriving (Eq, Show)
+
 -- | Tracks which element holds keyboard focus and whether it was visited
 -- during the current frame's render pass.
 data FocusState e = FocusState
@@ -349,12 +391,13 @@ data ElementState e = ElementState
   , elmSelections   :: Map.Map e [Selection]
   }
 
--- | Outputs accumulated during a single frame: draw commands, queued
--- messages, and the animation continuation flag. Reset to empty at the start
--- of each frame by 'nextFrameContext'.
-data FrameOutputs msg = FrameOutputs
+-- | Outputs accumulated during a single frame: draw commands, the queued
+-- 'Out' events (messages and UI effects, in emit order), and the animation
+-- continuation flag. Reset to empty at the start of each frame by
+-- 'nextFrameContext'.
+data FrameOutputs e msg = FrameOutputs
   { outDrawCommands     :: [DrawCommand]
-  , outMessages         :: [msg]
+  , outEvents           :: [Out e msg]
   , outRequiresAnimation :: Bool
   }
 
@@ -384,7 +427,7 @@ data UIContext e msg = UIContext
     -- 'charOffset' and 'charAtOffset' rather than accessing this directly.
   , ctxInteraction     :: InteractionState e
   , ctxElements        :: ElementState e
-  , ctxOutputs         :: FrameOutputs msg
+  , ctxOutputs         :: FrameOutputs e msg
   }
 
 -- | The UI monad. A state-threading computation in 'IO' that reads from a
@@ -425,10 +468,10 @@ emptyInteractionState = InteractionState
   , ixnButtonReleased = False
   }
 
-emptyFrameOutputs :: FrameOutputs msg
+emptyFrameOutputs :: FrameOutputs e msg
 emptyFrameOutputs = FrameOutputs
   { outDrawCommands      = []
-  , outMessages          = []
+  , outEvents            = []
   , outRequiresAnimation = False
   }
 
@@ -447,12 +490,14 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxOutputs         = emptyFrameOutputs
   }
 
--- | Advances the context to the next frame. Resets per-frame state (draw
--- commands, hover element, queued dispatches and async jobs, and the
--- focus-visited flag) while preserving cross-frame state (theme, focus
--- element, scroll state, selections, application state, and tab-stop bookkeeping).
-nextFrameContext :: Rectangle -> InputState -> UIContext e msg -> UIContext e msg
-nextFrameContext bounds input ctx = ctx
+-- | Advances the context to the next frame. First runs 'applyUiEffects' on
+-- the 'UiEffect's queued during the frame that just completed, so focus,
+-- scroll, and selection changes take effect starting this new frame. Then
+-- resets per-frame state (draw commands, hover element, queued messages, and
+-- the focus-visited flag) while preserving cross-frame state (theme, focus
+-- element, scroll state, selections, and tab-stop bookkeeping).
+nextFrameContext :: Ord e => Rectangle -> InputState -> UIContext e msg -> UIContext e msg
+nextFrameContext bounds input ctx0 = ctx
   { ctxBounds      = bounds
   , ctxInput       = input
   , ctxInteraction = nextInteractionFrame
@@ -461,6 +506,8 @@ nextFrameContext bounds input ctx = ctx
       (ctxInteraction ctx)
   , ctxOutputs     = emptyFrameOutputs
   }
+  where
+    ctx = applyUiEffects (getUiEffects ctx0) ctx0
 
 -- | Advances 'InteractionState' to the next frame: clears hover, derives
 -- button transition state from the previous and current raw down values,
@@ -484,10 +531,7 @@ modify f = UI $ \ctx -> pure ((), f ctx)
 modifyIxn :: (InteractionState e -> InteractionState e) -> UI e msg ()
 modifyIxn f = modify $ \ctx -> ctx { ctxInteraction = f (ctxInteraction ctx) }
 
-modifyElm :: (ElementState e -> ElementState e) -> UI e msg ()
-modifyElm f = modify $ \ctx -> ctx { ctxElements = f (ctxElements ctx) }
-
-modifyOut :: (FrameOutputs msg -> FrameOutputs msg) -> UI e msg ()
+modifyOut :: (FrameOutputs e msg -> FrameOutputs e msg) -> UI e msg ()
 modifyOut f = modify $ \ctx -> ctx { ctxOutputs = f (ctxOutputs ctx) }
 
 -- | The current scroll position for the given element, in @[0, 1]@. Returns
@@ -496,30 +540,26 @@ getScrollState :: Ord e => e -> UI e msg Double
 getScrollState eid = gets $ \ctx ->
   scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
--- | Overwrites the scroll position for the given element. The change takes
--- effect immediately: later reads in the same frame see the new value.
-setScrollState :: Ord e => e -> Double -> UI e msg ()
-setScrollState eid v = modifyElm $ \elm ->
-  elm { elmScrollStates = Map.insert eid (ScrollState v) (elmScrollStates elm) }
-
 -- | All selections for the given element. Returns @[]@ when none have been recorded.
 getSelections :: Ord e => e -> UI e msg [Selection]
 getSelections eid = gets $ \ctx ->
   Map.findWithDefault [] eid (elmSelections (ctxElements ctx))
 
--- | Overwrites the selection list for the given element. The change takes
--- effect immediately.
-setSelections :: Ord e => e -> [Selection] -> UI e msg ()
-setSelections eid ss = modifyElm $ \elm ->
-  elm { elmSelections = Map.insert eid ss (elmSelections elm) }
-
 -- | The first selection for the given element, or 'Nothing'.
 getSelection :: Ord e => e -> UI e msg (Maybe Selection)
 getSelection eid = listToMaybe <$> getSelections eid
 
--- | Sets a single selection, replacing any existing selections for the element.
-setSelection :: Ord e => e -> Selection -> UI e msg ()
-setSelection eid s = setSelections eid [s]
+-- Internal: writes a scroll position directly into the context, bypassing
+-- the deferred-effect queue. Used only by 'applyUiEffects'.
+writeScrollState :: Ord e => e -> Double -> UIContext e msg -> UIContext e msg
+writeScrollState eid v ctx = ctx { ctxElements = (ctxElements ctx)
+  { elmScrollStates = Map.insert eid (ScrollState v) (elmScrollStates (ctxElements ctx)) } }
+
+-- Internal: writes a selection directly into the context, bypassing the
+-- deferred-effect queue. Used only by 'applyUiEffects'.
+writeSelection :: Ord e => e -> Selection -> UIContext e msg -> UIContext e msg
+writeSelection eid sel ctx = ctx { ctxElements = (ctxElements ctx)
+  { elmSelections = Map.insert eid [sel] (elmSelections (ctxElements ctx)) } }
 
 -- | The lower bound of the selected range: @min selectionAnchor selectionActive@.
 selectionLow :: Selection -> Int
@@ -686,16 +726,21 @@ getFocus = gets (focusedElement . ixnFocus . ctxInteraction)
 isFocused :: Eq e => e -> UI e msg Bool
 isFocused eid = (== Just eid) <$> getFocus
 
--- | Transfers keyboard focus to the given element.
+-- | Transfers keyboard focus to the given element. Takes effect immediately
+-- — like 'setHovered' and mouse capture, not like the deferred
+-- scroll\/selection writes — because a control's own focus decision (take
+-- it when nothing else has it, hand off on Tab) is only correct if the next
+-- sibling in the same tree walk can see it happened.
 setFocus :: e -> UI e msg ()
 setFocus eid = modifyIxn $ \ixn ->
   ixn { ixnFocus = FocusState { focusedElement = Just eid, focusedThisFrame = True } }
 
--- | Transfers keyboard focus to the given element when the condition is 'True'.
+-- | Transfers keyboard focus to the given element when the condition is
+-- 'True'.
 setFocusWhen :: Bool -> e -> UI e msg ()
 setFocusWhen b eid = when b (setFocus eid)
 
--- | Removes keyboard focus from all elements.
+-- | Removes keyboard focus from all elements. Immediate, like 'setFocus'.
 clearFocus :: UI e msg ()
 clearFocus = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { focusedElement = Nothing } }
 
@@ -784,15 +829,49 @@ withBorder colour edges content = do
 -- | Queues a message to be delivered to the application once the frame
 -- completes. Messages are delivered in emit order by 'getMessages'.
 emit :: msg -> UI e msg ()
-emit msg = modifyOut $ \out -> out { outMessages = msg : outMessages out }
+emit msg = modifyOut $ \out -> out { outEvents = OutMsg msg : outEvents out }
+
+-- | Queues a 'UiEffect' — a focus, scroll, or selection change — to be
+-- applied by 'applyUiEffects' between this frame and the next. 'setFocus',
+-- 'clearFocus', and the scroll\/selection writes inside "Blink.Controls" are
+-- built on this; reach for it directly only when writing a custom control.
+emitUi :: UiEffect e -> UI e msg ()
+emitUi eff = modifyOut $ \out -> out { outEvents = OutUi eff : outEvents out }
 
 -- | Extracts the draw commands produced during the frame, in submission order.
 getDrawCommands :: UIContext e msg -> [DrawCommand]
 getDrawCommands = reverse . outDrawCommands . ctxOutputs
 
 -- | Extracts the messages queued with 'emit' during the frame, in emit order.
+-- 'UiEffect's queued with 'emitUi' (or 'setFocus', 'clearFocus', etc.) are
+-- excluded; they are applied automatically by 'nextFrameContext' and never
+-- reach the application.
 getMessages :: UIContext e msg -> [msg]
-getMessages = reverse . outMessages . ctxOutputs
+getMessages ctx = [msg | OutMsg msg <- reverse (outEvents (ctxOutputs ctx))]
+
+-- | Extracts the 'UiEffect's queued with 'emitUi' during the frame, in emit
+-- order, interleaved order with messages discarded. Used by
+-- 'nextFrameContext' to drive 'applyUiEffects'; not needed by ordinary
+-- application or control code.
+getUiEffects :: UIContext e msg -> [UiEffect e]
+getUiEffects ctx = [eff | OutUi eff <- reverse (outEvents (ctxOutputs ctx))]
+
+-- | Applies the 'UiEffect's queued during a frame (via 'emitUi' or a
+-- control's scroll\/selection writes) to the context handed to the next
+-- frame. Run automatically by 'nextFrameContext' — no host or application
+-- code needs to call this directly. Effects are folded in queue order:
+-- 'ScrollTo' and 'SetSelectionAt' each overwrite what came before for the
+-- same target, while 'ScrollBy' composes with a previous write to the same
+-- target, clamping to @[0, 1]@ after each step.
+applyUiEffects :: Ord e => [UiEffect e] -> UIContext e msg -> UIContext e msg
+applyUiEffects effects ctx0 = foldl' step ctx0 effects
+  where
+    step ctx (ScrollTo eid v)         = writeScrollState eid v ctx
+    step ctx (ScrollBy eid dv)        = writeScrollState eid (clampScrollPos (currentScroll eid ctx + dv)) ctx
+    step ctx (SetSelectionAt eid sel) = writeSelection eid sel ctx
+
+    currentScroll eid ctx =
+      scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
 -- | Compatibility shim for host code not yet migrated off the
 -- value-callback pattern: instantiates 'UI' with the message type fixed to

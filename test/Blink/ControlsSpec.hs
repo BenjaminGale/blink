@@ -64,6 +64,16 @@ withFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus = (ixnF
 getFocused :: UIContext TestElement s -> Maybe TestElement
 getFocused = focusedElement . ixnFocus . ctxInteraction
 
+-- | Applies the frame's queued 'UiEffect's (focus, scroll, selection)
+-- directly to the context, without advancing to a new frame (draw commands,
+-- hover state, and the animation flag are left untouched). Focus, scroll,
+-- and selection writes are deferred — queued with 'emitUi' rather than
+-- mutating the context immediately — so most assertions below settle the
+-- context first to see the result, the same way a host would after the
+-- frame completes.
+settle :: Ord e => UIContext e msg -> UIContext e msg
+settle ctx = applyUiEffects (getUiEffects ctx) ctx
+
 -- The number of messages emitted during the frame.
 dispatchCount :: UIContext e msg -> Int
 dispatchCount = length . getMessages
@@ -256,6 +266,45 @@ controlBehaviourSpec run hitPoint = do
       ctx' <- disabledRun (base { ctxInteraction = (ctxInteraction base) { ixnPrevTabStop = Just OtherControl } })
       getFocused ctx' `shouldBe` Just TestControl
 
+-- | Regression coverage for a bug that a suite built entirely on
+--   'controlBehaviourSpec' can't see: every spec above runs exactly one
+--   control per frame, so "nothing is focused, I'll be the default" is
+--   never contested. On a real screen with several controls, all of them
+--   render (and so all evaluate that same fallback) in one frame; only one
+--   may actually claim it, and it must be the first one in render order —
+--   not whichever happens to run last.
+defaultFocusArbitrationSpec :: Spec
+defaultFocusArbitrationSpec = describe "default focus arbitration (multiple controls, nothing focused)" $ do
+  it "the first control rendered claims default focus" $ do
+    ctx' <- fmap (settle . snd) $ runUI
+      (control TestControl (pure ()) >> control OtherControl (pure ()))
+      (mkCtx noInput)
+    getFocused ctx' `shouldBe` Just TestControl
+
+  it "a later control claims it when an earlier one is disabled" $ do
+    ctx' <- fmap (settle . snd) $ runUI
+      (disableWhen True (control TestControl (pure ())) >> control OtherControl (pure ()))
+      (mkCtx noInput)
+    getFocused ctx' `shouldBe` Just OtherControl
+
+  it "no control claims it when one is already focused" $ do
+    ctx' <- fmap (settle . snd) $ runUI
+      (control TestControl (pure ()) >> control OtherControl (pure ()))
+      (withFocus (Just OtherControl) (mkCtx noInput))
+    getFocused ctx' `shouldBe` Just OtherControl
+
+-- | Forward Tab with more than one control on screen. 'controlBehaviourSpec'
+--   only ever renders the single focused control, so its Tab test ("passes
+--   focus to the next control") only ever checks that focus clears — there
+--   is no second control in the same frame for it to actually land on.
+forwardTabNavigationSpec :: Spec
+forwardTabNavigationSpec = describe "forward Tab navigation (multiple controls)" $
+  it "moves focus to the very next control rendered, not back to the first" $ do
+    ctx' <- fmap (settle . snd) $ runUI
+      (control TestControl (pure ()) >> control OtherControl (pure ()))
+      (withFocus (Just TestControl) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab []] }))
+    getFocused ctx' `shouldBe` Just OtherControl
+
 -- | Background and border rendering tests. Only applicable to single controls
 --   that fill controlRect directly (not composite widgets).
 backgroundAndBorderSpec :: WidgetRunner -> Spec
@@ -286,16 +335,16 @@ backgroundAndBorderSpec run = do
     getDrawCommands ctx' `shouldContain` [StrokeBorder bgRect testBorderColour (uniformBorder 1)]
 
 runProgressBar :: Double -> WidgetRunner
-runProgressBar value ctx = fmap snd $ runUI (progressBar TestControl (Progress value)) ctx
+runProgressBar value ctx = fmap (settle . snd) $ runUI (progressBar TestControl (Progress value)) ctx
 
 runButton :: WidgetRunner
-runButton ctx = fmap snd $ runUI (button TestControl "label") ctx
+runButton ctx = fmap (settle . snd) $ runUI (button TestControl "label") ctx
 
 runActivatable :: WidgetRunner
-runActivatable ctx = fmap snd $ runUI (activatable TestControl (drawText testColour AlignCenter "x") [KeyReturn]) ctx
+runActivatable ctx = fmap (settle . snd) $ runUI (activatable TestControl (drawText testColour AlignCenter "x") [KeyReturn]) ctx
 
 runTextFieldControl :: WidgetRunner
-runTextFieldControl ctx = fmap snd $ runUI (textField TestControl "" (const ())) ctx
+runTextFieldControl ctx = fmap (settle . snd) $ runUI (textField TestControl "" (const ())) ctx
 
 -- Text editing tests use the entered text itself as the application state.
 mkTextCtx :: Text -> InputState -> UIContext TestElement Text
@@ -315,13 +364,13 @@ mkTextCtxWith :: TextMeasurer -> Text -> InputState -> UIContext TestElement Tex
 mkTextCtxWith measurer _value input = emptyUIContext controlRect input testTheme measurer
 
 runTextField :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
-runTextField value ctx = fmap snd $ runUI (textField TestControl value id) ctx
+runTextField value ctx = fmap (settle . snd) $ runUI (textField TestControl value id) ctx
 
 runNumberField :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
-runNumberField value ctx = fmap snd $ runUI (numberField TestControl value id) ctx
+runNumberField value ctx = fmap (settle . snd) $ runUI (numberField TestControl value id) ctx
 
 runPasswordField :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
-runPasswordField value ctx = fmap snd $ runUI (passwordField TestControl value id) ctx
+runPasswordField value ctx = fmap (settle . snd) $ runUI (passwordField TestControl value id) ctx
 
 -- checkboxMark setup: zero margin/padding so the full controlRect is hittable.
 -- App state is Maybe Bool so dispatches can be observed.
@@ -332,18 +381,18 @@ mkCheckboxMarkCtx :: InputState -> UIContext TestElement (Maybe Bool)
 mkCheckboxMarkCtx input = emptyUIContext controlRect input checkboxMarkTheme noOpTextMeasurer
 
 runCheckboxMark :: Bool -> UIContext TestElement (Maybe Bool) -> IO (UIContext TestElement (Maybe Bool))
-runCheckboxMark checked ctx = fmap snd $ runUI (checkboxMark TestControl checked Just) ctx
+runCheckboxMark checked ctx = fmap (settle . snd) $ runUI (checkboxMark TestControl checked Just) ctx
 
 runCheckboxMarkControl :: WidgetRunner
-runCheckboxMarkControl ctx = fmap snd $ runUI (checkboxMark TestControl False (const ())) (ctx { ctxTheme = checkboxMarkTheme })
+runCheckboxMarkControl ctx = fmap (settle . snd) $ runUI (checkboxMark TestControl False (const ())) (ctx { ctxTheme = checkboxMarkTheme })
 
 -- Forces checkboxTheme so the 20×20 box slot is hittable regardless of mkCtx's theme.
 runCheckboxControl :: WidgetRunner
-runCheckboxControl ctx = fmap snd $ runUI (checkbox TestControl "test label" False (const ())) (ctx { ctxTheme = checkboxTheme })
+runCheckboxControl ctx = fmap (settle . snd) $ runUI (checkbox TestControl "test label" False (const ())) (ctx { ctxTheme = checkboxTheme })
 
 -- Toggle tests record the dispatched value in a Maybe Bool application state.
 runCheckbox :: Bool -> UIContext TestElement (Maybe Bool) -> IO (UIContext TestElement (Maybe Bool))
-runCheckbox checked ctx = fmap snd $ runUI (checkbox TestControl "test label" checked Just) ctx
+runCheckbox checked ctx = fmap (settle . snd) $ runUI (checkbox TestControl "test label" checked Just) ctx
 
 mkCheckboxCtx :: InputState -> UIContext TestElement (Maybe Bool)
 mkCheckboxCtx input = emptyUIContext controlRect input checkboxTheme noOpTextMeasurer
@@ -356,12 +405,12 @@ drawnTexts :: UIContext e s -> [Text]
 drawnTexts ctx = [t | DrawText _ t _ _ <- getDrawCommands ctx]
 
 runRangeControl :: WidgetRunner
-runRangeControl ctx = fmap snd $ runUI (rangeControl TestControl OtherControl Vertical 0 1) ctx
+runRangeControl ctx = fmap (settle . snd) $ runUI (rangeControl TestControl OtherControl Vertical 0 1) ctx
 
 -- runSliderControl maps SliderTrack -> TestControl and SliderThumb -> OtherControl
 -- so the control suite helpers work without modification.
 runSliderControl :: WidgetRunner
-runSliderControl ctx = fmap snd $ runUI (slider tag Horizontal 0.5 (const ())) ctx
+runSliderControl ctx = fmap (settle . snd) $ runUI (slider tag Horizontal 0.5 (const ())) ctx
   where
     tag SliderTrack = TestControl
     tag SliderThumb = OtherControl
@@ -379,7 +428,7 @@ sliderRect = Rectangle 0 0 200 30
 
 runSlider :: Orientation -> Double -> InputState -> IO (UIContext SliderPart Double)
 runSlider ori val input =
-  fmap snd $ runUI (slider id ori val id)
+  fmap (settle . snd) $ runUI (slider id ori val id)
     (emptyUIContext sliderRect input sliderTheme noOpTextMeasurer)
 
 withSliderFocus :: Maybe SliderPart -> UIContext SliderPart Double -> UIContext SliderPart Double
@@ -388,7 +437,7 @@ withSliderFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus =
 -- runRadioControl maps index 0 -> TestControl for the control suite helpers.
 -- A single-item group is enough to exercise focus, tab, hover, and background.
 runRadioControl :: WidgetRunner
-runRadioControl ctx = fmap snd $ runUI (radioGroup tag [("a" :: String, "Option")] "a" (const ())) ctx
+runRadioControl ctx = fmap (settle . snd) $ runUI (radioGroup tag [("a" :: String, "Option")] "a" (const ())) ctx
   where
     tag 0 = TestControl
     tag _ = OtherControl
@@ -411,7 +460,7 @@ mkRadioGroupCtx :: String -> InputState -> UIContext Int String
 mkRadioGroupCtx _sel input = emptyUIContext radioGroupRect input radioGroupTheme noOpTextMeasurer
 
 runRadioGroup :: String -> UIContext Int String -> IO (UIContext Int String)
-runRadioGroup sel = fmap snd . runUI (radioGroup id radioItems sel id)
+runRadioGroup sel = fmap (settle . snd) . runUI (radioGroup id radioItems sel id)
 
 withItemFocus :: Maybe Int -> UIContext Int String -> UIContext Int String
 withItemFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus = (ixnFocus (ctxInteraction ctx)) { focusedElement = e } } }
@@ -442,7 +491,7 @@ mkListBoxCtx :: Int -> InputState -> UIContext ListBoxPart Int
 mkListBoxCtx _sel input = emptyUIContext listBoxRect input listBoxTheme noOpTextMeasurer
 
 runListBox :: Int -> UIContext ListBoxPart Int -> IO (UIContext ListBoxPart Int)
-runListBox sel = fmap snd . runUI (listBox id listBoxItemHeight listBoxItems sel id listBoxRenderItem)
+runListBox sel = fmap (settle . snd) . runUI (listBox id listBoxItemHeight listBoxItems sel id listBoxRenderItem)
 
 withListBoxFocus :: Maybe ListBoxPart -> UIContext ListBoxPart Int -> UIContext ListBoxPart Int
 withListBoxFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus = (ixnFocus (ctxInteraction ctx)) { focusedElement = e } } }
@@ -473,7 +522,7 @@ mkScrollBarCtx pos input =
   in base { ctxElements = (ctxElements base) { elmScrollStates = Map.singleton ScrollTrack (ScrollState pos) } }
 
 runScrollBar :: UIContext ScrollBarPart () -> IO (UIContext ScrollBarPart ())
-runScrollBar = fmap snd . runUI (scrollBar id Vertical 0.25)
+runScrollBar = fmap (settle . snd) . runUI (scrollBar id Vertical 0.25)
 
 data ViewportElem = VPPart ViewportPart | VPChild
   deriving (Eq, Ord, Show)
@@ -490,11 +539,14 @@ runViewport :: Point -> IO (UIContext ViewportElem ())
 runViewport mousePos =
   let input = noInput { inputMousePosition = mousePos }
       ctx = emptyUIContext vpOuterRect input vpTheme noOpTextMeasurer
-  in fmap snd $ runUI (viewport VPPart (Size 400 100) (control VPChild (pure ()))) ctx
+  in fmap (settle . snd) $ runUI (viewport VPPart (Size 400 100) (control VPChild (pure ()))) ctx
 
 
 spec :: Spec
 spec = describe "Controls" $ do
+  defaultFocusArbitrationSpec
+  forwardTabNavigationSpec
+
   describe "progressBar" $ do
     describe "background and border" $ backgroundAndBorderSpec (runProgressBar 0.5)
 
@@ -643,28 +695,28 @@ spec = describe "Controls" $ do
 
     describe "disabled" $ do
       it "does not dispatch when clicked while disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (checkboxMark TestControl False Just))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (checkboxMark TestControl False Just))
           (withButtonReleased (mkCheckboxMarkCtx (mouseAt (Point 50 50) False [])))
         getMessages ctx' `shouldBe` []
 
       it "does not dispatch when Enter is pressed while disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (checkboxMark TestControl False Just))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (checkboxMark TestControl False Just))
           (withFocus (Just TestControl) (mkCheckboxMarkCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         getMessages ctx' `shouldBe` []
 
   describe "focusRing" $ do
     it "draws the focused style's border around the current bounds when focused" $ do
-      ctx' <- fmap snd $ runUI (focusRing TestControl)
+      ctx' <- fmap (settle . snd) $ runUI (focusRing TestControl)
         ((withFocus (Just TestControl) (mkCtx noInput)) { ctxTheme = focusBorderTheme })
       getDrawCommands ctx' `shouldContain` [StrokeBorder controlRect testBorderColour (uniformBorder 1)]
 
     it "draws nothing when unfocused" $ do
-      ctx' <- fmap snd $ runUI (focusRing TestControl)
+      ctx' <- fmap (settle . snd) $ runUI (focusRing TestControl)
         ((withFocus (Just OtherControl) (mkCtx noInput)) { ctxTheme = focusBorderTheme })
       getDrawCommands ctx' `shouldBe` []
 
     it "draws nothing when focused but the style has no border colour" $ do
-      ctx' <- fmap snd $ runUI (focusRing TestControl) (withFocus (Just TestControl) (mkCtx noInput))
+      ctx' <- fmap (settle . snd) $ runUI (focusRing TestControl) (withFocus (Just TestControl) (mkCtx noInput))
       getDrawCommands ctx' `shouldBe` []
 
   describe "checkbox" $ do
@@ -697,11 +749,11 @@ spec = describe "Controls" $ do
 
     describe "disabled" $ do
       it "does not dispatch when clicked while disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (checkbox TestControl "test label" False Just)) (withButtonReleased (mkCheckboxCtx (mouseAt boxPoint False [])))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (checkbox TestControl "test label" False Just)) (withButtonReleased (mkCheckboxCtx (mouseAt boxPoint False [])))
         getMessages ctx' `shouldBe` []
 
       it "does not dispatch when Enter is pressed while disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (checkbox TestControl "test label" False Just)) (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (checkbox TestControl "test label" False Just)) (withFocus (Just TestControl) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         getMessages ctx' `shouldBe` []
 
     describe "rendering" $ do
@@ -763,11 +815,11 @@ spec = describe "Controls" $ do
 
     describe "disabled" $ do
       it "does not process input when disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (textField TestControl "hello" id)) (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] }))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (textField TestControl "hello" id)) (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] }))
         dispatchCount ctx' `shouldBe` 0
 
       it "does not show a cursor when focused and disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (textField TestControl "hello" id)) (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (textField TestControl "hello" id)) (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
         getDrawCommands ctx' `shouldNotContain` [FillRect (Rectangle 15 15 1 70) testColour]
 
     describe "cursor placement" $ do
@@ -779,7 +831,7 @@ spec = describe "Controls" $ do
       it "extends the active end on drag while keeping anchor" $ do
         -- First frame: click starts drag; second frame: drag extends selection.
         frame1 <- runTextField "hello" (withFocus (Just TestControl) (mkTextCtx "hello" (mouseAt (Point 50 50) True [])))
-        frame2 <- fmap snd $ runUI (textField TestControl "hello" id)
+        frame2 <- fmap (settle . snd) $ runUI (textField TestControl "hello" id)
                     (nextFrameContext controlRect (mouseAt (Point 70 50) True []) frame1)
         -- With noOpTextMeasurer both positions are 0, so selection is (0,0); the
         -- key check is that anchor was NOT reset on the second frame.
@@ -913,12 +965,12 @@ spec = describe "Controls" $ do
 
   describe "textInputControl" $ do
     it "lets a custom input filter reject keystrokes entirely" $ do
-      ctx' <- fmap snd $ runUI (textInputControl (const T.empty) id TestControl "hello" id)
+      ctx' <- fmap (settle . snd) $ runUI (textInputControl (const T.empty) id TestControl "hello" id)
         (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["x"] }))
       dispatchCount ctx' `shouldBe` 0
 
     it "lets a custom display filter change what is rendered without changing the value" $ do
-      ctx' <- fmap snd $ runUI (textInputControl id T.toUpper TestControl "hello" id)
+      ctx' <- fmap (settle . snd) $ runUI (textInputControl id T.toUpper TestControl "hello" id)
         (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
       drawnTexts ctx' `shouldContain` ["HELLO"]
 
@@ -944,7 +996,7 @@ spec = describe "Controls" $ do
 
     describe "thumb placement" $ do
       it "renders the thumb's chrome within the track's content rectangle when the thumb fills the track" $ do
-        drawCtx <- fmap snd $ runUI (rangeControl TestControl OtherControl Vertical 0 1) (mkCtx noInput)
+        drawCtx <- fmap (settle . snd) $ runUI (rangeControl TestControl OtherControl Vertical 0 1) (mkCtx noInput)
         -- With pos=0, ratio=1 the thumb fills the track's content rectangle
         -- exactly, so the thumb's own margin-inset background lands here.
         getDrawCommands drawCtx `shouldContain` [FillRect (insetRect (uniform 10) contentRect) testColour]
@@ -974,13 +1026,13 @@ spec = describe "Controls" $ do
 
       it "continues tracking when the mouse moves off the track while the button is held" $ do
         frame1 <- runScrollBar (mkScrollBarCtx 0 (mouseAt (Point 10 100) True []))
-        frame2 <- fmap snd $ runUI (scrollBar id Vertical 0.25)
+        frame2 <- fmap (settle . snd) $ runUI (scrollBar id Vertical 0.25)
                                    (nextFrameContext scrollRect (mouseAt (Point 200 40) True []) frame1)
         scrollPos frame2 `shouldBe` 0.0
 
       it "stops tracking when the button is released after dragging off the track" $ do
         frame1 <- runScrollBar (mkScrollBarCtx 0 (mouseAt (Point 10 100) True []))
-        frame2 <- fmap snd $ runUI (scrollBar id Vertical 0.25)
+        frame2 <- fmap (settle . snd) $ runUI (scrollBar id Vertical 0.25)
                                    (nextFrameContext scrollRect (mouseAt (Point 200 40) False []) frame1)
         scrollPos frame2 `shouldBe` 0.5
 
@@ -1009,14 +1061,14 @@ spec = describe "Controls" $ do
       it "continues tracking when the mouse moves outside the track while button held" $ do
         frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
         let val1 = head (getMessages frame1)
-        frame2 <- fmap snd $ runUI (slider id Horizontal val1 id)
+        frame2 <- fmap (settle . snd) $ runUI (slider id Horizontal val1 id)
                                    (nextFrameContext sliderRect (mouseAt (Point 300 15) True []) frame1)
         getMessages frame2 `shouldBe` [1.0]
 
       it "stops tracking when the button is released" $ do
         frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
         let val1 = head (getMessages frame1)
-        frame2 <- fmap snd $ runUI (slider id Horizontal val1 id)
+        frame2 <- fmap (settle . snd) $ runUI (slider id Horizontal val1 id)
                                    (nextFrameContext sliderRect (mouseAt (Point 300 15) False []) frame1)
         dispatchCount frame2 `shouldBe` 0
 
@@ -1028,7 +1080,7 @@ spec = describe "Controls" $ do
       it "does not dispatch on the release frame when the mouse is still over the track" $ do
         frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
         let val1 = head (getMessages frame1)
-        frame2 <- fmap snd $ runUI (slider id Horizontal val1 id)
+        frame2 <- fmap (settle . snd) $ runUI (slider id Horizontal val1 id)
                                    (nextFrameContext sliderRect (mouseAt (Point 100 15) False []) frame1)
         dispatchCount frame2 `shouldBe` 0
 
@@ -1058,12 +1110,12 @@ spec = describe "Controls" $ do
         getMessages ctx' `shouldBe` [0.0]
 
       it "does not nudge when another element has focus" $ do
-        ctx' <- fmap snd $ runUI (slider id Horizontal 0.5 id)
+        ctx' <- fmap (settle . snd) $ runUI (slider id Horizontal 0.5 id)
           (withSliderFocus (Just SliderThumb) (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme noOpTextMeasurer))
         getMessages ctx' `shouldBe` []
 
       it "does not nudge when disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (slider id Horizontal 0.5 id))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (slider id Horizontal 0.5 id))
           (withSliderFocus (Just SliderTrack) (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme noOpTextMeasurer))
         dispatchCount ctx' `shouldBe` 0
 
@@ -1078,7 +1130,7 @@ spec = describe "Controls" $ do
           drawText testColour AlignLeft ((if isSelected then "SEL:" else "UNSEL:") <> lbl)
 
         runSelector :: String -> UIContext Int String -> IO (UIContext Int String)
-        runSelector sel = fmap snd . runUI (selector id radioItems sel id renderItem)
+        runSelector sel = fmap (settle . snd) . runUI (selector id radioItems sel id renderItem)
 
     describe "selection" $ do
       it "dispatches the value of a clicked item" $ do
@@ -1086,12 +1138,12 @@ spec = describe "Controls" $ do
         getMessages ctx' `shouldBe` ["b"]
 
       it "dispatches the value when Enter is pressed while an item is focused" $ do
-        ctx' <- fmap snd $ runUI (selector id radioItems "a" id renderItem)
+        ctx' <- fmap (settle . snd) $ runUI (selector id radioItems "a" id renderItem)
           (withItemFocus (Just 1) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyReturn []] } radioGroupTheme noOpTextMeasurer))
         getMessages ctx' `shouldBe` ["b"]
 
       it "does not dispatch when clicked while disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (selector id radioItems "a" id renderItem))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (selector id radioItems "a" id renderItem))
           (withButtonReleased (mkRadioGroupCtx "a" (mouseAt (Point 50 45) False [])))
         dispatchCount ctx' `shouldBe` 0
 
@@ -1101,7 +1153,7 @@ spec = describe "Controls" $ do
 
     describe "keyboard navigation" $ do
       let nav focusIdx k = do
-            ctx' <- fmap snd $ runUI (selector id radioItems "a" id renderItem)
+            ctx' <- fmap (settle . snd) $ runUI (selector id radioItems "a" id renderItem)
               (withItemFocus (Just focusIdx)
                 (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent k []] } radioGroupTheme noOpTextMeasurer))
             pure $ focusedElement (ixnFocus (ctxInteraction ctx'))
@@ -1115,7 +1167,7 @@ spec = describe "Controls" $ do
         result `shouldBe` Just 0
 
       it "does not move focus when disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (selector id radioItems "a" id renderItem))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (selector id radioItems "a" id renderItem))
           (withItemFocus (Just 0) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyDown []] } radioGroupTheme noOpTextMeasurer))
         focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just 0
 
@@ -1143,17 +1195,17 @@ spec = describe "Controls" $ do
         getMessages ctx' `shouldBe` ["c"]
 
       it "dispatches the value when Enter is pressed while an item is focused" $ do
-        ctx' <- fmap snd $ runUI (radioGroup id radioItems "a" id)
+        ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" id)
           (withItemFocus (Just 1) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyReturn []] } radioGroupTheme noOpTextMeasurer))
         getMessages ctx' `shouldBe` ["b"]
 
       it "dispatches the value when Space is pressed while an item is focused" $ do
-        ctx' <- fmap snd $ runUI (radioGroup id radioItems "a" id)
+        ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" id)
           (withItemFocus (Just 2) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeySpace []] } radioGroupTheme noOpTextMeasurer))
         getMessages ctx' `shouldBe` ["c"]
 
       it "does not dispatch when no item is focused and a key is pressed" $ do
-        ctx' <- fmap snd $ runUI (radioGroup id radioItems "a" id)
+        ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" id)
           (withItemFocus (Just 99) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyReturn []] } radioGroupTheme noOpTextMeasurer))
         dispatchCount ctx' `shouldBe` 0
 
@@ -1163,7 +1215,7 @@ spec = describe "Controls" $ do
 
     describe "keyboard navigation" $ do
       let nav focusIdx k = do
-            ctx' <- fmap snd $ runUI (radioGroup id radioItems "a" id)
+            ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" id)
               (withItemFocus (Just focusIdx)
                 (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent k []] } radioGroupTheme noOpTextMeasurer))
             pure $ focusedElement (ixnFocus (ctxInteraction ctx'))
@@ -1185,14 +1237,14 @@ spec = describe "Controls" $ do
         result `shouldBe` Just 0
 
       it "does not move focus when disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (radioGroup id radioItems "a" id))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (radioGroup id radioItems "a" id))
           (withItemFocus (Just 0) (emptyUIContext radioGroupRect noInput { inputKeyEvents = [KeyEvent KeyDown []] } radioGroupTheme noOpTextMeasurer))
         focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just 0
 
       it "handles arrow keys on the frame focus is gained by click" $ do
         -- Click on item 0 (centre Point 50 15) and press Down in the same frame
         -- with no prior focus. The newly focused item should handle the key.
-        ctx' <- fmap snd $ runUI (radioGroup id radioItems "a" id)
+        ctx' <- fmap (settle . snd) $ runUI (radioGroup id radioItems "a" id)
           (withButtonReleased (emptyUIContext radioGroupRect noInput { inputMousePosition = Point 50 15, inputKeyEvents = [KeyEvent KeyDown []] } radioGroupTheme noOpTextMeasurer))
         focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just 1
 
@@ -1217,12 +1269,12 @@ spec = describe "Controls" $ do
         getMessages ctx' `shouldBe` [1]
 
       it "dispatches the value when Enter is pressed while an item is focused" $ do
-        ctx' <- fmap snd $ runUI (listBox id listBoxItemHeight listBoxItems 0 id listBoxRenderItem)
+        ctx' <- fmap (settle . snd) $ runUI (listBox id listBoxItemHeight listBoxItems 0 id listBoxRenderItem)
           (withListBoxFocus (Just (ListBoxItem 1)) (mkListBoxCtx 0 noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         getMessages ctx' `shouldBe` [1]
 
       it "does not dispatch when clicked while disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (listBox id listBoxItemHeight listBoxItems 0 id listBoxRenderItem))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (listBox id listBoxItemHeight listBoxItems 0 id listBoxRenderItem))
           (withButtonReleased (mkListBoxCtx 0 (mouseAt (Point 50 30) False [])))
         dispatchCount ctx' `shouldBe` 0
 
@@ -1240,7 +1292,7 @@ spec = describe "Controls" $ do
         focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just (ListBoxItem 0)
 
       it "does not move focus when disabled" $ do
-        ctx' <- fmap snd $ runUI (disableWhen True (listBox id listBoxItemHeight listBoxItems 0 id listBoxRenderItem))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (listBox id listBoxItemHeight listBoxItems 0 id listBoxRenderItem))
           (withListBoxFocus (Just (ListBoxItem 0)) (mkListBoxCtx 0 noInput { inputKeyEvents = [KeyEvent KeyDown []] }))
         focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just (ListBoxItem 0)
 
@@ -1306,7 +1358,7 @@ spec = describe "Controls" $ do
     let marker :: Int -> Rectangle -> DrawCommand
         marker i r = FillRect r (RGBA (fromIntegral i) 0 0 1)
         runVirtualContent pos itemH count =
-          fmap snd $ runUI (virtualContent pos itemH count (\i -> fillRect (RGBA (fromIntegral i) 0 0 1))) (mkCtx noInput)
+          fmap (settle . snd) $ runUI (virtualContent pos itemH count (\i -> fillRect (RGBA (fromIntegral i) 0 0 1))) (mkCtx noInput)
 
     it "renders items starting from the top when unscrolled" $ do
       -- itemHeight 20, viewport 100 tall -> exactly 5 full items fit.

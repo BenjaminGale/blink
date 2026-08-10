@@ -130,7 +130,7 @@ data App e s = App
 
 -- | Produces a 'BlinkHandle' for a continuous render backend. The draw list
 -- from the first render pass is submitted immediately each frame.
-configureContinuous :: Eq e => App e s -> TextMeasurer -> IO (BlinkHandle s)
+configureContinuous :: Ord e => App e s -> TextMeasurer -> IO (BlinkHandle s)
 configureContinuous app measurer = do
   s <- startUp app
   refs <- AppRefs
@@ -143,7 +143,7 @@ configureContinuous app measurer = do
 -- | Produces a 'BlinkHandle' for an event-driven backend. The 'IO ()'
 -- callback is called when the animation ticker fires so the backend can
 -- unblock its event wait.
-configureEventDriven :: Eq e => App e s -> IO () -> TextMeasurer -> IO (BlinkHandle s)
+configureEventDriven :: Ord e => App e s -> IO () -> TextMeasurer -> IO (BlinkHandle s)
 configureEventDriven app notify measurer = do
   s <- startUp app
   refs <- AppRefs
@@ -209,7 +209,7 @@ data AppRefs e s = AppRefs
     -- sequentially, so no concurrent access concerns.
   }
 
-buildCtx :: Eq e => App e s -> Rectangle -> InputState -> Float -> Bool -> s -> UIContext e (s -> s) -> UIContext e (s -> s)
+buildCtx :: Ord e => App e s -> Rectangle -> InputState -> Float -> Bool -> s -> UIContext e (s -> s) -> UIContext e (s -> s)
 buildCtx app winRect inputState delta isAnimTick state prevCtx =
   let elapsed   = animElapsed (ctxAnimation prevCtx) + delta
       animState = AnimationState { animDelta = delta, animElapsed = elapsed, animIsTick = isAnimTick }
@@ -219,7 +219,7 @@ buildCtx app winRect inputState delta isAnimTick state prevCtx =
   in ctx { ctxAnimation = animState }
 
 runFrame
-  :: Eq e
+  :: Ord e
   => App e s
   -> AppRefs e s
   -> FrameInput
@@ -241,13 +241,13 @@ runFrame app refs input = do
 
   pure (ctx', state')
 
-doStepContinuous :: Eq e => App e s -> AppRefs e s -> FrameInput -> IO (FrameResult s)
+doStepContinuous :: Ord e => App e s -> AppRefs e s -> FrameInput -> IO (FrameResult s)
 doStepContinuous app refs input = do
   (ctx', state') <- runFrame app refs input
   writeIORef (refsCtx refs) ctx'
   pure $ toResult input (getDrawCommands ctx') state'
 
-doStepEventDriven :: Eq e => App e s -> AppRefs e s -> IO () -> FrameInput -> IO (FrameResult s)
+doStepEventDriven :: Ord e => App e s -> AppRefs e s -> IO () -> FrameInput -> IO (FrameResult s)
 doStepEventDriven app refs notify input = do
   (firstPassCtx, state') <- runFrame app refs input
   let winRect    = rectFromSize (windowSize input)
