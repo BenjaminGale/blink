@@ -307,7 +307,7 @@ scrollView ps = do
 
 staticScrollList :: ScrollPageState -> DemoUI ()
 staticScrollList ps =
-  viewport ScrollRegion1 (Size 400 (20 * 32)) $
+  viewport ScrollRegion1 (Size 400 (20 * 32)) [] $
     vBox defaultBoxConfig
       [ (Layout Fill (Exactly 32) TopLeft, item i)
       | i <- [1 .. 20 :: Int]

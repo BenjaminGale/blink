@@ -571,7 +571,7 @@ runViewport :: Point -> IO (UIContext ViewportElem ())
 runViewport mousePos =
   let input = noInput { inputMousePosition = mousePos }
       ctx = emptyUIContext vpOuterRect input vpTheme noOpTextMeasurer
-  in fmap (settle . snd) $ runUI (viewport VPPart (Size 400 100) (control VPChild (pure ()))) ctx
+  in fmap (settle . snd) $ runUI (viewport VPPart (Size 400 100) [] (control VPChild (pure ()))) ctx
 
 
 spec :: Spec

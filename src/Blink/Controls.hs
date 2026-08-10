@@ -1050,9 +1050,9 @@ data ViewportPart
   | ViewportV ScrollBarPart -- ^ A part of the vertical scrollbar.
   deriving (Eq, Ord, Show)
 
--- | The pixel width of a scrollbar strip used by 'viewport'. Exported so
--- callers that compose a viewport inside their own layout can account for
--- the strip in their geometry without hard-coding the value.
+-- | The pixel width of a scrollbar strip used by 'viewport' and 'listBox'.
+-- Exported so callers that compose a viewport inside their own layout can
+-- account for the strip in their geometry without hard-coding the value.
 scrollRegionBarSize :: Double
 scrollRegionBarSize = 16
 
@@ -1073,9 +1073,11 @@ viewport
   :: Ord e
   => (ViewportPart -> e)  -- ^ maps viewport parts to element IDs
   -> Size                  -- ^ virtual content size
+  -> [Attr e Void msg cfg]  -- ^ attributes; 'viewport' is non-interactive
+                          -- and has no configuration yet
   -> UI e msg ()             -- ^ content
   -> UI e msg ()
-viewport mkId (Size cw ch) content = do
+viewport mkId (Size cw ch) _attrs content = do
   outer <- getBounds
   let ow      = rectWidth outer
       oh      = rectHeight outer
