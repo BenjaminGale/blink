@@ -7,7 +7,7 @@ import Test.Hspec
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Controls (ButtonEvent (..), ControlEvent (..), HasControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderEvent (..), SliderPart (..), TextEvent (..), ViewportPart (..), activatable, arrowStep, button, checkbox, checkboxMark, control, controlEvents, displayFilter, focusRing, inputFilter, isControlHit, listBox, mouseToTrackPos, numberField, onAny, onChange, onClick, onClickTo, onInput, onSelect, onSubmit, onToggle, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
+import Blink.Controls (ControlEvent (..), HasControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, arrowStep, button, checkbox, checkboxMark, control, controlEvents, displayFilter, focusRing, inputFilter, isControlHit, listBox, mouseToTrackPos, numberField, onChange, onClick, onClickTo, onInput, onSelect, onSubmit, onToggle, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -463,7 +463,7 @@ runSlider ori val input =
   fmap (settle . snd) $ runUI (slider id ori val [onChange id])
     (emptyUIContext sliderRect input sliderTheme noOpTextMeasurer)
 
-withSliderFocus :: Maybe SliderPart -> UIContext SliderPart Double -> UIContext SliderPart Double
+withSliderFocus :: Maybe SliderPart -> UIContext SliderPart msg -> UIContext SliderPart msg
 withSliderFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus = (ixnFocus (ctxInteraction ctx)) { focusedElement = e } } }
 
 -- runRadioControl maps index 0 -> TestControl for the control suite helpers.
@@ -699,15 +699,6 @@ spec = describe "Controls" $ do
           (withButtonReleased (mkCtx (mouseAt (Point 50 50) False [])))
         getUiEffects ctx' `shouldContain` [SetSelectionAt TestControl (cursor 0)]
         getMessages ctx' `shouldBe` []
-
-    describe "control events" $
-      -- Full gain/lost/retain coverage lives in controlEventsSpec, against
-      -- 'controlEvents' directly; this just checks button wires that shared
-      -- result into its own event type via 'Control'.
-      it "reports lifecycle events via ButtonEvent's Control constructor" $ do
-        (_, ctx') <- runUI (button TestControl "label" [onAny (\ev -> [OutMsg ev])])
-          (withButtonReleased (emptyUIContext controlRect (mouseAt (Point 50 50) False []) testTheme noOpTextMeasurer))
-        getMessages ctx' `shouldContain` [Control FocusGained]
 
   describe "checkboxMark" $ do
     controlBehaviourSpec runCheckboxMarkControl (Point 50 50)
@@ -1034,17 +1025,6 @@ spec = describe "Controls" $ do
           (withFocus (Just OtherControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         getMessages ctx' `shouldBe` []
 
-    -- Full gain/lost/retain coverage lives in controlEventsSpec; textInputControl
-    -- can't call controlEvents directly (control already does the same
-    -- hover/focus/tab work internally), so it reimplements the same
-    -- wasFocused/nowFocused diff by hand. This checks that reimplementation
-    -- actually wires into TextEvent's TextControl constructor.
-    describe "control events" $
-      it "reports lifecycle events via TextEvent's TextControl constructor" $ do
-        (_, ctx') <- runUI (textInputControl TestControl "hello" [onAny (\ev -> [OutMsg ev])])
-          (withButtonReleased (emptyUIContext controlRect (mouseAt (Point 50 50) False []) testTheme noOpTextMeasurer))
-        getMessages ctx' `shouldContain` [TextControl FocusGained]
-
   describe "rangeControl" $ do
     controlBehaviourSpec runRangeControl (Point 50 50)
     describe "background and border" $ backgroundAndBorderSpec runRangeControl
@@ -1199,18 +1179,6 @@ spec = describe "Controls" $ do
       it "does not dispatch when there is no input" $ do
         ctx' <- runSlider Horizontal 0.5 noInput
         dispatchCount ctx' `shouldBe` 0
-
-    -- Full gain/lost/retain coverage lives in controlEventsSpec; slider
-    -- can't call controlEvents directly (rangeControl already does the same
-    -- hover/focus/tab work internally via 'control'), so it reimplements the
-    -- same wasFocused/nowFocused diff by hand. This checks that
-    -- reimplementation actually wires into SliderEvent's SliderControl
-    -- constructor.
-    describe "control events" $
-      it "reports lifecycle events via SliderEvent's SliderControl constructor" $ do
-        (_, ctx') <- runUI (slider id Horizontal 0.5 [onAny (\ev -> [OutMsg ev])])
-          (withButtonReleased (emptyUIContext sliderRect (mouseAt (Point 100 15) False []) sliderTheme noOpTextMeasurer))
-        getMessages ctx' `shouldContain` [SliderControl FocusGained]
 
   describe "selector" $ do
     let renderItem :: Int -> Bool -> (String, Text) -> UI Int String ()

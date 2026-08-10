@@ -124,6 +124,7 @@ module Blink.Controls
   , fire
   , onAny
   , controlEvents
+  , controlEventsAfter
   , ControlEvent (..)
   , HasControlEvent (..)
     -- * Building controls
@@ -258,17 +259,20 @@ onAny :: (ev -> [Out e msg]) -> Attr e ev msg cfg
 onAny = On
 
 -- | Runs 'applyHover', 'applyFocus', and 'applyTabNavigation' for the given
--- element, then reports the 'ControlEvent's derived by comparing whether it
--- was focused just before that and whether it's focused just after:
--- 'FocusGained' on the frame it takes focus, 'FocusLost' on the frame it
--- gives it up. Shared by every attribute-based control so this detection
--- lives in one place rather than being reimplemented per control.
+-- element, then reports 'FocusGained'\/'FocusLost' via 'controlEventsAfter'.
 controlEvents :: (Ord e, HasControlEvent ev) => e -> UI e msg [ev]
 controlEvents eid = do
   wasFocused <- isFocused eid
   applyHover eid
   applyFocus eid
   applyTabNavigation eid
+  controlEventsAfter eid wasFocused
+
+-- | 'FocusGained'\/'FocusLost' derived from whether @eid@ was focused
+-- before some action and is focused now. Used directly by controls built on
+-- 'control'\/'rangeControl', which already ran that action.
+controlEventsAfter :: (Ord e, HasControlEvent ev) => e -> Bool -> UI e msg [ev]
+controlEventsAfter eid wasFocused = do
   nowFocused <- isFocused eid
   pure $ concat
     [ [liftControl FocusGained | not wasFocused && nowFocused]
@@ -799,11 +803,7 @@ textInputControl eid value attrs = do
 
         submitted = enabled && any (\e -> key e == KeyReturn) (inputKeyEvents input)
 
-        ctrlEvs = concat
-          [ [liftControl FocusGained | not wasFocused && hasFocus]
-          , [liftControl FocusLost   | wasFocused && not hasFocus]
-          ]
-
+    ctrlEvs <- controlEventsAfter eid wasFocused
     fire attrs (ctrlEvs ++ [Submitted | submitted] ++ [Edited t | Just t <- [edited]])
 
     when enabled $ emitUi (SetSelectionAt eid (Selection anchor3 active3))
@@ -1156,8 +1156,8 @@ slider mkId ori value attrs = do
         Horizontal -> (rectHeight contentRect, rectWidth contentRect)
         Vertical   -> (rectWidth contentRect,  rectHeight contentRect)
       thumbRatio  = if mainSz > 0 then crossSz / mainSz else 0
-  newPos     <- rangeControl trackId (mkId SliderThumb) ori clamped thumbRatio
-  nowFocused <- isFocused trackId
+  newPos  <- rangeControl trackId (mkId SliderThumb) ori clamped thumbRatio
+  ctrlEvs <- controlEventsAfter trackId wasFocused
   let (decrKey, incrKey) = case ori of
         Horizontal -> (KeyLeft,  KeyRight)
         Vertical   -> (KeyUp,    KeyDown)
@@ -1166,10 +1166,6 @@ slider mkId ori value attrs = do
   incrKeyed <- isKeyPressed trackId incrKey
   let decrPressed = not disabled && decrKeyed
       incrPressed = not disabled && incrKeyed
-      ctrlEvs = concat
-        [ [liftControl FocusGained | not wasFocused && nowFocused]
-        , [liftControl FocusLost   | wasFocused && not nowFocused]
-        ]
       changes = concat
         [ [Changed p | Just p <- [newPos]]
         , [Changed (max 0 (clamped - step)) | decrPressed]
