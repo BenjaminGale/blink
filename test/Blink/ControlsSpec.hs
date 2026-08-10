@@ -7,7 +7,7 @@ import Test.Hspec
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Controls (ButtonEvent (..), ControlEvent (..), HasControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, button, checkbox, checkboxMark, control, controlEvents, focusRing, isControlHit, listBox, mouseToTrackPos, numberField, onAny, onClick, onClickTo, onSelect, onToggle, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
+import Blink.Controls (ButtonEvent (..), ControlEvent (..), HasControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, button, checkbox, checkboxMark, control, controlEvents, displayFilter, focusRing, inputFilter, isControlHit, listBox, mouseToTrackPos, numberField, onAny, onClick, onClickTo, onInput, onSelect, onSubmit, onToggle, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -1014,14 +1014,25 @@ spec = describe "Controls" $ do
 
   describe "textInputControl" $ do
     it "lets a custom input filter reject keystrokes entirely" $ do
-      ctx' <- fmap (settle . snd) $ runUI (textInputControl (const T.empty) id TestControl "hello" id)
+      ctx' <- fmap (settle . snd) $ runUI (textInputControl TestControl "hello" [inputFilter (const T.empty), onInput id])
         (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["x"] }))
       dispatchCount ctx' `shouldBe` 0
 
     it "lets a custom display filter change what is rendered without changing the value" $ do
-      ctx' <- fmap (settle . snd) $ runUI (textInputControl id T.toUpper TestControl "hello" id)
+      ctx' <- fmap (settle . snd) $ runUI (textInputControl TestControl "hello" [displayFilter T.toUpper, onInput id])
         (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
       drawnTexts ctx' `shouldContain` ["HELLO"]
+
+    describe "onSubmit" $ do
+      it "fires Submitted when Enter is pressed while focused" $ do
+        ctx' <- fmap (settle . snd) $ runUI (textInputControl TestControl "hello" [onSubmit "submitted"])
+          (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        getMessages ctx' `shouldBe` ["submitted"]
+
+      it "does not fire Submitted when a different element is focused" $ do
+        ctx' <- fmap (settle . snd) $ runUI (textInputControl TestControl "hello" [onSubmit "submitted"])
+          (withFocus (Just OtherControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        getMessages ctx' `shouldBe` []
 
   describe "rangeControl" $ do
     controlBehaviourSpec runRangeControl (Point 50 50)
