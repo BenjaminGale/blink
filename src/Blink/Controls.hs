@@ -1240,10 +1240,10 @@ listBox :: (Eq e, Ord e, Eq a)
         -> Double                                  -- ^ item height, in pixels
         -> [(a, Text)]                             -- ^ @(value, label)@ pairs
         -> a                                       -- ^ currently selected value
-        -> (a -> msg)
+        -> [Attr e (SelectorEvent a) msg cfg]
         -> (e -> Bool -> (a, Text) -> UI e msg ())  -- ^ @eid isSelected item@
         -> UI e msg ()
-listBox mkId itemHeight items selected onItemSelected renderItem = do
+listBox mkId itemHeight items selected attrs renderItem = do
   initialFocus <- getFocus
   hBox defaultBoxConfig
     [ (Layout Fill Fill TopLeft, itemsArea initialFocus)
@@ -1277,7 +1277,7 @@ listBox mkId itemHeight items selected onItemSelected renderItem = do
            disabled     <- isDisabled
            let activated = not disabled && (clicked || keyActivated)
            renderItem eid (selected == val) item
-           when activated $ emit (onItemSelected val)
+           when activated $ fire attrs [Selected val]
            -- Same same-frame-cascade guard as 'selector': only the item that
            -- already held focus before this frame (or was just clicked) may
            -- move focus.

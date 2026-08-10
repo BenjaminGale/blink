@@ -523,7 +523,7 @@ mkListBoxCtx :: Int -> InputState -> UIContext ListBoxPart Int
 mkListBoxCtx _sel input = emptyUIContext listBoxRect input listBoxTheme noOpTextMeasurer
 
 runListBox :: Int -> UIContext ListBoxPart Int -> IO (UIContext ListBoxPart Int)
-runListBox sel = fmap (settle . snd) . runUI (listBox id listBoxItemHeight listBoxItems sel id listBoxRenderItem)
+runListBox sel = fmap (settle . snd) . runUI (listBox id listBoxItemHeight listBoxItems sel [onSelect id] listBoxRenderItem)
 
 withListBoxFocus :: Maybe ListBoxPart -> UIContext ListBoxPart Int -> UIContext ListBoxPart Int
 withListBoxFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus = (ixnFocus (ctxInteraction ctx)) { focusedElement = e } } }
@@ -1325,12 +1325,12 @@ spec = describe "Controls" $ do
         getMessages ctx' `shouldBe` [1]
 
       it "dispatches the value when Enter is pressed while an item is focused" $ do
-        ctx' <- fmap (settle . snd) $ runUI (listBox id listBoxItemHeight listBoxItems 0 id listBoxRenderItem)
+        ctx' <- fmap (settle . snd) $ runUI (listBox id listBoxItemHeight listBoxItems 0 [onSelect id] listBoxRenderItem)
           (withListBoxFocus (Just (ListBoxItem 1)) (mkListBoxCtx 0 noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         getMessages ctx' `shouldBe` [1]
 
       it "does not dispatch when clicked while disabled" $ do
-        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (listBox id listBoxItemHeight listBoxItems 0 id listBoxRenderItem))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (listBox id listBoxItemHeight listBoxItems 0 [onSelect id] listBoxRenderItem))
           (withButtonReleased (mkListBoxCtx 0 (mouseAt (Point 50 30) False [])))
         dispatchCount ctx' `shouldBe` 0
 
@@ -1348,7 +1348,7 @@ spec = describe "Controls" $ do
         focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just (ListBoxItem 0)
 
       it "does not move focus when disabled" $ do
-        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (listBox id listBoxItemHeight listBoxItems 0 id listBoxRenderItem))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (listBox id listBoxItemHeight listBoxItems 0 [onSelect id] listBoxRenderItem))
           (withListBoxFocus (Just (ListBoxItem 0)) (mkListBoxCtx 0 noInput { inputKeyEvents = [KeyEvent KeyDown []] }))
         focusedElement (ixnFocus (ctxInteraction ctx')) `shouldBe` Just (ListBoxItem 0)
 

@@ -321,7 +321,7 @@ staticScrollList ps =
 
 dynamicScrollList :: ScrollPageState -> DemoUI ()
 dynamicScrollList ps =
-  listBox ScrollList2 itemH items selected onChangeSelection renderRow
+  listBox ScrollList2 itemH items selected [onSelect onChangeSelection] renderRow
   where
     itemH  = 32 :: Double
     items  = [ (i, "Item " <> T.pack (show (i + 1))) | i <- [0 .. 99 :: Int] ]
