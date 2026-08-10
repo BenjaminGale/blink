@@ -175,6 +175,9 @@ module Blink.Controls
     -- * Slider
   , SliderPart (..)
   , slider
+  , SliderEvent (..)
+  , onChange
+  , arrowStep
     -- * Virtualized content
   , virtualContent
   , ListBoxPart (..)
@@ -832,7 +835,7 @@ textField :: Ord e
           -> Text             -- ^ current value
           -> (Text -> msg) -- ^ message given the new value
           -> UI e msg ()
-textField eid value onChange = textInputControl eid value [onInput onChange]
+textField eid value onEdit = textInputControl eid value [onInput onEdit]
 {-# DEPRECATED textField "Use textInputControl with an onInput attr instead; textField will be removed in Phase 5" #-}
 
 -- | A text field that only accepts digit keystrokes; all other typed
@@ -844,8 +847,8 @@ numberField :: Ord e
             -> Text             -- ^ current value
             -> (Text -> msg) -- ^ message given the new value
             -> UI e msg ()
-numberField eid value onChange =
-  textInputControl eid value [inputFilter (T.filter isDigit), onInput onChange]
+numberField eid value onEdit =
+  textInputControl eid value [inputFilter (T.filter isDigit), onInput onEdit]
 {-# DEPRECATED numberField "Use textInputControl with inputFilter/onInput attrs instead; numberField will be removed in Phase 5" #-}
 
 -- | A text field that masks its displayed value with @•@, one per character,
@@ -858,8 +861,8 @@ passwordField :: Ord e
               -> Text             -- ^ current value
               -> (Text -> msg) -- ^ message given the new value
               -> UI e msg ()
-passwordField eid value onChange =
-  textInputControl eid value [displayFilter (T.map (const '•')), onInput onChange]
+passwordField eid value onEdit =
+  textInputControl eid value [displayFilter (T.map (const '•')), onInput onEdit]
 {-# DEPRECATED passwordField "Use textInputControl with displayFilter/onInput attrs instead; passwordField will be removed in Phase 5" #-}
 
 -- | Sub-parts of a scrollbar, used as the inner tag when building the
@@ -1097,36 +1100,65 @@ viewport mkId (Size cw ch) content = do
 --
 -- @
 -- data Element = ... | HSlider SliderPart
--- slider HSlider Horizontal value VolumeChanged
+-- slider HSlider Horizontal value [onChange VolumeChanged]
 -- @
 data SliderPart
   = SliderTrack -- ^ The track area behind the thumb.
   | SliderThumb -- ^ The draggable thumb.
   deriving (Eq, Ord, Show)
 
--- | A slider mapping a draggable thumb to a value in @[0, 1]@. Dispatches
--- @onChange newValue@ when the user drags, clicks on the track, or nudges
--- with arrow keys (Left\/Right for 'Horizontal', Up\/Down for 'Vertical').
--- The thumb is square: its side equals the cross-axis of the track's content
--- rectangle. Arrow-key steps are 0.05.
+-- | Events reported by 'slider': 'Changed' with the new value when the user
+-- drags, clicks on the track, or nudges with arrow keys, or a lifecycle
+-- event via 'SliderControl' (see 'ControlEvent').
+data SliderEvent = Changed Double | SliderControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent SliderEvent where
+  liftControl = SliderControl
+  matchControl (SliderControl ce) = Just ce
+  matchControl _                  = Nothing
+
+-- | Emits @f newValue@ on every 'Changed'.
+onChange :: (Double -> msg) -> Attr e SliderEvent msg cfg
+onChange f = On $ \ev -> case ev of
+  Changed v -> [OutMsg (f v)]
+  _         -> []
+
+-- | Configuration for 'slider', set via 'arrowStep'.
+newtype SliderConfig = SliderConfig { configArrowStep :: Double }
+
+defaultSliderConfig :: SliderConfig
+defaultSliderConfig = SliderConfig { configArrowStep = 0.05 }
+
+-- | The amount an arrow-key press (Left\/Right for 'Horizontal', Up\/Down
+-- for 'Vertical') changes the value by. Defaults to @0.05@.
+arrowStep :: Double -> Attr e ev msg SliderConfig
+arrowStep v = Config $ \cfg -> cfg { configArrowStep = v }
+
+-- | A slider mapping a draggable thumb to a value in @[0, 1]@. Fires
+-- 'Changed' with the new value when the user drags, clicks on the track, or
+-- nudges with arrow keys (Left\/Right for 'Horizontal', Up\/Down for
+-- 'Vertical', by 'arrowStep'). The thumb is square: its side equals the
+-- cross-axis of the track's content rectangle.
 slider :: Ord e
        => (SliderPart -> e)   -- ^ maps slider parts to element IDs
        -> Orientation         -- ^ slider orientation
        -> Double              -- ^ current value, in @[0, 1]@
-       -> (Double -> msg)  -- ^ message given the new value
+       -> [Attr e SliderEvent msg SliderConfig]
        -> UI e msg ()
-slider mkId ori value onChange = do
+slider mkId ori value attrs = do
   let trackId = mkId SliderTrack
       clamped = max 0 (min 1 value)
+      step    = configArrowStep (configure defaultSliderConfig attrs)
+  wasFocused  <- isFocused trackId
   contentRect <- trackContentRect trackId
   let (crossSz, mainSz) = case ori of
         Horizontal -> (rectHeight contentRect, rectWidth contentRect)
         Vertical   -> (rectWidth contentRect,  rectHeight contentRect)
       thumbRatio  = if mainSz > 0 then crossSz / mainSz else 0
-  newPos <- rangeControl trackId (mkId SliderThumb) ori clamped thumbRatio
-  forM_ newPos $ \p -> emit (onChange p)
-  let step = 0.05
-      (decrKey, incrKey) = case ori of
+  newPos     <- rangeControl trackId (mkId SliderThumb) ori clamped thumbRatio
+  nowFocused <- isFocused trackId
+  let (decrKey, incrKey) = case ori of
         Horizontal -> (KeyLeft,  KeyRight)
         Vertical   -> (KeyUp,    KeyDown)
   disabled  <- isDisabled
@@ -1134,8 +1166,16 @@ slider mkId ori value onChange = do
   incrKeyed <- isKeyPressed trackId incrKey
   let decrPressed = not disabled && decrKeyed
       incrPressed = not disabled && incrKeyed
-  when decrPressed $ emit (onChange (max 0 (clamped - step)))
-  when incrPressed $ emit (onChange (min 1 (clamped + step)))
+      ctrlEvs = concat
+        [ [liftControl FocusGained | not wasFocused && nowFocused]
+        , [liftControl FocusLost   | wasFocused && not nowFocused]
+        ]
+      changes = concat
+        [ [Changed p | Just p <- [newPos]]
+        , [Changed (max 0 (clamped - step)) | decrPressed]
+        , [Changed (min 1 (clamped + step)) | incrPressed]
+        ]
+  fire attrs (ctrlEvs ++ changes)
 
 -- | Renders a windowed slice of a uniform-height item list: given the current
 -- scroll position (in pixels), the height of one item, and the total item
@@ -1190,7 +1230,7 @@ listBox :: (Eq e, Ord e, Eq a)
         -> (a -> msg)
         -> (e -> Bool -> (a, Text) -> UI e msg ())  -- ^ @eid isSelected item@
         -> UI e msg ()
-listBox mkId itemHeight items selected onChange renderItem = do
+listBox mkId itemHeight items selected onItemSelected renderItem = do
   initialFocus <- getFocus
   hBox defaultBoxConfig
     [ (Layout Fill Fill TopLeft, itemsArea initialFocus)
@@ -1224,7 +1264,7 @@ listBox mkId itemHeight items selected onChange renderItem = do
            disabled     <- isDisabled
            let activated = not disabled && (clicked || keyActivated)
            renderItem eid (selected == val) item
-           when activated $ emit (onChange val)
+           when activated $ emit (onItemSelected val)
            -- Same same-frame-cascade guard as 'selector': only the item that
            -- already held focus before this frame (or was just clicked) may
            -- move focus.

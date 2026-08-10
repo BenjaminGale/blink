@@ -248,8 +248,8 @@ rowSlider ps = do
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
     [ (Layout labelW Fill         MiddleLeft, label Label "Slider" [])
     , (Layout Fill   (Exactly 30) TopLeft,
-         slider Slider1 Horizontal (sliderValue ps) (\v s ->
-           updateBasicControls s (\p -> p { sliderValue = v })))
+         slider Slider1 Horizontal (sliderValue ps) [onChange (\v s ->
+           updateBasicControls s (\p -> p { sliderValue = v }))])
     , (Layout valueW Fill         MiddleLeft,
          label Label (T.pack (show (round (sliderValue ps * 100) :: Int)) <> "%") [])
     ]

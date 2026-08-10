@@ -7,7 +7,7 @@ import Test.Hspec
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Controls (ButtonEvent (..), ControlEvent (..), HasControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, button, checkbox, checkboxMark, control, controlEvents, displayFilter, focusRing, inputFilter, isControlHit, listBox, mouseToTrackPos, numberField, onAny, onClick, onClickTo, onInput, onSelect, onSubmit, onToggle, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
+import Blink.Controls (ButtonEvent (..), ControlEvent (..), HasControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderEvent (..), SliderPart (..), TextEvent (..), ViewportPart (..), activatable, arrowStep, button, checkbox, checkboxMark, control, controlEvents, displayFilter, focusRing, inputFilter, isControlHit, listBox, mouseToTrackPos, numberField, onAny, onChange, onClick, onClickTo, onInput, onSelect, onSubmit, onToggle, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -442,7 +442,7 @@ runRangeControl ctx = fmap (settle . snd) $ runUI (rangeControl TestControl Othe
 -- runSliderControl maps SliderTrack -> TestControl and SliderThumb -> OtherControl
 -- so the control suite helpers work without modification.
 runSliderControl :: WidgetRunner
-runSliderControl ctx = fmap (settle . snd) $ runUI (slider tag Horizontal 0.5 (const ())) ctx
+runSliderControl ctx = fmap (settle . snd) $ runUI (slider tag Horizontal 0.5 [onChange (const ())]) ctx
   where
     tag SliderTrack = TestControl
     tag SliderThumb = OtherControl
@@ -460,7 +460,7 @@ sliderRect = Rectangle 0 0 200 30
 
 runSlider :: Orientation -> Double -> InputState -> IO (UIContext SliderPart Double)
 runSlider ori val input =
-  fmap (settle . snd) $ runUI (slider id ori val id)
+  fmap (settle . snd) $ runUI (slider id ori val [onChange id])
     (emptyUIContext sliderRect input sliderTheme noOpTextMeasurer)
 
 withSliderFocus :: Maybe SliderPart -> UIContext SliderPart Double -> UIContext SliderPart Double
@@ -1034,6 +1034,17 @@ spec = describe "Controls" $ do
           (withFocus (Just OtherControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         getMessages ctx' `shouldBe` []
 
+    -- Full gain/lost/retain coverage lives in controlEventsSpec; textInputControl
+    -- can't call controlEvents directly (control already does the same
+    -- hover/focus/tab work internally), so it reimplements the same
+    -- wasFocused/nowFocused diff by hand. This checks that reimplementation
+    -- actually wires into TextEvent's TextControl constructor.
+    describe "control events" $
+      it "reports lifecycle events via TextEvent's TextControl constructor" $ do
+        (_, ctx') <- runUI (textInputControl TestControl "hello" [onAny (\ev -> [OutMsg ev])])
+          (withButtonReleased (emptyUIContext controlRect (mouseAt (Point 50 50) False []) testTheme noOpTextMeasurer))
+        getMessages ctx' `shouldContain` [TextControl FocusGained]
+
   describe "rangeControl" $ do
     controlBehaviourSpec runRangeControl (Point 50 50)
     describe "background and border" $ backgroundAndBorderSpec runRangeControl
@@ -1121,14 +1132,14 @@ spec = describe "Controls" $ do
       it "continues tracking when the mouse moves outside the track while button held" $ do
         frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
         let val1 = head (getMessages frame1)
-        frame2 <- fmap (settle . snd) $ runUI (slider id Horizontal val1 id)
+        frame2 <- fmap (settle . snd) $ runUI (slider id Horizontal val1 [onChange id])
                                    (nextFrameContext sliderRect (mouseAt (Point 300 15) True []) frame1)
         getMessages frame2 `shouldBe` [1.0]
 
       it "stops tracking when the button is released" $ do
         frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
         let val1 = head (getMessages frame1)
-        frame2 <- fmap (settle . snd) $ runUI (slider id Horizontal val1 id)
+        frame2 <- fmap (settle . snd) $ runUI (slider id Horizontal val1 [onChange id])
                                    (nextFrameContext sliderRect (mouseAt (Point 300 15) False []) frame1)
         dispatchCount frame2 `shouldBe` 0
 
@@ -1140,7 +1151,7 @@ spec = describe "Controls" $ do
       it "does not dispatch on the release frame when the mouse is still over the track" $ do
         frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
         let val1 = head (getMessages frame1)
-        frame2 <- fmap (settle . snd) $ runUI (slider id Horizontal val1 id)
+        frame2 <- fmap (settle . snd) $ runUI (slider id Horizontal val1 [onChange id])
                                    (nextFrameContext sliderRect (mouseAt (Point 100 15) False []) frame1)
         dispatchCount frame2 `shouldBe` 0
 
@@ -1169,13 +1180,18 @@ spec = describe "Controls" $ do
         ctx' <- runSlider Horizontal 0.0 noInput { inputKeyEvents = [KeyEvent KeyLeft []] }
         getMessages ctx' `shouldBe` [0.0]
 
+      it "uses arrowStep instead of the 0.05 default when given" $ do
+        ctx' <- fmap (settle . snd) $ runUI (slider id Horizontal 0.5 [onChange id, arrowStep 0.2])
+          (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme noOpTextMeasurer)
+        getMessages ctx' `shouldBe` [0.7]
+
       it "does not nudge when another element has focus" $ do
-        ctx' <- fmap (settle . snd) $ runUI (slider id Horizontal 0.5 id)
+        ctx' <- fmap (settle . snd) $ runUI (slider id Horizontal 0.5 [onChange id])
           (withSliderFocus (Just SliderThumb) (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme noOpTextMeasurer))
         getMessages ctx' `shouldBe` []
 
       it "does not nudge when disabled" $ do
-        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (slider id Horizontal 0.5 id))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (slider id Horizontal 0.5 [onChange id]))
           (withSliderFocus (Just SliderTrack) (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme noOpTextMeasurer))
         dispatchCount ctx' `shouldBe` 0
 
@@ -1183,6 +1199,18 @@ spec = describe "Controls" $ do
       it "does not dispatch when there is no input" $ do
         ctx' <- runSlider Horizontal 0.5 noInput
         dispatchCount ctx' `shouldBe` 0
+
+    -- Full gain/lost/retain coverage lives in controlEventsSpec; slider
+    -- can't call controlEvents directly (rangeControl already does the same
+    -- hover/focus/tab work internally via 'control'), so it reimplements the
+    -- same wasFocused/nowFocused diff by hand. This checks that
+    -- reimplementation actually wires into SliderEvent's SliderControl
+    -- constructor.
+    describe "control events" $
+      it "reports lifecycle events via SliderEvent's SliderControl constructor" $ do
+        (_, ctx') <- runUI (slider id Horizontal 0.5 [onAny (\ev -> [OutMsg ev])])
+          (withButtonReleased (emptyUIContext sliderRect (mouseAt (Point 100 15) False []) sliderTheme noOpTextMeasurer))
+        getMessages ctx' `shouldContain` [SliderControl FocusGained]
 
   describe "selector" $ do
     let renderItem :: Int -> Bool -> (String, Text) -> UI Int String ()
