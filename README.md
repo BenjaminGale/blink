@@ -15,33 +15,39 @@ A minimal counter, showing the shape of a Blink application:
 data Element = Increment | CountLabel
   deriving (Eq, Ord)
 
-view :: UI Element Int ()
-view = vBox defaultBoxConfig
-  [ ( Layout Fill (Exactly 24) TopLeft, do
-        count <- getAppState
-        label CountLabel (T.pack (show count))
+data Msg = Increment'
+
+view :: Int -> UI Element Msg ()
+view count = vBox defaultBoxConfig
+  [ ( Layout Fill (Exactly 24) TopLeft,
+        label CountLabel (T.pack (show count)) []
     )
-  , ( Layout Fill (Exactly 32) TopLeft, do
-        clicked <- button Increment "+1"
-        when clicked $ dispatch (+ 1)
+  , ( Layout Fill (Exactly 32) TopLeft,
+        button Increment "+1" [onClick Increment']
     )
   ]
 
-app :: App Element Int
-app = App { startUp = pure 0, theme = const myTheme, view = view }
+update :: Msg -> Update Int ()
+update Increment' = modify (+ 1)
+
+app :: App Element Msg Int
+app = App { startUp = pure 0, theme = const myTheme, view = view, update = update }
 ```
 
 `Element` identifies each interactive control, used to look up styles and
-route keyboard focus. `Int` is the application state — `view` reads it with
-`getAppState` and queues changes with `dispatch`; the host applies them once
-the frame completes. Pass `app` to `configureContinuous` or
-`configureEventDriven` to get a `BlinkHandle`, then drive it with `stepFrame`
-each iteration of your platform's event loop.
+route keyboard focus. `Msg` is what the view emits — here, `onClick` queues
+`Increment'` when the button fires. `Int` is the application state, passed
+into `view` explicitly each frame; `update` folds each queued `Msg` into the
+state once the frame completes, in emission order. Pass `app` to
+`configureContinuous` or `configureEventDriven` to get a `BlinkHandle`, then
+drive it with `stepFrame` each iteration of your platform's event loop.
 
 ## Modules
 
   * `Blink.App` — application definition and backend integration.
   * `Blink.UI` — the UI monad: drawing, interaction, focus, and style queries.
+  * `Blink.Update` — the Update monad: turns a message emitted by the view
+    into an updated application state.
   * `Blink.Controls` — ready-made controls: buttons, text inputs, checkboxes,
     progress bars, and labels.
   * `Blink.Layout` — box layout and constraint-based sizing.
