@@ -44,6 +44,8 @@ Every 'App' is parameterised over two types:
                        Start here when implementing a new backend.
   * "Blink.UI"       — The UI monad: drawing, interaction, focus, and style
                        queries. Start here when building views.
+  * "Blink.Update"   — The Update monad: turns a message emitted by the view
+                       into an updated application state.
   * "Blink.Controls" — Ready-made controls: buttons, text inputs, checkboxes,
                        progress bars, and labels.
   * "Blink.Layout"   — Box layout and constraint-based sizing.
@@ -62,6 +64,7 @@ module Blink
   , module Blink.Rendering
   , module Blink.Style
   , module Blink.UI
+  , module Blink.Update
   ) where
 
 import Blink.App
@@ -72,3 +75,4 @@ import Blink.Layout
 import Blink.Rendering
 import Blink.Style
 import Blink.UI
+import Blink.Update

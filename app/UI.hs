@@ -75,7 +75,7 @@ data AppState = AppState
   , lastInputCount :: Int
   }
 
-demoApp :: App Element AppState
+demoApp :: App Element (AppState -> AppState) AppState
 demoApp = App
   { startUp = pure AppState
       { currentPage    = BasicControlsPage initialBasicControls
@@ -86,6 +86,7 @@ demoApp = App
       }
   , theme   = \s -> if darkMode s then darkTheme else lightTheme
   , view    = demoView
+  , update  = modify
   }
 
 type DemoUI = LegacyUI Element AppState

@@ -4,22 +4,25 @@ Module: Blink.App
 = Application structure
 
 'App' bundles everything Blink needs to run: the startup action that
-produces the initial state, a function from state to 'Theme', and the UI tree.
+produces the initial state, a function from state to 'Theme', the UI tree,
+and the message handler.
 
 @
-data App e s = App
+data App e msg s = App
   { startUp :: IO s
-  , theme :: s -> Theme e
-  , view :: s -> LegacyUI e s ()
+  , theme   :: s -> Theme e
+  , view    :: s -> UI e msg ()
+  , update  :: msg -> Update s ()
   }
 @
 
   * @e@ is the element type — a sum type identifying each interactive control
     (see "Blink.UI").
+  * @msg@ is the type of messages the view emits (see "Blink.UI").
   * @s@ is the application state, owned by the host and passed into 'view'
     explicitly each frame. The view never mutates it directly; it queues
-    @s -> s@ modifiers with 'Blink.UI.emit', which are applied once the frame
-    completes.
+    @msg@ values with 'Blink.UI.emit', which 'update' folds into the state
+    once the frame completes, in emission order.
 
 = Configuration
 
@@ -29,18 +32,18 @@ Pass an 'App' to 'configureContinuous' or 'configureEventDriven' to obtain a
   * 'configureContinuous'  — for backends that redraw every frame regardless of
     input (e.g. game-style loops). Draw commands from the first render pass are
     submitted immediately each frame.
-  * 'configureEventDriven' — for backends that block on events. After applying
-    the frame's emitted modifiers, a second render pass runs on the updated
-    state so the displayed frame always reflects the latest state. The 'IO ()'
-    callback is invoked when the animation ticker fires, allowing the backend
-    to unblock its event wait (e.g. @glfwPostEmptyEvent@).
+  * 'configureEventDriven' — for backends that block on events. After folding
+    the frame's emitted messages into the state, a second render pass runs on
+    the updated state so the displayed frame always reflects the latest
+    state. The 'IO ()' callback is invoked when the animation ticker fires,
+    allowing the backend to unblock its event wait (e.g. @glfwPostEmptyEvent@).
 
 >  Continuous:                          Event-driven:
 >
 >  run view -----> submit draws         run view (pass 1)
 >       (stale state may flash              |
 >        briefly on the next frame          v
->        redraw instead)               apply emitted modifiers
+>        redraw instead)               fold emitted messages
 >                                            |
 >                                            v
 >                                       run view again (pass 2)
@@ -97,6 +100,7 @@ module Blink.App
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Monad (when, void)
 import Data.IORef
+import Data.List (foldl')
 import Data.Text (Text)
 import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
@@ -106,31 +110,36 @@ import Blink.Input (KeyEvent, InputState (..))
 import Blink.Rendering (DrawCommand, TextMeasurer (..))
 import Blink.Style (Theme)
 import Blink.UI
-  ( LegacyUI, UIContext (..), FrameOutputs (..)
+  ( UI, UIContext (..), FrameOutputs (..)
   , AnimationState (..)
   , emptyUIContext, nextFrameContext
-  , runUI, getDrawCommands, applyDispatches
+  , runUI, getDrawCommands, getMessages
   )
+import Blink.Update (Update, runUpdate)
 
 -- | Describes a complete Blink application.
 --
--- @e@ is the element type and @s@ the application state. See "Blink.UI" for
--- an explanation of element IDs and application state.
-data App e s = App
+-- @e@ is the element type, @msg@ the type of messages emitted by the view,
+-- and @s@ the application state. See "Blink.UI" for an explanation of
+-- element IDs and messages.
+data App e msg s = App
   { startUp :: IO s
     -- ^ Produces the initial application state before the render loop begins.
   , theme :: s -> Theme e
     -- ^ Derives the active 'Theme' from the current state. Called each frame,
     -- allowing the theme to change in response to state changes.
-  , view :: s -> LegacyUI e s ()
+  , view :: s -> UI e msg ()
     -- ^ The UI tree, given the application state as it was at the start of
-    -- the frame. Queues changes with 'Blink.UI.emit'; run once or twice per
+    -- the frame. Queues messages with 'Blink.UI.emit'; run once or twice per
     -- frame depending on the render mode.
+  , update :: msg -> Update s ()
+    -- ^ Folds one message emitted by 'view' into the application state.
+    -- Every message queued during a frame is applied in emission order.
   }
 
 -- | Produces a 'BlinkHandle' for a continuous render backend. The draw list
 -- from the first render pass is submitted immediately each frame.
-configureContinuous :: Ord e => App e s -> TextMeasurer -> IO (BlinkHandle s)
+configureContinuous :: Ord e => App e msg s -> TextMeasurer -> IO (BlinkHandle s)
 configureContinuous app measurer = do
   s <- startUp app
   refs <- AppRefs
@@ -143,7 +152,7 @@ configureContinuous app measurer = do
 -- | Produces a 'BlinkHandle' for an event-driven backend. The 'IO ()'
 -- callback is called when the animation ticker fires so the backend can
 -- unblock its event wait.
-configureEventDriven :: Ord e => App e s -> IO () -> TextMeasurer -> IO (BlinkHandle s)
+configureEventDriven :: Ord e => App e msg s -> IO () -> TextMeasurer -> IO (BlinkHandle s)
 configureEventDriven app notify measurer = do
   s <- startUp app
   refs <- AppRefs
@@ -194,8 +203,8 @@ data FrameResult s
 
 -- | Mutable state carried between frames, allocated once at configure time
 -- and threaded through every 'stepFrame' call via closure.
-data AppRefs e s = AppRefs
-  { refsCtx        :: IORef (UIContext e (s -> s))
+data AppRefs e msg s = AppRefs
+  { refsCtx        :: IORef (UIContext e msg)
     -- The UIContext carried over from the previous frame.
   , refsState      :: IORef s
     -- The application state as of the end of the previous frame.
@@ -209,7 +218,7 @@ data AppRefs e s = AppRefs
     -- sequentially, so no concurrent access concerns.
   }
 
-buildCtx :: Ord e => App e s -> Rectangle -> InputState -> Float -> Bool -> s -> UIContext e (s -> s) -> UIContext e (s -> s)
+buildCtx :: Ord e => App e msg s -> Rectangle -> InputState -> Float -> Bool -> s -> UIContext e msg -> UIContext e msg
 buildCtx app winRect inputState delta isAnimTick state prevCtx =
   let elapsed   = animElapsed (ctxAnimation prevCtx) + delta
       animState = AnimationState { animDelta = delta, animElapsed = elapsed, animIsTick = isAnimTick }
@@ -220,10 +229,10 @@ buildCtx app winRect inputState delta isAnimTick state prevCtx =
 
 runFrame
   :: Ord e
-  => App e s
-  -> AppRefs e s
+  => App e msg s
+  -> AppRefs e msg s
   -> FrameInput
-  -> IO (UIContext e (s -> s), s)
+  -> IO (UIContext e msg, s)
 runFrame app refs input = do
   let winRect    = rectFromSize (windowSize input)
       inputState = toInputState input
@@ -235,19 +244,19 @@ runFrame app refs input = do
   prevCtx <- readIORef (refsCtx refs)
   let ctx = buildCtx app winRect inputState delta (isAnimationTick input) state prevCtx
   ((), ctx') <- runUI (view app state) ctx
-  let state' = applyDispatches ctx' state
+  let state' = foldl' (\s msg -> runUpdate (update app msg) s) state (getMessages ctx')
 
   writeIORef (refsState refs) state'
 
   pure (ctx', state')
 
-doStepContinuous :: Ord e => App e s -> AppRefs e s -> FrameInput -> IO (FrameResult s)
+doStepContinuous :: Ord e => App e msg s -> AppRefs e msg s -> FrameInput -> IO (FrameResult s)
 doStepContinuous app refs input = do
   (ctx', state') <- runFrame app refs input
   writeIORef (refsCtx refs) ctx'
   pure $ toResult input (getDrawCommands ctx') state'
 
-doStepEventDriven :: Ord e => App e s -> AppRefs e s -> IO () -> FrameInput -> IO (FrameResult s)
+doStepEventDriven :: Ord e => App e msg s -> AppRefs e msg s -> IO () -> FrameInput -> IO (FrameResult s)
 doStepEventDriven app refs notify input = do
   (firstPassCtx, state') <- runFrame app refs input
   let winRect    = rectFromSize (windowSize input)

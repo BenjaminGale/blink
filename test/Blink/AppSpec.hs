@@ -11,6 +11,7 @@ import Blink.Input (Key (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), emptyTheme, noBorder)
 import Blink.UI
+import Blink.Update (modify)
 
 -- Test infrastructure
 
@@ -72,27 +73,29 @@ isQuit _          = False
 
 -- Test apps
 
-counterApp :: App () Int
+counterApp :: App () (Int -> Int) Int
 counterApp = App
   { startUp        = pure 0
 
   , theme          = const (emptyTheme testStyleSet)
   , view           = \_ -> emit (+1)
+  , update         = modify
   }
 
 -- Emits a FillRect covering the full window bounds each frame.
-drawingApp :: Colour -> App () ()
+drawingApp :: Colour -> App () () ()
 drawingApp c = App
   { startUp        = pure ()
 
   , theme          = const (emptyTheme testStyleSet)
   , view           = \_ -> fillRect c
+  , update         = \_ -> pure ()
   }
 
 -- Dispatches (+1) and also draws the current app state as text.
 -- The drawn value differs between continuous (pre-dispatch) and
 -- event-driven (post-dispatch) modes.
-stateDrawApp :: App () Int
+stateDrawApp :: App () (Int -> Int) Int
 stateDrawApp = App
   { startUp        = pure 0
 
@@ -100,10 +103,11 @@ stateDrawApp = App
   , view           = \n -> do
       emit (+1)
       drawText (RGBA 0 0 0 1) AlignLeft (T.pack (show n))
+  , update         = modify
   }
 
 -- Dispatches the number of key events seen this frame.
-keyCountApp :: App () Int
+keyCountApp :: App () (Int -> Int) Int
 keyCountApp = App
   { startUp        = pure 0
 
@@ -111,10 +115,11 @@ keyCountApp = App
   , view           = \_ -> do
       input <- getInput
       emit (+ length (inputKeyEvents input))
+  , update         = modify
   }
 
 -- Reads scroll state as a counter, increments it, and dispatches the old value as app state.
-uiStateApp :: App () Int
+uiStateApp :: App () (Int -> Int) Int
 uiStateApp = App
   { startUp = pure 0
   , theme   = const (emptyTheme testStyleSet)
@@ -122,10 +127,23 @@ uiStateApp = App
       pos <- getScrollState ()
       emitUi (ScrollTo () (pos + 1))
       emit (\_ -> round pos)
+  , update  = modify
+  }
+
+-- Emits two messages in one frame: appends "a" then "b" to the state.
+multiEmitApp :: App () (String -> String) String
+multiEmitApp = App
+  { startUp        = pure ""
+
+  , theme          = const (emptyTheme testStyleSet)
+  , view           = \_ -> do
+      emit (++ "a")
+      emit (++ "b")
+  , update         = modify
   }
 
 -- Dispatches the animation delta as state so it can be observed.
-deltaApp :: App () Float
+deltaApp :: App () (Float -> Float) Float
 deltaApp = App
   { startUp        = pure 999
 
@@ -133,6 +151,7 @@ deltaApp = App
   , view           = \_ -> do
       d <- getAnimDelta
       emit (const d)
+  , update         = modify
   }
 
 spec :: Spec
@@ -171,6 +190,11 @@ spec = do
         handle <- configureContinuous stateDrawApp nullMeasurer
         result <- stepFrame handle normalInput
         drawnTexts result `shouldContain` ["0"]
+
+      it "messages emitted in one frame are folded in emission order" $ do
+        handle <- configureContinuous multiEmitApp nullMeasurer
+        result <- stepFrame handle normalInput
+        resultState result `shouldBe` "ab"
 
     describe "configureEventDriven" $ do
       it "a normal frame returns Continue" $ do
