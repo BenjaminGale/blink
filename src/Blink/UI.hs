@@ -4,12 +4,15 @@ Module: Blink.UI
 = The UI monad
 
 'UI' is the core abstraction in Blink: a state-threading computation
-parameterised over an /element type/ @e@, a /UI state type/ @u@, and an
-/application state type/ @s@.
+parameterised over an /element type/ @e@ and a /message type/ @msg@.
 
 @
-newtype UI e msg a = UI { runUI :: UIContext e msg -> (a, UIContext e msg) }
+newtype UI e msg a = UI { runUI :: UIContext e msg -> IO (a, UIContext e msg) }
 @
+
+The computation runs in 'IO' only because 'TextMeasurer' (see /Text
+measurement/ below) queries the backend's real font metrics; nothing else in
+the UI tree touches 'IO'.
 
 Composing 'UI' actions with '>>=', '>>' and 'mapM_' builds a UI tree. Each
 node in the tree reads from the shared 'UIContext' (bounds, input, theme, focus

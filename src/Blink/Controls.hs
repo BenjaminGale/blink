@@ -107,6 +107,16 @@ and folds them into its own state via "Blink.Update"; the control reads the
 new value back from the application data on the next frame. This keeps all
 application data outside the UI tree.
 
+@Config@ attrs (like 'arrowStep' and 'inputFilter') are a separate concern
+from layout. "Blink.Layout"'s @Layout@ value, supplied by the parent
+container at the call site, controls a control's size and position within
+its container; a @Config@ attr controls the control's own presentation or
+behaviour, independent of where it's placed. Each control's @Config@ type is
+its own — @arrowStep@ only applies to 'slider', @inputFilter@ only to
+'textInputControl' — there is no type shared across every control's
+configuration, the same way there is no type shared across every control's
+events.
+
 == Control state
 
 Controls whose state is presentational rather than application data — a
@@ -1383,8 +1393,12 @@ isActivatedBy eid keys = do
 -- shape with the specifics filled in:
 --
 -- @
--- starRating :: Ord e => e -> Bool -> UI e msg Bool
--- starRating eid lit = activatable eid draw [KeyReturn, KeySpace]
+-- data StarRatingEvent = RatingClicked
+--
+-- starRating :: Ord e => e -> Bool -> [Attr e StarRatingEvent msg cfg] -> UI e msg ()
+-- starRating eid lit attrs = do
+--   activated <- activatable eid draw [KeyReturn, KeySpace]
+--   when activated $ fire attrs [RatingClicked]
 --   where
 --     draw = do
 --       style <- getStyle eid
