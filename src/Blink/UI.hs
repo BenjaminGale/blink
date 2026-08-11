@@ -4,12 +4,15 @@ Module: Blink.UI
 = The UI monad
 
 'UI' is the core abstraction in Blink: a state-threading computation
-parameterised over an /element type/ @e@, a /UI state type/ @u@, and an
-/application state type/ @s@.
+parameterised over an /element type/ @e@ and a /message type/ @msg@.
 
 @
-newtype UI e s a = UI { runUI :: UIContext e s -> (a, UIContext e s) }
+newtype UI e msg a = UI { runUI :: UIContext e msg -> IO (a, UIContext e msg) }
 @
+
+The computation runs in 'IO' only because 'TextMeasurer' (see /Text
+measurement/ below) queries the backend's real font metrics; nothing else in
+the UI tree touches 'IO'.
 
 Composing 'UI' actions with '>>=', '>>' and 'mapM_' builds a UI tree. Each
 node in the tree reads from the shared 'UIContext' (bounds, input, theme, focus
@@ -29,27 +32,36 @@ Element IDs are used to look up styles from the active 'Theme', to track hover
 and press state within a frame, and to route keyboard events to the focused
 control.
 
-= Application state
+= Messages
 
-The application state @s@ lives in the context alongside the UI state.
-'getAppState' reads the value the frame started with. Changes are queued
-rather than applied immediately: 'dispatch' appends a modifier that the host
-applies once the frame completes, so 'getAppState' later in the same frame
-still sees the pre-dispatch value. 'dispatchAsync' queues an IO job that the
-host forks after the frame; the modifier it returns is applied to whatever
-state exists when the job completes.
+Application state is not part of the context at all: views are pure
+functions of a model value supplied by the host, and controls report changes
+by queuing a @msg@ value with 'emit' rather than mutating anything. The host
+reads the queued messages back with 'getMessages' once the frame completes
+and folds them into its own state via "Blink.Update".
 
-= Scroll and selection state
+= Focus, scroll, and selection
 
-Some controls carry presentation state that is no business of the application
-— a scrollbar's position, a text input's cursor. This state is baked directly
-into the 'UIContext' via 'ctxElements': scroll positions are stored in
-'elmScrollStates' (a @Map e 'ScrollState'@) and selections in 'elmSelections'
-(a @Map e ['Selection']@). Both maps are keyed by element ID, populate lazily
-on first write, and persist across frames. Controls read and write them through
-'getScrollState' \/ 'setScrollState' and 'getSelections' \/ 'setSelections';
-the application never sees the traffic. Changes take effect immediately:
-later reads in the same frame see the new value.
+Some controls carry presentation state that is no business of the
+application — which element holds keyboard focus, a scrollbar's position, a
+text input's cursor. This state is baked directly into the 'UIContext':
+focus lives in 'InteractionState', and scroll positions ('elmScrollStates', a
+@Map e 'ScrollState'@) and selections ('elmSelections', a @Map e
+['Selection']@) live in 'ctxElements'. Both maps are keyed by element ID,
+populate lazily on first write, and persist across frames; the application
+never sees the traffic.
+
+Focus ('setFocus', 'clearFocus') changes immediately, exactly like
+'setHovered' and mouse capture: a control's decision (take focus when
+nothing else has it, hand off on Tab) is only correct if the next sibling in
+the same tree walk can see it, the same way capture arbitration needs a
+later hoverer to see that an earlier one already has the mouse. Scroll and
+selection have no such sibling-arbitration requirement — each write targets
+a specific element nobody else is contending for — so they queue a
+'UiEffect' with 'emitUi' instead of mutating immediately; a write made
+partway through a frame is not visible to a read later in that same frame.
+'nextFrameContext' applies the queued effects via 'applyUiEffects' when
+building the next frame's context, so the change takes effect starting then.
 
 = The render loop
 
@@ -57,15 +69,13 @@ Each frame follows the same three steps:
 
 >  1. buildCtx  ---->  2. runUI  ---->  3. extract
 >  (emptyUIContext /       (walk the           (getDrawCommands,
->   nextFrameContext)       UI tree)            applyDispatches,
->                                                getAsyncJobs)
+>   nextFrameContext)       UI tree)            getMessages)
 
   1. Build a fresh 'UIContext' with 'emptyUIContext' (first frame) or advance an
      existing one with 'nextFrameContext'.
   2. Run the UI tree via 'runUI'.
   3. Pass the resulting context to 'getDrawCommands' to obtain the renderer
-     input, and to 'applyDispatches' and 'getAsyncJobs' to advance the
-     application state.
+     input, and to 'getMessages' to advance the application state.
 
 The 'TextMeasurer' re-exported from "Blink.Rendering" is threaded through
 'emptyUIContext' at step 1; see /Text measurement/ below for how controls use
@@ -87,7 +97,7 @@ that advance happens once per tick rather than once per input event too:
 @
 withAnimationFrame $ do
   dt <- getAnimDelta
-  dispatch (\\s -> s { spinnerPhase = spinnerPhase s + dt })
+  emit (AdvanceSpinner dt)
 requiresAnimation
 @
 
@@ -103,7 +113,7 @@ region is discarded.
 
 Interaction queries are scoped to an element ID and are only meaningful after
 the element has registered a hover hit via 'setHovered' (or the high-level
-'control' helper, which does this automatically):
+'Blink.Controls.control' helper, which does this automatically):
 
   * 'isHovered' — the mouse is inside the element's bounds.
   * 'isPressed' — the left button is held while the element is hovered.
@@ -121,7 +131,7 @@ At most one element holds keyboard focus at a time, tracked in 'FocusState'.
     handled by multiple controls in the same frame.
 
 Tab and Shift-Tab navigation between controls is managed automatically by
-'control' in "Blink.Controls".
+'Blink.Controls.control'.
 
 = Styles
 
@@ -153,7 +163,7 @@ primitives above. A minimal button, stripped of styling and focus handling,
 shows how the pieces interlock:
 
 @
-miniButton :: Ord e => e -> Text -> UI e s Bool
+miniButton :: Ord e => e -> Text -> UI e msg Bool
 miniButton eid label = do
   isHit <- isRegionHit
   when isHit $ setHovered eid
@@ -164,7 +174,7 @@ miniButton eid label = do
 
 'setHovered' registers the hit so 'isClicked' has something to check next
 frame; 'fillRect' and 'drawText' read the current bounds implicitly. See
-'control' in "Blink.Controls" for the full version, which adds focus, tab
+'Blink.Controls.control' for the full version, which adds focus, tab
 navigation, and style-driven chrome on top of exactly this shape.
 -}
 module Blink.UI
@@ -175,6 +185,8 @@ module Blink.UI
   , InteractionState (..)
   , ElementState (..)
   , FrameOutputs (..)
+  , Out (..)
+  , UiEffect (..)
     -- * Re-export for convenience
     -- | From "Blink.Rendering"; re-exported since 'emptyUIContext' takes a
     -- 'TextMeasurer' and 'noOpTextMeasurer' is the usual choice outside a
@@ -185,23 +197,20 @@ module Blink.UI
   , emptyUIContext
   , nextFrameContext
   , getDrawCommands
-  , applyDispatches
-  , getAsyncJobs
-    -- * Application state
-  , getAppState
-  , dispatch
-  , dispatchAsync
+  , getMessages
+  , getUiEffects
+  , applyUiEffects
+    -- * Messages
+  , emit
+  , emitUi
     -- * Scroll state
   , ScrollState (..)
   , getScrollState
-  , setScrollState
   , clampScrollPos
     -- * Selections
   , Selection (..)
   , getSelections
-  , setSelections
   , getSelection
-  , setSelection
   , selectionLow
   , selectionHigh
   , selectionHasExtent
@@ -302,6 +311,36 @@ data Selection = Selection
   }
   deriving (Eq, Show)
 
+-- | A cross-frame presentation effect: a scroll or selection change that
+-- takes effect starting the next frame rather than immediately. Queued with
+-- 'emitUi' and applied by 'applyUiEffects', which 'nextFrameContext' runs
+-- automatically between frames. Focus is not represented here — see
+-- 'setFocus' for why it changes immediately instead.
+data UiEffect e
+  = ScrollTo e Double
+    -- ^ Sets the scroll position to an absolute value, stored as given. Most
+    -- callers ('Blink.Controls.scrollBar', 'Blink.Controls.viewport',
+    -- 'Blink.Controls.listBox') use the @[0, 1]@
+    -- convention documented on 'ScrollState' and pass an already-clamped
+    -- value; 'Blink.Controls.textInputControl' is the one exception, storing an unbounded
+    -- pixel offset instead.
+  | ScrollBy e Double
+    -- ^ Adjusts the scroll position by a delta, clamped to @[0, 1]@ — this
+    -- constructor is only ever used in the normalised @[0, 1]@ convention.
+    -- Composes with other 'ScrollBy' effects queued in the same frame for
+    -- the same element rather than last-write-wins.
+  | SetSelectionAt e Selection
+  deriving (Eq, Show)
+
+-- | One item from the frame's output queue: either an application message or
+-- a 'UiEffect'. A single ordered queue holds both so that the relative
+-- ordering between a message and an effect emitted in the same frame is
+-- preserved.
+data Out e msg
+  = OutMsg msg
+  | OutUi (UiEffect e)
+  deriving (Eq, Show)
+
 -- | Tracks which element holds keyboard focus and whether it was visited
 -- during the current frame's render pass.
 data FocusState e = FocusState
@@ -315,9 +354,10 @@ data FocusState e = FocusState
 -- | Per-frame interactive targeting state: which element the mouse is over,
 -- which holds capture during a drag, which has keyboard focus, and which was
 -- the most recent tab stop. Reset and carried forward by 'nextFrameContext'.
--- | Per-frame mouse button interaction state, derived by 'nextInteractionFrame'
--- from the previous and current raw button-down values. Four states arise from
--- the two-frame comparison:
+--
+-- 'ixnButtonDown'\/'ixnButtonReleased' are derived by 'nextInteractionFrame'
+-- from the previous and current raw button-down values. Four states arise
+-- from the two-frame comparison:
 --
 -- @
 -- prev  curr  ixnButtonDown  ixnButtonReleased  meaning
@@ -333,9 +373,13 @@ data FocusState e = FocusState
 -- distinguished from a plain click.
 data InteractionState e = InteractionState
   { ixnHovered         :: Maybe e
+    -- ^ The element currently under the mouse pointer, if any.
   , ixnCaptured        :: Maybe e
+    -- ^ The element holding mouse capture during a drag, if any. See 'nextCapture'.
   , ixnFocus           :: FocusState e
+    -- ^ Which element holds keyboard focus, and whether it's still present this frame.
   , ixnPrevTabStop     :: Maybe e
+    -- ^ The element visited just before the currently focused one, for Shift-Tab.
   , ixnButtonDown      :: Bool
     -- ^ 'True' when the left button is currently held (Pressed or Down state).
   , ixnButtonReleased  :: Bool
@@ -349,70 +393,68 @@ data ElementState e = ElementState
   , elmSelections   :: Map.Map e [Selection]
   }
 
--- | Outputs accumulated during a single frame: draw commands, queued state
--- modifiers, async jobs, and the animation continuation flag. Reset to empty
--- at the start of each frame by 'nextFrameContext'.
-data FrameOutputs s = FrameOutputs
+-- | Outputs accumulated during a single frame: draw commands, the queued
+-- 'Out' events (messages and UI effects, in emit order), and the animation
+-- continuation flag. Reset to empty at the start of each frame by
+-- 'nextFrameContext'.
+data FrameOutputs e msg = FrameOutputs
   { outDrawCommands     :: [DrawCommand]
-  , outDispatches       :: [s -> s]
-  , outAsyncJobs        :: [s -> IO (s -> s)]
+  , outEvents           :: [Out e msg]
   , outRequiresAnimation :: Bool
   }
 
 -- | The frame context threaded through every 'UI' computation. Carries the
 -- current bounds, input state, active theme, accumulated draw commands, focus
--- state, scroll and selection state, and the application state with its
--- queued modifiers. Construct with 'emptyUIContext' or 'nextFrameContext';
--- extract results with 'getDrawCommands', 'applyDispatches', and 'getAsyncJobs'.
+-- state, scroll and selection state, and queued messages. Construct with
+-- 'emptyUIContext' or 'nextFrameContext'; extract results with
+-- 'getDrawCommands' and 'getMessages'.
 --
 -- [@e@] Element identity type — identifies focusable\/hoverable controls.
--- [@s@] Application state type — read with 'getAppState', modified via
--- 'dispatch' and 'dispatchAsync'.
-data UIContext e s = UIContext
+-- [@msg@] Message type emitted by controls via 'emit'; the application never
+-- lives in this context.
+data UIContext e msg = UIContext
   { ctxBounds          :: Rectangle
   , ctxInput           :: InputState
   , ctxTheme           :: Theme e
-  , ctxAppState        :: s
   , ctxDisabled        :: Bool
   , ctxInteractionClip :: Maybe Rectangle
     -- ^ When set, 'isRegionHit' additionally requires the mouse to fall within
     -- this rectangle. Set by 'clipToCurrent' and restored on exit, so it
     -- tracks the innermost enclosing clip region.
   , ctxAnimation       :: AnimationState
-    -- ^ Per-frame animation state: wall-clock delta and tick flag. Set by the
-    -- backend at the start of each frame via 'buildCtx'.
+    -- ^ Per-frame animation state: wall-clock delta and tick flag. Set by
+    -- "Blink.App" at the start of each frame.
   , ctxTextMeasure     :: TextMeasurer
     -- ^ Text measurement service supplied at configure time. Controls call
     -- 'charOffset' and 'charAtOffset' rather than accessing this directly.
   , ctxInteraction     :: InteractionState e
   , ctxElements        :: ElementState e
-  , ctxOutputs         :: FrameOutputs s
+  , ctxOutputs         :: FrameOutputs e msg
   }
 
 -- | The UI monad. A state-threading computation in 'IO' that reads from a
--- 'UIContext' and emits draw commands and application state modifiers as a
--- side effect. Use the 'Functor', 'Applicative', and 'Monad' instances to
--- compose UI trees. See 'control' and "Blink.Controls" for higher-level
--- building blocks.
+-- 'UIContext' and emits draw commands and messages as a side effect. Use the
+-- 'Functor', 'Applicative', and 'Monad' instances to compose UI trees. See
+-- 'Blink.Controls.control' for higher-level building blocks.
 --
 -- [@e@] Element identity type.
--- [@s@] Application state type.
+-- [@msg@] Message type emitted via 'emit'.
 -- [@a@] Result type.
-newtype UI e s a = UI { runUI :: UIContext e s -> IO (a, UIContext e s) }
+newtype UI e msg a = UI { runUI :: UIContext e msg -> IO (a, UIContext e msg) }
 
-instance Functor (UI e s) where
+instance Functor (UI e msg) where
   fmap f (UI g) = UI $ \ctx -> do
     (a, ctx') <- g ctx
     pure (f a, ctx')
 
-instance Applicative (UI e s) where
+instance Applicative (UI e msg) where
   pure a = UI $ \ctx -> pure (a, ctx)
   UI f <*> UI x = UI $ \ctx -> do
     (g, ctx')  <- f ctx
     (a, ctx'') <- x ctx'
     pure (g a, ctx'')
 
-instance Monad (UI e s) where
+instance Monad (UI e msg) where
   return = pure
   UI x >>= f = UI $ \ctx -> do
     (a, ctx') <- x ctx
@@ -428,21 +470,19 @@ emptyInteractionState = InteractionState
   , ixnButtonReleased = False
   }
 
-emptyFrameOutputs :: FrameOutputs s
+emptyFrameOutputs :: FrameOutputs e msg
 emptyFrameOutputs = FrameOutputs
   { outDrawCommands      = []
-  , outDispatches        = []
-  , outAsyncJobs         = []
+  , outEvents            = []
   , outRequiresAnimation = False
   }
 
 -- | Constructs the initial 'UIContext' for the first frame.
-emptyUIContext :: Rectangle -> InputState -> Theme e -> s -> TextMeasurer -> UIContext e s
-emptyUIContext bounds input thm appState measurer = UIContext
+emptyUIContext :: Rectangle -> InputState -> Theme e -> TextMeasurer -> UIContext e msg
+emptyUIContext bounds input thm measurer = UIContext
   { ctxBounds          = bounds
   , ctxInput           = input
   , ctxTheme           = thm
-  , ctxAppState        = appState
   , ctxDisabled        = False
   , ctxInteractionClip = Nothing
   , ctxAnimation       = AnimationState { animDelta = 0, animElapsed = 0, animIsTick = False }
@@ -452,12 +492,14 @@ emptyUIContext bounds input thm appState measurer = UIContext
   , ctxOutputs         = emptyFrameOutputs
   }
 
--- | Advances the context to the next frame. Resets per-frame state (draw
--- commands, hover element, queued dispatches and async jobs, and the
--- focus-visited flag) while preserving cross-frame state (theme, focus
--- element, scroll state, selections, application state, and tab-stop bookkeeping).
-nextFrameContext :: Rectangle -> InputState -> UIContext e s -> UIContext e s
-nextFrameContext bounds input ctx = ctx
+-- | Advances the context to the next frame. First runs 'applyUiEffects' on
+-- the 'UiEffect's queued during the frame that just completed, so focus,
+-- scroll, and selection changes take effect starting this new frame. Then
+-- resets per-frame state (draw commands, hover element, queued messages, and
+-- the focus-visited flag) while preserving cross-frame state (theme, focus
+-- element, scroll state, selections, and tab-stop bookkeeping).
+nextFrameContext :: Ord e => Rectangle -> InputState -> UIContext e msg -> UIContext e msg
+nextFrameContext bounds input ctx0 = ctx
   { ctxBounds      = bounds
   , ctxInput       = input
   , ctxInteraction = nextInteractionFrame
@@ -466,6 +508,8 @@ nextFrameContext bounds input ctx = ctx
       (ctxInteraction ctx)
   , ctxOutputs     = emptyFrameOutputs
   }
+  where
+    ctx = applyUiEffects (getUiEffects ctx0) ctx0
 
 -- | Advances 'InteractionState' to the next frame: clears hover, derives
 -- button transition state from the previous and current raw down values,
@@ -480,51 +524,44 @@ nextInteractionFrame prevDown currDown ixn = ixn
   , ixnFocus          = nextFocusFrame (ixnFocus ixn)
   }
 
-gets :: (UIContext e s -> a) -> UI e s a
+gets :: (UIContext e msg -> a) -> UI e msg a
 gets f = UI $ \ctx -> pure (f ctx, ctx)
 
-modify :: (UIContext e s -> UIContext e s) -> UI e s ()
+modify :: (UIContext e msg -> UIContext e msg) -> UI e msg ()
 modify f = UI $ \ctx -> pure ((), f ctx)
 
-modifyIxn :: (InteractionState e -> InteractionState e) -> UI e s ()
+modifyIxn :: (InteractionState e -> InteractionState e) -> UI e msg ()
 modifyIxn f = modify $ \ctx -> ctx { ctxInteraction = f (ctxInteraction ctx) }
 
-modifyElm :: (ElementState e -> ElementState e) -> UI e s ()
-modifyElm f = modify $ \ctx -> ctx { ctxElements = f (ctxElements ctx) }
-
-modifyOut :: (FrameOutputs s -> FrameOutputs s) -> UI e s ()
+modifyOut :: (FrameOutputs e msg -> FrameOutputs e msg) -> UI e msg ()
 modifyOut f = modify $ \ctx -> ctx { ctxOutputs = f (ctxOutputs ctx) }
 
 -- | The current scroll position for the given element, in @[0, 1]@. Returns
 -- @0@ when no position has been recorded yet.
-getScrollState :: Ord e => e -> UI e s Double
+getScrollState :: Ord e => e -> UI e msg Double
 getScrollState eid = gets $ \ctx ->
   scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
--- | Overwrites the scroll position for the given element. The change takes
--- effect immediately: later reads in the same frame see the new value.
-setScrollState :: Ord e => e -> Double -> UI e s ()
-setScrollState eid v = modifyElm $ \elm ->
-  elm { elmScrollStates = Map.insert eid (ScrollState v) (elmScrollStates elm) }
-
 -- | All selections for the given element. Returns @[]@ when none have been recorded.
-getSelections :: Ord e => e -> UI e s [Selection]
+getSelections :: Ord e => e -> UI e msg [Selection]
 getSelections eid = gets $ \ctx ->
   Map.findWithDefault [] eid (elmSelections (ctxElements ctx))
 
--- | Overwrites the selection list for the given element. The change takes
--- effect immediately.
-setSelections :: Ord e => e -> [Selection] -> UI e s ()
-setSelections eid ss = modifyElm $ \elm ->
-  elm { elmSelections = Map.insert eid ss (elmSelections elm) }
-
 -- | The first selection for the given element, or 'Nothing'.
-getSelection :: Ord e => e -> UI e s (Maybe Selection)
+getSelection :: Ord e => e -> UI e msg (Maybe Selection)
 getSelection eid = listToMaybe <$> getSelections eid
 
--- | Sets a single selection, replacing any existing selections for the element.
-setSelection :: Ord e => e -> Selection -> UI e s ()
-setSelection eid s = setSelections eid [s]
+-- Internal: writes a scroll position directly into the context, bypassing
+-- the deferred-effect queue. Used only by 'applyUiEffects'.
+writeScrollState :: Ord e => e -> Double -> UIContext e msg -> UIContext e msg
+writeScrollState eid v ctx = ctx { ctxElements = (ctxElements ctx)
+  { elmScrollStates = Map.insert eid (ScrollState v) (elmScrollStates (ctxElements ctx)) } }
+
+-- Internal: writes a selection directly into the context, bypassing the
+-- deferred-effect queue. Used only by 'applyUiEffects'.
+writeSelection :: Ord e => e -> Selection -> UIContext e msg -> UIContext e msg
+writeSelection eid sel ctx = ctx { ctxElements = (ctxElements ctx)
+  { elmSelections = Map.insert eid [sel] (elmSelections (ctxElements ctx)) } }
 
 -- | The lower bound of the selected range: @min selectionAnchor selectionActive@.
 selectionLow :: Selection -> Int
@@ -563,47 +600,47 @@ clampScrollPos :: Double -> Double
 clampScrollPos = max 0 . min 1
 
 -- | The current layout rectangle. Set by the layout system via 'withBounds'.
-getBounds :: UI e s Rectangle
+getBounds :: UI e msg Rectangle
 getBounds = gets ctxBounds
 
 -- | The current mouse cursor position in window coordinates.
-getMousePos :: UI e s Point
+getMousePos :: UI e msg Point
 getMousePos = inputMousePosition <$> getInput
 
 -- | The raw input state for the current frame.
-getInput :: UI e s InputState
+getInput :: UI e msg InputState
 getInput = gets ctxInput
 
 -- | Removes all events for the given key from the current frame's key queue,
 -- preventing other controls from handling the same keypress.
-consumeKey :: Key -> UI e s ()
+consumeKey :: Key -> UI e msg ()
 consumeKey k = modify $ \ctx ->
   let input = ctxInput ctx
   in ctx { ctxInput = input { inputKeyEvents = filter (\e -> key e /= k) (inputKeyEvents input) } }
 
 -- | The element that was the most recent tab stop before the current one,
--- used by 'control' to implement Shift-Tab navigation.
-getPreviousTabStop :: UI e s (Maybe e)
+-- used by 'Blink.Controls.control' to implement Shift-Tab navigation.
+getPreviousTabStop :: UI e msg (Maybe e)
 getPreviousTabStop = gets (ixnPrevTabStop . ctxInteraction)
 
 -- | Records the current element as the previous tab stop. Called automatically
--- by 'control'; call manually when building custom focusable controls.
-setPreviousTabStop :: e -> UI e s ()
+-- by 'Blink.Controls.control'; call manually when building custom focusable controls.
+setPreviousTabStop :: e -> UI e msg ()
 setPreviousTabStop eid = modifyIxn $ \ixn -> ixn { ixnPrevTabStop = Just eid }
 
-getTheme :: UI e s (Theme e)
+getTheme :: UI e msg (Theme e)
 getTheme = gets ctxTheme
 
 -- | Returns all style variants for the given element. Falls back to the theme's
 -- default style when no element-specific style is registered.
-getStyleSet :: Ord e => e -> UI e s StyleSet
+getStyleSet :: Ord e => e -> UI e msg StyleSet
 getStyleSet eid = do
   t <- getTheme
   return $ Map.findWithDefault (themeDefaultStyle t) eid (themeElementStyles t)
 
 -- | Resolves the active 'Style' for an element given its current interaction
 -- state. Priority: disabled > pressed > hovered > focused > normal.
-getStyle :: Ord e => e -> UI e s Style
+getStyle :: Ord e => e -> UI e msg Style
 getStyle eid = do
   styles <- getStyleSet eid
   isDis  <- isDisabled
@@ -619,26 +656,26 @@ getStyle eid = do
   return $ fromMaybe (styleSetNormal styles) (asum candidates)
 
 -- | 'True' when the given element is the current hover target.
-isHovered :: Eq e => e -> UI e s Bool
+isHovered :: Eq e => e -> UI e msg Bool
 isHovered eid = (== Just eid) <$> gets (ixnHovered . ctxInteraction)
 
 -- | 'True' when the left button is currently held (Pressed or Down state).
-isButtonDown :: UI e s Bool
+isButtonDown :: UI e msg Bool
 isButtonDown = gets (ixnButtonDown . ctxInteraction)
 
 -- | 'True' on the one frame the left button transitions from held to up.
-isButtonReleased :: UI e s Bool
+isButtonReleased :: UI e msg Bool
 isButtonReleased = gets (ixnButtonReleased . ctxInteraction)
 
 -- | 'True' when the element is hovered and the left button was just released.
-isClicked :: Eq e => e -> UI e s Bool
+isClicked :: Eq e => e -> UI e msg Bool
 isClicked eid = do
   isHov     <- isHovered eid
   released  <- gets (ixnButtonReleased . ctxInteraction)
   return (isHov && released)
 
 -- | 'True' when the element is hovered and the left button is held down.
-isPressed :: Eq e => e -> UI e s Bool
+isPressed :: Eq e => e -> UI e msg Bool
 isPressed eid = do
   isHov <- isHovered eid
   down  <- gets (ixnButtonDown . ctxInteraction)
@@ -646,8 +683,8 @@ isPressed eid = do
 
 -- | Derives the next frame's captured element from the button transition.
 -- Capture is held while the button is down and through the release frame so
--- that 'applyFocus' can distinguish a drag release from a plain click.
--- Cleared once the button is fully up (both prev and curr false).
+-- that a control's focus handling can distinguish a drag release from a
+-- plain click. Cleared once the button is fully up (both prev and curr false).
 -- Acquisition — setting capture in the first place — happens in 'setHovered'.
 nextCapture :: Bool -> Bool -> Maybe e -> Maybe e
 nextCapture prevDown currDown existing
@@ -656,25 +693,26 @@ nextCapture prevDown currDown existing
 
 -- | 'True' on every frame that the given element is being dragged — from the
 -- initial press through to release.
-isDragging :: Eq e => e -> UI e s Bool
+isDragging :: Eq e => e -> UI e msg Bool
 isDragging eid = (== Just eid) <$> gets (ixnCaptured . ctxInteraction)
 
 -- | The element that currently holds mouse capture, or 'Nothing' when no drag
 -- is in progress. Exported for control authors that need to inspect capture
--- state directly, e.g. when implementing focus-on-click without using 'control'.
-getCapturedElement :: UI e s (Maybe e)
+-- state directly, e.g. when implementing focus-on-click without using
+-- 'Blink.Controls.control'.
+getCapturedElement :: UI e msg (Maybe e)
 getCapturedElement = gets (ixnCaptured . ctxInteraction)
 
 -- | The element currently under the mouse pointer, or 'Nothing' when no
 -- element is hovered. Updated at the end of each frame after all controls
 -- have had a chance to register hover via 'setHovered'.
-getHoveredElement :: UI e s (Maybe e)
+getHoveredElement :: UI e msg (Maybe e)
 getHoveredElement = gets (ixnHovered . ctxInteraction)
 
 -- | Registers the element as the current hover target. Also acquires mouse
 -- capture for it if the left button is currently down and nothing is captured
 -- yet, making this the first point of capture for that press.
-setHovered :: e -> UI e s ()
+setHovered :: e -> UI e msg ()
 setHovered eid = modify $ \ctx ->
   let ixn  = ctxInteraction ctx
       ixn' = ixn { ixnHovered = Just eid }
@@ -684,24 +722,29 @@ setHovered eid = modify $ \ctx ->
        else ixn' }
 
 -- | The element that currently holds keyboard focus, or 'Nothing' if none does.
-getFocus :: UI e s (Maybe e)
+getFocus :: UI e msg (Maybe e)
 getFocus = gets (focusedElement . ixnFocus . ctxInteraction)
 
 -- | 'True' when the given element holds keyboard focus.
-isFocused :: Eq e => e -> UI e s Bool
+isFocused :: Eq e => e -> UI e msg Bool
 isFocused eid = (== Just eid) <$> getFocus
 
--- | Transfers keyboard focus to the given element.
-setFocus :: e -> UI e s ()
+-- | Transfers keyboard focus to the given element. Takes effect immediately
+-- — like 'setHovered' and mouse capture, not like the deferred
+-- scroll\/selection writes — because a control's own focus decision (take
+-- it when nothing else has it, hand off on Tab) is only correct if the next
+-- sibling in the same tree walk can see it happened.
+setFocus :: e -> UI e msg ()
 setFocus eid = modifyIxn $ \ixn ->
   ixn { ixnFocus = FocusState { focusedElement = Just eid, focusedThisFrame = True } }
 
--- | Transfers keyboard focus to the given element when the condition is 'True'.
-setFocusWhen :: Bool -> e -> UI e s ()
+-- | Transfers keyboard focus to the given element when the condition is
+-- 'True'.
+setFocusWhen :: Bool -> e -> UI e msg ()
 setFocusWhen b eid = when b (setFocus eid)
 
--- | Removes keyboard focus from all elements.
-clearFocus :: UI e s ()
+-- | Removes keyboard focus from all elements. Immediate, like 'setFocus'.
+clearFocus :: UI e msg ()
 clearFocus = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { focusedElement = Nothing } }
 
 -- | Advances a 'FocusState' to the next frame: carries focus forward if it
@@ -717,40 +760,40 @@ nextFocusFrame fs = FocusState
 -- | Runs a sub-tree within a different bounding rectangle. The previous bounds
 -- are restored when the sub-tree completes. Used by the layout system to
 -- assign each child its allocated slot.
-withBounds :: Rectangle -> UI e s a -> UI e s a
+withBounds :: Rectangle -> UI e msg a -> UI e msg a
 withBounds r (UI f) = UI $ \ctx -> do
   (a, ctx') <- f (ctx { ctxBounds = r })
   pure (a, ctx' { ctxBounds = ctxBounds ctx })
 
 -- | 'True' when the current sub-tree has been marked disabled.
-isDisabled :: UI e s Bool
+isDisabled :: UI e msg Bool
 isDisabled = gets ctxDisabled
 
 -- | Marks a sub-tree as disabled when the condition is 'True'. The flag is
 -- restored to its previous value once the sub-tree completes.
-disableWhen :: Bool -> UI e s a -> UI e s a
+disableWhen :: Bool -> UI e msg a -> UI e msg a
 disableWhen True (UI f) = UI $ \ctx -> do
   (a, ctx') <- f (ctx { ctxDisabled = True })
   pure (a, ctx' { ctxDisabled = ctxDisabled ctx })
 disableWhen False action = action
 
-draw :: DrawCommand -> UI e s ()
+draw :: DrawCommand -> UI e msg ()
 draw cmd = modifyOut $ \out -> out { outDrawCommands = cmd : outDrawCommands out }
 
 -- | Fills the current bounds with a solid colour.
-fillRect :: Colour -> UI e s ()
+fillRect :: Colour -> UI e msg ()
 fillRect colour = do
   r <- getBounds
   draw $ FillRect r colour
 
 -- | Strokes the border of the current bounds with the given colour and per-side widths.
-strokeRect :: Colour -> BorderEdges -> UI e s ()
+strokeRect :: Colour -> BorderEdges -> UI e msg ()
 strokeRect colour edges = do
   r <- getBounds
   draw $ StrokeBorder r colour edges
 
 -- | Renders text within the current bounds using the given colour and alignment.
-drawText :: Colour -> TextAlign -> Text -> UI e s ()
+drawText :: Colour -> TextAlign -> Text -> UI e msg ()
 drawText colour align text = do
   r <- getBounds
   draw $ DrawText r text colour align
@@ -758,7 +801,7 @@ drawText colour align text = do
 -- | Wraps a sub-tree in a clip region matching the current bounds. Draw
 -- commands produced by the sub-tree that fall outside the region are discarded,
 -- and mouse hit-testing is also restricted to the same region.
-clipToCurrent :: UI e s a -> UI e s a
+clipToCurrent :: UI e msg a -> UI e msg a
 clipToCurrent (UI f) = UI $ \ctx -> do
   let r       = ctxBounds ctx
       newClip = maybe r (intersectRect r) (ctxInteractionClip ctx)
@@ -773,56 +816,71 @@ clipToCurrent (UI f) = UI $ \ctx -> do
 
 -- | Fills the current bounds with @colour@ then runs @content@ on top.
 -- Skips the fill when @colour@ is fully transparent.
-withBackground :: Colour -> UI e s a -> UI e s a
+withBackground :: Colour -> UI e msg a -> UI e msg a
 withBackground colour content = do
   when (isVisible colour) $ fillRect colour
   content
 
 -- | Runs @content@, then strokes a border around the current bounds on top.
 -- Drawing the border after content ensures it is always visible over children.
-withBorder :: Colour -> BorderEdges -> UI e s a -> UI e s a
+withBorder :: Colour -> BorderEdges -> UI e msg a -> UI e msg a
 withBorder colour edges content = do
   result <- content
   strokeRect colour edges
   pure result
 
--- | The application state as it was at the start of the frame. Modifiers
--- queued with 'dispatch' do not affect the value seen by later calls in the
--- same frame; changes become visible from the next frame onward.
-getAppState :: UI e s s
-getAppState = gets ctxAppState
+-- | Queues a message to be delivered to the application once the frame
+-- completes. Messages are delivered in emit order by 'getMessages'.
+emit :: msg -> UI e msg ()
+emit msg = modifyOut $ \out -> out { outEvents = OutMsg msg : outEvents out }
 
--- | Queues a modifier to be applied to the application state once the frame
--- completes. Modifiers are applied in dispatch order by 'applyDispatches'.
-dispatch :: (s -> s) -> UI e s ()
-dispatch f = modifyOut $ \out -> out { outDispatches = f : outDispatches out }
-
--- | Queues an asynchronous job. The host forks the job once the frame
--- completes, passing it the post-dispatch application state; the modifier the
--- job returns is applied to whatever state exists when it finishes.
-dispatchAsync :: (s -> IO (s -> s)) -> UI e s ()
-dispatchAsync job = modifyOut $ \out -> out { outAsyncJobs = job : outAsyncJobs out }
+-- | Queues a 'UiEffect' — a focus, scroll, or selection change — to be
+-- applied by 'applyUiEffects' between this frame and the next. 'setFocus',
+-- 'clearFocus', and the scroll\/selection writes inside "Blink.Controls" are
+-- built on this; reach for it directly only when writing a custom control.
+emitUi :: UiEffect e -> UI e msg ()
+emitUi eff = modifyOut $ \out -> out { outEvents = OutUi eff : outEvents out }
 
 -- | Extracts the draw commands produced during the frame, in submission order.
-getDrawCommands :: UIContext e s -> [DrawCommand]
+getDrawCommands :: UIContext e msg -> [DrawCommand]
 getDrawCommands = reverse . outDrawCommands . ctxOutputs
 
--- | Applies the modifiers queued with 'dispatch' during the frame to the
--- frame's application state, in dispatch order.
-applyDispatches :: UIContext e s -> s
-applyDispatches ctx =
-  foldl' (flip ($)) (ctxAppState ctx) (reverse (outDispatches (ctxOutputs ctx)))
+-- | Extracts the messages queued with 'emit' during the frame, in emit order.
+-- 'UiEffect's queued with 'emitUi' (or 'setFocus', 'clearFocus', etc.) are
+-- excluded; they are applied automatically by 'nextFrameContext' and never
+-- reach the application.
+getMessages :: UIContext e msg -> [msg]
+getMessages ctx = [msg | OutMsg msg <- reverse (outEvents (ctxOutputs ctx))]
 
--- | Extracts the asynchronous jobs queued with 'dispatchAsync' during the
--- frame, in dispatch order.
-getAsyncJobs :: UIContext e s -> [s -> IO (s -> s)]
-getAsyncJobs = reverse . outAsyncJobs . ctxOutputs
+-- | Extracts the 'UiEffect's queued with 'emitUi' during the frame, in emit
+-- order, interleaved order with messages discarded. Used by
+-- 'nextFrameContext' to drive 'applyUiEffects'; not needed by ordinary
+-- application or control code.
+getUiEffects :: UIContext e msg -> [UiEffect e]
+getUiEffects ctx = [eff | OutUi eff <- reverse (outEvents (ctxOutputs ctx))]
+
+-- | Applies the 'UiEffect's queued during a frame (via 'emitUi' or a
+-- control's scroll\/selection writes) to the context handed to the next
+-- frame. Run automatically by 'nextFrameContext' — no host or application
+-- code needs to call this directly. Effects are folded in queue order:
+-- 'ScrollTo' and 'SetSelectionAt' each overwrite what came before for the
+-- same target, while 'ScrollBy' composes with a previous write to the same
+-- target, clamping to @[0, 1]@ after each step.
+applyUiEffects :: Ord e => [UiEffect e] -> UIContext e msg -> UIContext e msg
+applyUiEffects effects ctx0 = foldl' step ctx0 effects
+  where
+    step ctx (ScrollTo eid v)         = writeScrollState eid v ctx
+    step ctx (ScrollBy eid dv)        = writeScrollState eid (clampScrollPos (currentScroll eid ctx + dv)) ctx
+    step ctx (SetSelectionAt eid sel) = writeSelection eid sel ctx
+
+    currentScroll eid ctx =
+      scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
 -- | 'True' when the mouse cursor is within the current bounds and within the
 -- active interaction clip region (set by 'clipToCurrent'). This is the
 -- lower-level, element-agnostic primitive; for a specific control's hit area
 -- (bounds inset by its margin), see @isControlHit@ in "Blink.Controls".
-isRegionHit :: UI e s Bool
+isRegionHit :: UI e msg Bool
 isRegionHit = do
   r    <- getBounds
   p    <- getMousePos
@@ -830,7 +888,7 @@ isRegionHit = do
   return $ containsPoint p r && maybe True (containsPoint p) clip
 
 -- | Skips its argument entirely when the current sub-tree is disabled.
-whenEnabled :: UI e s () -> UI e s ()
+whenEnabled :: UI e msg () -> UI e msg ()
 whenEnabled ui = do
   disabled <- isDisabled
   unless disabled ui
@@ -839,20 +897,20 @@ whenEnabled ui = do
 -- in progress. Use alongside 'isDragging' to decide whether a control should
 -- respond to hover: @free || dragging@ allows hover when the mouse is
 -- uncontested or when this element itself owns the capture.
-isMouseFree :: UI e s Bool
+isMouseFree :: UI e msg Bool
 isMouseFree = isNothing <$> gets (ixnCaptured . ctxInteraction)
 
 -- | Signals that animation should continue running. Call unconditionally on
 -- every frame from any component that needs animation, including frames not
--- triggered by the ticker. Keeps 'refsAnimActive' set so the ticker does not
--- go quiet while the component is visible.
-requiresAnimation :: UI e s ()
+-- triggered by the ticker, so "Blink.App"'s ticker does not go quiet while
+-- the component is visible.
+requiresAnimation :: UI e msg ()
 requiresAnimation = modifyOut $ \out -> out { outRequiresAnimation = True }
 
 -- | Runs @action@ only on frames triggered by the animation ticker. On frames
 -- triggered by mouse movement, keyboard input, or other platform events, this
 -- is a no-op. Pair with 'requiresAnimation' so the ticker keeps firing.
-withAnimationFrame :: UI e s () -> UI e s ()
+withAnimationFrame :: UI e msg () -> UI e msg ()
 withAnimationFrame action = do
   isTick <- gets (animIsTick . ctxAnimation)
   when isTick action
@@ -860,31 +918,31 @@ withAnimationFrame action = do
 -- | Wall-clock seconds elapsed since the previous frame, clamped to 100 ms.
 -- Zero on the first frame. Use inside 'withAnimationFrame' to advance
 -- animation state by the correct amount regardless of ticker jitter.
-getAnimDelta :: UI e s Float
+getAnimDelta :: UI e msg Float
 getAnimDelta = gets (animDelta . ctxAnimation)
 
 -- | Total wall-clock seconds elapsed since the application started.
 -- Derived by accumulating 'animDelta' each frame; use this to compute
 -- animation phase without storing per-component state.
-getAnimElapsed :: UI e s Float
+getAnimElapsed :: UI e msg Float
 getAnimElapsed = gets (animElapsed . ctxAnimation)
 
 -- | Returns the x offset (pixels) of character index @n@ from the start of
 -- @text@, using the backend's text measurer.
-charOffset :: Text -> Int -> UI e s Float
+charOffset :: Text -> Int -> UI e msg Float
 charOffset text n = UI $ \ctx -> do
   v <- tmCharOffset (ctxTextMeasure ctx) text n
   pure (v, ctx)
 
 -- | Returns the character index closest to x offset @x@ in @text@, using the
 -- backend's text measurer.
-charAtOffset :: Text -> Float -> UI e s Int
+charAtOffset :: Text -> Float -> UI e msg Int
 charAtOffset text x = UI $ \ctx -> do
   v <- tmCharAtOffset (ctxTextMeasure ctx) text x
   pure (v, ctx)
 
 -- | Returns the pixel dimensions of @text@ as rendered by the current font.
-measureText :: Text -> UI e s Size
+measureText :: Text -> UI e msg Size
 measureText text = UI $ \ctx -> do
   v <- tmTextSize (ctxTextMeasure ctx) text
   pure (v, ctx)

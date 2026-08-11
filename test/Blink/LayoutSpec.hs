@@ -58,7 +58,7 @@ fill = fillRect testColour
 
 runLayout :: Rectangle -> UI () () () -> IO [Rectangle]
 runLayout bounds ui = do
-  let ctx = emptyUIContext bounds noInput emptyTheme () noOpTextMeasurer
+  let ctx = emptyUIContext bounds noInput emptyTheme noOpTextMeasurer
   (_, ctx') <- runUI ui ctx
   pure [r | FillRect r _ <- getDrawCommands ctx']
 

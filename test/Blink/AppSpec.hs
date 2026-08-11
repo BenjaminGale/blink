@@ -1,9 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.AppSpec (spec) where
 
-import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
-import Control.Monad (when)
-import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Test.Hspec
@@ -14,6 +11,7 @@ import Blink.Input (Key (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), emptyTheme, noBorder)
 import Blink.UI
+import Blink.Update (modify)
 
 -- Test infrastructure
 
@@ -75,68 +73,85 @@ isQuit _          = False
 
 -- Test apps
 
-counterApp :: App () Int
+counterApp :: App () (Int -> Int) Int
 counterApp = App
   { startUp        = pure 0
 
   , theme          = const (emptyTheme testStyleSet)
-  , view           = dispatch (+1)
+  , view           = \_ -> emit (+1)
+  , update         = modify
   }
 
 -- Emits a FillRect covering the full window bounds each frame.
-drawingApp :: Colour -> App () ()
+drawingApp :: Colour -> App () () ()
 drawingApp c = App
   { startUp        = pure ()
 
   , theme          = const (emptyTheme testStyleSet)
-  , view           = fillRect c
+  , view           = \_ -> fillRect c
+  , update         = \_ -> pure ()
   }
 
 -- Dispatches (+1) and also draws the current app state as text.
 -- The drawn value differs between continuous (pre-dispatch) and
 -- event-driven (post-dispatch) modes.
-stateDrawApp :: App () Int
+stateDrawApp :: App () (Int -> Int) Int
 stateDrawApp = App
   { startUp        = pure 0
 
   , theme          = const (emptyTheme testStyleSet)
-  , view           = do
-      n <- getAppState
-      dispatch (+1)
+  , view           = \n -> do
+      emit (+1)
       drawText (RGBA 0 0 0 1) AlignLeft (T.pack (show n))
+  , update         = modify
   }
 
 -- Dispatches the number of key events seen this frame.
-keyCountApp :: App () Int
+keyCountApp :: App () (Int -> Int) Int
 keyCountApp = App
   { startUp        = pure 0
 
   , theme          = const (emptyTheme testStyleSet)
-  , view           = do
+  , view           = \_ -> do
       input <- getInput
-      dispatch (+ length (inputKeyEvents input))
+      emit (+ length (inputKeyEvents input))
+  , update         = modify
   }
 
 -- Reads scroll state as a counter, increments it, and dispatches the old value as app state.
-uiStateApp :: App () Int
+uiStateApp :: App () (Int -> Int) Int
 uiStateApp = App
   { startUp = pure 0
   , theme   = const (emptyTheme testStyleSet)
-  , view    = do
+  , view    = \_ -> do
       pos <- getScrollState ()
-      setScrollState () (pos + 1)
-      dispatch (\_ -> round pos)
+      emitUi (ScrollTo () (pos + 1))
+      emit (\_ -> round pos)
+  , update  = modify
+  }
+
+-- Emits two messages in one frame: appends "a" then "b" to the state.
+multiEmitApp :: App () (String -> String) String
+multiEmitApp = App
+  { startUp        = pure ""
+
+  , theme          = const (emptyTheme testStyleSet)
+  , view           = \_ -> do
+      emit (++ "a")
+      emit (++ "b")
+  , update         = modify
   }
 
 -- Dispatches the animation delta as state so it can be observed.
-deltaApp :: App () Float
+deltaApp :: App () (Float -> Float) Float
 deltaApp = App
   { startUp        = pure 999
 
   , theme          = const (emptyTheme testStyleSet)
-  , view           = do
+  , view           = \_ -> do
       d <- getAnimDelta
-      dispatch (const d)
+      emit (const d)
+  , update         = modify
   }
 
 spec :: Spec
@@ -176,6 +191,11 @@ spec = do
         result <- stepFrame handle normalInput
         drawnTexts result `shouldContain` ["0"]
 
+      it "messages emitted in one frame are folded in emission order" $ do
+        handle <- configureContinuous multiEmitApp nullMeasurer
+        result <- stepFrame handle normalInput
+        resultState result `shouldBe` "ab"
+
     describe "configureEventDriven" $ do
       it "a normal frame returns Continue" $ do
         handle <- configureEventDriven counterApp (pure ()) nullMeasurer
@@ -202,38 +222,6 @@ spec = do
         let oneKey = normalInput { keyEvents = [KeyEvent KeyReturn []] }
         result <- stepFrame handle oneKey
         resultState result `shouldBe` 1
-
-    describe "async dispatch" $ do
-      it "an async modifier is applied at the start of the next frame" $ do
-        done <- newEmptyMVar
-        let asyncApp = App
-              { startUp        = pure 0
-              , theme          = const (emptyTheme testStyleSet)
-              , view           = do
-                  s <- getAppState
-                  when (s == 0) $ dispatchAsync $ \_ -> pure (+10)
-              } :: App () Int
-            notify = putMVar done ()
-        handle <- configureEventDriven asyncApp notify nullMeasurer
-        _ <- stepFrame handle normalInput
-        takeMVar done
-        r2 <- stepFrame handle normalInput
-        resultState r2 `shouldBe` 10
-
-      it "the notify callback is called when an async job completes" $ do
-        notified <- newIORef False
-        done     <- newEmptyMVar
-        let notify = writeIORef notified True >> putMVar done ()
-            asyncApp = App
-              { startUp        = pure ()
-            
-              , theme          = const (emptyTheme testStyleSet)
-              , view           = dispatchAsync $ \_ -> pure id
-              } :: App () ()
-        handle <- configureEventDriven asyncApp notify nullMeasurer
-        _ <- stepFrame handle normalInput
-        takeMVar done
-        readIORef notified `shouldReturn` True
 
     describe "frame context progression" $ do
       it "UI state written in frame N is readable in frame N+1" $ do

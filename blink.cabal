@@ -39,6 +39,7 @@ library
         Blink.Rendering
         Blink.Style
         Blink.UI
+        Blink.Update
     hs-source-dirs: src
 
 executable demo
@@ -67,6 +68,7 @@ test-suite blink-tests
         Blink.GeometrySpec
         Blink.LayoutSpec
         Blink.UISpec
+        Blink.UpdateSpec
     build-depends:
         blink,
         hspec,

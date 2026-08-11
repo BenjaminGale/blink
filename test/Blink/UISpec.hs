@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.UISpec (spec) where
 
-import Data.IORef
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
@@ -66,20 +65,20 @@ emptyTheme = Theme
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
-run :: UI () s a -> s -> IO (a, UIContext () s)
-run ui s = runUI ui (emptyUIContext testBounds noInput emptyTheme s noOpTextMeasurer)
+run :: UI () msg a -> IO (a, UIContext () msg)
+run ui = runUI ui (emptyUIContext testBounds noInput emptyTheme noOpTextMeasurer)
 
-runWith :: InputState -> UI () Int a -> IO (a, UIContext () Int)
-runWith input ui = runUI ui (emptyUIContext testBounds input emptyTheme (0 :: Int) noOpTextMeasurer)
+runWith :: InputState -> UI () msg a -> IO (a, UIContext () msg)
+runWith input ui = runUI ui (emptyUIContext testBounds input emptyTheme noOpTextMeasurer)
 
-runTwoElem :: UI TwoElems Int a -> IO (a, UIContext TwoElems Int)
-runTwoElem ui = runUI ui (emptyUIContext testBounds noInput twoElemTheme (0 :: Int) noOpTextMeasurer)
+runTwoElem :: UI TwoElems msg a -> IO (a, UIContext TwoElems msg)
+runTwoElem ui = runUI ui (emptyUIContext testBounds noInput twoElemTheme noOpTextMeasurer)
 
 freshCtx :: IO (UIContext () Int)
-freshCtx = snd <$> run (pure ()) (0 :: Int)
+freshCtx = snd <$> run0 (pure ())
 
 run0 :: UI () Int a -> IO (a, UIContext () Int)
-run0 ui = run ui 0
+run0 = run
 
 withCapture :: e -> UIContext e s -> UIContext e s
 withCapture e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnCaptured = Just e } }
@@ -131,7 +130,7 @@ spec = describe "Blink.UI" $ do
       b `shouldBe` testBounds
 
   context "during a drag (another element holds capture)" $ do
-    let base = emptyUIContext testBounds mouseOnCenterDown twoElemTheme (0 :: Int) noOpTextMeasurer
+    let base = emptyUIContext testBounds mouseOnCenterDown twoElemTheme noOpTextMeasurer :: UIContext TwoElems Int
 
     it "does not hover an element when another element holds capture" $ do
       let ctx = withCapture ElemB base
@@ -147,37 +146,18 @@ spec = describe "Blink.UI" $ do
       (_, ctx') <- runUI (control ElemA (pure ())) base
       ixnHovered (ctxInteraction ctx') `shouldBe` Just ElemA
 
-  it "getAppState returns the frame's starting state" $ do
-    (a, _) <- run getAppState (42 :: Int)
-    a `shouldBe` 42
+  it "getMessages returns emitted messages in emit order" $ do
+    (_, ctx) <- run0 (emit (1 :: Int) >> emit 2)
+    getMessages ctx `shouldBe` [1, 2]
 
-  it "getAppState still sees the pre-dispatch state later in the same frame" $ do
-    (a, _) <- run0 (dispatch (+ 1) >> getAppState)
-    a `shouldBe` 0
-
-  it "applyDispatches applies modifiers in dispatch order" $ do
-    (_, ctx) <- run0 (dispatch (+ 1) >> dispatch (* 10))
-    applyDispatches ctx `shouldBe` 10
-
-  it "applyDispatches returns the starting state when nothing was dispatched" $ do
+  it "getMessages returns [] when nothing was emitted" $ do
     (_, ctx) <- run0 (pure ())
-    applyDispatches ctx `shouldBe` 0
+    getMessages ctx `shouldBe` []
 
-  it "dispatchAsync enqueues exactly one job" $ do
-    let job s = pure (const s)
-    (_, ctx) <- run0 (dispatchAsync job)
-    length (getAsyncJobs ctx) `shouldBe` 1
-
-  it "dispatchAsync does not execute the job immediately" $ do
-    ref <- newIORef False
-    let job s = writeIORef ref True >> pure (const s)
-    _ <- run0 (dispatchAsync job)
-    readIORef ref `shouldReturn` False
-
-  it "nextFrameContext clears queued dispatches and async jobs" $ do
-    (_, ctx) <- run0 (dispatch (+ 1) >> dispatchAsync (pure . const))
+  it "nextFrameContext clears queued messages" $ do
+    (_, ctx) <- run0 (emit (1 :: Int))
     let ctx' = nextFrameContext testBounds noInput ctx
-    (applyDispatches ctx', length (getAsyncJobs ctx')) `shouldBe` (0, 0)
+    getMessages ctx' `shouldBe` []
 
   describe "Selection helpers" $ do
     let sel = Selection
@@ -247,21 +227,23 @@ spec = describe "Blink.UI" $ do
       (ss, _) <- run0 (getSelections ())
       ss `shouldBe` []
 
-    it "returns the selections just written in the same frame" $ do
-      let s = Selection 1 4
-      (ss, _) <- run0 (setSelections () [s] >> getSelections ())
-      ss `shouldBe` [s]
-
     it "getSelection returns Nothing when no selection exists" $ do
       (s, _) <- run0 (getSelection ())
       s `shouldBe` Nothing
 
-    it "getSelection returns the first selection after setSelection" $ do
-      (s, _) <- run0 (setSelection () (cursor 3) >> getSelection ())
-      s `shouldBe` Just (cursor 3)
+    it "SetSelectionAt is queued rather than applied immediately" $ do
+      (ss, ctx) <- run0 (emitUi (SetSelectionAt () (Selection 1 4)) >> getSelections ())
+      ss `shouldBe` []
+      getUiEffects ctx `shouldBe` [SetSelectionAt () (Selection 1 4)]
 
-    it "setSelection replaces any existing selections" $ do
-      (ss, _) <- run0 (setSelections () [Selection 0 5, Selection 7 9] >> setSelection () (cursor 1) >> getSelections ())
+    it "a queued SetSelectionAt is visible via getSelections once applied" $ do
+      (_, ctx) <- run0 (emitUi (SetSelectionAt () (Selection 1 4)))
+      (ss, _) <- runUI (getSelections ()) (applyUiEffects (getUiEffects ctx) ctx)
+      ss `shouldBe` [Selection 1 4]
+
+    it "a later SetSelectionAt in the same frame overrides an earlier one" $ do
+      (_, ctx) <- run0 (emitUi (SetSelectionAt () (Selection 0 5)) >> emitUi (SetSelectionAt () (cursor 1)))
+      (ss, _) <- runUI (getSelections ()) (applyUiEffects (getUiEffects ctx) ctx)
       ss `shouldBe` [cursor 1]
 
   describe "scroll state" $ do
@@ -269,13 +251,24 @@ spec = describe "Blink.UI" $ do
       (v, _) <- run0 (getScrollState ())
       v `shouldBe` 0
 
-    it "returns the value just written in the same frame" $ do
-      (v, _) <- run0 (setScrollState () 0.5 >> getScrollState ())
+    it "ScrollTo is queued rather than applied immediately" $ do
+      (v, ctx) <- run0 (emitUi (ScrollTo () 0.5) >> getScrollState ())
+      v `shouldBe` 0
+      getUiEffects ctx `shouldBe` [ScrollTo () 0.5]
+
+    it "a queued ScrollTo is visible via getScrollState once applied" $ do
+      (_, ctx) <- run0 (emitUi (ScrollTo () 0.5))
+      (v, _) <- runUI (getScrollState ()) (applyUiEffects (getUiEffects ctx) ctx)
       v `shouldBe` 0.5
 
+    it "ScrollBy composes with the current position, clamped to [0, 1]" $ do
+      (_, ctx) <- run0 (emitUi (ScrollTo () 0.5) >> emitUi (ScrollBy () 0.7))
+      (v, _) <- runUI (getScrollState ()) (applyUiEffects (getUiEffects ctx) ctx)
+      v `shouldBe` 1.0
+
     it "keeps scroll positions separate per element" $ do
-      (v, _) <- runTwoElem
-        (setScrollState ElemA 0.3 >> setScrollState ElemB 0.7 >> getScrollState ElemA)
+      (_, ctx) <- runTwoElem (emitUi (ScrollTo ElemA 0.3) >> emitUi (ScrollTo ElemB 0.7))
+      (v, _) <- runUI (getScrollState ElemA) (applyUiEffects (getUiEffects ctx) ctx)
       v `shouldBe` 0.3
 
   describe "clampScrollPos" $ do
@@ -486,12 +479,12 @@ spec = describe "Blink.UI" $ do
       b `shouldBe` False
 
     it "whenEnabled skips its body when the sub-tree is disabled" $ do
-      (_, ctx) <- run0 (disableWhen True (whenEnabled (dispatch (const 1))))
-      applyDispatches ctx `shouldBe` 0
+      (_, ctx) <- run0 (disableWhen True (whenEnabled (emit 1)))
+      getMessages ctx `shouldBe` []
 
     it "whenEnabled runs its body when the sub-tree is enabled" $ do
-      (_, ctx) <- run0 (whenEnabled (dispatch (const 1)))
-      applyDispatches ctx `shouldBe` 1
+      (_, ctx) <- run0 (whenEnabled (emit 1))
+      getMessages ctx `shouldBe` [1]
 
   describe "isMouseFree" $ do
     it "is True when no element holds capture" $ do
@@ -548,8 +541,8 @@ spec = describe "Blink.UI" $ do
           { themeElementStyles = Map.singleton () distinctStyles
           , themeDefaultStyle  = emptyStyleSet
           }
-        runStyled     ui       = runUI ui (emptyUIContext testBounds noInput       styledTheme (0 :: Int) noOpTextMeasurer)
-        runStyledWith input ui = runUI ui (emptyUIContext testBounds input         styledTheme (0 :: Int) noOpTextMeasurer)
+        runStyled     ui       = runUI ui (emptyUIContext testBounds noInput       styledTheme noOpTextMeasurer)
+        runStyledWith input ui = runUI ui (emptyUIContext testBounds input         styledTheme noOpTextMeasurer)
 
     describe "getStyleSet" $ do
       it "returns the element-specific style when registered" $ do
@@ -582,7 +575,8 @@ spec = describe "Blink.UI" $ do
         styleBackground s `shouldBe` RGBA 1 1 1 1
 
   describe "animation" $ do
-    let baseAnimCtx = (emptyUIContext testBounds noInput emptyTheme (0 :: Int) noOpTextMeasurer)
+    let baseAnimCtx :: UIContext () Int
+        baseAnimCtx = (emptyUIContext testBounds noInput emptyTheme noOpTextMeasurer)
                         { ctxAnimation = AnimationState { animDelta = 0.016, animElapsed = 1.5, animIsTick = False } }
         tickCtx    = baseAnimCtx { ctxAnimation = (ctxAnimation baseAnimCtx) { animIsTick = True } }
         nonTickCtx = baseAnimCtx
@@ -596,12 +590,12 @@ spec = describe "Blink.UI" $ do
       e `shouldBe` 1.5
 
     it "withAnimationFrame runs its body on tick frames" $ do
-      (_, ctx) <- runUI (withAnimationFrame (dispatch (const 1))) tickCtx
-      applyDispatches ctx `shouldBe` 1
+      (_, ctx) <- runUI (withAnimationFrame (emit 1)) tickCtx
+      getMessages ctx `shouldBe` [1]
 
     it "withAnimationFrame skips its body on non-tick frames" $ do
-      (_, ctx) <- runUI (withAnimationFrame (dispatch (const 1))) nonTickCtx
-      applyDispatches ctx `shouldBe` 0
+      (_, ctx) <- runUI (withAnimationFrame (emit 1)) nonTickCtx
+      getMessages ctx `shouldBe` []
 
     it "requiresAnimation sets the animation continuation flag" $ do
       (_, ctx) <- runUI requiresAnimation tickCtx

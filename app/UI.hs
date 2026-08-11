@@ -4,6 +4,7 @@ module UI (Element, AppState (..), demoApp) where
 import Blink
 import Theme (Element (..), lightTheme, darkTheme)
 import Control.Monad (when)
+import Data.Char (isDigit)
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -75,7 +76,39 @@ data AppState = AppState
   , lastInputCount :: Int
   }
 
-demoApp :: App Element AppState
+-- Messages
+
+data BasicControlsMsg
+  = ToggleEditing Bool
+  | AddClicks Int
+  | ResetClicks
+  | SetInputText Text
+  | SetNumberText Text
+  | SetPasswordText Text
+  | SetSliderValue Double
+  | SetRadioSelection Int
+  | SetRadioSelection2 Int
+
+data ScrollMsg
+  = ClickedStaticItem Int
+  | SelectedDynamicItem Int
+
+newtype ProgressMsg = ToggleAnimating Bool
+
+data LayoutMsg
+  = ToggleHboxFillCross Bool
+  | ToggleVboxFillCross Bool
+
+data Msg
+  = Navigate Int
+  | SetDarkMode Bool
+  | BasicControlsMsg BasicControlsMsg
+  | ScrollMsg ScrollMsg
+  | ProgressMsg ProgressMsg
+  | LayoutMsg LayoutMsg
+  | FrameObserved Bool Text  -- ^ mouse-is-hovering, this frame's raw key/typed-text label
+
+demoApp :: App Element Msg AppState
 demoApp = App
   { startUp = pure AppState
       { currentPage    = BasicControlsPage initialBasicControls
@@ -86,9 +119,51 @@ demoApp = App
       }
   , theme   = \s -> if darkMode s then darkTheme else lightTheme
   , view    = demoView
+  , update  = updateApp
   }
 
-type DemoUI = UI Element AppState
+updateApp :: Msg -> Update AppState ()
+updateApp msg = case msg of
+  Navigate i           -> modify $ \s -> s { currentPage = pageForIndex i }
+  SetDarkMode v        -> modify $ \s -> s { darkMode = v }
+  BasicControlsMsg m   -> modify $ \s -> updateBasicControls s (applyBasicControlsMsg m)
+  ScrollMsg m          -> modify $ \s -> updateScrollState s (applyScrollMsg m)
+  ProgressMsg m        -> modify $ \s -> updateProgressState s (applyProgressMsg m)
+  LayoutMsg m          -> modify $ \s -> updateLayoutState s (applyLayoutMsg m)
+  FrameObserved hov keyLabel -> modify $ \s -> s
+    { isHovering     = hov
+    , lastInput      = if T.null keyLabel then lastInput s else keyLabel
+    , lastInputCount = if T.null keyLabel then lastInputCount s
+                       else if keyLabel == lastInput s then lastInputCount s + 1
+                       else 1
+    }
+
+applyBasicControlsMsg :: BasicControlsMsg -> BasicControlsState -> BasicControlsState
+applyBasicControlsMsg msg p = case msg of
+  ToggleEditing v      -> p { editingEnabled = v }
+  AddClicks i          -> p { clickCount = min 50 (clickCount p + i) }
+  ResetClicks          -> p { clickCount = 0 }
+  SetInputText t       -> p { inputText = t }
+  SetNumberText t      -> p { numberText = t }
+  SetPasswordText t    -> p { passwordText = t }
+  SetSliderValue v     -> p { sliderValue = v }
+  SetRadioSelection v  -> p { radioSelection = v }
+  SetRadioSelection2 v -> p { radioSelection2 = v }
+
+applyScrollMsg :: ScrollMsg -> ScrollPageState -> ScrollPageState
+applyScrollMsg msg p = case msg of
+  ClickedStaticItem i    -> p { lastClickedStatic = Just i }
+  SelectedDynamicItem i  -> p { lastClickedDynamic = Just i }
+
+applyProgressMsg :: ProgressMsg -> ProgressState -> ProgressState
+applyProgressMsg (ToggleAnimating v) p = p { animating = v }
+
+applyLayoutMsg :: LayoutMsg -> LayoutPageState -> LayoutPageState
+applyLayoutMsg msg p = case msg of
+  ToggleHboxFillCross v -> p { hboxFillCross = v }
+  ToggleVboxFillCross v -> p { vboxFillCross = v }
+
+type DemoUI = UI Element Msg
 
 -- Shell
 
@@ -106,12 +181,10 @@ sidebar s = do
     , (Layout Fill btnH TopLeft, navBtn 3 "Layout")
     , (Layout Fill Fill  TopLeft, pure ())
     , (Layout Fill cbH  TopLeft,
-         checkbox CheckboxBox2 "Dark mode" (darkMode s) (\v st -> st { darkMode = v }))
+         checkbox CheckboxBox2 "Dark mode" (darkMode s) [onToggle SetDarkMode])
     ]
   where
-    navBtn i lbl = do
-      clicked <- button (NavBtn i) lbl
-      when clicked $ dispatch $ \st -> st { currentPage = pageForIndex i }
+    navBtn i lbl = button (NavBtn i) lbl [onClick (Navigate i)]
 
 pageForIndex :: Int -> Page
 pageForIndex 0 = BasicControlsPage initialBasicControls
@@ -142,11 +215,11 @@ footer s (winW, winH) = do
   hoverW'  <- labelWidth hoverText
   renderChrome StatusBar $
     hBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 4, boxAlignment = Center })
-      [ (Layout winW'    Fill MiddleLeft, label Label winText)
-      , (Layout mouseW'  Fill MiddleLeft, label Label mouseText)
-      , (Layout buttonW' Fill MiddleLeft, label Label buttonText)
-      , (Layout hoverW'  Fill MiddleLeft, label Label hoverText)
-      , (Layout Fill               Fill MiddleLeft, label Label keyText)
+      [ (Layout winW'    Fill MiddleLeft, label Label winText [])
+      , (Layout mouseW'  Fill MiddleLeft, label Label mouseText [])
+      , (Layout buttonW' Fill MiddleLeft, label Label buttonText [])
+      , (Layout hoverW'  Fill MiddleLeft, label Label hoverText [])
+      , (Layout Fill               Fill MiddleLeft, label Label keyText [])
       ]
 
 centrePane :: AppState -> DemoUI ()
@@ -177,8 +250,8 @@ rowCheckboxes ps = do
       h = Exactly (max 20 th)
   hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
     [ (Layout w h MiddleLeft,
-         checkbox CheckboxBox1 "Enable editing" (editingEnabled ps) (\v s ->
-           updateBasicControls s (\p -> p { editingEnabled = v })))
+         checkbox CheckboxBox1 "Enable editing" (editingEnabled ps)
+           [onToggle (BasicControlsMsg . ToggleEditing)])
     ]
 
 rowButtons :: BasicControlsState -> DemoUI ()
@@ -192,21 +265,15 @@ rowButtons ps = do
            [ (Layout btnW Fill TopLeft,    btn 1 "One")
            , (Layout btnW Fill TopLeft,    btn 2 "Two")
            , (Layout btnW Fill TopLeft,    btn 3 "Three")
-           , (Layout Fill Fill MiddleLeft, label Label ("Clicks: " <> T.pack (show (clickCount ps))))
+           , (Layout Fill Fill MiddleLeft, label Label ("Clicks: " <> T.pack (show (clickCount ps))) [])
            , (Layout btnW Fill TopLeft,    resetBtn)
            ])
     , (Layout Fill (Exactly 20) TopLeft,
-         progressBar ProgressBar1 (Progress (fromIntegral (clickCount ps) / 50)))
+         progressBar ProgressBar1 (Progress (fromIntegral (clickCount ps) / 50)) [])
     ]
   where
-    btn i txt = do
-      clicked <- button (Btn i) txt
-      when clicked $ dispatch $
-        \s -> updateBasicControls s (\p -> p { clickCount = min 50 (clickCount p + i) })
-    resetBtn = do
-      clicked <- button (Btn 0) "Reset"
-      when clicked $ dispatch $
-        \s -> updateBasicControls s (\p -> p { clickCount = 0 })
+    btn i txt = button (Btn i) txt [onClick (BasicControlsMsg (AddClicks i))]
+    resetBtn  = button (Btn 0) "Reset" [onClick (BasicControlsMsg ResetClicks)]
 
 rowInput :: BasicControlsState -> DemoUI ()
 rowInput ps = do
@@ -214,10 +281,10 @@ rowInput ps = do
   Size tw _   <- measureText "Text input"
   let labelW = addLength (Exactly tw) chromW
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
-    [ (Layout labelW Fill         MiddleLeft, label Label "Text input")
+    [ (Layout labelW Fill         MiddleLeft, label Label "Text input" [])
     , (Layout Fill   (Exactly 30) TopLeft,
-         textField TextInput1 (inputText ps) (\t s ->
-           updateBasicControls s (\p -> p { inputText = t })))
+         textInputControl TextInput1 (inputText ps)
+           [onInput (BasicControlsMsg . SetInputText)])
     ]
 
 rowNumberInput :: BasicControlsState -> DemoUI ()
@@ -226,10 +293,10 @@ rowNumberInput ps = do
   Size tw _   <- measureText "Number input"
   let labelW = addLength (Exactly tw) chromW
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
-    [ (Layout labelW Fill         MiddleLeft, label Label "Number input")
+    [ (Layout labelW Fill         MiddleLeft, label Label "Number input" [])
     , (Layout Fill   (Exactly 30) TopLeft,
-         numberField NumberInput1 (numberText ps) (\t s ->
-           updateBasicControls s (\p -> p { numberText = t })))
+         textInputControl NumberInput1 (numberText ps)
+           [inputFilter (T.filter isDigit), onInput (BasicControlsMsg . SetNumberText)])
     ]
 
 rowPasswordInput :: BasicControlsState -> DemoUI ()
@@ -238,10 +305,10 @@ rowPasswordInput ps = do
   Size tw _   <- measureText "Password input"
   let labelW = addLength (Exactly tw) chromW
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
-    [ (Layout labelW Fill         MiddleLeft, label Label "Password input")
+    [ (Layout labelW Fill         MiddleLeft, label Label "Password input" [])
     , (Layout Fill   (Exactly 30) TopLeft,
-         passwordField PasswordInput1 (passwordText ps) (\t s ->
-           updateBasicControls s (\p -> p { passwordText = t })))
+         textInputControl PasswordInput1 (passwordText ps)
+           [displayFilter (T.map (const '•')), onInput (BasicControlsMsg . SetPasswordText)])
     ]
 
 rowSlider :: BasicControlsState -> DemoUI ()
@@ -252,12 +319,12 @@ rowSlider ps = do
   let labelW = addLength (Exactly lw) chromW
       valueW = addLength (Exactly vw) chromW
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
-    [ (Layout labelW Fill         MiddleLeft, label Label "Slider")
+    [ (Layout labelW Fill         MiddleLeft, label Label "Slider" [])
     , (Layout Fill   (Exactly 30) TopLeft,
-         slider Slider1 Horizontal (sliderValue ps) (\v s ->
-           updateBasicControls s (\p -> p { sliderValue = v })))
+         slider Slider1 Horizontal (sliderValue ps)
+           [onChange (BasicControlsMsg . SetSliderValue)])
     , (Layout valueW Fill         MiddleLeft,
-         label Label (T.pack (show (round (sliderValue ps * 100) :: Int)) <> "%"))
+         label Label (T.pack (show (round (sliderValue ps * 100) :: Int)) <> "%") [])
     ]
 
 rowRadio :: BasicControlsState -> DemoUI ()
@@ -268,21 +335,21 @@ rowRadio ps = do
   hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
     [ (Layout Fill Fill TopLeft,
          vBox defaultBoxConfig
-           [ (Layout Fill labelH TopLeft, label Label "Size")
+           [ (Layout Fill labelH TopLeft, label Label "Size" [])
            , (Layout Fill Fill    TopLeft,
                 radioGroup RadioOpt
                   [(0, "Small"), (1, "Medium"), (2, "Large")]
                   (radioSelection ps)
-                  (\v s -> updateBasicControls s (\p -> p { radioSelection = v })))
+                  [onSelect (BasicControlsMsg . SetRadioSelection)])
            ])
     , (Layout Fill Fill TopLeft,
          vBox defaultBoxConfig
-           [ (Layout Fill labelH TopLeft, label Label "Priority")
+           [ (Layout Fill labelH TopLeft, label Label "Priority" [])
            , (Layout Fill Fill    TopLeft,
                 radioGroup RadioOpt2
                   [(0, "Low"), (1, "Medium"), (2, "High"), (3, "Critical")]
                   (radioSelection2 ps)
-                  (\v s -> updateBasicControls s (\p -> p { radioSelection2 = v })))
+                  [onSelect (BasicControlsMsg . SetRadioSelection2)])
            ])
     ]
 
@@ -301,8 +368,8 @@ scrollView ps = do
   vBox (defaultBoxConfig { boxMargin = 8, boxSpacing = 4 })
     [ (Layout Fill headerH TopLeft,
          hBox defaultBoxConfig
-           [ (Layout Fill Fill MiddleLeft, label Label "Known size (viewport)")
-           , (Layout Fill Fill MiddleLeft, label Label "Virtualized (listBox, 100 items)")
+           [ (Layout Fill Fill MiddleLeft, label Label "Known size (viewport)" [])
+           , (Layout Fill Fill MiddleLeft, label Label "Virtualized (listBox, 100 items)" [])
            ])
     , (Layout Fill Fill TopLeft,
          hBox (defaultBoxConfig { boxSpacing = 8 })
@@ -313,7 +380,7 @@ scrollView ps = do
 
 staticScrollList :: ScrollPageState -> DemoUI ()
 staticScrollList ps =
-  viewport ScrollRegion1 (Size 400 (20 * 32)) $
+  viewport ScrollRegion1 (Size 400 (20 * 32)) [] $
     vBox defaultBoxConfig
       [ (Layout Fill (Exactly 32) TopLeft, item i)
       | i <- [1 .. 20 :: Int]
@@ -322,18 +389,16 @@ staticScrollList ps =
     item i = do
       let isSelected = lastClickedStatic ps == Just i
           txt = (if isSelected then "✓ " else "") <> "Item " <> T.pack (show i)
-      clicked <- button (ScrollItem1 i) txt
-      when clicked $ dispatch $ \s -> updateScrollState s (\p -> p { lastClickedStatic = Just i })
+      button (ScrollItem1 i) txt
+        [onClick (ScrollMsg (ClickedStaticItem i))]
 
 dynamicScrollList :: ScrollPageState -> DemoUI ()
 dynamicScrollList ps =
-  listBox ScrollList2 itemH items selected onChangeSelection renderRow
+  listBox ScrollList2 itemH items selected [onSelect (ScrollMsg . SelectedDynamicItem)] renderRow
   where
     itemH  = 32 :: Double
     items  = [ (i, "Item " <> T.pack (show (i + 1))) | i <- [0 .. 99 :: Int] ]
     selected = maybe (-1) id (lastClickedDynamic ps)
-
-    onChangeSelection i s = updateScrollState s (\p -> p { lastClickedDynamic = Just i })
 
     renderRow eid isSelected (_, txt) = do
       style <- getStyle eid
@@ -353,12 +418,12 @@ progressView ps = do
   let cbH = Exactly (max 20 th)
   vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
     [ (Layout Fill cbH TopLeft,
-         checkbox CheckboxBox3 "Animate" (animating ps) (\v s ->
-           updateProgressState s (\p -> p { animating = v })))
+         checkbox CheckboxBox3 "Animate" (animating ps)
+           [onToggle (ProgressMsg . ToggleAnimating)])
     , (Layout Fill Fill TopLeft,
          if animating ps
-           then progressBar ProgressBar2 Indeterminate
-           else progressBar ProgressBar2 (Progress 0))
+           then progressBar ProgressBar2 Indeterminate []
+           else progressBar ProgressBar2 (Progress 0) [])
     ]
 
 updateProgressState :: AppState -> (ProgressState -> ProgressState) -> AppState
@@ -380,25 +445,25 @@ layoutView ps = do
     , (Layout Fill (Exactly 200) TopLeft, borderLayoutDemo)
     , (Layout Fill headerH       TopLeft, sectionHeader "hBox" $
          checkbox CheckboxBox4 "Fill cross axis" (hboxFillCross ps)
-           (\v s -> updateLayoutState s (\p -> p { hboxFillCross = v })))
+           [onToggle (LayoutMsg . ToggleHboxFillCross)])
     , (Layout Fill (Exactly 100) TopLeft, hboxDemo (hboxFillCross ps))
     , (Layout Fill headerH       TopLeft, sectionHeader "vBox" $
          checkbox CheckboxBox5 "Fill cross axis" (vboxFillCross ps)
-           (\v s -> updateLayoutState s (\p -> p { vboxFillCross = v })))
+           [onToggle (LayoutMsg . ToggleVboxFillCross)])
     , (Layout Fill Fill          TopLeft, vboxDemo (vboxFillCross ps))
     ]
 
 sectionHeader :: Text -> DemoUI () -> DemoUI ()
 sectionHeader title extra =
   hBox defaultBoxConfig
-    [ (Layout Fill          Fill TopLeft, label Label title)
+    [ (Layout Fill          Fill TopLeft, label Label title [])
     , (Layout (Exactly 180) Fill TopLeft, extra)
     ]
 
 colorPane :: Colour -> Text -> DemoUI ()
 colorPane col lbl = do
   fillRect col
-  label Label lbl
+  label Label lbl []
 
 borderLayoutDemo :: DemoUI ()
 borderLayoutDemo =
@@ -438,9 +503,8 @@ updateLayoutState s f = case currentPage s of
 
 -- Top-level view
 
-demoView :: DemoUI ()
-demoView = do
-  s     <- getAppState
+demoView :: AppState -> DemoUI ()
+demoView s = do
   input <- getInput
   win   <- getBounds
   let winSize = (round (rectWidth win) :: Int, round (rectHeight win) :: Int)
@@ -461,10 +525,4 @@ demoView = do
       newInput = if not (T.null typed)
                    then if typed == " " then "Space" else "Character " <> typed
                    else keyName
-  dispatch $ \s' -> s'
-    { isHovering     = isJust mHov
-    , lastInput      = if T.null newInput then lastInput s' else newInput
-    , lastInputCount = if T.null newInput then lastInputCount s'
-                       else if newInput == lastInput s' then lastInputCount s' + 1
-                       else 1
-    }
+  emit (FrameObserved (isJust mHov) newInput)
