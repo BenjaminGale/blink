@@ -2,12 +2,13 @@
 module Blink.ControlsSpec (spec) where
 
 import Control.Monad (forM_)
+import Data.Char (isDigit)
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Controls (ControlEvent (..), HasControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, arrowStep, bandSpeed, button, checkbox, checkboxMark, control, controlEvents, displayFilter, focusRing, inputFilter, isControlHit, listBox, mouseToTrackPos, numberField, onChange, onClick, onClickTo, onInput, onSelect, onSubmit, onToggle, passwordField, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textField, textInputControl, thumbRect, viewport, virtualContent)
+import Blink.Controls (ControlEvent (..), HasControlEvent (..), ListBoxPart (..), ProgressValue (..), ScrollBarPart (..), SliderPart (..), ViewportPart (..), activatable, arrowStep, bandSpeed, button, checkbox, checkboxMark, control, controlEvents, displayFilter, focusRing, inputFilter, isControlHit, listBox, mouseToTrackPos, onChange, onClick, onClickTo, onInput, onSelect, onSubmit, onToggle, progressBar, radioGroup, rangeControl, scrollBar, scrollRegionBarSize, selector, slider, textInputControl, thumbRect, viewport, virtualContent)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (Key (..), Modifier (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
@@ -376,7 +377,7 @@ runActivatable :: WidgetRunner
 runActivatable ctx = fmap (settle . snd) $ runUI (activatable TestControl (drawText testColour AlignCenter "x") [KeyReturn]) ctx
 
 runTextFieldControl :: WidgetRunner
-runTextFieldControl ctx = fmap (settle . snd) $ runUI (textField TestControl "" (const ())) ctx
+runTextFieldControl ctx = fmap (settle . snd) $ runUI (textInputControl TestControl "" [onInput (const ())]) ctx
 
 -- Text editing tests use the entered text itself as the application state.
 mkTextCtx :: Text -> InputState -> UIContext TestElement Text
@@ -396,13 +397,13 @@ mkTextCtxWith :: TextMeasurer -> Text -> InputState -> UIContext TestElement Tex
 mkTextCtxWith measurer _value input = emptyUIContext controlRect input testTheme measurer
 
 runTextField :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
-runTextField value ctx = fmap (settle . snd) $ runUI (textField TestControl value id) ctx
+runTextField value ctx = fmap (settle . snd) $ runUI (textInputControl TestControl value [onInput id]) ctx
 
 runNumberField :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
-runNumberField value ctx = fmap (settle . snd) $ runUI (numberField TestControl value id) ctx
+runNumberField value ctx = fmap (settle . snd) $ runUI (textInputControl TestControl value [inputFilter (T.filter isDigit), onInput id]) ctx
 
 runPasswordField :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
-runPasswordField value ctx = fmap (settle . snd) $ runUI (passwordField TestControl value id) ctx
+runPasswordField value ctx = fmap (settle . snd) $ runUI (textInputControl TestControl value [displayFilter (T.map (const '•')), onInput id]) ctx
 
 -- checkboxMark setup: zero margin/padding so the full controlRect is hittable.
 -- App state is Maybe Bool so dispatches can be observed.
@@ -825,7 +826,7 @@ spec = describe "Controls" $ do
         ctx' <- runCheckbox False (withFocus (Just OtherControl) (mkCheckboxCtx noInput) { ctxTheme = focusBorderTheme })
         getDrawCommands ctx' `shouldNotContain` [StrokeBorder controlRect testBorderColour (uniformBorder 1)]
 
-  describe "textField" $ do
+  describe "textInputControl" $ do
     controlBehaviourSpec runTextFieldControl (Point 50 50)
     describe "background and border" $ backgroundAndBorderSpec runTextFieldControl
 
@@ -862,11 +863,11 @@ spec = describe "Controls" $ do
 
     describe "disabled" $ do
       it "does not process input when disabled" $ do
-        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (textField TestControl "hello" id)) (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] }))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (textInputControl TestControl "hello" [onInput id])) (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] }))
         dispatchCount ctx' `shouldBe` 0
 
       it "does not show a cursor when focused and disabled" $ do
-        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (textField TestControl "hello" id)) (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (textInputControl TestControl "hello" [onInput id])) (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
         getDrawCommands ctx' `shouldNotContain` [FillRect (Rectangle 15 15 1 70) testColour]
 
     describe "cursor placement" $ do
@@ -878,7 +879,7 @@ spec = describe "Controls" $ do
       it "extends the active end on drag while keeping anchor" $ do
         -- First frame: click starts drag; second frame: drag extends selection.
         frame1 <- runTextField "hello" (withFocus (Just TestControl) (mkTextCtx "hello" (mouseAt (Point 50 50) True [])))
-        frame2 <- fmap (settle . snd) $ runUI (textField TestControl "hello" id)
+        frame2 <- fmap (settle . snd) $ runUI (textInputControl TestControl "hello" [onInput id])
                     (nextFrameContext controlRect (mouseAt (Point 70 50) True []) frame1)
         -- With noOpTextMeasurer both positions are 0, so selection is (0,0); the
         -- key check is that anchor was NOT reset on the second frame.
@@ -966,60 +967,60 @@ spec = describe "Controls" $ do
         ctx' <- runTextField "hello" base
         textScrollX ctx' `shouldBe` 0
 
-  describe "numberField" $ do
-    describe "input filter" $ do
-      it "inserts digits typed alongside non-digits, dropping the non-digits" $ do
-        ctx' <- runNumberField "12" (withFocus (Just TestControl) (mkTextCtx "12" noInput { inputTypedText = ["a3b"] }))
-        getMessages ctx' `shouldBe` ["123"]
+    describe "digits-only input (inputFilter)" $ do
+      describe "input filter" $ do
+        it "inserts digits typed alongside non-digits, dropping the non-digits" $ do
+          ctx' <- runNumberField "12" (withFocus (Just TestControl) (mkTextCtx "12" noInput { inputTypedText = ["a3b"] }))
+          getMessages ctx' `shouldBe` ["123"]
 
-      it "does not dispatch when the only typed characters are non-digits" $ do
-        ctx' <- runNumberField "12" (withFocus (Just TestControl) (mkTextCtx "12" noInput { inputTypedText = ["!"] }))
+        it "does not dispatch when the only typed characters are non-digits" $ do
+          ctx' <- runNumberField "12" (withFocus (Just TestControl) (mkTextCtx "12" noInput { inputTypedText = ["!"] }))
+          dispatchCount ctx' `shouldBe` 0
+
+        it "still allows backspace to remove digits" $ do
+          ctx' <- runNumberField "12" (withFocus (Just TestControl) (mkTextCtx "12" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] }))
+          getMessages ctx' `shouldBe` ["1"]
+
+      describe "rendering" $ do
+        it "displays the value unmasked" $ do
+          ctx' <- runNumberField "42" (withFocus (Just TestControl) (mkTextCtx "42" noInput))
+          drawnTexts ctx' `shouldContain` ["42"]
+
+    describe "password masking (displayFilter)" $ do
+      describe "rendering" $ do
+        it "displays a mask character per character of the value instead of the value itself" $ do
+          ctx' <- runPasswordField "hunter2" (withFocus (Just TestControl) (mkTextCtx "hunter2" noInput))
+          drawnTexts ctx' `shouldContain` ["•••••••"]
+          drawnTexts ctx' `shouldNotContain` ["hunter2"]
+
+      describe "editing" $ do
+        it "appends typed characters to the real (unmasked) value" $ do
+          ctx' <- runPasswordField "hunter2" (withFocus (Just TestControl) (mkTextCtx "hunter2" noInput { inputTypedText = ["!"] }))
+          getMessages ctx' `shouldBe` ["hunter2!"]
+
+      describe "cursor placement" $ do
+        it "places the cursor using offsets measured against the masked text, not the real value" $ do
+          -- fixedCharWidth advances 20px per character regardless of content, so
+          -- this only demonstrates the masked text (not the real value) is what
+          -- gets measured; a measurer sensitive to character identity would be
+          -- needed to fully distinguish the two, but passing the wrong text here
+          -- would still be a bug even if this measurer can't see it.
+          let base = withFocus (Just TestControl) (mkTextCtxWith fixedCharWidth "hunter2" (mouseAt (Point 35 50) True []))
+          ctx' <- runPasswordField "hunter2" base
+          case Map.lookup TestControl (elmSelections (ctxElements ctx')) of
+            Just [Selection a v] -> (a, v) `shouldBe` (1, 1)
+            other                 -> expectationFailure $ "expected Just [Selection 1 1], got: " <> show other
+
+    describe "custom filters" $ do
+      it "lets a custom input filter reject keystrokes entirely" $ do
+        ctx' <- fmap (settle . snd) $ runUI (textInputControl TestControl "hello" [inputFilter (const T.empty), onInput id])
+          (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["x"] }))
         dispatchCount ctx' `shouldBe` 0
 
-      it "still allows backspace to remove digits" $ do
-        ctx' <- runNumberField "12" (withFocus (Just TestControl) (mkTextCtx "12" noInput { inputKeyEvents = [KeyEvent KeyBackspace []] }))
-        getMessages ctx' `shouldBe` ["1"]
-
-    describe "rendering" $ do
-      it "displays the value unmasked" $ do
-        ctx' <- runNumberField "42" (withFocus (Just TestControl) (mkTextCtx "42" noInput))
-        drawnTexts ctx' `shouldContain` ["42"]
-
-  describe "passwordField" $ do
-    describe "rendering" $ do
-      it "displays a mask character per character of the value instead of the value itself" $ do
-        ctx' <- runPasswordField "hunter2" (withFocus (Just TestControl) (mkTextCtx "hunter2" noInput))
-        drawnTexts ctx' `shouldContain` ["•••••••"]
-        drawnTexts ctx' `shouldNotContain` ["hunter2"]
-
-    describe "editing" $ do
-      it "appends typed characters to the real (unmasked) value" $ do
-        ctx' <- runPasswordField "hunter2" (withFocus (Just TestControl) (mkTextCtx "hunter2" noInput { inputTypedText = ["!"] }))
-        getMessages ctx' `shouldBe` ["hunter2!"]
-
-    describe "cursor placement" $ do
-      it "places the cursor using offsets measured against the masked text, not the real value" $ do
-        -- fixedCharWidth advances 20px per character regardless of content, so
-        -- this only demonstrates the masked text (not the real value) is what
-        -- gets measured; a measurer sensitive to character identity would be
-        -- needed to fully distinguish the two, but passing the wrong text here
-        -- would still be a bug even if this measurer can't see it.
-        let base = withFocus (Just TestControl) (mkTextCtxWith fixedCharWidth "hunter2" (mouseAt (Point 35 50) True []))
-        ctx' <- runPasswordField "hunter2" base
-        case Map.lookup TestControl (elmSelections (ctxElements ctx')) of
-          Just [Selection a v] -> (a, v) `shouldBe` (1, 1)
-          other                 -> expectationFailure $ "expected Just [Selection 1 1], got: " <> show other
-
-  describe "textInputControl" $ do
-    it "lets a custom input filter reject keystrokes entirely" $ do
-      ctx' <- fmap (settle . snd) $ runUI (textInputControl TestControl "hello" [inputFilter (const T.empty), onInput id])
-        (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["x"] }))
-      dispatchCount ctx' `shouldBe` 0
-
-    it "lets a custom display filter change what is rendered without changing the value" $ do
-      ctx' <- fmap (settle . snd) $ runUI (textInputControl TestControl "hello" [displayFilter T.toUpper, onInput id])
-        (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
-      drawnTexts ctx' `shouldContain` ["HELLO"]
+      it "lets a custom display filter change what is rendered without changing the value" $ do
+        ctx' <- fmap (settle . snd) $ runUI (textInputControl TestControl "hello" [displayFilter T.toUpper, onInput id])
+          (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
+        drawnTexts ctx' `shouldContain` ["HELLO"]
 
     describe "onSubmit" $ do
       it "fires Submitted when Enter is pressed while focused" $ do

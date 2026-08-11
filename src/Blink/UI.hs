@@ -35,11 +35,7 @@ Application state is not part of the context at all: views are pure
 functions of a model value supplied by the host, and controls report changes
 by queuing a @msg@ value with 'emit' rather than mutating anything. The host
 reads the queued messages back with 'getMessages' once the frame completes
-and folds them into its own state however it likes.
-
-Host code not yet migrated off the value-callback pattern (where a control's
-callback returns a full @s -> s@ state modifier rather than a @msg@) can use
-'LegacyUI' and the compatibility 'applyDispatches' to keep working unchanged.
+and folds them into its own state via "Blink.Update".
 
 = Focus, scroll, and selection
 
@@ -204,9 +200,6 @@ module Blink.UI
     -- * Messages
   , emit
   , emitUi
-    -- * Legacy value-callback compatibility
-  , LegacyUI
-  , applyDispatches
     -- * Scroll state
   , ScrollState (..)
   , getScrollState
@@ -872,16 +865,6 @@ applyUiEffects effects ctx0 = foldl' step ctx0 effects
 
     currentScroll eid ctx =
       scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
-
--- | Compatibility shim for host code not yet migrated off the
--- value-callback pattern: instantiates 'UI' with the message type fixed to
--- @s -> s@ state modifiers, as it was before messages were introduced.
-type LegacyUI e s = UI e (s -> s)
-
--- | Folds the modifiers queued via 'emit' under 'LegacyUI' into a single
--- state transformation, reproducing the pre-migration @applyDispatches@.
-applyDispatches :: UIContext e (s -> s) -> s -> s
-applyDispatches ctx = foldl' (flip (.)) id (getMessages ctx)
 
 -- | 'True' when the mouse cursor is within the current bounds and within the
 -- active interaction clip region (set by 'clipToCurrent'). This is the

@@ -90,23 +90,22 @@ activation result are produced together. 'button' is the direct expression
 of this pattern; 'checkboxMark' and 'selector''s per-item handling build on
 it too.
 
-== Value-callback pattern
+== Attributes
 
-Controls that edit application data receive the current value and a function
-from an updated value to a message, emitted whenever the user makes a
-change:
+Every control takes required, type-specific data positionally, followed by
+one attribute list mixing event handlers and configuration (see 'Attr',
+'fire', 'configure'):
 
 @
-textField NameInput (userName model) NameChanged
+textInputControl NameInput (userName model) [onInput NameChanged]
 @
 
-The host reads the emitted messages back once the frame completes and folds
-them into its own state however it likes; the control reads the new value
-back from the application data on the next frame. This keeps all application
-data outside the UI tree.
-
-'button' is the deliberate exception — see its Haddock for why it returns a
-'Bool' instead.
+Handlers are registered with functions like 'onClick' and 'onInput', each
+producing an @Attr@ that maps one of the control's own event constructors to
+a message. The host reads the emitted messages back once the frame completes
+and folds them into its own state via "Blink.Update"; the control reads the
+new value back from the application data on the next frame. This keeps all
+application data outside the UI tree.
 
 == Control state
 
@@ -162,9 +161,6 @@ module Blink.Controls
   , onSubmit
   , inputFilter
   , displayFilter
-  , textField
-  , numberField
-  , passwordField
     -- * Scroll
   , ScrollBarPart (..)
   , scrollBar
@@ -188,7 +184,6 @@ module Blink.Controls
   ) where
 
 import Control.Monad (when, forM_)
-import Data.Char (isDigit)
 import Data.List (foldl', find)
 import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
@@ -684,31 +679,6 @@ drawTextInputContent style bounds value hasFocus enabled ox (anchor3, active3) =
     drawLo = min anchor3 active3
     drawHi = max anchor3 active3
 
--- | A single-line text entry field, and the base every other text-entry
--- control ('textField', 'numberField', 'passwordField') is built on.
--- Supports click-to-place cursor, drag selection, Shift+arrow extension, and
--- selection-aware editing. Long text scrolls horizontally to keep the cursor
--- visible.
---
--- @inputFilter@ is applied to newly typed text before it's inserted, letting
--- callers restrict which keystrokes are accepted (e.g. digits only).
--- Reformatting the value itself (e.g. inserting punctuation as the user
--- types) is application concern, not this control's — do it in @onChange@
--- and pass the already-formatted value back in on the next frame, same as
--- any other value-callback control.
---
--- @displayFilter@ is applied to the value everywhere it is measured or
--- drawn — the rendered text, and every character-offset calculation used for
--- cursor placement, click hit-testing, and auto-scroll — so what's on screen
--- and where the cursor lands always agree. It must be length- and
--- position-preserving (e.g. masking each character of a password with @•@);
--- the underlying value edited by @inputFilter@\/@onChange@ is never affected
--- by it.
---
--- Cursor position and selection are control state (see "Blink.Style" and the
--- Concepts section above), not application data — 'textInputControl' reads
--- and writes them itself via 'getSelection'\/'setSelection' and
--- 'getScrollState'\/'setScrollState', keyed by @eid@.
 -- | Events reported by 'textInputControl': 'Edited' with the new value
 -- whenever a keystroke changes it, 'Submitted' when Enter is pressed while
 -- focused and enabled, or a lifecycle event via 'TextControl' (see
@@ -747,11 +717,11 @@ defaultTextInputConfig = TextInputConfig
   }
 
 -- | Applied to newly typed text before it's inserted, letting callers
--- restrict which keystrokes are accepted (e.g. digits only, for
--- 'numberField'). Reformatting the value itself (e.g. inserting punctuation
--- as the user types) is application concern, not this control's — do it in
--- an 'onInput' handler and pass the already-formatted value back in on the
--- next frame, same as any other value-callback control. Defaults to 'id'.
+-- restrict which keystrokes are accepted (e.g. @T.filter isDigit@ for a
+-- digits-only field). Reformatting the value itself (e.g. inserting
+-- punctuation as the user types) is an application concern, not this
+-- control's — do it in an 'onInput' handler and pass the already-formatted
+-- value back in on the next frame. Defaults to 'id'.
 inputFilter :: (Text -> Text) -> Attr e ev msg TextInputConfig
 inputFilter f = Config $ \cfg -> cfg { configInputFilter = f }
 
@@ -759,17 +729,17 @@ inputFilter f = Config $ \cfg -> cfg { configInputFilter = f }
 -- text, and every character-offset calculation used for cursor placement,
 -- click hit-testing, and auto-scroll — so what's on screen and where the
 -- cursor lands always agree. It must be length- and position-preserving
--- (e.g. masking each character of a password with @•@, as 'passwordField'
--- does); the underlying value edited by 'inputFilter'\/'onInput' is never
--- affected by it. Defaults to 'id'.
+-- (e.g. @T.map (const '\8226')@ to mask each character of a password); the
+-- underlying value edited by 'inputFilter'\/'onInput' is never affected by
+-- it. Defaults to 'id'.
 displayFilter :: (Text -> Text) -> Attr e ev msg TextInputConfig
 displayFilter f = Config $ \cfg -> cfg { configDisplayFilter = f }
 
--- | A single-line text entry field, and the base every other text-entry
--- control ('textField', 'numberField', 'passwordField') is built on.
--- Supports click-to-place cursor, drag selection, Shift+arrow extension, and
--- selection-aware editing. Long text scrolls horizontally to keep the cursor
--- visible.
+-- | A single-line text entry field. Supports click-to-place cursor, drag
+-- selection, Shift+arrow extension, and selection-aware editing. Long text
+-- scrolls horizontally to keep the cursor visible. 'inputFilter' and
+-- 'displayFilter' attrs turn this into a digits-only or password-style
+-- field.
 --
 -- Cursor position and selection are control state (see "Blink.Style" and the
 -- Concepts section above), not application data — 'textInputControl' reads
@@ -837,48 +807,6 @@ textInputControl eid value attrs = do
         else pure scrollX
 
     drawTextInputContent style bounds displayValue hasFocus enabled effectiveScrollX (anchor3, active3)
-
--- | A plain single-line text entry field, with no keystroke filtering or
--- display masking. A deprecated one-line wrapper over 'textInputControl';
--- prefer calling that directly with an 'onInput' attr.
---
--- @
--- textField NameInput (userName s) (\\t st -> st { userName = t })
--- @
-textField :: Ord e
-          => e                -- ^ element ID
-          -> Text             -- ^ current value
-          -> (Text -> msg) -- ^ message given the new value
-          -> UI e msg ()
-textField eid value onEdit = textInputControl eid value [onInput onEdit]
-{-# DEPRECATED textField "Use textInputControl with an onInput attr instead; textField will be removed in Phase 5" #-}
-
--- | A text field that only accepts digit keystrokes; all other typed
--- characters are silently dropped. Built on 'textInputControl'. A
--- deprecated one-line wrapper; prefer calling 'textInputControl' directly
--- with @[inputFilter (T.filter isDigit), onInput onChange]@.
-numberField :: Ord e
-            => e                -- ^ element ID
-            -> Text             -- ^ current value
-            -> (Text -> msg) -- ^ message given the new value
-            -> UI e msg ()
-numberField eid value onEdit =
-  textInputControl eid value [inputFilter (T.filter isDigit), onInput onEdit]
-{-# DEPRECATED numberField "Use textInputControl with inputFilter/onInput attrs instead; numberField will be removed in Phase 5" #-}
-
--- | A text field that masks its displayed value with @•@, one per character,
--- while editing the real underlying text as normal. Built on
--- 'textInputControl'. A deprecated one-line wrapper; prefer calling
--- 'textInputControl' directly with
--- @[displayFilter (T.map (const '\8226')), onInput onChange]@.
-passwordField :: Ord e
-              => e                -- ^ element ID
-              -> Text             -- ^ current value
-              -> (Text -> msg) -- ^ message given the new value
-              -> UI e msg ()
-passwordField eid value onEdit =
-  textInputControl eid value [displayFilter (T.map (const '•')), onInput onEdit]
-{-# DEPRECATED passwordField "Use textInputControl with displayFilter/onInput attrs instead; passwordField will be removed in Phase 5" #-}
 
 -- | Sub-parts of a scrollbar, used as the inner tag when building the
 -- control's element IDs via a tagging function:
