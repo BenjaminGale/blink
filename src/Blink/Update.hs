@@ -5,8 +5,33 @@ The host-side counterpart to 'Blink.UI.UI': a small state-threading monad
 for turning a @msg@ emitted by the view into an updated application state.
 It mirrors 'Blink.UI.UI's shape (a pure state-threading computation with
 'modify'\/'gets' primitives) but over the application state @s@ rather than
-'Blink.UI.UIContext', and carries no 'IO' — nothing in an 'update' handler
+'Blink.UI.UIContext', and carries no 'IO' — nothing in an @update@ handler
 touches text measurement or any other backend concern.
+
+= Writing an update function
+
+Pass a function of type @msg -> Update s ()@ as 'Blink.App.App's @update@
+field. The host loop runs it once per message emitted during the frame, in
+emission order, threading the state through each call:
+
+@
+data Msg = Increment | SetName Text
+
+update :: Msg -> Update AppState ()
+update msg = case msg of
+  Increment -> modify (\\s -> s { counter = counter s + 1 })
+  SetName t -> modify (\\s -> s { name = t })
+@
+
+Use 'gets' to read part of the state, or 'get' \/ 'put' for the whole thing,
+the same way you would with any state monad:
+
+@
+update :: Msg -> Update AppState ()
+update ResetIfOverLimit = do
+  n <- gets counter
+  when (n > 100) $ put initialState
+@
 -}
 module Blink.Update
   ( Update
@@ -17,6 +42,9 @@ module Blink.Update
   , modify
   ) where
 
+-- | A pure, state-threading computation over the application state @s@,
+-- producing a result @a@. Compose with the 'Functor'\/'Applicative'\/'Monad'
+-- instances; run with 'runUpdate'.
 newtype Update s a = Update { runUpdateM :: s -> (a, s) }
 
 instance Functor (Update s) where

@@ -13,30 +13,33 @@ An application is described by an 'App', which bundles the initial state,
 theme, view, and update handler. Passing an 'App' to 'configureContinuous' or
 'configureEventDriven' produces a 'BlinkHandle'. The backend then calls
 'stepFrame' each iteration, passing a 'FrameInput' assembled from platform
-events and receiving a 'FrameResult' containing draw commands and updated state:
+events and receiving a 'FrameResult' containing draw commands and the
+resulting state — 'BlinkHandle' tracks the current state internally, so the
+loop itself only ever threads the handle:
 
 @
-loop handle state = do
+loop handle = do
   input  <- collectFrameInput       -- assemble FrameInput from platform events
-  result <- stepFrame handle input state
+  result <- stepFrame handle input
   case result of
-    Continue draws state' -> render draws >> loop handle state'
-    Quit     draws _      -> render draws
+    Continue draws _ -> render draws >> loop handle
+    Quit     draws _ -> render draws
 @
 
 = Type parameters
 
-Every 'App' is parameterised over two types:
+Every 'App' is parameterised over three types:
 
   * @e@ — the /element type/, a sum type with one constructor per interactive
     control. Used to look up styles from the 'Theme' and to route keyboard
     focus. See "Blink.UI".
+  * @msg@ — the type of messages the view emits. See "Blink.UI".
   * @s@ — the /application state/, owned by the host and passed into the view
-    explicitly each frame. Views never mutate it directly; they queue
-    messages with 'emit', which the host reads back with 'getMessages' and
-    folds in however it likes. Presentational state (scroll positions,
-    selections) is baked into the 'UIContext' and accessed through dedicated
-    primitives. See "Blink.UI".
+    explicitly each frame. Views never mutate it directly; they queue @msg@
+    values with 'emit', which 'update' folds into the state once the frame
+    completes, in emission order. See "Blink.Update". Presentational state
+    (scroll positions, selections) is baked into the 'UIContext' and accessed
+    through dedicated primitives instead. See "Blink.UI".
 
 = Module guide
 

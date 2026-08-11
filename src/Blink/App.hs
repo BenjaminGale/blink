@@ -21,7 +21,7 @@ data App e msg s = App
   * @msg@ is the type of messages the view emits (see "Blink.UI").
   * @s@ is the application state, owned by the host and passed into 'view'
     explicitly each frame. The view never mutates it directly; it queues
-    @msg@ values with 'Blink.UI.emit', which 'update' folds into the state
+    @msg@ values with 'Blink.UI.emit', which @update@ folds into the state
     once the frame completes, in emission order.
 
 = Configuration
@@ -166,8 +166,9 @@ configureEventDriven app notify measurer = do
 -- or 'configureEventDriven'.
 data BlinkHandle s = BlinkHandle
   { stepFrame :: FrameInput -> IO (FrameResult s)
-    -- ^ Processes one frame: runs the view, applies the frame's emitted
-    -- modifiers, and returns draw commands paired with the new state.
+    -- ^ Processes one frame: runs the view, folds the frame's emitted
+    -- messages into the state via @update@, and returns draw commands
+    -- paired with the new state.
   }
 
 -- | All per-frame inputs from the platform, assembled by the backend each

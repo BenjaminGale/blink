@@ -47,26 +47,28 @@ module Blink.Layout
     --   * A slot needs a constraint more specific than 'Fill' or a single
     --     hardcoded 'Exactly' — a finer-grained choice of 'Length'.
     --
-    --   Both are special cases: they draw on 'getBounds' \/ 'withBounds',
-    --   'Blink.UI.getAppState', a box combinator ('hBox' \/ 'vBox'),
-    --   'layoutWithConstraints', and the 'Length' arithmetic above all at
-    --   once, rather than being handled by any one of them.
+    --   Both are special cases: they draw on 'getBounds' \/ 'withBounds', the
+    --   application state passed into the enclosing view, a box combinator
+    --   ('hBox' \/ 'vBox'), 'layoutWithConstraints', and the 'Length'
+    --   arithmetic above all at once, rather than being handled by any one
+    --   of them.
     --
     --   == Depending on the current context
     --
-    --   \"Context\" here means either half of the 'UI' monad's state: the UI
-    --   context ('getBounds', for the space actually available) or the
-    --   application state ('Blink.UI.getAppState', for whatever the host decided).
-    --   Branch on either, or both, with ordinary @if@\/@case@ — there is no
-    --   dedicated combinator for this because a plain 'UI' action already
-    --   does the job:
+    --   \"Context\" here means either of two things available while
+    --   building a view: the current layout bounds, queried with
+    --   'getBounds' from inside the 'UI' monad, or the application state,
+    --   which the enclosing view function already has in scope as an
+    --   ordinary argument (see "Blink.App"). Branch on either, or both,
+    --   with ordinary @if@\/@case@ — there is no dedicated combinator for
+    --   this because a plain 'UI' action and a plain function argument
+    --   already do the job:
     --
     --   @
-    --   contextual :: UI e s ()
-    --   contextual = do
-    --     bounds  <- getBounds
-    --     compact <- appCompactMode \<$\> getAppState
-    --     if compact || rectWidth bounds < 600
+    --   contextual :: AppState -> UI Element msg ()
+    --   contextual state = do
+    --     bounds <- getBounds
+    --     if appCompactMode state || rectWidth bounds < 600
     --       then vBox defaultBoxConfig [ (Layout Fill (Exactly 200) TopLeft, sidebar)
     --                                   , (Layout Fill Fill        TopLeft, content)
     --                                   ]
@@ -78,9 +80,9 @@ module Blink.Layout
     --   Both branches use ordinary 'hBox'\/'vBox' — only the choice of
     --   which one to call, and how the two children are ordered, depends on
     --   the context. Here that context is a window narrower than 600px /or/
-    --   an explicit compact-mode flag the application chose to set;
-    --   'getBounds' and 'Blink.UI.getAppState' compose freely, so either can drive
-    --   the decision on its own or together.
+    --   an explicit compact-mode flag in the application state; the two
+    --   compose freely, so either can drive the decision on its own or
+    --   together.
     --
     --   == Choosing a finer-grained constraint
     --
@@ -110,13 +112,13 @@ module Blink.Layout
     --   @
     --   -- Sizes a button tightly around its label plus its own chrome,
     --   -- instead of stretching to fill the parent.
-    --   tightButton :: Ord e => e -> Text -> UI e s Bool
-    --   tightButton eid txt = do
+    --   tightButton :: Ord e => e -> Text -> [Attr e ButtonEvent msg cfg] -> UI e msg ()
+    --   tightButton eid txt attrs = do
     --     (chromeW, chromeH) <- measureChrome eid
     --     Size textW textH    <- measureText txt
     --     let w = addLength chromeW (Exactly (realToFrac textW))
     --         h = addLength chromeH (Exactly (realToFrac textH))
-    --     layoutWithConstraints (Layout w h TopLeft) (button eid txt)
+    --     layoutWithConstraints (Layout w h TopLeft) (button eid txt attrs)
     --   @
     --
     --   The same pattern extends to a row of controls that must each be
@@ -289,7 +291,7 @@ boxTotalSpacing cfg n = boxSpacing cfg * fromIntegral (max 0 (n - 1))
 -- >  |                            +-------------+
 -- >  |                            |    Badge    |
 -- >  +----------------------------+-------------+
-layoutWithConstraints :: Layout -> UI e s a -> UI e s a
+layoutWithConstraints :: Layout -> UI e msg a -> UI e msg a
 layoutWithConstraints rc ui = do
   r <- getBounds
   let w = preferredSize (layoutWidth rc) (rectWidth r)
@@ -401,7 +403,7 @@ vertical = Axis
 -- >  +------------+--------------+------------+
 -- >  |                                        |
 -- >  +----------------------------------------+
-hBox :: BoxConfig -> [(Layout, UI e s ())] -> UI e s ()
+hBox :: BoxConfig -> [(Layout, UI e msg ())] -> UI e msg ()
 hBox = box horizontal
 
 -- | Arranges children top-to-bottom. Each child is paired with a 'Layout'
@@ -429,10 +431,10 @@ hBox = box horizontal
 -- >  +------------------------------------------+
 -- >  |           Footer (Exactly 3px)           |
 -- >  +------------------------------------------+
-vBox :: BoxConfig -> [(Layout, UI e s ())] -> UI e s ()
+vBox :: BoxConfig -> [(Layout, UI e msg ())] -> UI e msg ()
 vBox = box vertical
 
-box :: Axis -> BoxConfig -> [(Layout, UI e s ())] -> UI e s ()
+box :: Axis -> BoxConfig -> [(Layout, UI e msg ())] -> UI e msg ()
 box ax cfg children = do
   r <- getBounds
   let contentArea  = insetRect (uniform (boxMargin cfg)) r
@@ -605,12 +607,12 @@ distributeSurplusSpace surplus constraints =
     cap _             = 1 / 0
 
 -- | Specifies which panels to show in a 'borderLayout'.
-data BorderContent e s = BorderContent
-  { topPanel    :: Maybe (Double, UI e s ())
-  , bottomPanel :: Maybe (Double, UI e s ())
-  , leftPanel   :: Maybe (Double, UI e s ())
-  , rightPanel  :: Maybe (Double, UI e s ())
-  , centrePanel :: Maybe (UI e s ())
+data BorderContent e msg = BorderContent
+  { topPanel    :: Maybe (Double, UI e msg ())
+  , bottomPanel :: Maybe (Double, UI e msg ())
+  , leftPanel   :: Maybe (Double, UI e msg ())
+  , rightPanel  :: Maybe (Double, UI e msg ())
+  , centrePanel :: Maybe (UI e msg ())
   }
 
 -- | All panels absent; use record update to populate only the ones you need.
@@ -621,7 +623,7 @@ data BorderContent e s = BorderContent
 --   , centrePanel = Just body
 --   }
 -- @
-emptyBorderContent :: BorderContent e s
+emptyBorderContent :: BorderContent e msg
 emptyBorderContent = BorderContent
   { topPanel    = Nothing
   , bottomPanel = Nothing
@@ -653,7 +655,7 @@ emptyBorderContent = BorderContent
 -- and within the middle row the left, centre, and right panels are further
 -- clipped as a group to that row. An oversized panel can still overlap its
 -- neighbours within the same row.
-borderLayout :: BorderContent e s -> UI e s ()
+borderLayout :: BorderContent e msg -> UI e msg ()
 borderLayout bc =
   vBox defaultBoxConfig (catMaybes [topRow, middleRow, bottomRow])
   where

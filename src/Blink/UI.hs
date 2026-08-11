@@ -113,7 +113,7 @@ region is discarded.
 
 Interaction queries are scoped to an element ID and are only meaningful after
 the element has registered a hover hit via 'setHovered' (or the high-level
-'control' helper, which does this automatically):
+'Blink.Controls.control' helper, which does this automatically):
 
   * 'isHovered' — the mouse is inside the element's bounds.
   * 'isPressed' — the left button is held while the element is hovered.
@@ -131,7 +131,7 @@ At most one element holds keyboard focus at a time, tracked in 'FocusState'.
     handled by multiple controls in the same frame.
 
 Tab and Shift-Tab navigation between controls is managed automatically by
-'control' in "Blink.Controls".
+'Blink.Controls.control'.
 
 = Styles
 
@@ -174,7 +174,7 @@ miniButton eid label = do
 
 'setHovered' registers the hit so 'isClicked' has something to check next
 frame; 'fillRect' and 'drawText' read the current bounds implicitly. See
-'control' in "Blink.Controls" for the full version, which adds focus, tab
+'Blink.Controls.control' for the full version, which adds focus, tab
 navigation, and style-driven chrome on top of exactly this shape.
 -}
 module Blink.UI
@@ -319,9 +319,10 @@ data Selection = Selection
 data UiEffect e
   = ScrollTo e Double
     -- ^ Sets the scroll position to an absolute value, stored as given. Most
-    -- callers ('scrollBar', 'viewport', 'listBox') use the @[0, 1]@
+    -- callers ('Blink.Controls.scrollBar', 'Blink.Controls.viewport',
+    -- 'Blink.Controls.listBox') use the @[0, 1]@
     -- convention documented on 'ScrollState' and pass an already-clamped
-    -- value; 'textInputControl' is the one exception, storing an unbounded
+    -- value; 'Blink.Controls.textInputControl' is the one exception, storing an unbounded
     -- pixel offset instead.
   | ScrollBy e Double
     -- ^ Adjusts the scroll position by a delta, clamped to @[0, 1]@ — this
@@ -353,9 +354,10 @@ data FocusState e = FocusState
 -- | Per-frame interactive targeting state: which element the mouse is over,
 -- which holds capture during a drag, which has keyboard focus, and which was
 -- the most recent tab stop. Reset and carried forward by 'nextFrameContext'.
--- | Per-frame mouse button interaction state, derived by 'nextInteractionFrame'
--- from the previous and current raw button-down values. Four states arise from
--- the two-frame comparison:
+--
+-- 'ixnButtonDown'\/'ixnButtonReleased' are derived by 'nextInteractionFrame'
+-- from the previous and current raw button-down values. Four states arise
+-- from the two-frame comparison:
 --
 -- @
 -- prev  curr  ixnButtonDown  ixnButtonReleased  meaning
@@ -371,9 +373,13 @@ data FocusState e = FocusState
 -- distinguished from a plain click.
 data InteractionState e = InteractionState
   { ixnHovered         :: Maybe e
+    -- ^ The element currently under the mouse pointer, if any.
   , ixnCaptured        :: Maybe e
+    -- ^ The element holding mouse capture during a drag, if any. See 'nextCapture'.
   , ixnFocus           :: FocusState e
+    -- ^ Which element holds keyboard focus, and whether it's still present this frame.
   , ixnPrevTabStop     :: Maybe e
+    -- ^ The element visited just before the currently focused one, for Shift-Tab.
   , ixnButtonDown      :: Bool
     -- ^ 'True' when the left button is currently held (Pressed or Down state).
   , ixnButtonReleased  :: Bool
@@ -416,8 +422,8 @@ data UIContext e msg = UIContext
     -- this rectangle. Set by 'clipToCurrent' and restored on exit, so it
     -- tracks the innermost enclosing clip region.
   , ctxAnimation       :: AnimationState
-    -- ^ Per-frame animation state: wall-clock delta and tick flag. Set by the
-    -- backend at the start of each frame via 'buildCtx'.
+    -- ^ Per-frame animation state: wall-clock delta and tick flag. Set by
+    -- "Blink.App" at the start of each frame.
   , ctxTextMeasure     :: TextMeasurer
     -- ^ Text measurement service supplied at configure time. Controls call
     -- 'charOffset' and 'charAtOffset' rather than accessing this directly.
@@ -429,7 +435,7 @@ data UIContext e msg = UIContext
 -- | The UI monad. A state-threading computation in 'IO' that reads from a
 -- 'UIContext' and emits draw commands and messages as a side effect. Use the
 -- 'Functor', 'Applicative', and 'Monad' instances to compose UI trees. See
--- 'control' and "Blink.Controls" for higher-level building blocks.
+-- 'Blink.Controls.control' for higher-level building blocks.
 --
 -- [@e@] Element identity type.
 -- [@msg@] Message type emitted via 'emit'.
@@ -613,19 +619,19 @@ consumeKey k = modify $ \ctx ->
   in ctx { ctxInput = input { inputKeyEvents = filter (\e -> key e /= k) (inputKeyEvents input) } }
 
 -- | The element that was the most recent tab stop before the current one,
--- used by 'control' to implement Shift-Tab navigation.
+-- used by 'Blink.Controls.control' to implement Shift-Tab navigation.
 getPreviousTabStop :: UI e msg (Maybe e)
 getPreviousTabStop = gets (ixnPrevTabStop . ctxInteraction)
 
 -- | Records the current element as the previous tab stop. Called automatically
--- by 'control'; call manually when building custom focusable controls.
+-- by 'Blink.Controls.control'; call manually when building custom focusable controls.
 setPreviousTabStop :: e -> UI e msg ()
 setPreviousTabStop eid = modifyIxn $ \ixn -> ixn { ixnPrevTabStop = Just eid }
 
 getTheme :: UI e msg (Theme e)
 getTheme = gets ctxTheme
 
--- | Returns all style variants for the given element. Falls back to the theme'msg
+-- | Returns all style variants for the given element. Falls back to the theme's
 -- default style when no element-specific style is registered.
 getStyleSet :: Ord e => e -> UI e msg StyleSet
 getStyleSet eid = do
@@ -677,8 +683,8 @@ isPressed eid = do
 
 -- | Derives the next frame's captured element from the button transition.
 -- Capture is held while the button is down and through the release frame so
--- that 'applyFocus' can distinguish a drag release from a plain click.
--- Cleared once the button is fully up (both prev and curr false).
+-- that a control's focus handling can distinguish a drag release from a
+-- plain click. Cleared once the button is fully up (both prev and curr false).
 -- Acquisition — setting capture in the first place — happens in 'setHovered'.
 nextCapture :: Bool -> Bool -> Maybe e -> Maybe e
 nextCapture prevDown currDown existing
@@ -692,7 +698,8 @@ isDragging eid = (== Just eid) <$> gets (ixnCaptured . ctxInteraction)
 
 -- | The element that currently holds mouse capture, or 'Nothing' when no drag
 -- is in progress. Exported for control authors that need to inspect capture
--- state directly, e.g. when implementing focus-on-click without using 'control'.
+-- state directly, e.g. when implementing focus-on-click without using
+-- 'Blink.Controls.control'.
 getCapturedElement :: UI e msg (Maybe e)
 getCapturedElement = gets (ixnCaptured . ctxInteraction)
 
@@ -895,8 +902,8 @@ isMouseFree = isNothing <$> gets (ixnCaptured . ctxInteraction)
 
 -- | Signals that animation should continue running. Call unconditionally on
 -- every frame from any component that needs animation, including frames not
--- triggered by the ticker. Keeps 'refsAnimActive' set so the ticker does not
--- go quiet while the component is visible.
+-- triggered by the ticker, so "Blink.App"'s ticker does not go quiet while
+-- the component is visible.
 requiresAnimation :: UI e msg ()
 requiresAnimation = modifyOut $ \out -> out { outRequiresAnimation = True }
 

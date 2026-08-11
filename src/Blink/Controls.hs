@@ -46,8 +46,8 @@ element type:
 data Element = ... | VScroll ScrollBarPart
               | ItemList Int
 
-scrollBar VScroll Vertical 0.3          -- mkId = VScroll
-selector  ItemList items selected onChange renderItem  -- mkId = ItemList
+scrollBar VScroll Vertical 0.3 []                        -- mkId = VScroll
+selector  ItemList items selected [onSelect Chose] renderItem  -- mkId = ItemList
 @
 
 The element ID space therefore forms a tree that mirrors the widget tree:
@@ -87,8 +87,8 @@ of a designated set of keys pressed while the control holds keyboard focus —
 provided the control isn't disabled. 'isActivatedBy' implements this test;
 'activatable' pairs it with 'control' so a control's draw action and its
 activation result are produced together. 'button' is the direct expression
-of this pattern; 'checkboxMark' and 'selector''s per-item handling build on
-it too.
+of this pattern; 'checkboxMark' and the per-item handling in 'selector' both
+build on it too.
 
 == Attributes
 
@@ -121,10 +121,12 @@ events.
 
 Controls whose state is presentational rather than application data — a
 scrollbar's position, for example — read and write it directly through the
-primitives in "Blink.UI" ('getScrollState', 'setScrollState', and the
-selection counterparts). State is keyed by element ID, populates lazily on
-first write, and persists across frames inside the 'UIContext'. The application
-never sees the traffic.
+primitives in "Blink.UI": 'getScrollState'\/'getSelection' to read, and
+'emitUi' with a 'UiEffect' ('ScrollTo', 'ScrollBy', 'SetSelectionAt') to
+write. Writes are deferred — applied between frames by 'applyUiEffects' —
+rather than taking effect immediately. State is keyed by element ID,
+populates lazily on first write, and persists across frames inside the
+'UIContext'. The application never sees the traffic.
 -}
 module Blink.Controls
   ( -- * Attributes and events
@@ -227,13 +229,12 @@ class HasControlEvent ev where
 -- configuration ('Config', built by a control-specific attribute such as
 -- 'inputFilter'). A single list carries both, in any order.
 --
--- @cfg@ is each control's own configuration type (e.g. a future
--- @TextInputConfig@), not one type shared across every control — a
--- 'Config' attr built for one control's @cfg@ cannot be passed to a
--- control expecting a different one, the same way an 'On' handler built
--- for one control's @ev@ cannot be passed to a control expecting a
--- different event type. A control with no configuration yet (every one
--- converted so far) simply leaves @cfg@ unconstrained.
+-- @cfg@ is each control's own configuration type (e.g. 'TextInputConfig'),
+-- not one type shared across every control — a 'Config' attr built for one
+-- control's @cfg@ cannot be passed to a control expecting a different one,
+-- the same way an 'On' handler built for one control's @ev@ cannot be
+-- passed to a control expecting a different event type. A control with no
+-- configuration (e.g. 'label') simply leaves @cfg@ unconstrained.
 data Attr e ev msg cfg
   = On (ev -> [Out e msg])
   | Config (cfg -> cfg)
@@ -429,6 +430,16 @@ onSelect :: (a -> msg) -> Attr e (SelectorEvent a) msg cfg
 onSelect f = On $ \ev -> case ev of
   Selected v -> [OutMsg (f v)]
 
+-- | 'True' when @eid@ may handle an arrow-key navigation press this frame:
+-- either it already held focus going into this pass, or it was clicked this
+-- frame. Comparing against a focus snapshot taken before any item in the
+-- pass ran — rather than re-reading focus per item — keeps at most one item
+-- per frame handling the key, even though a same-frame 'setFocus' from an
+-- earlier item in the same pass is otherwise visible to a later item's
+-- 'isFocused' straight away. Shared by 'selector' and 'listBox'.
+mayHandleArrowKeys :: Eq e => Maybe e -> Bool -> e -> Bool
+mayHandleArrowKeys initialFocus clicked eid = initialFocus == Just eid || clicked
+
 -- | A vertical list of items, each activated by click, Enter, or Space, with
 -- arrow-key navigation between items and one item designated as selected.
 -- Fires 'Selected' with the new value when a different item is activated.
@@ -455,16 +466,6 @@ onSelect f = On $ \ev -> case ev of
 --     style <- getStyle eid
 --     drawText (styleTextColour style) AlignLeft (if isSelected then "> " <> lbl else lbl)
 -- @
--- | 'True' when @eid@ may handle an arrow-key navigation press this frame:
--- either it already held focus going into this pass, or it was clicked this
--- frame. Comparing against a focus snapshot taken before any item in the
--- pass ran — rather than re-reading focus per item — keeps at most one item
--- per frame handling the key, even though a same-frame 'setFocus' from an
--- earlier item in the same pass is otherwise visible to a later item's
--- 'isFocused' straight away. Shared by 'selector' and 'listBox'.
-mayHandleArrowKeys :: Eq e => Maybe e -> Bool -> e -> Bool
-mayHandleArrowKeys initialFocus clicked eid = initialFocus == Just eid || clicked
-
 selector :: (Eq e, Ord e, Eq a)
          => (Int -> e)                          -- ^ maps item index to an element ID
          -> [(a, Text)]                         -- ^ @(value, label)@ pairs
@@ -757,10 +758,10 @@ displayFilter f = Config $ \cfg -> cfg { configDisplayFilter = f }
 -- 'displayFilter' attrs turn this into a digits-only or password-style
 -- field.
 --
--- Cursor position and selection are control state (see "Blink.Style" and the
--- Concepts section above), not application data — 'textInputControl' reads
--- and writes them itself via 'getSelection'\/'setSelection' and
--- 'getScrollState'\/'setScrollState', keyed by @eid@.
+-- Cursor position and selection are control state (see the Concepts section
+-- above), not application data — 'textInputControl' reads and writes them
+-- itself via 'getSelection' and 'getScrollState', keyed by @eid@, writing
+-- through 'emitUi' with 'SetSelectionAt' and 'ScrollTo'.
 textInputControl :: Ord e
                   => e     -- ^ element ID
                   -> Text  -- ^ current value
@@ -829,7 +830,7 @@ textInputControl eid value attrs = do
 --
 -- @
 -- data Element = ... | VScroll ScrollBarPart
--- scrollBar VScroll Vertical ratio
+-- scrollBar VScroll Vertical ratio []
 -- @
 data ScrollBarPart
   = ScrollTrack   -- ^ The track area behind the thumb.
@@ -1001,7 +1002,7 @@ mouseToTrackPos Horizontal ratio r mouse =
 --
 -- @
 -- data Element = ... | MyRegion ViewportPart
--- viewport MyRegion (Size 600 400) content
+-- viewport MyRegion (Size 600 400) [] content
 -- @
 data ViewportPart
   = ViewportH ScrollBarPart -- ^ A part of the horizontal scrollbar.
@@ -1158,7 +1159,7 @@ slider mkId ori value attrs = do
 -- generated, at the right position.
 --
 -- Does not draw a scrollbar or manage scroll state itself — pair with
--- 'scrollBar' and 'getScrollState'\/'setScrollState' (see 'listBox').
+-- 'scrollBar' and 'getScrollState' (see 'listBox').
 virtualContent
   :: Double              -- ^ current scroll position, in pixels
   -> Double              -- ^ height of one item, in pixels
@@ -1261,8 +1262,9 @@ listBox mkId itemHeight items selected attrs renderItem = do
       scrollBar (mkId . ListBoxScroll) Vertical thumbRatio []
 
 -- | Returns the @(width, height)@ overhead consumed by a control's margin and
--- padding as 'Length' constraints. Add these to a content size with 'addLength'
--- to get the total size needed for the control to display without clipping.
+-- padding as 'Length' constraints. Add these to a content size with
+-- @Blink.Layout.addLength@ to get the total size needed for the control to
+-- display without clipping.
 measureChrome :: Ord e
               => e  -- ^ element ID
               -> UI e msg (Length, Length)
