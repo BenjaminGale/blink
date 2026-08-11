@@ -455,6 +455,16 @@ onSelect f = On $ \ev -> case ev of
 --     style <- getStyle eid
 --     drawText (styleTextColour style) AlignLeft (if isSelected then "> " <> lbl else lbl)
 -- @
+-- | 'True' when @eid@ may handle an arrow-key navigation press this frame:
+-- either it already held focus going into this pass, or it was clicked this
+-- frame. Comparing against a focus snapshot taken before any item in the
+-- pass ran — rather than re-reading focus per item — keeps at most one item
+-- per frame handling the key, even though a same-frame 'setFocus' from an
+-- earlier item in the same pass is otherwise visible to a later item's
+-- 'isFocused' straight away. Shared by 'selector' and 'listBox'.
+mayHandleArrowKeys :: Eq e => Maybe e -> Bool -> e -> Bool
+mayHandleArrowKeys initialFocus clicked eid = initialFocus == Just eid || clicked
+
 selector :: (Eq e, Ord e, Eq a)
          => (Int -> e)                          -- ^ maps item index to an element ID
          -> [(a, Text)]                         -- ^ @(value, label)@ pairs
@@ -477,11 +487,7 @@ selector mkId items selected attrs renderItem = do
              let activated = not disabled && (clicked || keyActivated)
              renderItem eid (selected == val) item
              when activated $ fire attrs [Selected val]
-             -- Use initialFocus (captured before any item renders) to prevent
-             -- cascade: an item that gained focus via setFocus earlier in this
-             -- same vBox pass must not also fire navigation. Allow same-frame
-             -- clicks as an additional trigger since initialFocus predates applyFocus.
-             whenEnabled $ when (initialFocus == Just eid || clicked) $ do
+             whenEnabled $ when (mayHandleArrowKeys initialFocus clicked eid) $ do
                upPressed   <- isKeyPressed eid KeyUp
                downPressed <- isKeyPressed eid KeyDown
                when upPressed   $ setFocus (mkId (max 0 (idx - 1)))
@@ -1230,10 +1236,7 @@ listBox mkId itemHeight items selected attrs renderItem = do
            let activated = not disabled && (clicked || keyActivated)
            renderItem eid (selected == val) item
            when activated $ fire attrs [Selected val]
-           -- Same same-frame-cascade guard as 'selector': only the item that
-           -- already held focus before this frame (or was just clicked) may
-           -- move focus.
-           whenEnabled $ when (initialFocus == Just eid || clicked) $ do
+           whenEnabled $ when (mayHandleArrowKeys initialFocus clicked eid) $ do
              upPressed   <- isKeyPressed eid KeyUp
              downPressed <- isKeyPressed eid KeyDown
              when upPressed   $ scrollToCurrent vpH maxScroll scrollPx (max 0 (idx - 1))

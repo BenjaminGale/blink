@@ -223,10 +223,6 @@ spec = do
         result <- stepFrame handle oneKey
         resultState result `shouldBe` 1
 
-    -- Async dispatch (dispatchAsync) is removed for the duration of the
-    -- Elm-architecture migration; it returns in a later phase as a Cmd
-    -- returned from `update`. See blink-elm-migration-plan.md.
-
     describe "frame context progression" $ do
       it "UI state written in frame N is readable in frame N+1" $ do
         handle <- configureContinuous uiStateApp nullMeasurer
