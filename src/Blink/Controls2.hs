@@ -23,11 +23,14 @@ module Blink.Controls2
   , whenFocused
   , isActivatedBy
   , activatable
+  , LabelEvent (..)
+  , label
   ) where
 
 import Control.Monad (forM_, when)
 import Data.List (find, foldl')
 import Data.Maybe (isJust, isNothing)
+import Data.Text (Text)
 
 import Blink.Geometry (Insets (..), borderInsets, insetRect, noBorder)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
@@ -287,3 +290,23 @@ activatable :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg cfg] -> [Key] 
 activatable eid attrs keys draw = do
   control eid attrs draw
   isActivatedBy eid keys
+
+-- | Events reported by 'label': just a lifecycle event via 'LabelControl'
+-- (see 'ControlEvent') — 'label' has no domain events of its own, but still
+-- needs a concrete event type to be a 'control' and raise the shared ones.
+newtype LabelEvent = LabelControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent LabelEvent where
+  liftControl = LabelControl
+  matchControl (LabelControl ce) = Just ce
+
+-- | Text in the resolved style. A full 'control', so it registers
+-- mouse-over and honours 'tabStop'\/'focusOnClick' (both default to
+-- off-the-beaten-path uses — a plain label has no reason to take focus —
+-- but a composite like a labelled field can use 'focusOnClick' to redirect
+-- a click on the caption onto its input).
+label :: Ord e => e -> Text -> [Attr e LabelEvent msg cfg] -> UI e msg ()
+label eid text attrs = control eid attrs $ do
+  style <- getStyle eid
+  drawText (styleTextColour style) (styleTextAlign style) text

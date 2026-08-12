@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls2Spec (spec) where
 
 import Control.Monad (forM_)
@@ -19,6 +20,8 @@ import Blink.Controls2
   , isActivatedBy
   , isKeyPressed
   , isMouseOver
+  , label
+  , LabelEvent (..)
   , measureChrome
   , onAny
   , onFocusGained
@@ -49,7 +52,7 @@ import Blink.ControlsTestSupport
 import Blink.Geometry (Point (..), uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
 import Blink.Layout (Length (..))
-import Blink.Rendering (DrawCommand (..))
+import Blink.Rendering (DrawCommand (..), TextAlign (..))
 import Blink.UI
 
 -- | 'Blink.ControlsTestSupport.mkCtx' fixes @msg ~ ()@; several suites below
@@ -98,9 +101,9 @@ onPing msg = onAny $ \ev -> case ev of
 runFire :: Ord e => [Attr e ev msg cfg] -> [ev] -> UIContext e msg -> IO (UIContext e msg)
 runFire attrs evs ctx = snd <$> runUI (fire attrs evs) ctx
 
-label :: DummyEvent -> String
-label Ping = "Ping"
-label Pong = "Pong"
+dummyLabel :: DummyEvent -> String
+dummyLabel Ping = "Ping"
+dummyLabel Pong = "Pong"
 
 spec :: Spec
 spec = describe "Blink.Controls2" $ do
@@ -136,8 +139,8 @@ spec = describe "Blink.Controls2" $ do
 
     it "runs in event order, then handler-list order within an event" $ do
       let attrs =
-            [ onAny (\ev -> [OutMsg (label ev <> "-a")])
-            , onAny (\ev -> [OutMsg (label ev <> "-b")])
+            [ onAny (\ev -> [OutMsg (dummyLabel ev <> "-a")])
+            , onAny (\ev -> [OutMsg (dummyLabel ev <> "-b")])
             ]
       ctx <- runFire attrs [Ping, Pong] (mkCtxFor noInput)
       getMessages ctx `shouldBe` ["Ping-a", "Ping-b", "Pong-a", "Pong-b"]
@@ -478,3 +481,26 @@ spec = describe "Blink.Controls2" $ do
       let ctx = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []))
       (_, ctx') <- runUI (activatable TestControl ([] :: [Attr TestElement Probe Probe ()]) [KeyReturn] (pure ())) ctx
       getFocused ctx' `shouldBe` Just TestControl
+
+  describe "label" $ do
+    it "draws the given text in the resolved style's colour and alignment" $ do
+      ctx' <- snd <$> runUI (label TestControl "Hello" ([] :: [Attr TestElement LabelEvent () ()])) (mkCtxFor noInput)
+      getDrawCommands ctx' `shouldContain` [DrawText contentRect "Hello" testColour AlignCenter]
+
+    it "renders chrome like any other control" $ do
+      ctx' <- snd <$> runUI (label TestControl "Hello" ([] :: [Attr TestElement LabelEvent () ()])) (mkCtxFor noInput)
+      getDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
+
+    it "does not take focus by default (tabStop/focusOnClick still default like any control)" $ do
+      ctx' <- snd <$> runUI (label TestControl "Hello" ([] :: [Attr TestElement LabelEvent () ()])) (mkCtxFor noInput)
+      getFocused ctx' `shouldBe` Just TestControl
+
+    it "honours tabStop False, so it is skipped by Shift-Tab from what comes after it" $ do
+      ctx' <- snd <$> runUI (label TestControl "Hello" ([tabStop False] :: [Attr TestElement LabelEvent () ()])) (mkCtxFor noInput)
+      ixnPrevTabStop (ctxInteraction ctx') `shouldBe` Nothing
+
+    it "honours focusOnClick (FocusTarget), redirecting a click onto another element" $ do
+      let attrs = [focusOnClick (FocusTarget OtherControl)] :: [Attr TestElement LabelEvent () ()]
+          ctx   = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []))
+      ctx' <- snd <$> runUI (label TestControl "Caption" attrs) ctx
+      getFocused ctx' `shouldBe` Just OtherControl
