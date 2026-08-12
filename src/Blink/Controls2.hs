@@ -16,6 +16,8 @@ module Blink.Controls2
   , tabStop
   , focusOnClick
   , isMouseOver
+  , isPressed
+  , getStyle
   , renderChrome
   , measureChrome
   , applyMouseOver
@@ -57,9 +59,11 @@ module Blink.Controls2
   , slider
   ) where
 
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, guard, when)
+import Data.Foldable (asum)
+import Data.Functor (($>))
 import Data.List (find, foldl')
-import Data.Maybe (isJust, isNothing)
+import Data.Maybe (fromMaybe, isJust, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Void (Void)
@@ -69,7 +73,7 @@ import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (BoxConfig (..), Layout (..), Length (..), defaultBoxConfig, hBox)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
-import Blink.UI
+import Blink.UI hiding (getStyle, isPressed)
 
 data ControlEvent
   = FocusGained
@@ -158,23 +162,65 @@ focusOnClick foc = Shared $ \cc -> cc { ccFocusOnClick = foc }
 -- inset by its margin) — the control-specific hit area. Built on 'isRegionHit';
 -- a pure geometric test, so unlike the legacy single-owner hover field, many
 -- elements can each independently be "over" in the same frame.
+--
+-- Uses the element's /normal/ margin, not the margin of whichever style
+-- variant is currently active: 'getStyle' (below) determines which variant
+-- is active by calling this function, so depending on the resolved style
+-- here would be circular. Margin defining the hit region's own boundary
+-- shouldn't depend on the interaction state the hit test is being used to
+-- determine anyway — real themes don't vary margin by state.
 isMouseOver :: Ord e => e -> UI e msg Bool
 isMouseOver eid = do
-  s <- getStyle eid
-  r <- getBounds
-  withBounds (insetRect (styleMargin s) r) isRegionHit
+  ss <- getStyleSet eid
+  r  <- getBounds
+  withBounds (insetRect (styleMargin (styleSetNormal ss)) r) isRegionHit
+
+-- | Like 'Blink.UI.isPressed', but resolving from geometric 'isMouseOver'
+-- instead of the legacy single-owner hover field this module never writes
+-- to (see 'getStyle').
+isPressed :: Ord e => e -> UI e msg Bool
+isPressed eid = do
+  disabled <- isDisabled
+  hit      <- isMouseOver eid
+  down     <- isButtonDown
+  pure (not disabled && hit && down)
+
+-- | Like 'Blink.UI.getStyle', but resolving the hovered\/pressed priority
+-- from geometric 'isMouseOver'\/'isPressed' instead of the legacy
+-- single-owner hover field ('Blink.UI.isHovered'\/'Blink.UI.ixnHovered').
+-- Nothing in this module ever calls 'Blink.UI.setHovered', so that field is
+-- permanently empty here — resolving styling through it would mean
+-- @styleSetHovered@\/@styleSetPressed@ never activate for any control built
+-- on this module, regardless of actual mouse position.
+getStyle :: Ord e => e -> UI e msg Style
+getStyle eid = do
+  styles <- getStyleSet eid
+  isDis  <- isDisabled
+  isHov  <- isMouseOver eid
+  isFoc  <- isFocused eid
+  isPrs  <- isPressed eid
+  let candidates =
+        [ guard isDis $> styleSetDisabled styles
+        , guard isPrs $> styleSetPressed  styles
+        , guard isHov $> styleSetHovered  styles
+        , guard isFoc $> styleSetFocused  styles
+        ]
+  pure $ fromMaybe (styleSetNormal styles) (asum candidates)
 
 -- | Registers the element as moused over and as hot (for drag continuation)
 -- when the mouse is within its bounds, and fires 'onMouseEnter'\/'onMouseExit'
--- by comparing against last frame's result.
+-- by comparing against last frame's result. Purely geometric plus a disabled
+-- check — no exclusion for a different element's drag being in progress:
+-- unlike the legacy single-owner hover field, geometric hover has no shared
+-- slot for one element's drag to contend over, so that exclusion (present in
+-- the pre-migration code) no longer serves a purpose. 'setHot' still guards
+-- its own capture acquisition independently, so a drag can't be stolen.
 applyMouseOver :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg cfg] -> UI e msg ()
 applyMouseOver eid attrs = do
   wasOver  <- wasMouseOverLastFrame eid
   disabled <- isDisabled
-  free     <- isMouseFree
-  dragging <- isDragging eid
   hit      <- isMouseOver eid
-  let isOver = not disabled && (free || dragging) && hit
+  let isOver = not disabled && hit
   when isOver $ do
     registerMouseOver eid
     setHot eid

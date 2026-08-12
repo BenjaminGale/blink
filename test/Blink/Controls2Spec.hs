@@ -20,6 +20,8 @@ import Blink.Controls2
   , isActivatedBy
   , isKeyPressed
   , isMouseOver
+  , isPressed
+  , getStyle
   , label
   , LabelEvent
   , measureChrome
@@ -70,6 +72,7 @@ import Blink.ControlsTestSupport
   , settle
   , testBorderColour
   , testColour
+  , testStyle
   , testTheme
   , testThemeWithBorder
   , withButtonReleased
@@ -82,9 +85,9 @@ import qualified Data.Text as T
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
 import Blink.Layout (Length (..))
-import Blink.Rendering (DrawCommand (..), TextAlign (..))
+import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
-import Blink.UI
+import Blink.UI hiding (getStyle, isPressed)
 
 -- | 'Blink.ControlsTestSupport.mkCtx' fixes @msg ~ ()@; several suites below
 -- (anything using 'fire' to observe emitted values) need other message
@@ -309,6 +312,41 @@ spec = describe "Blink.Controls2" $ do
       (a, _) <- runUI (isMouseOver TestControl) ctx
       (b, _) <- runUI (isMouseOver OtherControl) ctx
       (a, b) `shouldBe` (True, True)
+
+  describe "hover/pressed styling" $ do
+    -- Regression coverage: getStyle/isPressed must resolve hover/pressed
+    -- priority from geometric isMouseOver, not the legacy single-owner
+    -- hover field this module never writes to (setHovered is never called
+    -- by applyMouseOver). Every other test theme in this file uses the same
+    -- style value for all five variants, which makes this bug invisible to
+    -- them; this theme uses a distinct colour per variant specifically so
+    -- the wrong-variant case is observable.
+    let distinctStyle c = testStyle { styleBackground = c }
+        distinctStyleSet = StyleSet
+          { styleSetNormal   = distinctStyle (RGBA 0 0 0 1)
+          , styleSetHovered  = distinctStyle (RGBA 1 0 0 1)
+          , styleSetPressed  = distinctStyle (RGBA 0 1 0 1)
+          , styleSetFocused  = distinctStyle (RGBA 0 0 1 1)
+          , styleSetDisabled = distinctStyle (RGBA 1 1 1 1)
+          }
+        distinctTheme = testTheme { themeElementStyles = Map.fromList [(TestControl, distinctStyleSet), (OtherControl, distinctStyleSet)] }
+        ctxWith input = emptyUIContext controlRect input distinctTheme noOpTextMeasurer :: UIContext TestElement ()
+
+    it "getStyle resolves the Hovered variant when the mouse is over the control" $ do
+      (s, _) <- runUI (getStyle TestControl) (ctxWith (mouseAt (Point 50 50) False []))
+      styleBackground s `shouldBe` RGBA 1 0 0 1
+
+    it "getStyle resolves the Normal variant when the mouse is not over the control" $ do
+      (s, _) <- runUI (getStyle TestControl) (ctxWith (mouseAt (Point 200 200) False []))
+      styleBackground s `shouldBe` RGBA 0 0 0 1
+
+    it "isPressed is True when the mouse is over the control and the button is held" $ do
+      (result, _) <- runUI (isPressed TestControl) (ctxWith (mouseAt (Point 50 50) True []))
+      result `shouldBe` True
+
+    it "isPressed is False when the mouse is over the control but the button is not held" $ do
+      (result, _) <- runUI (isPressed TestControl) (ctxWith (mouseAt (Point 50 50) False []))
+      result `shouldBe` False
 
   describe "applyMouseOver" $ do
     it "fires MouseEntered the first frame the mouse is over" $ do
