@@ -47,15 +47,13 @@ module Blink.Controls2
   , inputFilter
   , displayFilter
   , textInputControl
-  , RangeEvent (RangeChanged)
-  , onRangeChange
-  , rangeControl
   , thumbRect
   , mouseToTrackPos
   , SliderPart (..)
   , SliderEvent (Changed)
   , onChange
   , arrowStep
+  , thumbRatio
   , slider
   ) where
 
@@ -865,45 +863,6 @@ dragToTrackPos trackId ori ratio contentRect = do
     then Just . mouseToTrackPos ori ratio contentRect <$> getMousePos
     else pure Nothing
 
--- | Events reported by 'rangeControl': 'RangeChanged' with the new position
--- while being dragged, or a lifecycle event via 'RangeControl' (see
--- 'ControlEvent'). 'RangeControl' is not exported — the shared
--- 'onFocusGained'\/etc. combinators already cover it — but 'RangeChanged'
--- is, for the same reason 'ButtonEvent'\'s 'Clicked' is: a caller bridging
--- this into a wrapping control's own events (see 'captureOuts') needs to
--- pattern-match on it directly.
-data RangeEvent = RangeChanged Double | RangeControl ControlEvent
-  deriving (Eq, Show)
-
-instance HasControlEvent RangeEvent where
-  liftControl = RangeControl
-  matchControl (RangeControl ce) = Just ce
-  matchControl _                 = Nothing
-
--- | Emits @f newPosition@ on every 'RangeChanged'.
-onRangeChange :: (Double -> msg) -> Attr e RangeEvent msg cfg
-onRangeChange f = onAny $ \ev -> case ev of
-  RangeChanged v -> [OutMsg (f v)]
-  _              -> []
-
--- | A track with a draggable thumb, positioned within @[0, 1]@ by @pos@ and
--- sized within the track by @ratio@ (visible \/ total, also @[0, 1]@).
--- @trackId@ is the interactive element — it receives chrome, hover, focus,
--- and tab navigation via 'control' — and @thumbId@ is a purely decorative
--- child positioned inside it. Fires 'RangeChanged' with the new position
--- while @trackId@ is being dragged; a caller wanting a different reporting
--- channel (an effect rather than a message, say) bridges it via 'onAny' and
--- 'captureOuts' against its own attrs — see 'slider'. Shared by 'scrollBar'
--- and 'slider'.
-rangeControl :: Ord e => e -> e -> Orientation -> Double -> Double -> [Attr e RangeEvent msg cfg] -> UI e msg ()
-rangeControl trackId thumbId ori pos ratio attrs = do
-  contentRect <- trackContentRect trackId
-  let thumbR = thumbRect ori pos ratio contentRect
-  control trackId attrs $
-    withBounds thumbR $ renderChrome thumbId $ pure ()
-  newPos <- dragToTrackPos trackId ori ratio contentRect
-  fire attrs [RangeChanged v | Just v <- [newPos]]
-
 -- | Computes the bounding rectangle of a thumb within a track. @pos@ is the
 -- position along the track and @ratio@ is the fraction of the track the
 -- thumb fills (visible \/ total); both are in @[0, 1]@. The result is a
@@ -961,36 +920,49 @@ onChange f = onAny $ \ev -> case ev of
   Changed v -> [OutMsg (f v)]
   _         -> []
 
--- | Configuration for 'slider', set via 'arrowStep'.
-newtype SliderConfig = SliderConfig { configArrowStep :: Double }
+-- | Configuration for 'slider', set via 'arrowStep' and 'thumbRatio'.
+data SliderConfig = SliderConfig
+  { configArrowStep  :: Double
+  , configThumbRatio :: Maybe Double
+  }
 
 defaultSliderConfig :: SliderConfig
-defaultSliderConfig = SliderConfig { configArrowStep = 0.05 }
+defaultSliderConfig = SliderConfig { configArrowStep = 0.05, configThumbRatio = Nothing }
 
 -- | The amount an arrow-key press (Left\/Right for 'Horizontal', Up\/Down
 -- for 'Vertical') changes the value by. Defaults to @0.05@.
 arrowStep :: Double -> Attr e ev msg SliderConfig
 arrowStep v = configAny $ \cfg -> cfg { configArrowStep = v }
 
+-- | Overrides the thumb's size (visible \/ total, in @[0, 1]@) instead of
+-- the default square-thumb calculation (side equal to the track's
+-- cross-axis). 'scrollBar' uses this to size its thumb from the fraction of
+-- content actually visible, rather than a square.
+thumbRatio :: Double -> Attr e ev msg SliderConfig
+thumbRatio v = configAny $ \cfg -> cfg { configThumbRatio = Just v }
+
 -- | A slider mapping a draggable thumb to a value in @[0, 1]@. Fires
 -- 'Changed' with the new value when the user drags, clicks on the track, or
 -- nudges with arrow keys (Left\/Right for 'Horizontal', Up\/Down for
--- 'Vertical', by 'arrowStep'). The thumb is square: its side equals the
--- cross-axis of the track's content rectangle.
+-- 'Vertical', by 'arrowStep'). The thumb is square by default; override
+-- with 'thumbRatio'.
 slider :: Ord e => (SliderPart -> e) -> Orientation -> Double -> [Attr e SliderEvent msg SliderConfig] -> UI e msg ()
 slider mkId ori value attrs = do
   let trackId = mkId SliderTrack
+      thumbId = mkId SliderThumb
       clamped = max 0 (min 1 value)
-      step    = configArrowStep (configure defaultSliderConfig attrs)
+      cfg     = configure defaultSliderConfig attrs
+      step    = configArrowStep cfg
   contentRect <- trackContentRect trackId
   let (crossSz, mainSz) = case ori of
         Horizontal -> (rectHeight contentRect, rectWidth contentRect)
         Vertical   -> (rectWidth contentRect,  rectHeight contentRect)
-      thumbRatio = if mainSz > 0 then crossSz / mainSz else 0
-      bridgeAttrs = [onAny $ \ev -> case ev of
-        RangeChanged v  -> captureOuts attrs (Changed v)
-        RangeControl ce -> captureOuts attrs (liftControl ce)]
-  rangeControl trackId (mkId SliderThumb) ori clamped thumbRatio bridgeAttrs
+      autoRatio = if mainSz > 0 then crossSz / mainSz else 0
+      ratio     = fromMaybe autoRatio (configThumbRatio cfg)
+      thumbR    = thumbRect ori clamped ratio contentRect
+  control trackId attrs $
+    withBounds thumbR $ renderChrome thumbId $ pure ()
+  newPos <- dragToTrackPos trackId ori ratio contentRect
   let (decrKey, incrKey) = case ori of
         Horizontal -> (KeyLeft,  KeyRight)
         Vertical   -> (KeyUp,    KeyDown)
@@ -1000,7 +972,8 @@ slider mkId ori value attrs = do
   let decrPressed = not disabled && decrKeyed
       incrPressed = not disabled && incrKeyed
       changes = concat
-        [ [Changed (max 0 (clamped - step)) | decrPressed]
-        , [Changed (min 1 (clamped + step)) | incrPressed]
+        [ [Changed v | Just v <- [newPos]]
+        , [Changed (max 0 (clamped - step)) | decrPressed && step > 0]
+        , [Changed (min 1 (clamped + step)) | incrPressed && step > 0]
         ]
   fire attrs changes

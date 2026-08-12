@@ -49,12 +49,10 @@ import Blink.Controls2
   , inputFilter
   , displayFilter
   , textInputControl
-  , RangeEvent
-  , onRangeChange
-  , rangeControl
   , SliderPart (..)
   , onChange
   , arrowStep
+  , thumbRatio
   , slider
   )
 import Blink.ControlsTestSupport
@@ -82,7 +80,7 @@ import Data.Char (isDigit)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
+import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
 import Blink.Layout (Length (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -1056,41 +1054,37 @@ spec = describe "Blink.Controls2" $ do
           (withFocus (Just OtherControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         getMessages (settle ctx') `shouldBe` []
 
-  describe "rangeControl" $ do
-    it "renders chrome like any other control" $ do
-      ctx' <- snd <$> runUI (rangeControl TestControl OtherControl Vertical 0 1 ([] :: [Attr TestElement RangeEvent () ()])) (mkCtxFor noInput)
-      getDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
-
-    describe "drag interaction" $ do
-      it "fires RangeChanged via onRangeChange with the drag position while dragging" $ do
-        (_, ctx') <- runUI (rangeControl TestControl OtherControl Vertical 0 0.5 [onRangeChange id])
-          (mkCtxFor (mouseAt (Point 50 50) True []) :: UIContext TestElement Double)
-        getMessages ctx' `shouldBe` [0.5]
-
-      it "fires nothing when the button is not held" $ do
-        (_, ctx') <- runUI (rangeControl TestControl OtherControl Vertical 0 0.5 [onRangeChange id])
-          (mkCtxFor (mouseAt (Point 50 50) False []) :: UIContext TestElement Double)
-        getMessages ctx' `shouldBe` []
-
-      it "fires nothing when not dragging even if the button is held elsewhere" $ do
-        (_, ctx') <- runUI (rangeControl TestControl OtherControl Vertical 0 0.5 [onRangeChange id])
-          (mkCtxFor (mouseAt (Point 200 200) True []) :: UIContext TestElement Double)
-        getMessages ctx' `shouldBe` []
-
-    describe "thumb placement" $ do
-      it "renders the thumb's chrome within the track's content rectangle when the thumb fills the track" $ do
-        -- With pos=0, ratio=1 the thumb fills the track's content rectangle
-        -- exactly, so the thumb's own margin-inset background lands here.
-        drawCtx <- snd <$> runUI (rangeControl TestControl OtherControl Vertical 0 1 ([] :: [Attr TestElement RangeEvent () ()])) (mkCtxFor noInput)
-        getDrawCommands drawCtx `shouldContain` [FillRect (insetRect (uniform 10) contentRect) testColour]
-
   describe "slider" $ do
     it "renders chrome like any other control" $ do
       ctx' <- snd <$> runUI (slider id Horizontal 0.5 [onChange (const ())])
         (emptyUIContext sliderRect noInput sliderTheme noOpTextMeasurer)
       getDrawCommands ctx' `shouldContain` [FillRect sliderRect testColour]
 
+    describe "thumbRatio" $ do
+      -- sliderRect is 200x30; the default square-thumb calculation gives a
+      -- 30x30 thumb (side = cross-axis). An explicit thumbRatio of 0.5
+      -- gives a 100-wide thumb instead — distinct enough from the default
+      -- to prove the override actually took effect, not just that the
+      -- track's own (same-coloured) background is present regardless.
+      it "defaults to a square thumb when not given" $ do
+        ctx' <- snd <$> runUI (slider id Horizontal 0 [onChange (const ())])
+          (emptyUIContext sliderRect noInput sliderTheme noOpTextMeasurer)
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 0 30 30) testColour]
+
+      it "overrides the default square-thumb sizing when given" $ do
+        ctx' <- snd <$> runUI (slider id Horizontal 0 [onChange (const ()), thumbRatio 0.5])
+          (emptyUIContext sliderRect noInput sliderTheme noOpTextMeasurer)
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 0 100 30) testColour]
+
     describe "drag interaction" $ do
+      it "does not dispatch when the mouse is over the track but the button is not held" $ do
+        ctx' <- runSlider Horizontal 0.5 (mouseAt (Point 100 15) False [])
+        dispatchCount ctx' `shouldBe` 0
+
+      it "does not dispatch when not dragging even if the button is held elsewhere" $ do
+        ctx' <- runSlider Horizontal 0.5 (mouseAt (Point 300 300) True [])
+        dispatchCount ctx' `shouldBe` 0
+
       it "sets value to 0.5 when dragged to the midpoint" $ do
         ctx' <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
         getMessages ctx' `shouldBe` [0.5]
