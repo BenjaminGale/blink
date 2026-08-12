@@ -1,8 +1,9 @@
 module Blink.Controls2
-  ( Attr (..)
+  ( Attr
   , configure
   , fire
   , onAny
+  , configAny
   , ControlEvent (..)
   , HasControlEvent (..)
   , onFocusGained
@@ -84,6 +85,9 @@ fire attrs evs = forM_ evs $ \ev -> forM_ handlers $ \h -> mapM_ dispatch (h ev)
 
 onAny :: (ev -> [Out e msg]) -> Attr e ev msg cfg
 onAny = On
+
+configAny :: (cfg -> cfg) -> Attr e ev msg cfg
+configAny = Config
 
 onFocusGained :: HasControlEvent ev => msg -> Attr e ev msg cfg
 onFocusGained msg = onAny $ \ev -> [OutMsg msg | matchControl ev == Just FocusGained]

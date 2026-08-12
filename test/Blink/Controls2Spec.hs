@@ -4,12 +4,13 @@ import Control.Monad (forM_)
 import Test.Hspec
 
 import Blink.Controls2
-  ( Attr (..)
+  ( Attr
   , ControlEvent (..)
   , FocusOnClick (..)
   , HasControlEvent (..)
   , applyFocus
   , applyMouseOver
+  , configAny
   , configure
   , control
   , fire
@@ -80,10 +81,10 @@ defaultDummyConfig :: DummyConfig
 defaultDummyConfig = DummyConfig { dummyFlag = False, dummyCount = 0 }
 
 setFlag :: Bool -> Attr e ev msg DummyConfig
-setFlag b = Config $ \cfg -> cfg { dummyFlag = b }
+setFlag b = configAny $ \cfg -> cfg { dummyFlag = b }
 
 addCount :: Int -> Attr e ev msg DummyConfig
-addCount n = Config $ \cfg -> cfg { dummyCount = dummyCount cfg + n }
+addCount n = configAny $ \cfg -> cfg { dummyCount = dummyCount cfg + n }
 
 onPing :: msg -> Attr e DummyEvent msg cfg
 onPing msg = onAny $ \ev -> case ev of
@@ -153,6 +154,11 @@ spec = describe "Blink.Controls2" $ do
     it "builds a handler with full access to Out, usable like any other On attr" $ do
       ctx <- runFire [onPing (1 :: Int)] [Ping] (mkCtxFor noInput)
       getMessages ctx `shouldBe` [1]
+
+  describe "configAny" $
+    it "builds a config attr usable like any other, for a control author's own cfg type" $
+      dummyCount (configure defaultDummyConfig [configAny (\cfg -> cfg { dummyCount = 5 })])
+        `shouldBe` 5
 
   describe "isMouseOver" $ do
     forM_ insidePoints $ \(desc, pt) ->
