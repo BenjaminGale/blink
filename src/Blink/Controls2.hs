@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls2
   ( Attr
   , configure
@@ -32,6 +33,11 @@ module Blink.Controls2
   , ButtonEvent (Clicked)
   , onClick
   , onClickTo
+  , CheckboxPart (..)
+  , CheckboxEvent (Toggled)
+  , onToggle
+  , renderCheckboxGlyph
+  , checkbox
   ) where
 
 import Control.Monad (forM_, when)
@@ -40,9 +46,10 @@ import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
 import Data.Void (Void)
 
-import Blink.Geometry (Insets (..), Rectangle (..), borderInsets, insetRect, noBorder)
+import Blink.Geometry (Alignment (..), Insets (..), Rectangle (..), borderInsets, insetRect, noBorder)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
-import Blink.Layout (Length (..))
+import Blink.Layout (BoxConfig (..), Layout (..), Length (..), defaultBoxConfig, hBox)
+import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..))
 import Blink.UI
 
@@ -402,3 +409,75 @@ button eid txt attrs = do
     draw = do
       style <- getStyle eid
       drawText (styleTextColour style) (styleTextAlign style) txt
+
+-- | Sub-parts of a 'checkbox', used as the inner tag when building the
+-- control's element IDs via a tagging function:
+--
+-- @
+-- data Element = ... | NotifyMe CheckboxPart
+-- checkbox NotifyMe "Notify me by email" (notifyMe model) [onToggle NotifyMeChanged]
+-- @
+data CheckboxPart
+  = CheckboxBox   -- ^ The checkbox as a whole: chrome, hit region, focus, activation.
+  | CheckboxGlyph -- ^ The checkmark glyph.
+  | CheckboxLabel -- ^ The label beside it — an ordinary 'label'.
+  deriving (Eq, Ord, Show)
+
+-- | Events reported by 'checkbox': 'Toggled' with the new checked state when
+-- activated, or a lifecycle event via 'CheckboxControl' (see 'ControlEvent').
+data CheckboxEvent = Toggled Bool | CheckboxControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent CheckboxEvent where
+  liftControl = CheckboxControl
+  matchControl (CheckboxControl ce) = Just ce
+  matchControl _                    = Nothing
+
+-- | Emits @f newChecked@ when 'Toggled'.
+onToggle :: (Bool -> msg) -> Attr e CheckboxEvent msg cfg
+onToggle f = onAny $ \ev -> case ev of
+  Toggled b -> [OutMsg (f b)]
+  _         -> []
+
+-- | Draws a checkbox glyph: a checkmark centred in the current bounds when
+-- @checked@, nothing otherwise, in the resolved style's text colour. A bare
+-- rendering action with no interactive behaviour of its own — reusable by
+-- anything that wants to look like a checkbox glyph without taking on
+-- 'checkbox''s toggle behaviour.
+renderCheckboxGlyph :: Ord e => e -> Bool -> UI e msg ()
+renderCheckboxGlyph eid checked = do
+  style <- getStyle eid
+  when checked $ drawText (styleTextColour style) AlignCenter "✓"
+
+-- | Attrs shared by a checkbox's glyph and label sub-parts: neither is a tab
+-- stop, and clicking either redirects focus to the checkbox itself.
+-- Committing to 'LabelEvent' here (rather than leaving it polymorphic) is
+-- what lets 'checkbox' use the same value at both the glyph's 'control' call
+-- and the label's 'label' call without either site leaving its event type
+-- ambiguous.
+checkboxSubPartAttrs :: e -> [Attr e LabelEvent msg cfg]
+checkboxSubPartAttrs boxId = [tabStop False, focusOnClick (FocusTarget boxId)]
+
+-- | A togglable checkbox with an adjacent label, as one unit: the glyph and
+-- label are purely visual sub-parts (each moused-over and styled on its own
+-- bounds, neither a tab stop, a click on either redirecting focus to the
+-- checkbox) — all interaction lives on the checkbox itself, whose own hit
+-- region spans the glyph, the label, and the gap between them. Fires
+-- 'Toggled' with the new checked state when activated by a click anywhere
+-- in that region, or by Enter or Space while focused.
+--
+-- @
+-- checkbox NotifyMe "Notify me by email" (notifyMe model) [onToggle NotifyMeChanged]
+-- @
+checkbox :: Ord e => (CheckboxPart -> e) -> Text -> Bool -> [Attr e CheckboxEvent msg cfg] -> UI e msg ()
+checkbox mkId text checked attrs = do
+  activated <- activatable (mkId CheckboxBox) attrs [KeyReturn, KeySpace] draw
+  when activated $ fire attrs [Toggled (not checked)]
+  where
+    glyphId  = mkId CheckboxGlyph
+    subAttrs = checkboxSubPartAttrs (mkId CheckboxBox)
+    draw =
+      hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
+        [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, control glyphId subAttrs (renderCheckboxGlyph glyphId checked))
+        , (Layout Fill Fill MiddleLeft, label (mkId CheckboxLabel) text subAttrs)
+        ]

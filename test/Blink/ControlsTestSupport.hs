@@ -84,10 +84,10 @@ contentRect = insetRect (uniform 5) bgRect
 mkCtx :: InputState -> UIContext TestElement ()
 mkCtx input = emptyUIContext controlRect input testTheme noOpTextMeasurer
 
-withFocus :: Maybe TestElement -> UIContext TestElement s -> UIContext TestElement s
+withFocus :: Maybe e -> UIContext e s -> UIContext e s
 withFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus = (ixnFocus (ctxInteraction ctx)) { focusedElement = e } } }
 
-getFocused :: UIContext TestElement s -> Maybe TestElement
+getFocused :: UIContext e s -> Maybe e
 getFocused = focusedElement . ixnFocus . ctxInteraction
 
 -- | Applies the frame's queued 'UiEffect's (focus, scroll, selection)

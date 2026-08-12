@@ -38,6 +38,10 @@ import Blink.Controls2
   , ButtonEvent (Clicked)
   , onClick
   , onClickTo
+  , CheckboxPart (..)
+  , onToggle
+  , renderCheckboxGlyph
+  , checkbox
   )
 import Blink.ControlsTestSupport
   ( TestElement (..)
@@ -50,6 +54,7 @@ import Blink.ControlsTestSupport
   , mouseAt
   , noInput
   , outsidePoints
+  , settle
   , testBorderColour
   , testColour
   , testTheme
@@ -57,10 +62,12 @@ import Blink.ControlsTestSupport
   , withButtonReleased
   , withFocus
   )
-import Blink.Geometry (Point (..), Rectangle (..), uniformBorder)
+import qualified Data.Map.Strict as Map
+import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
 import Blink.Layout (Length (..))
 import Blink.Rendering (DrawCommand (..), TextAlign (..))
+import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 
 -- | 'Blink.ControlsTestSupport.mkCtx' fixes @msg ~ ()@; several suites below
@@ -112,6 +119,49 @@ runFire attrs evs ctx = snd <$> runUI (fire attrs evs) ctx
 dummyLabel :: DummyEvent -> String
 dummyLabel Ping = "Ping"
 dummyLabel Pong = "Pong"
+
+-- checkbox takes a tagging function rather than a single element ID, so its
+-- tests use CheckboxPart as the element type directly and 'id' as the
+-- tagging function — the same convention the old suite used for scrollBar.
+-- Zero margin/padding throughout so the whole checkboxRect is hittable, and
+-- the composite's own outer bounds (not just the glyph) span the full row.
+checkboxRect :: Rectangle
+checkboxRect = Rectangle 0 0 100 20
+
+checkboxStyle :: Style
+checkboxStyle = Style
+  { styleBackground   = testColour
+  , styleTextColour   = testColour
+  , styleTextAlign    = AlignCenter
+  , styleMargin       = uniform 0
+  , stylePadding      = uniform 0
+  , styleBorderColour = Nothing
+  , styleBorderEdges  = noBorder
+  }
+
+checkboxStyleSet :: StyleSet
+checkboxStyleSet = StyleSet
+  { styleSetNormal   = checkboxStyle
+  , styleSetHovered  = checkboxStyle
+  , styleSetPressed  = checkboxStyle
+  , styleSetFocused  = checkboxStyle
+  , styleSetDisabled = checkboxStyle
+  }
+
+checkboxTheme :: Theme CheckboxPart
+checkboxTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = checkboxStyleSet }
+
+mkCheckboxCtx :: InputState -> UIContext CheckboxPart Bool
+mkCheckboxCtx input = emptyUIContext checkboxRect input checkboxTheme noOpTextMeasurer
+
+runCheckbox :: Bool -> UIContext CheckboxPart Bool -> IO (UIContext CheckboxPart Bool)
+runCheckbox checked ctx = fmap (settle . snd) $ runUI (checkbox id "Notify me" checked [onToggle id]) ctx
+
+glyphPoint :: Point
+glyphPoint = Point 10 10
+
+labelPoint :: Point
+labelPoint = Point 50 10
 
 spec :: Spec
 spec = describe "Blink.Controls2" $ do
@@ -613,3 +663,79 @@ spec = describe "Blink.Controls2" $ do
       (_, ctx') <- runUI (button TestControl "label" attrs) (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])))
       getMessages ctx' `shouldBe` [1]
       getUiEffects ctx' `shouldContain` [SetSelectionAt TestControl (cursor 0)]
+
+  describe "renderCheckboxGlyph" $ do
+    it "draws a checkmark when checked" $ do
+      (_, ctx') <- runUI (renderCheckboxGlyph CheckboxGlyph True) (mkCheckboxCtx noInput)
+      drawnTexts ctx' `shouldContain` ["✓"]
+
+    it "draws nothing when unchecked" $ do
+      (_, ctx') <- runUI (renderCheckboxGlyph CheckboxGlyph False) (mkCheckboxCtx noInput)
+      drawnTexts ctx' `shouldBe` []
+
+  describe "checkbox" $ do
+    describe "toggle behaviour" $ do
+      it "dispatches True when clicked while unchecked" $ do
+        ctx' <- runCheckbox False (withButtonReleased (mkCheckboxCtx (mouseAt labelPoint False [])))
+        getMessages ctx' `shouldBe` [True]
+
+      it "dispatches False when clicked while checked" $ do
+        ctx' <- runCheckbox True (withButtonReleased (mkCheckboxCtx (mouseAt labelPoint False [])))
+        getMessages ctx' `shouldBe` [False]
+
+      it "dispatches when clicked directly on the glyph, not just the label" $ do
+        ctx' <- runCheckbox False (withButtonReleased (mkCheckboxCtx (mouseAt glyphPoint False [])))
+        getMessages ctx' `shouldBe` [True]
+
+      it "dispatches toggle when Enter is pressed while focused" $ do
+        ctx' <- runCheckbox False (withFocus (Just CheckboxBox) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        getMessages ctx' `shouldBe` [True]
+
+      it "dispatches toggle when Space is pressed while focused" $ do
+        ctx' <- runCheckbox False (withFocus (Just CheckboxBox) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeySpace []] }))
+        getMessages ctx' `shouldBe` [True]
+
+      it "does not dispatch when clicked outside the checkbox" $ do
+        ctx' <- runCheckbox False (withButtonReleased (mkCheckboxCtx (mouseAt (Point 200 200) False [])))
+        getMessages ctx' `shouldBe` []
+
+      it "does not dispatch when Enter is pressed while unfocused" $ do
+        ctx' <- runCheckbox False (withFocus (Just CheckboxGlyph) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        getMessages ctx' `shouldBe` []
+
+    describe "disabled" $ do
+      it "does not dispatch when clicked while disabled" $ do
+        (_, ctx') <- runUI (disableWhen True (checkbox id "Notify me" False [onToggle id]))
+          (withButtonReleased (mkCheckboxCtx (mouseAt labelPoint False [])))
+        getMessages ctx' `shouldBe` []
+
+      it "does not dispatch when Enter is pressed while disabled" $ do
+        (_, ctx') <- runUI (disableWhen True (checkbox id "Notify me" False [onToggle id]))
+          (withFocus (Just CheckboxBox) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        getMessages ctx' `shouldBe` []
+
+    describe "rendering" $ do
+      it "draws the checkmark when checked" $ do
+        ctx' <- runCheckbox True (mkCheckboxCtx noInput)
+        drawnTexts ctx' `shouldContain` ["✓"]
+
+      it "does not draw the checkmark when unchecked" $ do
+        ctx' <- runCheckbox False (mkCheckboxCtx noInput)
+        drawnTexts ctx' `shouldNotContain` ["✓"]
+
+      it "draws the label text" $ do
+        ctx' <- runCheckbox False (mkCheckboxCtx noInput)
+        drawnTexts ctx' `shouldContain` ["Notify me"]
+
+      it "fills its own background across the whole composite" $ do
+        ctx' <- runCheckbox False (mkCheckboxCtx noInput)
+        getDrawCommands ctx' `shouldContain` [FillRect checkboxRect testColour]
+
+    describe "focus" $ do
+      it "gives focus to the checkbox itself (not the glyph or label) when the label is clicked" $ do
+        ctx' <- runCheckbox False (withButtonReleased (mkCheckboxCtx (mouseAt labelPoint False [])))
+        getFocused ctx' `shouldBe` Just CheckboxBox
+
+      it "gives focus to the checkbox itself when the glyph is clicked" $ do
+        ctx' <- runCheckbox False (withButtonReleased (mkCheckboxCtx (mouseAt glyphPoint False [])))
+        getFocused ctx' `shouldBe` Just CheckboxBox
