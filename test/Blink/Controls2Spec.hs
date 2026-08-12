@@ -1,16 +1,75 @@
 module Blink.Controls2Spec (spec) where
 
+import Control.Monad (forM_)
 import Test.Hspec
 
-import Blink.Controls2 (Attr (..), configure, fire, onAny)
-import Blink.ControlsTestSupport (TestElement (..), controlRect, noInput, testTheme)
-import Blink.Input (InputState)
+import Blink.Controls2
+  ( Attr (..)
+  , ControlEvent (..)
+  , FocusOnClick (..)
+  , HasControlEvent (..)
+  , applyFocus
+  , applyMouseOver
+  , configure
+  , control
+  , fire
+  , focusOnClick
+  , isMouseOver
+  , measureChrome
+  , onAny
+  , onFocusGained
+  , onFocusLost
+  , onMouseEnter
+  , onMouseExit
+  , renderChrome
+  , tabStop
+  )
+import Blink.ControlsTestSupport
+  ( TestElement (..)
+  , bgRect
+  , contentRect
+  , controlRect
+  , getFocused
+  , insidePoints
+  , mouseAt
+  , noInput
+  , outsidePoints
+  , testBorderColour
+  , testColour
+  , testTheme
+  , testThemeWithBorder
+  , withButtonReleased
+  , withFocus
+  )
+import Blink.Geometry (Point (..), uniformBorder)
+import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
+import Blink.Layout (Length (..))
+import Blink.Rendering (DrawCommand (..))
 import Blink.UI
 
--- | 'Blink.ControlsTestSupport.mkCtx' fixes @msg ~ ()@; 'fire' is tested
--- against several different message types, so this stays polymorphic.
+-- | 'Blink.ControlsTestSupport.mkCtx' fixes @msg ~ ()@; several suites below
+-- (anything using 'fire' to observe emitted values) need other message
+-- types, so this stays polymorphic.
 mkCtxFor :: InputState -> UIContext TestElement msg
 mkCtxFor input = emptyUIContext controlRect input testTheme noOpTextMeasurer
+
+-- | Spies on the shared 'ControlEvent's a primitive fires, by emitting the
+-- event itself as the message.
+newtype Probe = Probe ControlEvent deriving (Eq, Show)
+
+instance HasControlEvent Probe where
+  liftControl = Probe
+  matchControl (Probe ce) = Just ce
+
+captureAttrs :: Attr e Probe Probe cfg
+captureAttrs = onAny (\ev -> [OutMsg ev])
+
+noProbeAttrs :: [Attr e Probe Probe ()]
+noProbeAttrs = []
+
+isStrokeRect :: DrawCommand -> Bool
+isStrokeRect (StrokeBorder {}) = True
+isStrokeRect _                 = False
 
 data DummyEvent = Ping | Pong deriving (Eq, Show)
 
@@ -94,3 +153,232 @@ spec = describe "Blink.Controls2" $ do
     it "builds a handler with full access to Out, usable like any other On attr" $ do
       ctx <- runFire [onPing (1 :: Int)] [Ping] (mkCtxFor noInput)
       getMessages ctx `shouldBe` [1]
+
+  describe "isMouseOver" $ do
+    forM_ insidePoints $ \(desc, pt) ->
+      it ("is True " <> desc) $ do
+        (result, _) <- runUI (isMouseOver TestControl) (mkCtxFor (mouseAt pt False []) :: UIContext TestElement ())
+        result `shouldBe` True
+
+    forM_ outsidePoints $ \(desc, pt) ->
+      it ("is False " <> desc) $ do
+        (result, _) <- runUI (isMouseOver TestControl) (mkCtxFor (mouseAt pt False []) :: UIContext TestElement ())
+        result `shouldBe` False
+
+    it "several elements can each independently be over at once (geometric, not last-writer-wins)" $ do
+      let ctx = mkCtxFor (mouseAt (Point 50 50) False []) :: UIContext TestElement ()
+      (a, _) <- runUI (isMouseOver TestControl) ctx
+      (b, _) <- runUI (isMouseOver OtherControl) ctx
+      (a, b) `shouldBe` (True, True)
+
+  describe "applyMouseOver" $ do
+    it "fires MouseEntered the first frame the mouse is over" $ do
+      (_, ctx) <- runUI (applyMouseOver TestControl [captureAttrs]) (mkCtxFor (mouseAt (Point 50 50) False []))
+      getMessages ctx `shouldBe` [Probe MouseEntered]
+
+    it "does not fire MouseEntered again on a later frame while still over" $ do
+      (_, ctx1) <- runUI (applyMouseOver TestControl [captureAttrs]) (mkCtxFor (mouseAt (Point 50 50) False []))
+      let ctx2 = nextFrameContext controlRect (mouseAt (Point 50 50) False []) ctx1
+      (_, ctx3) <- runUI (applyMouseOver TestControl [captureAttrs]) ctx2
+      getMessages ctx3 `shouldBe` []
+
+    it "fires MouseExited on the frame the mouse leaves after being over" $ do
+      (_, ctx1) <- runUI (applyMouseOver TestControl [captureAttrs]) (mkCtxFor (mouseAt (Point 50 50) False []))
+      let ctx2 = nextFrameContext controlRect (mouseAt (Point 200 200) False []) ctx1
+      (_, ctx3) <- runUI (applyMouseOver TestControl [captureAttrs]) ctx2
+      getMessages ctx3 `shouldBe` [Probe MouseExited]
+
+    it "fires nothing when the mouse was never over" $ do
+      (_, ctx) <- runUI (applyMouseOver TestControl [captureAttrs]) (mkCtxFor (mouseAt (Point 200 200) False []))
+      getMessages ctx `shouldBe` []
+
+    it "acquires hot capture when hit and the button is down" $ do
+      (_, ctx) <- runUI (applyMouseOver TestControl noProbeAttrs) (mkCtxFor (mouseAt (Point 50 50) True []))
+      ixnCaptured (ctxInteraction ctx) `shouldBe` Just TestControl
+
+    it "does not register mouse-over, or fire enter, when disabled" $ do
+      let ctx0 = mkCtxFor (mouseAt (Point 50 50) False []) :: UIContext TestElement Probe
+      (_, ctx) <- runUI (applyMouseOver TestControl [captureAttrs]) (ctx0 { ctxDisabled = True })
+      getMessages ctx `shouldBe` []
+
+    it "fires via onMouseEnter when the mouse enters" $ do
+      let attrs = [onMouseEnter "entered"] :: [Attr TestElement Probe String ()]
+      (_, ctx) <- runUI (applyMouseOver TestControl attrs) (mkCtxFor (mouseAt (Point 50 50) False []))
+      getMessages ctx `shouldBe` ["entered"]
+
+    it "fires via onMouseExit when the mouse leaves after being over" $ do
+      let enterAttrs = [] :: [Attr TestElement Probe String ()]
+          exitAttrs  = [onMouseExit "exited"] :: [Attr TestElement Probe String ()]
+      (_, ctx1) <- runUI (applyMouseOver TestControl enterAttrs) (mkCtxFor (mouseAt (Point 50 50) False []))
+      let ctx2 = nextFrameContext controlRect (mouseAt (Point 200 200) False []) ctx1
+      (_, ctx3) <- runUI (applyMouseOver TestControl exitAttrs) ctx2
+      getMessages ctx3 `shouldBe` ["exited"]
+
+    it "several elements can each register mouse-over in the same frame" $ do
+      let ctx0 = mkCtxFor (mouseAt (Point 50 50) False []) :: UIContext TestElement Probe
+      (_, ctx1) <- runUI (applyMouseOver TestControl noProbeAttrs) ctx0
+      (_, ctx2) <- runUI (applyMouseOver OtherControl noProbeAttrs) ctx1
+      let ctx3 = nextFrameContext controlRect noInput ctx2
+      (a, _) <- runUI (wasMouseOverLastFrame TestControl) ctx3
+      (b, _) <- runUI (wasMouseOverLastFrame OtherControl) ctx3
+      (a, b) `shouldBe` (True, True)
+
+  describe "applyFocus" $ do
+    describe "default (FocusSelf)" $ do
+      let run attrs ctx = snd <$> runUI (applyFocus TestControl attrs) ctx
+          noAttrs = [] :: [Attr TestElement Probe Probe ()]
+
+      it "receives focus when nothing else is focused" $ do
+        ctx' <- run noAttrs (mkCtxFor noInput)
+        getFocused ctx' `shouldBe` Just TestControl
+
+      it "does not take focus from another element" $ do
+        ctx' <- run noAttrs (withFocus (Just OtherControl) (mkCtxFor noInput))
+        getFocused ctx' `shouldBe` Just OtherControl
+
+      it "receives focus when clicked" $ do
+        ctx' <- run noAttrs (withFocus (Just OtherControl) (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []))))
+        getFocused ctx' `shouldBe` Just TestControl
+
+      it "does not steal focus when the mouse is released on it after dragging from another element" $ do
+        let base = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []))
+            ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just OtherControl } }
+        ctx' <- run noAttrs ctx
+        getFocused ctx' `shouldBe` Nothing
+
+      it "retains focus on the previously focused element when a drag releases elsewhere" $ do
+        let base = withFocus (Just OtherControl) (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])))
+            ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just OtherControl } }
+        ctx' <- snd <$> runUI (applyFocus OtherControl noAttrs) ctx
+        getFocused ctx' `shouldBe` Just OtherControl
+
+      it "fires FocusGained via onFocusGained when focus is gained" $ do
+        ctx' <- run ([onFocusGained "gained"] :: [Attr TestElement Probe String ()]) (mkCtxFor noInput)
+        getMessages ctx' `shouldBe` ["gained"]
+
+      it "fires FocusLost via onFocusLost when focus is lost to a Tab press" $ do
+        -- This is the reason focus and tab navigation are one primitive: a
+        -- Tab-driven loss is only visible to a bracket spanning both, since
+        -- applyFocus alone would return before the loss happens, and by the
+        -- time anything ran again this same element would have already
+        -- auto-reclaimed focus, masking the transition.
+        let base = withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyTab []] })
+        ctx' <- run ([onFocusLost "lost"] :: [Attr TestElement Probe String ()]) base
+        getMessages ctx' `shouldBe` ["lost"]
+
+      it "fires nothing when focus is retained" $ do
+        ctx' <- run [captureAttrs] (withFocus (Just TestControl) (mkCtxFor noInput))
+        getMessages ctx' `shouldBe` []
+
+      it "fires nothing when it stays unfocused" $ do
+        ctx' <- run [captureAttrs] (withFocus (Just OtherControl) (mkCtxFor noInput))
+        getMessages ctx' `shouldBe` []
+
+    describe "tab navigation" $ do
+      let run attrs ctx = snd <$> runUI (applyFocus TestControl attrs) ctx
+          noAttrs = [] :: [Attr TestElement Probe Probe ()]
+
+      it "clears focus when Tab is pressed while focused" $ do
+        ctx' <- run noAttrs (withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyTab []] }))
+        getFocused ctx' `shouldBe` Nothing
+
+      it "passes focus to the previous tab stop when Shift+Tab is pressed" $ do
+        let base = withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyTab [Shift]] })
+            ctx  = base { ctxInteraction = (ctxInteraction base) { ixnPrevTabStop = Just OtherControl } }
+        ctx' <- run noAttrs ctx
+        getFocused ctx' `shouldBe` Just OtherControl
+
+      it "registers itself as the previous tab stop by default" $ do
+        ctx' <- run noAttrs (mkCtxFor noInput)
+        ixnPrevTabStop (ctxInteraction ctx') `shouldBe` Just TestControl
+
+      it "does not register itself as the previous tab stop when tabStop is False" $ do
+        ctx' <- run ([tabStop False] :: [Attr TestElement Probe Probe ()]) (mkCtxFor noInput)
+        ixnPrevTabStop (ctxInteraction ctx') `shouldBe` Nothing
+
+      it "a tabStop-False control leaves the previous tab-stop record unchanged" $ do
+        ctx0 <- run noAttrs (mkCtxFor noInput)
+        ctx1 <- snd <$> runUI (applyFocus OtherControl ([tabStop False] :: [Attr TestElement Probe Probe ()])) ctx0
+        ixnPrevTabStop (ctxInteraction ctx1) `shouldBe` Just TestControl
+
+      it "does not consume Tab or lose focus when disabled while focused" $ do
+        let disabledCtx = (withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyTab []] })) { ctxDisabled = True }
+        ctx' <- run noAttrs disabledCtx
+        getFocused ctx' `shouldBe` Just TestControl
+
+    describe "focusOnClick (FocusTarget)" $ do
+      let attrs = [focusOnClick (FocusTarget OtherControl)] :: [Attr TestElement Probe Probe ()]
+
+      it "does not auto-claim focus when nothing is focused" $ do
+        ctx' <- snd <$> runUI (applyFocus TestControl attrs) (mkCtxFor noInput)
+        getFocused ctx' `shouldBe` Nothing
+
+      it "gives focus to the target when clicked, not to itself" $ do
+        ctx' <- snd <$> runUI (applyFocus TestControl attrs) (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])))
+        getFocused ctx' `shouldBe` Just OtherControl
+
+    describe "focusOnClick (NoFocus)" $ do
+      let attrs = [focusOnClick NoFocus] :: [Attr TestElement Probe Probe ()]
+
+      it "does not auto-claim focus when nothing is focused" $ do
+        ctx' <- snd <$> runUI (applyFocus TestControl attrs) (mkCtxFor noInput)
+        getFocused ctx' `shouldBe` Nothing
+
+      it "does not take focus when clicked" $ do
+        ctx' <- snd <$> runUI (applyFocus TestControl attrs) (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])))
+        getFocused ctx' `shouldBe` Nothing
+
+      it "still retains focus if it already holds it" $ do
+        ctx' <- snd <$> runUI (applyFocus TestControl attrs) (withFocus (Just TestControl) (mkCtxFor noInput))
+        getFocused ctx' `shouldBe` Just TestControl
+
+  describe "measureChrome" $ do
+    it "sums margin, border, and padding on each axis" $ do
+      ((Exactly dw, Exactly dh), _) <- runUI (measureChrome TestControl) (mkCtxFor noInput :: UIContext TestElement ())
+      (dw, dh) `shouldBe` (30, 30)
+
+    it "includes border width when a border is set" $ do
+      let ctx = (mkCtxFor noInput :: UIContext TestElement ()) { ctxTheme = testThemeWithBorder }
+      ((Exactly dw, Exactly dh), _) <- runUI (measureChrome TestControl) ctx
+      (dw, dh) `shouldBe` (32, 32)
+
+  describe "renderChrome" $ do
+    let run ctx = snd <$> runUI (renderChrome TestControl (pure ())) ctx
+
+    it "does not draw a background in the margin area" $ do
+      ctx' <- run (mkCtxFor noInput :: UIContext TestElement ())
+      getDrawCommands ctx' `shouldNotContain` [FillRect controlRect testColour]
+
+    it "fills its background area" $ do
+      ctx' <- run (mkCtxFor noInput :: UIContext TestElement ())
+      getDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
+
+    it "clips content to its padding area" $ do
+      ctx' <- run (mkCtxFor noInput :: UIContext TestElement ())
+      getDrawCommands ctx' `shouldContain` [PushClip contentRect]
+
+    it "does not draw a border when borderColour is Nothing" $ do
+      ctx' <- run (mkCtxFor noInput :: UIContext TestElement ())
+      filter isStrokeRect (getDrawCommands ctx') `shouldBe` []
+
+    it "draws a border when borderColour is set" $ do
+      let ctx = (mkCtxFor noInput :: UIContext TestElement ()) { ctxTheme = testThemeWithBorder }
+      ctx' <- run ctx
+      getDrawCommands ctx' `shouldContain` [StrokeBorder bgRect testBorderColour (uniformBorder 1)]
+
+  describe "control" $ do
+    it "composes mouse-over, focus, tab navigation, and chrome for a single interactive element" $ do
+      let ctx = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []))
+      ctx' <- snd <$> runUI (control TestControl ([] :: [Attr TestElement Probe Probe ()]) (pure ())) ctx
+      getFocused ctx' `shouldBe` Just TestControl
+      getDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
+
+    it "threads focusOnClick through to the underlying applyFocus" $ do
+      let attrs = [focusOnClick (FocusTarget OtherControl)] :: [Attr TestElement Probe Probe ()]
+          ctx   = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []))
+      ctx' <- snd <$> runUI (control TestControl attrs (pure ())) ctx
+      getFocused ctx' `shouldBe` Just OtherControl
+
+    it "runs content within the padded content rectangle" $ do
+      ctx' <- snd <$> runUI (control TestControl ([] :: [Attr TestElement Probe Probe ()]) (fillRect testColour)) (mkCtxFor noInput)
+      getDrawCommands ctx' `shouldContain` [FillRect contentRect testColour]
