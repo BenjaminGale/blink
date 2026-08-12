@@ -15,6 +15,8 @@ module Blink.Controls2
   , FocusOnClick (..)
   , tabStop
   , focusOnClick
+  , HasTextConfig (..)
+  , text
   , isMouseOver
   , isPressed
   , getStyle
@@ -32,6 +34,7 @@ module Blink.Controls2
   , ProgressValue (..)
   , progressBar
   , bandSpeed
+  , progress
   , button
   , ButtonEvent (Clicked)
   , onClick
@@ -39,6 +42,7 @@ module Blink.Controls2
   , CheckboxPart (..)
   , CheckboxEvent (Toggled)
   , onToggle
+  , checked
   , renderCheckboxGlyph
   , checkbox
   , TextEvent (Edited, Submitted)
@@ -54,6 +58,8 @@ module Blink.Controls2
   , onChange
   , arrowStep
   , thumbRatio
+  , orientation
+  , value
   , slider
   ) where
 
@@ -155,6 +161,19 @@ tabStop b = Shared $ \cc -> cc { ccTabStop = b }
 
 focusOnClick :: FocusOnClick e -> Attr e ev msg cfg
 focusOnClick foc = Shared $ \cc -> cc { ccFocusOnClick = foc }
+
+-- | Implemented by any control's own config type that carries displayed
+-- text, letting 'text' work uniformly across them (same pattern as
+-- 'HasControlEvent' for the shared lifecycle events) rather than needing a
+-- differently-named attribute per control.
+class HasTextConfig cfg where
+  setText :: Text -> cfg -> cfg
+
+-- | Sets the text a control displays — a caption for 'label'\/'button'\/
+-- 'checkbox', or the current value for 'textInputControl'. Defaults to
+-- @\"\"@ when not given.
+text :: HasTextConfig cfg => Text -> Attr e ev msg cfg
+text t = configAny (setText t)
 
 -- | 'True' when the mouse is over the element's background rectangle (bounds
 -- inset by its margin) — the control-specific hit area. Built on 'isRegionHit';
@@ -385,15 +404,25 @@ instance HasControlEvent LabelEvent where
   liftControl = LabelControl
   matchControl (LabelControl ce) = Just ce
 
--- | Text in the resolved style. A full 'control', so it registers
--- mouse-over and honours 'tabStop'\/'focusOnClick' (both default to
--- off-the-beaten-path uses — a plain label has no reason to take focus —
+-- | Configuration for 'label', set via 'text'. Defaults to @\"\"@.
+newtype LabelConfig = LabelConfig { labelConfigText :: Text }
+
+defaultLabelConfig :: LabelConfig
+defaultLabelConfig = LabelConfig { labelConfigText = "" }
+
+instance HasTextConfig LabelConfig where
+  setText t cfg = cfg { labelConfigText = t }
+
+-- | Text in the resolved style, set via 'text'. A full 'control', so it
+-- registers mouse-over and honours 'tabStop'\/'focusOnClick' (both default
+-- to off-the-beaten-path uses — a plain label has no reason to take focus —
 -- but a composite like a labelled field can use 'focusOnClick' to redirect
 -- a click on the caption onto its input).
-label :: Ord e => e -> Text -> [Attr e LabelEvent msg cfg] -> UI e msg ()
-label eid text attrs = control eid attrs $ do
+label :: Ord e => e -> [Attr e LabelEvent msg LabelConfig] -> UI e msg ()
+label eid attrs = control eid attrs $ do
   style <- getStyle eid
-  drawText (styleTextColour style) (styleTextAlign style) text
+  let cfg = configure defaultLabelConfig attrs
+  drawText (styleTextColour style) (styleTextAlign style) (labelConfigText cfg)
 
 -- | The value passed to 'progressBar'.
 data ProgressValue
@@ -403,41 +432,53 @@ data ProgressValue
     -- ^ Unknown progress: a band animates continuously across the bar.
   deriving (Eq, Show)
 
--- | Configuration for 'progressBar', set via 'bandSpeed'.
-newtype ProgressBarConfig = ProgressBarConfig { configBandSpeed :: Double }
+-- | Configuration for 'progressBar', set via 'bandSpeed' and 'progress'.
+data ProgressBarConfig = ProgressBarConfig
+  { configBandSpeed     :: Double
+  , progressBarConfigValue :: ProgressValue
+  }
 
 defaultProgressBarConfig :: ProgressBarConfig
-defaultProgressBarConfig = ProgressBarConfig { configBandSpeed = 0.5 }
+defaultProgressBarConfig = ProgressBarConfig { configBandSpeed = 0.5, progressBarConfigValue = Progress 0 }
 
 -- | How fast the band sweeps across an 'Indeterminate' bar, in bar-widths
 -- per second. Defaults to 0.5.
 bandSpeed :: Double -> Attr e ev msg ProgressBarConfig
 bandSpeed v = configAny $ \cfg -> cfg { configBandSpeed = v }
 
--- | A read-only progress indicator. Pass 'Progress' for a determinate bar or
--- 'Indeterminate' for a continuously animating band. Not interactive — no
--- mouse-over, focus, or tab stop, so it takes no 'tabStop'\/'focusOnClick'
--- and never needs a real event type; 'Void' rules out anything being fired.
-progressBar :: Ord e => e -> ProgressValue -> [Attr e Void msg ProgressBarConfig] -> UI e msg ()
-progressBar eid (Progress value) _attrs = renderChrome eid $ do
-  style <- getStyle eid
-  r     <- getBounds
-  let clamped   = max 0 (min 1 value)
-      fillRect' = r { rectWidth = rectWidth r * clamped }
-  withBounds fillRect' $ fillRect (styleTextColour style)
-progressBar eid Indeterminate attrs = do
-  requiresAnimation
-  renderChrome eid $ do
-    r       <- getBounds
-    style   <- getStyle eid
-    elapsed <- getAnimElapsed
-    let speed = configBandSpeed (configure defaultProgressBarConfig attrs)
-        t     = realToFrac elapsed * speed
-        phase = t - fromIntegral (floor t :: Int)
-        bandW = rectWidth r * 0.3
-        left  = rectX r - bandW + (rectWidth r + bandW) * phase
-    withBounds (r { rectX = left, rectWidth = bandW }) $
-      fillRect (styleTextColour style)
+-- | Sets the bar to 'Progress' (determinate) or 'Indeterminate'. Defaults
+-- to @'Progress' 0@.
+progress :: ProgressValue -> Attr e ev msg ProgressBarConfig
+progress p = configAny $ \cfg -> cfg { progressBarConfigValue = p }
+
+-- | A read-only progress indicator, set via 'progress' to 'Progress' for a
+-- determinate bar or 'Indeterminate' for a continuously animating band. Not
+-- interactive — no mouse-over, focus, or tab stop, so it takes no
+-- 'tabStop'\/'focusOnClick' and never needs a real event type; 'Void' rules
+-- out anything being fired.
+progressBar :: Ord e => e -> [Attr e Void msg ProgressBarConfig] -> UI e msg ()
+progressBar eid attrs = do
+  let cfg = configure defaultProgressBarConfig attrs
+  case progressBarConfigValue cfg of
+    Progress progressValue -> renderChrome eid $ do
+      style <- getStyle eid
+      r     <- getBounds
+      let clamped   = max 0 (min 1 progressValue)
+          fillRect' = r { rectWidth = rectWidth r * clamped }
+      withBounds fillRect' $ fillRect (styleTextColour style)
+    Indeterminate -> do
+      requiresAnimation
+      renderChrome eid $ do
+        r       <- getBounds
+        style   <- getStyle eid
+        elapsed <- getAnimElapsed
+        let speed = configBandSpeed cfg
+            t     = realToFrac elapsed * speed
+            phase = t - fromIntegral (floor t :: Int)
+            bandW = rectWidth r * 0.3
+            left  = rectX r - bandW + (rectWidth r + bandW) * phase
+        withBounds (r { rectX = left, rectWidth = bandW }) $
+          fillRect (styleTextColour style)
 
 -- | Events reported by 'button': 'Clicked' when activated, or a lifecycle
 -- event via 'Control' (see 'ControlEvent'). 'Control' is not exported —
@@ -467,17 +508,27 @@ onClickTo eff = onAny $ \ev -> case ev of
   Clicked -> [OutUi eff]
   _       -> []
 
--- | A clickable button labelled @txt@. Fires 'Clicked' — via 'onClick' or
--- 'onClickTo' — on the frame it's activated, by a left-click or by pressing
--- Enter while focused.
-button :: Ord e => e -> Text -> [Attr e ButtonEvent msg cfg] -> UI e msg ()
-button eid txt attrs = do
+-- | Configuration for 'button', set via 'text'. Defaults to @\"\"@.
+newtype ButtonConfig = ButtonConfig { buttonConfigText :: Text }
+
+defaultButtonConfig :: ButtonConfig
+defaultButtonConfig = ButtonConfig { buttonConfigText = "" }
+
+instance HasTextConfig ButtonConfig where
+  setText t cfg = cfg { buttonConfigText = t }
+
+-- | A clickable button labelled via 'text'. Fires 'Clicked' — via 'onClick'
+-- or 'onClickTo' — on the frame it's activated, by a left-click or by
+-- pressing Enter while focused.
+button :: Ord e => e -> [Attr e ButtonEvent msg ButtonConfig] -> UI e msg ()
+button eid attrs = do
   activated <- activatable eid attrs [KeyReturn] draw
   when activated $ fire attrs [Clicked]
   where
     draw = do
       style <- getStyle eid
-      drawText (styleTextColour style) (styleTextAlign style) txt
+      let cfg = configure defaultButtonConfig attrs
+      drawText (styleTextColour style) (styleTextAlign style) (buttonConfigText cfg)
 
 -- | Sub-parts of a 'checkbox', used as the inner tag when building the
 -- control's element IDs via a tagging function:
@@ -514,9 +565,26 @@ onToggle f = onAny $ \ev -> case ev of
 -- anything that wants to look like a checkbox glyph without taking on
 -- 'checkbox''s toggle behaviour.
 renderCheckboxGlyph :: Ord e => e -> Bool -> UI e msg ()
-renderCheckboxGlyph eid checked = do
+renderCheckboxGlyph eid isChecked = do
   style <- getStyle eid
-  when checked $ drawText (styleTextColour style) AlignCenter "✓"
+  when isChecked $ drawText (styleTextColour style) AlignCenter "✓"
+
+-- | Configuration for 'checkbox', set via 'checked' and 'text'. Defaults to
+-- unchecked with an empty label.
+data CheckboxConfig = CheckboxConfig
+  { checkboxConfigChecked :: Bool
+  , checkboxConfigText    :: Text
+  }
+
+defaultCheckboxConfig :: CheckboxConfig
+defaultCheckboxConfig = CheckboxConfig { checkboxConfigChecked = False, checkboxConfigText = "" }
+
+instance HasTextConfig CheckboxConfig where
+  setText t cfg = cfg { checkboxConfigText = t }
+
+-- | Sets whether the checkbox is checked. Defaults to 'False'.
+checked :: Bool -> Attr e ev msg CheckboxConfig
+checked b = configAny $ \cfg -> cfg { checkboxConfigChecked = b }
 
 -- | Attrs shared by a checkbox's glyph and label sub-parts: neither is a tab
 -- stop, and clicking either redirects focus to the checkbox itself.
@@ -527,28 +595,31 @@ renderCheckboxGlyph eid checked = do
 checkboxSubPartAttrs :: e -> [Attr e LabelEvent msg cfg]
 checkboxSubPartAttrs boxId = [tabStop False, focusOnClick (FocusTarget boxId)]
 
--- | A togglable checkbox with an adjacent label, as one unit: the glyph and
--- label are purely visual sub-parts (each moused-over and styled on its own
--- bounds, neither a tab stop, a click on either redirecting focus to the
--- checkbox) — all interaction lives on the checkbox itself, whose own hit
--- region spans the glyph, the label, and the gap between them. Fires
--- 'Toggled' with the new checked state when activated by a click anywhere
--- in that region, or by Enter or Space while focused.
+-- | A togglable checkbox with an adjacent label, as one unit, set via
+-- 'checked' and 'text': the glyph and label are purely visual sub-parts
+-- (each moused-over and styled on its own bounds, neither a tab stop, a
+-- click on either redirecting focus to the checkbox) — all interaction
+-- lives on the checkbox itself, whose own hit region spans the glyph, the
+-- label, and the gap between them. Fires 'Toggled' with the new checked
+-- state when activated by a click anywhere in that region, or by Enter or
+-- Space while focused.
 --
 -- @
--- checkbox NotifyMe "Notify me by email" (notifyMe model) [onToggle NotifyMeChanged]
+-- checkbox NotifyMe [checked (notifyMe model), text "Notify me by email", onToggle NotifyMeChanged]
 -- @
-checkbox :: Ord e => (CheckboxPart -> e) -> Text -> Bool -> [Attr e CheckboxEvent msg cfg] -> UI e msg ()
-checkbox mkId text checked attrs = do
-  activated <- activatable (mkId CheckboxBox) attrs [KeyReturn, KeySpace] draw
-  when activated $ fire attrs [Toggled (not checked)]
+checkbox :: Ord e => (CheckboxPart -> e) -> [Attr e CheckboxEvent msg CheckboxConfig] -> UI e msg ()
+checkbox mkId attrs = do
+  let cfg = configure defaultCheckboxConfig attrs
+      isChecked = checkboxConfigChecked cfg
+  activated <- activatable (mkId CheckboxBox) attrs [KeyReturn, KeySpace] (draw isChecked (checkboxConfigText cfg))
+  when activated $ fire attrs [Toggled (not isChecked)]
   where
     glyphId  = mkId CheckboxGlyph
     subAttrs = checkboxSubPartAttrs (mkId CheckboxBox)
-    draw =
+    draw isChecked txt =
       hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
-        [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, control glyphId subAttrs (renderCheckboxGlyph glyphId checked))
-        , (Layout Fill Fill MiddleLeft, label (mkId CheckboxLabel) text subAttrs)
+        [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, control glyphId subAttrs (renderCheckboxGlyph glyphId isChecked))
+        , (Layout Fill Fill MiddleLeft, label (mkId CheckboxLabel) (text txt : subAttrs))
         ]
 
 -- | Click sets both selection ends at the clicked character; dragging
@@ -565,13 +636,13 @@ resolveMouseSelection
   -> Double      -- ^ current horizontal scroll offset
   -> (Int, Int)  -- ^ current @(anchor, active)@ selection
   -> UI e msg (Int, Int)
-resolveMouseSelection eid bounds wasCapturing justFocused value scrollX (anchor0, active0) = do
+resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX (anchor0, active0) = do
   isCapturing <- isDragging eid
   if isCapturing
     then do
       mousePos <- getMousePos
       let localX = realToFrac (pointX mousePos - rectX bounds) + realToFrac scrollX :: Float
-      clickedPos <- charAtOffset value localX
+      clickedPos <- charAtOffset displayValue localX
       pure $ if not wasCapturing || justFocused
         then (clickedPos, clickedPos)
         else (anchor0, clickedPos)
@@ -611,9 +682,9 @@ applyEdit :: (Text -> Text)   -- ^ @inputFilter@, applied to newly typed text be
           -> InputState       -- ^ this frame's input
           -> (Int, Int)       -- ^ current @(anchor, active)@ selection
           -> ((Int, Int), Maybe Text) -- ^ new @(anchor, active)@, and the new value if it changed
-applyEdit inputFilterFn value input (anchor2, active2)
+applyEdit inputFilterFn currentValue input (anchor2, active2)
   | backspace || hasTyped =
-      ((newCursor, newCursor), if newText /= value then Just newText else Nothing)
+      ((newCursor, newCursor), if newText /= currentValue then Just newText else Nothing)
   | otherwise = ((anchor2, active2), Nothing)
   where
     keyEvts   = inputKeyEvents input
@@ -625,14 +696,14 @@ applyEdit inputFilterFn value input (anchor2, active2)
     selHi2    = max anchor2 active2
     (newText, newCursor)
       | hasSel2 && backspace =
-          (T.take selLo2 value <> T.drop selHi2 value, selLo2)
+          (T.take selLo2 currentValue <> T.drop selHi2 currentValue, selLo2)
       | hasSel2 =
-          (T.take selLo2 value <> typed <> T.drop selHi2 value, selLo2 + T.length typed)
+          (T.take selLo2 currentValue <> typed <> T.drop selHi2 currentValue, selLo2 + T.length typed)
       | backspace && active2 > 0 =
-          (T.take (active2 - 1) value <> T.drop active2 value, active2 - 1)
+          (T.take (active2 - 1) currentValue <> T.drop active2 currentValue, active2 - 1)
       | hasTyped =
-          (T.take active2 value <> typed <> T.drop active2 value, active2 + T.length typed)
-      | otherwise = (value, active2)
+          (T.take active2 currentValue <> typed <> T.drop active2 currentValue, active2 + T.length typed)
+      | otherwise = (currentValue, active2)
 
 -- | The scroll offset needed to keep a cursor at @cursorAbs@ visible within
 -- a viewport of width @w@ currently scrolled to @scrollX@. Pixels in, pixels
@@ -680,10 +751,10 @@ drawTextInputContent
   -> Double      -- ^ current horizontal scroll offset
   -> (Int, Int)  -- ^ current @(anchor, active)@ selection
   -> UI e msg ()
-drawTextInputContent style bounds value hasFocus enabled ox (anchor3, active3) = do
+drawTextInputContent style bounds displayValue hasFocus enabled ox (anchor3, active3) = do
   when (hasFocus && drawLo < drawHi) $ do
-    loX <- charOffset value drawLo
-    hiX <- charOffset value drawHi
+    loX <- charOffset displayValue drawLo
+    hiX <- charOffset displayValue drawHi
     let selRect = Rectangle
           (rectX bounds + realToFrac loX - ox)
           (rectY bounds)
@@ -692,10 +763,10 @@ drawTextInputContent style bounds value hasFocus enabled ox (anchor3, active3) =
     withBounds selRect $ fillRect (RGBA 0.3 0.5 1.0 0.4)
 
   let textBounds = bounds { rectX = rectX bounds - ox }
-  withBounds textBounds $ drawText (styleTextColour style) AlignLeft value
+  withBounds textBounds $ drawText (styleTextColour style) AlignLeft displayValue
 
   when enabled $ do
-    curX <- charOffset value active3
+    curX <- charOffset displayValue active3
     let cursorRect = Rectangle
           (rectX bounds + realToFrac curX - ox)
           (rectY bounds)
@@ -730,18 +801,23 @@ onSubmit msg = onAny $ \ev -> case ev of
   Submitted -> [OutMsg msg]
   _         -> []
 
--- | Configuration for 'textInputControl', set via 'inputFilter' and
--- 'displayFilter'.
+-- | Configuration for 'textInputControl', set via 'inputFilter',
+-- 'displayFilter', and 'text' (the field's current value). Defaults to @\"\"@.
 data TextInputConfig = TextInputConfig
-  { configInputFilter   :: Text -> Text
-  , configDisplayFilter :: Text -> Text
+  { configInputFilter    :: Text -> Text
+  , configDisplayFilter  :: Text -> Text
+  , textInputConfigValue :: Text
   }
 
 defaultTextInputConfig :: TextInputConfig
 defaultTextInputConfig = TextInputConfig
-  { configInputFilter   = id
-  , configDisplayFilter = id
+  { configInputFilter    = id
+  , configDisplayFilter  = id
+  , textInputConfigValue = ""
   }
+
+instance HasTextConfig TextInputConfig where
+  setText t cfg = cfg { textInputConfigValue = t }
 
 -- | Applied to newly typed text before it's inserted, letting callers
 -- restrict which keystrokes are accepted (e.g. @T.filter isDigit@ for a
@@ -775,11 +851,12 @@ displayFilter f = configAny $ \cfg -> cfg { configDisplayFilter = f }
 -- @[0, 1]@ fraction every other scroll-state consumer uses — see
 -- 'scrollFraction'\/'scrollPixels' — converted to and from pixels locally,
 -- since the selection\/cursor\/auto-scroll math below is naturally pixel-based.
-textInputControl :: Ord e => e -> Text -> [Attr e TextEvent msg TextInputConfig] -> UI e msg ()
-textInputControl eid value attrs = do
+textInputControl :: Ord e => e -> [Attr e TextEvent msg TextInputConfig] -> UI e msg ()
+textInputControl eid attrs = do
   wasFocused   <- isFocused eid
   wasCapturing <- isDragging eid
-  let cfg = configure defaultTextInputConfig attrs
+  let cfg          = configure defaultTextInputConfig attrs
+      currentValue = textInputConfigValue cfg
   control eid attrs $ do
     style    <- getStyle eid
     hasFocus <- isFocused eid
@@ -789,9 +866,9 @@ textInputControl eid value attrs = do
     sel      <- getSelection eid
     frac     <- getScrollState eid
 
-    let displayValue = configDisplayFilter cfg value
+    let displayValue = configDisplayFilter cfg currentValue
         w           = rectWidth bounds
-        defPos      = T.length value
+        defPos      = T.length currentValue
         anchor0     = maybe defPos selectionAnchor sel
         active0     = maybe defPos selectionActive sel
         -- Focus was gained by a click this frame (e.g. clicking from another
@@ -810,10 +887,10 @@ textInputControl eid value attrs = do
         else pure (anchor0, active0)
 
     let (anchor2, active2) =
-          resolveKeyboardSelection hasFocus (inputKeyEvents input) (T.length value) (anchor1, active1)
+          resolveKeyboardSelection hasFocus (inputKeyEvents input) (T.length currentValue) (anchor1, active1)
 
         ((anchor3, active3), edited)
-          | enabled   = applyEdit (configInputFilter cfg) value input (anchor2, active2)
+          | enabled   = applyEdit (configInputFilter cfg) currentValue input (anchor2, active2)
           | otherwise = ((anchor2, active2), Nothing)
 
         submitted = enabled && any (\e -> key e == KeyReturn) (inputKeyEvents input)
@@ -920,14 +997,22 @@ onChange f = onAny $ \ev -> case ev of
   Changed v -> [OutMsg (f v)]
   _         -> []
 
--- | Configuration for 'slider', set via 'arrowStep' and 'thumbRatio'.
+-- | Configuration for 'slider', set via 'arrowStep', 'thumbRatio',
+-- 'orientation', and 'value'. Defaults to a horizontal slider at 0.
 data SliderConfig = SliderConfig
-  { configArrowStep  :: Double
-  , configThumbRatio :: Maybe Double
+  { configArrowStep         :: Double
+  , configThumbRatio        :: Maybe Double
+  , sliderConfigOrientation :: Orientation
+  , sliderConfigValue       :: Double
   }
 
 defaultSliderConfig :: SliderConfig
-defaultSliderConfig = SliderConfig { configArrowStep = 0.05, configThumbRatio = Nothing }
+defaultSliderConfig = SliderConfig
+  { configArrowStep         = 0.05
+  , configThumbRatio        = Nothing
+  , sliderConfigOrientation = Horizontal
+  , sliderConfigValue       = 0
+  }
 
 -- | The amount an arrow-key press (Left\/Right for 'Horizontal', Up\/Down
 -- for 'Vertical') changes the value by. Defaults to @0.05@.
@@ -941,17 +1026,26 @@ arrowStep v = configAny $ \cfg -> cfg { configArrowStep = v }
 thumbRatio :: Double -> Attr e ev msg SliderConfig
 thumbRatio v = configAny $ \cfg -> cfg { configThumbRatio = Just v }
 
--- | A slider mapping a draggable thumb to a value in @[0, 1]@. Fires
--- 'Changed' with the new value when the user drags, clicks on the track, or
--- nudges with arrow keys (Left\/Right for 'Horizontal', Up\/Down for
--- 'Vertical', by 'arrowStep'). The thumb is square by default; override
--- with 'thumbRatio'.
-slider :: Ord e => (SliderPart -> e) -> Orientation -> Double -> [Attr e SliderEvent msg SliderConfig] -> UI e msg ()
-slider mkId ori value attrs = do
+-- | Sets the slider's orientation. Defaults to 'Horizontal'.
+orientation :: Orientation -> Attr e ev msg SliderConfig
+orientation o = configAny $ \cfg -> cfg { sliderConfigOrientation = o }
+
+-- | Sets the slider's current value, in @[0, 1]@. Defaults to @0@.
+value :: Double -> Attr e ev msg SliderConfig
+value v = configAny $ \cfg -> cfg { sliderConfigValue = v }
+
+-- | A slider mapping a draggable thumb to a value in @[0, 1]@, set via
+-- 'value' and 'orientation'. Fires 'Changed' with the new value when the
+-- user drags, clicks on the track, or nudges with arrow keys (Left\/Right
+-- for 'Horizontal', Up\/Down for 'Vertical', by 'arrowStep'). The thumb is
+-- square by default; override with 'thumbRatio'.
+slider :: Ord e => (SliderPart -> e) -> [Attr e SliderEvent msg SliderConfig] -> UI e msg ()
+slider mkId attrs = do
   let trackId = mkId SliderTrack
       thumbId = mkId SliderThumb
-      clamped = max 0 (min 1 value)
       cfg     = configure defaultSliderConfig attrs
+      ori     = sliderConfigOrientation cfg
+      clamped = max 0 (min 1 (sliderConfigValue cfg))
       step    = configArrowStep cfg
   contentRect <- trackContentRect trackId
   let (crossSz, mainSz) = case ori of
