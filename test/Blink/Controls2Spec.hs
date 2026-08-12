@@ -21,7 +21,7 @@ import Blink.Controls2
   , isKeyPressed
   , isMouseOver
   , label
-  , LabelEvent (..)
+  , LabelEvent
   , measureChrome
   , ProgressValue (..)
   , progressBar

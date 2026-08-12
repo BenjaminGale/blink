@@ -23,7 +23,7 @@ module Blink.Controls2
   , whenFocused
   , isActivatedBy
   , activatable
-  , LabelEvent (..)
+  , LabelEvent
   , label
   , ProgressValue (..)
   , progressBar
