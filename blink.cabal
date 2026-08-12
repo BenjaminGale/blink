@@ -33,6 +33,7 @@ library
         Blink
         Blink.App
         Blink.Controls
+        Blink.Controls2
         Blink.Geometry
         Blink.Input
         Blink.Layout
@@ -64,6 +65,7 @@ test-suite blink-tests
     other-modules:
         Blink.AppSpec
         Blink.ControlsSpec
+        Blink.Controls2Spec
         Blink.Generators
         Blink.GeometrySpec
         Blink.LayoutSpec
