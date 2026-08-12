@@ -47,17 +47,33 @@ data FocusOnClick e
   | NoFocus
   deriving (Eq, Show)
 
+-- | Configuration shared by every control, regardless of that control's own
+-- 'Config': whether Tab lands on it ('tabStop') and what clicking it does to
+-- focus ('focusOnClick').
+data ControlConfig e = ControlConfig
+  { ccTabStop      :: Bool
+  , ccFocusOnClick :: FocusOnClick e
+  }
+
+defaultControlConfig :: ControlConfig e
+defaultControlConfig = ControlConfig { ccTabStop = True, ccFocusOnClick = FocusSelf }
+
 data Attr e ev msg cfg
   = On (ev -> [Out e msg])
   | Config (cfg -> cfg)
-  | TabStop Bool
-  | SetFocusOnClick (FocusOnClick e)
+  | Shared (ControlConfig e -> ControlConfig e)
 
 configure :: cfg -> [Attr e ev msg cfg] -> cfg
 configure = foldl' apply
   where
     apply cfg (Config f) = f cfg
     apply cfg _          = cfg
+
+controlConfig :: [Attr e ev msg cfg] -> ControlConfig e
+controlConfig = foldl' apply defaultControlConfig
+  where
+    apply cc (Shared f) = f cc
+    apply cc _          = cc
 
 fire :: [Attr e ev msg cfg] -> [ev] -> UI e msg ()
 fire attrs evs = forM_ evs $ \ev -> forM_ handlers $ \h -> mapM_ dispatch (h ev)
@@ -82,25 +98,10 @@ onMouseExit :: HasControlEvent ev => msg -> Attr e ev msg cfg
 onMouseExit msg = onAny $ \ev -> [OutMsg msg | matchControl ev == Just MouseExited]
 
 tabStop :: Bool -> Attr e ev msg cfg
-tabStop = TabStop
+tabStop b = Shared $ \cc -> cc { ccTabStop = b }
 
 focusOnClick :: FocusOnClick e -> Attr e ev msg cfg
-focusOnClick = SetFocusOnClick
-
-data ControlConfig e = ControlConfig
-  { ccTabStop      :: Bool
-  , ccFocusOnClick :: FocusOnClick e
-  }
-
-defaultControlConfig :: ControlConfig e
-defaultControlConfig = ControlConfig { ccTabStop = True, ccFocusOnClick = FocusSelf }
-
-controlConfig :: [Attr e ev msg cfg] -> ControlConfig e
-controlConfig = foldl' apply defaultControlConfig
-  where
-    apply cc (TabStop b)          = cc { ccTabStop = b }
-    apply cc (SetFocusOnClick foc) = cc { ccFocusOnClick = foc }
-    apply cc _                     = cc
+focusOnClick foc = Shared $ \cc -> cc { ccFocusOnClick = foc }
 
 -- | 'True' when the mouse is over the element's background rectangle (bounds
 -- inset by its margin) — the control-specific hit area. Built on 'isRegionHit';
