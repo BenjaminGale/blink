@@ -23,6 +23,9 @@ import Blink.Controls2
   , label
   , LabelEvent (..)
   , measureChrome
+  , ProgressValue (..)
+  , progressBar
+  , bandSpeed
   , onAny
   , onFocusGained
   , onFocusLost
@@ -49,7 +52,7 @@ import Blink.ControlsTestSupport
   , withButtonReleased
   , withFocus
   )
-import Blink.Geometry (Point (..), uniformBorder)
+import Blink.Geometry (Point (..), Rectangle (..), uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
 import Blink.Layout (Length (..))
 import Blink.Rendering (DrawCommand (..), TextAlign (..))
@@ -504,3 +507,50 @@ spec = describe "Blink.Controls2" $ do
           ctx   = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []))
       ctx' <- snd <$> runUI (label TestControl "Caption" attrs) ctx
       getFocused ctx' `shouldBe` Just OtherControl
+
+  describe "progressBar" $ do
+    let run value ctx = snd <$> runUI (progressBar TestControl (Progress value) []) ctx
+
+    it "fills the correct proportion of the content area at 0.5" $ do
+      ctx' <- run 0.5 (mkCtxFor noInput)
+      getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 35 70) testColour]
+
+    it "fills the full content area at 1.0" $ do
+      ctx' <- run 1.0 (mkCtxFor noInput)
+      getDrawCommands ctx' `shouldContain` [FillRect contentRect testColour]
+
+    it "fills zero width at 0.0" $ do
+      ctx' <- run 0.0 (mkCtxFor noInput)
+      getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 0 70) testColour]
+
+    it "clamps values above 1.0 to full width" $ do
+      ctx' <- run 1.5 (mkCtxFor noInput)
+      getDrawCommands ctx' `shouldContain` [FillRect contentRect testColour]
+
+    it "clamps values below 0.0 to zero width" $ do
+      ctx' <- run (-0.5) (mkCtxFor noInput)
+      getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 15 15 0 70) testColour]
+
+    it "renders chrome like any other control" $ do
+      ctx' <- run 0.5 (mkCtxFor noInput)
+      getDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
+
+    describe "Indeterminate" $ do
+      let baseCtx    = mkCtxFor noInput :: UIContext TestElement ()
+          elapsedCtx = baseCtx { ctxAnimation = (ctxAnimation baseCtx) { animElapsed = 1 } }
+
+      it "sweeps the band using the default band speed (0.5)" $ do
+        ctx' <- snd <$> runUI (progressBar TestControl Indeterminate []) elapsedCtx
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 39.5 15 21 70) testColour]
+
+      it "uses bandSpeed instead of the default when given" $ do
+        ctx' <- snd <$> runUI (progressBar TestControl Indeterminate [bandSpeed 1.0]) elapsedCtx
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle (-6) 15 21 70) testColour]
+
+      it "keeps the animation ticker alive" $ do
+        ctx' <- snd <$> runUI (progressBar TestControl Indeterminate []) elapsedCtx
+        outRequiresAnimation (ctxOutputs ctx') `shouldBe` True
+
+      it "a determinate bar does not request animation" $ do
+        ctx' <- run 0.5 elapsedCtx
+        outRequiresAnimation (ctxOutputs ctx') `shouldBe` False

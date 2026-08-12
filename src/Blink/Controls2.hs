@@ -25,14 +25,18 @@ module Blink.Controls2
   , activatable
   , LabelEvent (..)
   , label
+  , ProgressValue (..)
+  , progressBar
+  , bandSpeed
   ) where
 
 import Control.Monad (forM_, when)
 import Data.List (find, foldl')
 import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
+import Data.Void (Void)
 
-import Blink.Geometry (Insets (..), borderInsets, insetRect, noBorder)
+import Blink.Geometry (Insets (..), Rectangle (..), borderInsets, insetRect, noBorder)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (Length (..))
 import Blink.Style (Style (..))
@@ -310,3 +314,47 @@ label :: Ord e => e -> Text -> [Attr e LabelEvent msg cfg] -> UI e msg ()
 label eid text attrs = control eid attrs $ do
   style <- getStyle eid
   drawText (styleTextColour style) (styleTextAlign style) text
+
+-- | The value passed to 'progressBar'.
+data ProgressValue
+  = Progress Double
+    -- ^ A determinate value in @[0, 1]@, clamped and rendered as a filled bar.
+  | Indeterminate
+    -- ^ Unknown progress: a band animates continuously across the bar.
+  deriving (Eq, Show)
+
+-- | Configuration for 'progressBar', set via 'bandSpeed'.
+newtype ProgressBarConfig = ProgressBarConfig { configBandSpeed :: Double }
+
+defaultProgressBarConfig :: ProgressBarConfig
+defaultProgressBarConfig = ProgressBarConfig { configBandSpeed = 0.5 }
+
+-- | How fast the band sweeps across an 'Indeterminate' bar, in bar-widths
+-- per second. Defaults to 0.5.
+bandSpeed :: Double -> Attr e ev msg ProgressBarConfig
+bandSpeed v = configAny $ \cfg -> cfg { configBandSpeed = v }
+
+-- | A read-only progress indicator. Pass 'Progress' for a determinate bar or
+-- 'Indeterminate' for a continuously animating band. Not interactive — no
+-- mouse-over, focus, or tab stop, so it takes no 'tabStop'\/'focusOnClick'
+-- and never needs a real event type; 'Void' rules out anything being fired.
+progressBar :: Ord e => e -> ProgressValue -> [Attr e Void msg ProgressBarConfig] -> UI e msg ()
+progressBar eid (Progress value) _attrs = renderChrome eid $ do
+  style <- getStyle eid
+  r     <- getBounds
+  let clamped   = max 0 (min 1 value)
+      fillRect' = r { rectWidth = rectWidth r * clamped }
+  withBounds fillRect' $ fillRect (styleTextColour style)
+progressBar eid Indeterminate attrs = do
+  requiresAnimation
+  renderChrome eid $ do
+    r       <- getBounds
+    style   <- getStyle eid
+    elapsed <- getAnimElapsed
+    let speed = configBandSpeed (configure defaultProgressBarConfig attrs)
+        t     = realToFrac elapsed * speed
+        phase = t - fromIntegral (floor t :: Int)
+        bandW = rectWidth r * 0.3
+        left  = rectX r - bandW + (rectWidth r + bandW) * phase
+    withBounds (r { rectX = left, rectWidth = bandW }) $
+      fillRect (styleTextColour style)
