@@ -311,9 +311,6 @@ mkCheckboxCtx input = emptyUIContext controlRect input checkboxTheme noOpTextMea
 boxPoint :: Point
 boxPoint = Point 10 50
 
-drawnTexts :: UIContext e s -> [Text]
-drawnTexts ctx = [t | DrawText _ t _ _ <- getDrawCommands ctx]
-
 runRangeControl :: WidgetRunner
 runRangeControl ctx = fmap (settle . snd) $ runUI (rangeControl TestControl OtherControl Vertical 0 1) ctx
 

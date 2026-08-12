@@ -28,6 +28,10 @@ module Blink.Controls2
   , ProgressValue (..)
   , progressBar
   , bandSpeed
+  , button
+  , ButtonEvent (Clicked)
+  , onClick
+  , onClickTo
   ) where
 
 import Control.Monad (forM_, when)
@@ -358,3 +362,43 @@ progressBar eid Indeterminate attrs = do
         left  = rectX r - bandW + (rectWidth r + bandW) * phase
     withBounds (r { rectX = left, rectWidth = bandW }) $
       fillRect (styleTextColour style)
+
+-- | Events reported by 'button': 'Clicked' when activated, or a lifecycle
+-- event via 'Control' (see 'ControlEvent'). 'Control' is not exported —
+-- 'onFocusGained'\/'onFocusLost'\/'onMouseEnter'\/'onMouseExit' already cover
+-- it generically — but 'Clicked' is, since 'onAny' needs to pattern-match
+-- on it directly to build a custom handler ('onClick'\/'onClickTo' each only
+-- cover one output; combining a message and a 'UiEffect' on the same click
+-- needs 'onAny' with 'Clicked' in scope).
+data ButtonEvent = Clicked | Control ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent ButtonEvent where
+  liftControl = Control
+  matchControl (Control ce) = Just ce
+  matchControl _             = Nothing
+
+-- | Emits @msg@ when the button is 'Clicked'.
+onClick :: msg -> Attr e ButtonEvent msg cfg
+onClick msg = onAny $ \ev -> case ev of
+  Clicked -> [OutMsg msg]
+  _       -> []
+
+-- | Queues a 'UiEffect' when the button is 'Clicked', for effects that don't
+-- have a @msg@ to emit.
+onClickTo :: UiEffect e -> Attr e ButtonEvent msg cfg
+onClickTo eff = onAny $ \ev -> case ev of
+  Clicked -> [OutUi eff]
+  _       -> []
+
+-- | A clickable button labelled @txt@. Fires 'Clicked' — via 'onClick' or
+-- 'onClickTo' — on the frame it's activated, by a left-click or by pressing
+-- Enter while focused.
+button :: Ord e => e -> Text -> [Attr e ButtonEvent msg cfg] -> UI e msg ()
+button eid txt attrs = do
+  activated <- activatable eid attrs [KeyReturn] draw
+  when activated $ fire attrs [Clicked]
+  where
+    draw = do
+      style <- getStyle eid
+      drawText (styleTextColour style) (styleTextAlign style) txt

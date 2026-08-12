@@ -34,10 +34,15 @@ import Blink.Controls2
   , renderChrome
   , tabStop
   , whenFocused
+  , button
+  , ButtonEvent (Clicked)
+  , onClick
+  , onClickTo
   )
 import Blink.ControlsTestSupport
   ( TestElement (..)
   , bgRect
+  , drawnTexts
   , contentRect
   , controlRect
   , getFocused
@@ -554,3 +559,57 @@ spec = describe "Blink.Controls2" $ do
       it "a determinate bar does not request animation" $ do
         ctx' <- run 0.5 elapsedCtx
         outRequiresAnimation (ctxOutputs ctx') `shouldBe` False
+
+  describe "button" $ do
+    it "draws the label" $ do
+      ctx' <- snd <$> runUI (button TestControl "label" []) (mkCtxFor noInput)
+      drawnTexts ctx' `shouldContain` ["label"]
+
+    it "renders chrome like any other control" $ do
+      ctx' <- snd <$> runUI (button TestControl "label" []) (mkCtxFor noInput)
+      getDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
+
+    forM_ insidePoints $ \(desc, pt) ->
+      it ("is clicked when the mouse is released " <> desc) $ do
+        (_, ctx') <- runUI (button TestControl "label" [onClick ()]) (withButtonReleased (mkCtxFor (mouseAt pt False [])))
+        getMessages ctx' `shouldBe` [()]
+
+    forM_ outsidePoints $ \(desc, pt) ->
+      it ("is not clicked when the mouse is released " <> desc) $ do
+        (_, ctx') <- runUI (button TestControl "label" [onClick ()]) (withButtonReleased (mkCtxFor (mouseAt pt False [])))
+        getMessages ctx' `shouldBe` []
+
+    it "is clicked when Enter is pressed and the button has focus" $ do
+      (_, ctx') <- runUI (button TestControl "label" [onClick ()]) (withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+      getMessages ctx' `shouldBe` [()]
+
+    it "is not clicked when Enter is pressed and the button does not have focus" $ do
+      (_, ctx') <- runUI (button TestControl "label" [onClick ()]) (withFocus (Just OtherControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+      getMessages ctx' `shouldBe` []
+
+    it "is not clicked when Tab and Enter are pressed simultaneously" $ do
+      (_, ctx') <- runUI (button TestControl "label" [onClick ()])
+        (withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyTab [], KeyEvent KeyReturn []] }))
+      getMessages ctx' `shouldBe` []
+
+    it "is not activated by a click when disabled" $ do
+      (_, ctx') <- runUI (disableWhen True (button TestControl "label" [onClick ()])) (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])))
+      getMessages ctx' `shouldBe` []
+
+    it "is not activated by Enter when disabled" $ do
+      (_, ctx') <- runUI (disableWhen True (button TestControl "label" [onClick ()])) (withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+      getMessages ctx' `shouldBe` []
+
+    it "onClickTo queues the given UiEffect when clicked, instead of emitting a message" $ do
+      (_, ctx') <- runUI (button TestControl "label" [onClickTo (SetSelectionAt TestControl (cursor 0))])
+        (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])) :: UIContext TestElement ())
+      getUiEffects ctx' `shouldContain` [SetSelectionAt TestControl (cursor 0)]
+      getMessages ctx' `shouldBe` []
+
+    it "onAny can pattern-match Clicked directly to fan out to a message and a UiEffect together" $ do
+      let attrs = [onAny (\ev -> case ev of
+                     Clicked -> [OutMsg (1 :: Int), OutUi (SetSelectionAt TestControl (cursor 0))]
+                     _       -> [])]
+      (_, ctx') <- runUI (button TestControl "label" attrs) (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])))
+      getMessages ctx' `shouldBe` [1]
+      getUiEffects ctx' `shouldContain` [SetSelectionAt TestControl (cursor 0)]

@@ -28,13 +28,15 @@ module Blink.ControlsTestSupport
   , withButtonReleased
   , insidePoints
   , outsidePoints
+  , drawnTexts
   ) where
 
 import qualified Data.Map.Strict as Map
 
+import Data.Text (Text)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..), KeyEvent (..))
-import Blink.Rendering (Colour (..), TextAlign (..))
+import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 
@@ -164,3 +166,8 @@ testThemeWithBorder = Theme
 -- — the common shape every shared behaviour spec (focus, tab, hover,
 -- background\/border) is parameterized over.
 type WidgetRunner = UIContext TestElement () -> IO (UIContext TestElement ())
+
+-- | The text of every 'DrawText' command issued during the frame, in
+-- submission order.
+drawnTexts :: UIContext e s -> [Text]
+drawnTexts ctx = [t | DrawText _ t _ _ <- getDrawCommands ctx]
