@@ -58,6 +58,8 @@ import Blink.Controls2
   , orientation
   , value
   , slider
+  , ScrollBarPart (..)
+  , scrollBar
   )
 import Blink.ControlsTestSupport
   ( TestElement (..)
@@ -235,6 +237,26 @@ runSlider :: Orientation -> Double -> InputState -> IO (UIContext SliderPart Dou
 runSlider ori val input =
   fmap (settle . snd) $ runUI (slider id [orientation ori, value val, onChange id])
     (emptyUIContext sliderRect input sliderTheme noOpTextMeasurer)
+
+-- 20x200 vertical scrollbar with a 0.25 thumb ratio: buttons at y 0-20 and
+-- 180-200, track at y 20-180 (zero margin/padding throughout, same as
+-- checkboxStyle, so those pixel boundaries are exact).
+scrollBarTheme :: Theme ScrollBarPart
+scrollBarTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = checkboxStyleSet }
+
+scrollBarRect :: Rectangle
+scrollBarRect = Rectangle 0 0 20 200
+
+mkScrollBarCtx :: Double -> InputState -> UIContext ScrollBarPart msg
+mkScrollBarCtx pos input =
+  let base = emptyUIContext scrollBarRect input scrollBarTheme noOpTextMeasurer
+  in base { ctxElements = (ctxElements base) { elmScrollStates = Map.singleton ScrollTrack (ScrollState pos) } }
+
+runScrollBar :: UIContext ScrollBarPart () -> IO (UIContext ScrollBarPart ())
+runScrollBar = fmap (settle . snd) . runUI (scrollBar id [orientation Vertical, thumbRatio 0.25])
+
+scrollBarPos :: UIContext ScrollBarPart () -> Double
+scrollBarPos = scrollPosition . Map.findWithDefault (ScrollState 0) ScrollTrack . elmScrollStates . ctxElements
 
 spec :: Spec
 spec = describe "Blink.Controls2" $ do
@@ -1168,3 +1190,81 @@ spec = describe "Blink.Controls2" $ do
       it "does not dispatch when there is no input" $ do
         ctx' <- runSlider Horizontal 0.5 noInput
         dispatchCount ctx' `shouldBe` 0
+
+  describe "scrollBar" $ do
+    it "renders chrome for the track like any other control" $ do
+      -- Track occupies the middle 160px between the two 20px buttons.
+      ctx' <- runScrollBar (mkScrollBarCtx 0 noInput)
+      getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 20 20 160) testColour]
+
+    describe "defaults" $ do
+      it "defaults to Horizontal orientation, drawing horizontal arrow glyphs" $ do
+        ctx' <- snd <$> runUI (scrollBar id []) (mkScrollBarCtx 0 noInput)
+        drawnTexts ctx' `shouldContain` ["◀"]
+        drawnTexts ctx' `shouldContain` ["▶"]
+
+      it "defaults to a full-track thumb ratio (nothing to step by)" $ do
+        ctx' <- fmap (settle . snd) $ runUI (scrollBar id [orientation Vertical])
+          (withButtonReleased (mkScrollBarCtx 0.5 (mouseAt (Point 10 190) False [])))
+        scrollBarPos ctx' `shouldBe` 1.0
+
+    describe "button stepping" $ do
+      it "steps forward by the thumb ratio when the increment button is clicked" $ do
+        ctx' <- runScrollBar (withButtonReleased (mkScrollBarCtx 0.5 (mouseAt (Point 10 190) False [])))
+        scrollBarPos ctx' `shouldBe` 0.75
+
+      it "steps back by the thumb ratio when the decrement button is clicked" $ do
+        ctx' <- runScrollBar (withButtonReleased (mkScrollBarCtx 0.5 (mouseAt (Point 10 10) False [])))
+        scrollBarPos ctx' `shouldBe` 0.25
+
+      it "clamps to 1 when stepping forward near the end" $ do
+        ctx' <- runScrollBar (withButtonReleased (mkScrollBarCtx 0.9 (mouseAt (Point 10 190) False [])))
+        scrollBarPos ctx' `shouldBe` 1
+
+      it "clamps to 0 when stepping back near the start" $ do
+        ctx' <- runScrollBar (withButtonReleased (mkScrollBarCtx 0.1 (mouseAt (Point 10 10) False [])))
+        scrollBarPos ctx' `shouldBe` 0
+
+    describe "track dragging" $ do
+      it "centres the thumb on the cursor while the track is pressed" $ do
+        ctx' <- runScrollBar (mkScrollBarCtx 0 (mouseAt (Point 10 100) True []))
+        scrollBarPos ctx' `shouldBe` 0.5
+
+      it "continues tracking when the mouse moves off the track while the button is held" $ do
+        frame1 <- runScrollBar (mkScrollBarCtx 0 (mouseAt (Point 10 100) True []))
+        frame2 <- fmap (settle . snd) $ runUI (scrollBar id [orientation Vertical, thumbRatio 0.25])
+                                   (nextFrameContext scrollBarRect (mouseAt (Point 200 40) True []) frame1)
+        scrollBarPos frame2 `shouldBe` 0.0
+
+      it "stops tracking when the button is released after dragging off the track" $ do
+        frame1 <- runScrollBar (mkScrollBarCtx 0 (mouseAt (Point 10 100) True []))
+        frame2 <- fmap (settle . snd) $ runUI (scrollBar id [orientation Vertical, thumbRatio 0.25])
+                                   (nextFrameContext scrollBarRect (mouseAt (Point 200 40) False []) frame1)
+        scrollBarPos frame2 `shouldBe` 0.5
+
+    describe "keyboard nudging (inherited from the underlying slider)" $ do
+      it "nudges the position when an arrow key is pressed while the track is focused" $ do
+        ctx' <- fmap (settle . snd) $ runUI (scrollBar id [orientation Vertical, thumbRatio 0.25])
+          (withFocus (Just ScrollTrack) (mkScrollBarCtx 0.5 noInput { inputKeyEvents = [KeyEvent KeyDown []] }))
+        scrollBarPos ctx' `shouldBe` 0.55
+
+    describe "without interaction" $ do
+      it "leaves the position unchanged" $ do
+        ctx' <- runScrollBar (mkScrollBarCtx 0.5 noInput)
+        scrollBarPos ctx' `shouldBe` 0.5
+
+    describe "lifecycle events" $ do
+      it "bridges the track's FocusGained into onFocusGained" $ do
+        -- Starts with a different sub-part focused so the buttons' own
+        -- default auto-claim-when-nothing-focused rule doesn't race the
+        -- track for focus first; the click is what moves it explicitly.
+        let attrs = [orientation Vertical, thumbRatio 0.25, onFocusGained "gained"]
+            ctx0  = withFocus (Just ScrollIncrBtn) (withButtonReleased (mkScrollBarCtx 0 (mouseAt (Point 10 100) False []))) :: UIContext ScrollBarPart String
+        ctx' <- snd <$> runUI (scrollBar id attrs) ctx0
+        getMessages ctx' `shouldBe` ["gained"]
+
+      it "bridges the track's MouseEntered into onMouseEnter" $ do
+        let attrs = [orientation Vertical, thumbRatio 0.25, onMouseEnter "entered"]
+            ctx0  = mkScrollBarCtx 0 (mouseAt (Point 10 100) False []) :: UIContext ScrollBarPart String
+        ctx' <- snd <$> runUI (scrollBar id attrs) ctx0
+        getMessages ctx' `shouldBe` ["entered"]

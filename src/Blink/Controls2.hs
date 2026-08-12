@@ -57,10 +57,15 @@ module Blink.Controls2
   , SliderEvent (Changed)
   , onChange
   , arrowStep
+  , HasThumbRatioConfig (..)
   , thumbRatio
+  , HasOrientationConfig (..)
   , orientation
   , value
   , slider
+  , ScrollBarPart (..)
+  , ScrollBarEvent
+  , scrollBar
   ) where
 
 import Control.Monad (forM_, guard, when)
@@ -74,7 +79,7 @@ import Data.Void (Void)
 
 import Blink.Geometry (Alignment (..), Insets (..), Orientation (..), Point (..), Rectangle (..), borderInsets, insetRect, noBorder)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
-import Blink.Layout (BoxConfig (..), Layout (..), Length (..), defaultBoxConfig, hBox)
+import Blink.Layout (BoxConfig (..), Layout (..), Length (..), defaultBoxConfig, hBox, vBox)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
 import Blink.UI hiding (getStyle, isPressed)
@@ -1019,16 +1024,34 @@ defaultSliderConfig = SliderConfig
 arrowStep :: Double -> Attr e ev msg SliderConfig
 arrowStep v = configAny $ \cfg -> cfg { configArrowStep = v }
 
--- | Overrides the thumb's size (visible \/ total, in @[0, 1]@) instead of
--- the default square-thumb calculation (side equal to the track's
--- cross-axis). 'scrollBar' uses this to size its thumb from the fraction of
--- content actually visible, rather than a square.
-thumbRatio :: Double -> Attr e ev msg SliderConfig
-thumbRatio v = configAny $ \cfg -> cfg { configThumbRatio = Just v }
+-- | Implemented by any control's own config type that carries a thumb
+-- ratio, letting 'thumbRatio' work uniformly across them (same pattern as
+-- 'HasTextConfig').
+class HasThumbRatioConfig cfg where
+  setThumbRatio :: Double -> cfg -> cfg
 
--- | Sets the slider's orientation. Defaults to 'Horizontal'.
-orientation :: Orientation -> Attr e ev msg SliderConfig
-orientation o = configAny $ \cfg -> cfg { sliderConfigOrientation = o }
+-- | Overrides the thumb's size (visible \/ total, in @[0, 1]@) instead of a
+-- control's own default sizing. 'slider' defaults to a square thumb (side
+-- equal to the track's cross-axis) when not given; 'scrollBar' defaults to
+-- a full-track thumb (i.e. nothing to scroll).
+thumbRatio :: HasThumbRatioConfig cfg => Double -> Attr e ev msg cfg
+thumbRatio v = configAny (setThumbRatio v)
+
+instance HasThumbRatioConfig SliderConfig where
+  setThumbRatio v cfg = cfg { configThumbRatio = Just v }
+
+-- | Implemented by any control's own config type that carries an
+-- orientation, letting 'orientation' work uniformly across them (same
+-- pattern as 'HasTextConfig').
+class HasOrientationConfig cfg where
+  setOrientation :: Orientation -> cfg -> cfg
+
+-- | Sets a control's orientation. Defaults to 'Horizontal'.
+orientation :: HasOrientationConfig cfg => Orientation -> Attr e ev msg cfg
+orientation o = configAny (setOrientation o)
+
+instance HasOrientationConfig SliderConfig where
+  setOrientation o cfg = cfg { sliderConfigOrientation = o }
 
 -- | Sets the slider's current value, in @[0, 1]@. Defaults to @0@.
 value :: Double -> Attr e ev msg SliderConfig
@@ -1071,3 +1094,105 @@ slider mkId attrs = do
         , [Changed (min 1 (clamped + step)) | incrPressed && step > 0]
         ]
   fire attrs changes
+
+-- | Sub-parts of a scrollbar, used as the inner tag when building the
+-- control's element IDs via a tagging function:
+--
+-- @
+-- data Element = ... | VScroll ScrollBarPart
+-- scrollBar VScroll [orientation Vertical, thumbRatio 0.3]
+-- @
+data ScrollBarPart
+  = ScrollTrack   -- ^ The track area behind the thumb.
+  | ScrollThumb   -- ^ The draggable thumb.
+  | ScrollDecrBtn -- ^ The decrement arrow button.
+  | ScrollIncrBtn -- ^ The increment arrow button.
+  deriving (Eq, Ord, Show)
+
+-- | Events reported by 'scrollBar': a lifecycle event via 'ScrollBarControl'
+-- (see 'ControlEvent'). The scroll position itself is control state, not
+-- reported to the caller — it lives in the 'UIContext', keyed by the
+-- track's element ID, and is read with 'getScrollState'.
+newtype ScrollBarEvent = ScrollBarControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent ScrollBarEvent where
+  liftControl = ScrollBarControl
+  matchControl (ScrollBarControl ce) = Just ce
+
+-- | Configuration for 'scrollBar', set via 'orientation' and 'thumbRatio'.
+-- Defaults to a horizontal bar with a full-track thumb (i.e. nothing to
+-- scroll) — unlike 'slider', a scrollbar's thumb size is meaningless
+-- without a caller-supplied visible\/total fraction, so there's no
+-- auto-square fallback to reach for.
+data ScrollBarConfig = ScrollBarConfig
+  { scrollBarConfigOrientation :: Orientation
+  , scrollBarConfigThumbRatio  :: Double
+  }
+
+defaultScrollBarConfig :: ScrollBarConfig
+defaultScrollBarConfig = ScrollBarConfig
+  { scrollBarConfigOrientation = Horizontal
+  , scrollBarConfigThumbRatio  = 1
+  }
+
+instance HasOrientationConfig ScrollBarConfig where
+  setOrientation o cfg = cfg { scrollBarConfigOrientation = o }
+
+instance HasThumbRatioConfig ScrollBarConfig where
+  setThumbRatio v cfg = cfg { scrollBarConfigThumbRatio = v }
+
+-- | A scrollbar with decrement\/increment buttons flanking a draggable
+-- thumb, set via 'orientation' and 'thumbRatio' (the fraction of the track
+-- the thumb fills, visible \/ total, in @[0, 1]@). The track and thumb are
+-- a 'slider' underneath — dragging, clicking the track, and arrow-key
+-- nudging while focused all move the position, written directly to the
+-- 'UIContext' at the track's element ID via 'ScrollTo'; nothing is reported
+-- back to the caller through 'ScrollBarEvent' beyond lifecycle events.
+-- Button clicks step by 'thumbRatio'.
+scrollBar :: Ord e => (ScrollBarPart -> e) -> [Attr e ScrollBarEvent msg ScrollBarConfig] -> UI e msg ()
+scrollBar mkId attrs = do
+  bounds <- getBounds
+  pos    <- getScrollState trackId
+  let btnLayout = case ori of
+        Vertical   -> Layout Fill (Exactly (rectWidth bounds))  TopLeft
+        Horizontal -> Layout (Exactly (rectHeight bounds)) Fill TopLeft
+  layoutFn defaultBoxConfig
+    [ (btnLayout, decrBtn)
+    , (Layout Fill Fill TopLeft, track pos)
+    , (btnLayout, incrBtn)
+    ]
+  where
+    cfg   = configure defaultScrollBarConfig attrs
+    ori   = scrollBarConfigOrientation cfg
+    ratio = max 0 (min 1 (scrollBarConfigThumbRatio cfg))
+
+    trackId = mkId ScrollTrack
+    thumbId = mkId ScrollThumb
+
+    layoutFn = case ori of
+      Vertical   -> vBox
+      Horizontal -> hBox
+
+    decrSym = case ori of
+      Vertical   -> "▲"
+      Horizontal -> "◀"
+    incrSym = case ori of
+      Vertical   -> "▼"
+      Horizontal -> "▶"
+
+    decrBtn = button (mkId ScrollDecrBtn) [text decrSym, onClickTo (ScrollBy trackId (negate ratio))]
+    incrBtn = button (mkId ScrollIncrBtn) [text incrSym, onClickTo (ScrollBy trackId ratio)]
+
+    sliderPartId SliderTrack = trackId
+    sliderPartId SliderThumb = thumbId
+
+    track pos' =
+      slider sliderPartId
+        [ value pos'
+        , orientation ori
+        , thumbRatio ratio
+        , onAny $ \ev -> case ev of
+            Changed v        -> [OutUi (ScrollTo trackId v)]
+            SliderControl ce -> captureOuts attrs (liftControl ce)
+        ]
