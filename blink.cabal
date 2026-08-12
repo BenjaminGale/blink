@@ -65,6 +65,7 @@ test-suite blink-tests
     other-modules:
         Blink.AppSpec
         Blink.ControlsSpec
+        Blink.ControlsTestSupport
         Blink.Controls2Spec
         Blink.Generators
         Blink.GeometrySpec
