@@ -38,18 +38,25 @@ module Blink.Controls2
   , onToggle
   , renderCheckboxGlyph
   , checkbox
+  , TextEvent (Edited, Submitted)
+  , onInput
+  , onSubmit
+  , inputFilter
+  , displayFilter
+  , textInputControl
   ) where
 
 import Control.Monad (forM_, when)
 import Data.List (find, foldl')
 import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Void (Void)
 
-import Blink.Geometry (Alignment (..), Insets (..), Rectangle (..), borderInsets, insetRect, noBorder)
+import Blink.Geometry (Alignment (..), Insets (..), Point (..), Rectangle (..), borderInsets, insetRect, noBorder)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (BoxConfig (..), Layout (..), Length (..), defaultBoxConfig, hBox)
-import Blink.Rendering (TextAlign (..))
+import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..))
 import Blink.UI
 
@@ -481,3 +488,289 @@ checkbox mkId text checked attrs = do
         [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, control glyphId subAttrs (renderCheckboxGlyph glyphId checked))
         , (Layout Fill Fill MiddleLeft, label (mkId CheckboxLabel) text subAttrs)
         ]
+
+-- | Click sets both selection ends at the clicked character; dragging
+-- extends only the active end, keeping the anchor from before the drag
+-- started. Assumes the caller has already checked the control is focused
+-- and enabled.
+resolveMouseSelection
+  :: Ord e
+  => e           -- ^ element ID
+  -> Rectangle   -- ^ control's bounds
+  -> Bool        -- ^ control was already being dragged last frame
+  -> Bool        -- ^ control just gained focus this frame via a click
+  -> Text        -- ^ displayed value (post-@displayFilter@)
+  -> Double      -- ^ current horizontal scroll offset
+  -> (Int, Int)  -- ^ current @(anchor, active)@ selection
+  -> UI e msg (Int, Int)
+resolveMouseSelection eid bounds wasCapturing justFocused value scrollX (anchor0, active0) = do
+  isCapturing <- isDragging eid
+  if isCapturing
+    then do
+      mousePos <- getMousePos
+      let localX = realToFrac (pointX mousePos - rectX bounds) + realToFrac scrollX :: Float
+      clickedPos <- charAtOffset value localX
+      pure $ if not wasCapturing || justFocused
+        then (clickedPos, clickedPos)
+        else (anchor0, clickedPos)
+    else pure (anchor0, active0)
+
+-- | Shift+Left\/Right extend the selection; plain Left\/Right collapse an
+-- existing selection to its near end, or step by one otherwise.
+resolveKeyboardSelection
+  :: Bool         -- ^ control has keyboard focus
+  -> [KeyEvent]   -- ^ this frame's key events
+  -> Int          -- ^ length of the underlying value
+  -> (Int, Int)   -- ^ current @(anchor, active)@ selection
+  -> (Int, Int)
+resolveKeyboardSelection hasFocus keyEvts len (anchor1, active1)
+  | shiftLeft  = (anchor1, max 0    (active1 - 1))
+  | shiftRight = (anchor1, min len  (active1 + 1))
+  | plainLeft  = let p = if hasSel1 then selLo1 else max 0   (active1 - 1) in (p, p)
+  | plainRight = let p = if hasSel1 then selHi1 else min len (active1 + 1) in (p, p)
+  | otherwise  = (anchor1, active1)
+  where
+    hasSel1    = anchor1 /= active1
+    selLo1     = min anchor1 active1
+    selHi1     = max anchor1 active1
+    shiftLeft  = hasFocus && any (\e -> key e == KeyLeft  && Shift `elem`    modifiers e) keyEvts
+    shiftRight = hasFocus && any (\e -> key e == KeyRight && Shift `elem`    modifiers e) keyEvts
+    plainLeft  = hasFocus && any (\e -> key e == KeyLeft  && Shift `notElem` modifiers e) keyEvts
+    plainRight = hasFocus && any (\e -> key e == KeyRight && Shift `notElem` modifiers e) keyEvts
+
+-- | Backspace and typed text edit the value, selection-aware; returns the
+-- new value alongside the new cursor position when the text actually
+-- changed. @inputFilter@ is applied to the newly typed text before
+-- insertion, letting callers reject or transform keystrokes (e.g. digits
+-- only). Assumes the caller has already checked the control is focused and
+-- enabled. Pure — the caller decides how (or whether) to report the change.
+applyEdit :: (Text -> Text)   -- ^ @inputFilter@, applied to newly typed text before insertion
+          -> Text             -- ^ current value
+          -> InputState       -- ^ this frame's input
+          -> (Int, Int)       -- ^ current @(anchor, active)@ selection
+          -> ((Int, Int), Maybe Text) -- ^ new @(anchor, active)@, and the new value if it changed
+applyEdit inputFilterFn value input (anchor2, active2)
+  | backspace || hasTyped =
+      ((newCursor, newCursor), if newText /= value then Just newText else Nothing)
+  | otherwise = ((anchor2, active2), Nothing)
+  where
+    keyEvts   = inputKeyEvents input
+    backspace = any (\e -> key e == KeyBackspace) keyEvts
+    typed     = inputFilterFn (foldl' (<>) T.empty (inputTypedText input))
+    hasTyped  = not (T.null typed)
+    hasSel2   = anchor2 /= active2
+    selLo2    = min anchor2 active2
+    selHi2    = max anchor2 active2
+    (newText, newCursor)
+      | hasSel2 && backspace =
+          (T.take selLo2 value <> T.drop selHi2 value, selLo2)
+      | hasSel2 =
+          (T.take selLo2 value <> typed <> T.drop selHi2 value, selLo2 + T.length typed)
+      | backspace && active2 > 0 =
+          (T.take (active2 - 1) value <> T.drop active2 value, active2 - 1)
+      | hasTyped =
+          (T.take active2 value <> typed <> T.drop active2 value, active2 + T.length typed)
+      | otherwise = (value, active2)
+
+-- | The scroll offset needed to keep a cursor at @cursorAbs@ visible within
+-- a viewport of width @w@ currently scrolled to @scrollX@. Pixels in, pixels
+-- out — 'scrollFraction'\/'scrollPixels' convert at the boundary with
+-- 'getScrollState'\/'ScrollTo' so the stored value stays in the same
+-- @[0, 1]@ convention every other scroll-state consumer uses.
+resolveScroll
+  :: Double  -- ^ viewport width
+  -> Double  -- ^ current scroll offset
+  -> Double  -- ^ cursor position to keep visible
+  -> Double
+resolveScroll w scrollX cursorAbs
+  | cursorAbs < scrollX         = cursorAbs
+  | cursorAbs > scrollX + w - 1 = max 0 (cursorAbs - w + 1)
+  | otherwise                   = scrollX
+
+-- | The largest pixel offset worth scrolling by: zero once the content
+-- already fits within the viewport.
+maxScrollPixels :: Double -> Double -> Double
+maxScrollPixels contentW viewportW = max 0 (contentW - viewportW)
+
+-- | Converts a pixel scroll offset to the @[0, 1]@ fraction 'ScrollState'
+-- stores, given the max offset from 'maxScrollPixels'. @0@ when there's
+-- nothing to scroll.
+scrollFraction :: Double -> Double -> Double
+scrollFraction maxPx px
+  | maxPx > 0 = clampScrollPos (px / maxPx)
+  | otherwise = 0
+
+-- | The inverse of 'scrollFraction': converts a stored @[0, 1]@ fraction
+-- back to a pixel offset, given the max offset from 'maxScrollPixels'.
+scrollPixels :: Double -> Double -> Double
+scrollPixels maxPx frac = frac * maxPx
+
+-- | Draws the selection highlight (focused with a non-empty selection), the
+-- text itself, and the cursor (focused and enabled), all offset by the
+-- current horizontal scroll.
+drawTextInputContent
+  :: Ord e
+  => Style       -- ^ active style
+  -> Rectangle   -- ^ control's bounds
+  -> Text        -- ^ displayed value (post-@displayFilter@)
+  -> Bool        -- ^ control has keyboard focus
+  -> Bool        -- ^ control is focused and not disabled
+  -> Double      -- ^ current horizontal scroll offset
+  -> (Int, Int)  -- ^ current @(anchor, active)@ selection
+  -> UI e msg ()
+drawTextInputContent style bounds value hasFocus enabled ox (anchor3, active3) = do
+  when (hasFocus && drawLo < drawHi) $ do
+    loX <- charOffset value drawLo
+    hiX <- charOffset value drawHi
+    let selRect = Rectangle
+          (rectX bounds + realToFrac loX - ox)
+          (rectY bounds)
+          (realToFrac (hiX - loX))
+          (rectHeight bounds)
+    withBounds selRect $ fillRect (RGBA 0.3 0.5 1.0 0.4)
+
+  let textBounds = bounds { rectX = rectX bounds - ox }
+  withBounds textBounds $ drawText (styleTextColour style) AlignLeft value
+
+  when enabled $ do
+    curX <- charOffset value active3
+    let cursorRect = Rectangle
+          (rectX bounds + realToFrac curX - ox)
+          (rectY bounds)
+          1
+          (rectHeight bounds)
+    withBounds cursorRect $ fillRect (styleTextColour style)
+  where
+    drawLo = min anchor3 active3
+    drawHi = max anchor3 active3
+
+-- | Events reported by 'textInputControl': 'Edited' with the new value
+-- whenever a keystroke changes it, 'Submitted' when Enter is pressed while
+-- focused and enabled, or a lifecycle event via 'TextControl' (see
+-- 'ControlEvent').
+data TextEvent = Edited Text | Submitted | TextControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent TextEvent where
+  liftControl = TextControl
+  matchControl (TextControl ce) = Just ce
+  matchControl _                = Nothing
+
+-- | Emits @f newValue@ on every 'Edited'.
+onInput :: (Text -> msg) -> Attr e TextEvent msg cfg
+onInput f = onAny $ \ev -> case ev of
+  Edited t -> [OutMsg (f t)]
+  _        -> []
+
+-- | Emits @msg@ when Enter is pressed while the field is focused ('Submitted').
+onSubmit :: msg -> Attr e TextEvent msg cfg
+onSubmit msg = onAny $ \ev -> case ev of
+  Submitted -> [OutMsg msg]
+  _         -> []
+
+-- | Configuration for 'textInputControl', set via 'inputFilter' and
+-- 'displayFilter'.
+data TextInputConfig = TextInputConfig
+  { configInputFilter   :: Text -> Text
+  , configDisplayFilter :: Text -> Text
+  }
+
+defaultTextInputConfig :: TextInputConfig
+defaultTextInputConfig = TextInputConfig
+  { configInputFilter   = id
+  , configDisplayFilter = id
+  }
+
+-- | Applied to newly typed text before it's inserted, letting callers
+-- restrict which keystrokes are accepted (e.g. @T.filter isDigit@ for a
+-- digits-only field). Reformatting the value itself (e.g. inserting
+-- punctuation as the user types) is an application concern, not this
+-- control's — do it in an 'onInput' handler and pass the already-formatted
+-- value back in on the next frame. Defaults to 'id'.
+inputFilter :: (Text -> Text) -> Attr e ev msg TextInputConfig
+inputFilter f = configAny $ \cfg -> cfg { configInputFilter = f }
+
+-- | Applied to the value everywhere it is measured or drawn — the rendered
+-- text, and every character-offset calculation used for cursor placement,
+-- click hit-testing, and auto-scroll — so what's on screen and where the
+-- cursor lands always agree. It must be length- and position-preserving
+-- (e.g. @T.map (const '\8226')@ to mask each character of a password); the
+-- underlying value edited by 'inputFilter'\/'onInput' is never affected by
+-- it. Defaults to 'id'.
+displayFilter :: (Text -> Text) -> Attr e ev msg TextInputConfig
+displayFilter f = configAny $ \cfg -> cfg { configDisplayFilter = f }
+
+-- | A single-line text entry field. Supports click-to-place cursor, drag
+-- selection, Shift+arrow extension, and selection-aware editing. Long text
+-- scrolls horizontally to keep the cursor visible. 'inputFilter' and
+-- 'displayFilter' attrs turn this into a digits-only or password-style
+-- field.
+--
+-- Cursor position and selection are control state, not application data —
+-- 'textInputControl' reads and writes them itself via 'getSelection' and
+-- 'getScrollState', keyed by @eid@, writing through 'emitUi' with
+-- 'SetSelectionAt' and 'ScrollTo'. The scroll position is stored as the same
+-- @[0, 1]@ fraction every other scroll-state consumer uses — see
+-- 'scrollFraction'\/'scrollPixels' — converted to and from pixels locally,
+-- since the selection\/cursor\/auto-scroll math below is naturally pixel-based.
+textInputControl :: Ord e => e -> Text -> [Attr e TextEvent msg TextInputConfig] -> UI e msg ()
+textInputControl eid value attrs = do
+  wasFocused   <- isFocused eid
+  wasCapturing <- isDragging eid
+  let cfg = configure defaultTextInputConfig attrs
+  control eid attrs $ do
+    style    <- getStyle eid
+    hasFocus <- isFocused eid
+    disabled <- isDisabled
+    bounds   <- getBounds
+    input    <- getInput
+    sel      <- getSelection eid
+    frac     <- getScrollState eid
+
+    let displayValue = configDisplayFilter cfg value
+        w           = rectWidth bounds
+        defPos      = T.length value
+        anchor0     = maybe defPos selectionAnchor sel
+        active0     = maybe defPos selectionActive sel
+        -- Focus was gained by a click this frame (e.g. clicking from another
+        -- element). Treat as a fresh click rather than a drag continuation so
+        -- the old anchor is not inherited.
+        justFocused = hasFocus && not wasFocused
+        enabled     = hasFocus && not disabled
+
+    contentW <- realToFrac <$> charOffset displayValue (T.length displayValue)
+    let maxScrollPx = maxScrollPixels contentW w
+        scrollX     = scrollPixels maxScrollPx frac
+
+    (anchor1, active1) <-
+      if enabled
+        then resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX (anchor0, active0)
+        else pure (anchor0, active0)
+
+    let (anchor2, active2) =
+          resolveKeyboardSelection hasFocus (inputKeyEvents input) (T.length value) (anchor1, active1)
+
+        ((anchor3, active3), edited)
+          | enabled   = applyEdit (configInputFilter cfg) value input (anchor2, active2)
+          | otherwise = ((anchor2, active2), Nothing)
+
+        submitted = enabled && any (\e -> key e == KeyReturn) (inputKeyEvents input)
+
+    fire attrs ([Submitted | submitted] ++ [Edited t | Just t <- [edited]])
+
+    when enabled $ emitUi (SetSelectionAt eid (Selection anchor3 active3))
+
+    -- Computed locally rather than re-read via 'getScrollState': scroll
+    -- writes are deferred (applied between frames), so a same-frame re-read
+    -- would still see the pre-write value and the cursor would lag the
+    -- auto-scroll by one frame.
+    effectiveScrollX <-
+      if enabled
+        then do
+          curX <- charOffset displayValue active3
+          let newScrollX = resolveScroll w scrollX (realToFrac curX)
+          when (newScrollX /= scrollX) $ emitUi (ScrollTo eid (scrollFraction maxScrollPx newScrollX))
+          pure newScrollX
+        else pure scrollX
+
+    drawTextInputContent style bounds displayValue hasFocus enabled effectiveScrollX (anchor3, active3)
