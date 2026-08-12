@@ -19,6 +19,10 @@ module Blink.Controls2
   , applyMouseOver
   , applyFocus
   , control
+  , isKeyPressed
+  , whenFocused
+  , isActivatedBy
+  , activatable
   ) where
 
 import Control.Monad (forM_, when)
@@ -237,3 +241,49 @@ control eid attrs content = do
   applyMouseOver eid attrs
   applyFocus eid attrs
   renderChrome eid content
+
+-- | 'True' when the element holds focus and a key event for @k@ is present
+-- in the current frame's input queue.
+isKeyPressed :: Eq e => e -> Key -> UI e msg Bool
+isKeyPressed eid k = do
+  hasFoc  <- isFocused eid
+  pressed <- any (\e -> key e == k) . inputKeyEvents <$> getInput
+  pure (hasFoc && pressed)
+
+-- | Runs @action@ only when the given element holds keyboard focus.
+whenFocused :: Eq e => e -> UI e msg () -> UI e msg ()
+whenFocused eid action = isFocused eid >>= \f -> when f action
+
+-- | 'True' when the element is a valid click target this frame: not
+-- disabled, eligible for mouse-over (mouse free, or this element itself
+-- holds capture), geometrically hit, and the button was just released.
+-- Mirrors 'applyMouseOver's own gating, so a click can't activate a control
+-- while a different control is mid-drag. Not exported: 'isMouseOver' is
+-- geometric and has no registration state of its own to query directly the
+-- way the legacy @isHovered@ did, so this is assembled fresh here rather
+-- than reused from "Blink.UI".
+isClickedOver :: Ord e => e -> UI e msg Bool
+isClickedOver eid = do
+  disabled <- isDisabled
+  free     <- isMouseFree
+  dragging <- isDragging eid
+  hit      <- isMouseOver eid
+  released <- isButtonReleased
+  pure (not disabled && (free || dragging) && hit && released)
+
+-- | 'True' when the element was clicked, or one of @keys@ was pressed while
+-- it held focus, and it is not disabled.
+isActivatedBy :: Ord e => e -> [Key] -> UI e msg Bool
+isActivatedBy eid keys = do
+  clicked  <- isClickedOver eid
+  keyPress <- or <$> mapM (isKeyPressed eid) keys
+  disabled <- isDisabled
+  pure (not disabled && (clicked || keyPress))
+
+-- | 'control' plus 'isActivatedBy': runs @draw@ as a normal interactive
+-- control, then reports whether it was activated (a click or one of @keys@)
+-- this frame.
+activatable :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg cfg] -> [Key] -> UI e msg () -> UI e msg Bool
+activatable eid attrs keys draw = do
+  control eid attrs draw
+  isActivatedBy eid keys

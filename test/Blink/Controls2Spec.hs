@@ -8,6 +8,7 @@ import Blink.Controls2
   , ControlEvent (..)
   , FocusOnClick (..)
   , HasControlEvent (..)
+  , activatable
   , applyFocus
   , applyMouseOver
   , configAny
@@ -15,6 +16,8 @@ import Blink.Controls2
   , control
   , fire
   , focusOnClick
+  , isActivatedBy
+  , isKeyPressed
   , isMouseOver
   , measureChrome
   , onAny
@@ -24,6 +27,7 @@ import Blink.Controls2
   , onMouseExit
   , renderChrome
   , tabStop
+  , whenFocused
   )
 import Blink.ControlsTestSupport
   ( TestElement (..)
@@ -388,3 +392,89 @@ spec = describe "Blink.Controls2" $ do
     it "runs content within the padded content rectangle" $ do
       ctx' <- snd <$> runUI (control TestControl ([] :: [Attr TestElement Probe Probe ()]) (fillRect testColour)) (mkCtxFor noInput)
       getDrawCommands ctx' `shouldContain` [FillRect contentRect testColour]
+
+  describe "isKeyPressed" $ do
+    it "is True when focused and the key is present this frame" $ do
+      let ctx = withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) :: UIContext TestElement ()
+      (result, _) <- runUI (isKeyPressed TestControl KeyReturn) ctx
+      result `shouldBe` True
+
+    it "is False when not focused, even if the key is present" $ do
+      let ctx = withFocus (Just OtherControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) :: UIContext TestElement ()
+      (result, _) <- runUI (isKeyPressed TestControl KeyReturn) ctx
+      result `shouldBe` False
+
+    it "is False when focused but the key is absent" $ do
+      let ctx = withFocus (Just TestControl) (mkCtxFor noInput) :: UIContext TestElement ()
+      (result, _) <- runUI (isKeyPressed TestControl KeyReturn) ctx
+      result `shouldBe` False
+
+  describe "whenFocused" $ do
+    it "runs the action when the element holds focus" $ do
+      let ctx = withFocus (Just TestControl) (mkCtxFor noInput)
+      ctx' <- snd <$> runUI (whenFocused TestControl (emit (1 :: Int))) ctx
+      getMessages ctx' `shouldBe` [1]
+
+    it "skips the action when the element does not hold focus" $ do
+      let ctx = withFocus (Just OtherControl) (mkCtxFor noInput)
+      ctx' <- snd <$> runUI (whenFocused TestControl (emit (1 :: Int))) ctx
+      getMessages ctx' `shouldBe` []
+
+  describe "isActivatedBy" $ do
+    it "is True when clicked" $ do
+      let ctx = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])) :: UIContext TestElement ()
+      (result, _) <- runUI (isActivatedBy TestControl [KeyReturn]) ctx
+      result `shouldBe` True
+
+    it "is False when the click misses" $ do
+      let ctx = withButtonReleased (mkCtxFor (mouseAt (Point 200 200) False [])) :: UIContext TestElement ()
+      (result, _) <- runUI (isActivatedBy TestControl [KeyReturn]) ctx
+      result `shouldBe` False
+
+    it "is True when a listed key is pressed while focused" $ do
+      let ctx = withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) :: UIContext TestElement ()
+      (result, _) <- runUI (isActivatedBy TestControl [KeyReturn]) ctx
+      result `shouldBe` True
+
+    it "is False when neither clicked nor a listed key is pressed" $ do
+      let ctx = mkCtxFor noInput :: UIContext TestElement ()
+      (result, _) <- runUI (isActivatedBy TestControl [KeyReturn]) ctx
+      result `shouldBe` False
+
+    it "is False when disabled, even if clicked" $ do
+      let ctx = (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])) :: UIContext TestElement ()) { ctxDisabled = True }
+      (result, _) <- runUI (isActivatedBy TestControl [KeyReturn]) ctx
+      result `shouldBe` False
+
+    it "is False on a click released while a different element holds drag capture" $ do
+      -- Regression coverage for the fix this primitive needed: it must not
+      -- reuse the legacy isHovered/isClicked (built on the single-owner
+      -- ixnHovered field this module never writes to), and it must apply
+      -- the same drag-exclusion gating applyMouseOver does.
+      let base = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])) :: UIContext TestElement ()
+          ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just OtherControl } }
+      (result, _) <- runUI (isActivatedBy TestControl [KeyReturn]) ctx
+      result `shouldBe` False
+
+    it "is True on a click released while this same element holds drag capture" $ do
+      let base = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])) :: UIContext TestElement ()
+          ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just TestControl } }
+      (result, _) <- runUI (isActivatedBy TestControl [KeyReturn]) ctx
+      result `shouldBe` True
+
+  describe "activatable" $ do
+    it "returns True and renders chrome when activated by a click" $ do
+      let ctx = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []))
+      (activated, ctx') <- runUI (activatable TestControl ([] :: [Attr TestElement Probe Probe ()]) [KeyReturn] (pure ())) ctx
+      activated `shouldBe` True
+      getDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
+
+    it "returns False when not activated" $ do
+      let ctx = mkCtxFor noInput :: UIContext TestElement Probe
+      (activated, _) <- runUI (activatable TestControl ([] :: [Attr TestElement Probe Probe ()]) [KeyReturn] (pure ())) ctx
+      activated `shouldBe` False
+
+    it "still takes focus via the underlying control even when not activated by a key" $ do
+      let ctx = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []))
+      (_, ctx') <- runUI (activatable TestControl ([] :: [Attr TestElement Probe Probe ()]) [KeyReturn] (pure ())) ctx
+      getFocused ctx' `shouldBe` Just TestControl
