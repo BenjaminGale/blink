@@ -3,6 +3,7 @@ module Blink.Controls2
   ( Attr
   , configure
   , fire
+  , captureOuts
   , onAny
   , configAny
   , ControlEvent (..)
@@ -44,6 +45,16 @@ module Blink.Controls2
   , inputFilter
   , displayFilter
   , textInputControl
+  , RangeEvent (RangeChanged)
+  , onRangeChange
+  , rangeControl
+  , thumbRect
+  , mouseToTrackPos
+  , SliderPart (..)
+  , SliderEvent (Changed)
+  , onChange
+  , arrowStep
+  , slider
   ) where
 
 import Control.Monad (forM_, when)
@@ -53,11 +64,11 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Void (Void)
 
-import Blink.Geometry (Alignment (..), Insets (..), Point (..), Rectangle (..), borderInsets, insetRect, noBorder)
+import Blink.Geometry (Alignment (..), Insets (..), Orientation (..), Point (..), Rectangle (..), borderInsets, insetRect, noBorder)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (BoxConfig (..), Layout (..), Length (..), defaultBoxConfig, hBox)
 import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Style (..))
+import Blink.Style (Style (..), StyleSet (..))
 import Blink.UI
 
 data ControlEvent
@@ -105,10 +116,17 @@ controlConfig = foldl' apply defaultControlConfig
     apply cc (Shared f) = f cc
     apply cc _          = cc
 
+-- | The outs a set of attrs' handlers would produce for one event, without
+-- executing any of them — the pure half of 'fire'. Lets a composite bridge
+-- an inner control's events into its own attrs (see 'rangeControl') by
+-- capturing what firing against them would do, then handing that result
+-- back through its own dispatch instead of triggering it directly.
+captureOuts :: [Attr e ev msg cfg] -> ev -> [Out e msg]
+captureOuts attrs ev = concatMap ($ ev) [h | On h <- attrs]
+
 fire :: [Attr e ev msg cfg] -> [ev] -> UI e msg ()
-fire attrs evs = forM_ evs $ \ev -> forM_ handlers $ \h -> mapM_ dispatch (h ev)
+fire attrs evs = forM_ evs $ \ev -> mapM_ dispatch (captureOuts attrs ev)
   where
-    handlers = [h | On h <- attrs]
     dispatch (OutMsg msg) = emit msg
     dispatch (OutUi eff)  = emitUi eff
 
@@ -774,3 +792,169 @@ textInputControl eid value attrs = do
         else pure scrollX
 
     drawTextInputContent style bounds displayValue hasFocus enabled effectiveScrollX (anchor3, active3)
+
+contentRectFor :: StyleSet -> Rectangle -> Rectangle
+contentRectFor ss r =
+  let s = styleSetNormal ss
+  in insetRect (stylePadding s) (insetRect (styleMargin s) r)
+
+-- | The content rectangle of a track-style element (its slot bounds inset by
+-- margin and padding), used by both 'scrollBar' and 'slider' to size and
+-- place their thumb.
+trackContentRect :: Ord e => e -> UI e msg Rectangle
+trackContentRect trackId = do
+  bounds   <- getBounds
+  styleSet <- getStyleSet trackId
+  pure (contentRectFor styleSet bounds)
+
+-- | While @trackId@ is being dragged with the button held, returns the track
+-- position under the cursor; 'Nothing' otherwise. Shared drag-handling for
+-- 'scrollBar' and 'slider', both of which map a thumb drag to a position via
+-- 'mouseToTrackPos'.
+dragToTrackPos :: Ord e => e -> Orientation -> Double -> Rectangle -> UI e msg (Maybe Double)
+dragToTrackPos trackId ori ratio contentRect = do
+  dragging <- isDragging trackId
+  btnDown  <- isButtonDown
+  if dragging && btnDown
+    then Just . mouseToTrackPos ori ratio contentRect <$> getMousePos
+    else pure Nothing
+
+-- | Events reported by 'rangeControl': 'RangeChanged' with the new position
+-- while being dragged, or a lifecycle event via 'RangeControl' (see
+-- 'ControlEvent'). 'RangeControl' is not exported — the shared
+-- 'onFocusGained'\/etc. combinators already cover it — but 'RangeChanged'
+-- is, for the same reason 'ButtonEvent'\'s 'Clicked' is: a caller bridging
+-- this into a wrapping control's own events (see 'captureOuts') needs to
+-- pattern-match on it directly.
+data RangeEvent = RangeChanged Double | RangeControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent RangeEvent where
+  liftControl = RangeControl
+  matchControl (RangeControl ce) = Just ce
+  matchControl _                 = Nothing
+
+-- | Emits @f newPosition@ on every 'RangeChanged'.
+onRangeChange :: (Double -> msg) -> Attr e RangeEvent msg cfg
+onRangeChange f = onAny $ \ev -> case ev of
+  RangeChanged v -> [OutMsg (f v)]
+  _              -> []
+
+-- | A track with a draggable thumb, positioned within @[0, 1]@ by @pos@ and
+-- sized within the track by @ratio@ (visible \/ total, also @[0, 1]@).
+-- @trackId@ is the interactive element — it receives chrome, hover, focus,
+-- and tab navigation via 'control' — and @thumbId@ is a purely decorative
+-- child positioned inside it. Fires 'RangeChanged' with the new position
+-- while @trackId@ is being dragged; a caller wanting a different reporting
+-- channel (an effect rather than a message, say) bridges it via 'onAny' and
+-- 'captureOuts' against its own attrs — see 'slider'. Shared by 'scrollBar'
+-- and 'slider'.
+rangeControl :: Ord e => e -> e -> Orientation -> Double -> Double -> [Attr e RangeEvent msg cfg] -> UI e msg ()
+rangeControl trackId thumbId ori pos ratio attrs = do
+  contentRect <- trackContentRect trackId
+  let thumbR = thumbRect ori pos ratio contentRect
+  control trackId attrs $
+    withBounds thumbR $ renderChrome thumbId $ pure ()
+  newPos <- dragToTrackPos trackId ori ratio contentRect
+  fire attrs [RangeChanged v | Just v <- [newPos]]
+
+-- | Computes the bounding rectangle of a thumb within a track. @pos@ is the
+-- position along the track and @ratio@ is the fraction of the track the
+-- thumb fills (visible \/ total); both are in @[0, 1]@. The result is a
+-- sub-rectangle of @r@.
+thumbRect :: Orientation -> Double -> Double -> Rectangle -> Rectangle
+thumbRect Vertical pos ratio r =
+  let h = rectHeight r * ratio
+  in r { rectY = rectY r + (rectHeight r - h) * pos, rectHeight = h }
+thumbRect Horizontal pos ratio r =
+  let w = rectWidth r * ratio
+  in r { rectX = rectX r + (rectWidth r - w) * pos, rectWidth = w }
+
+-- | Converts a mouse position to a track position in @[0, 1]@, centring the
+-- thumb on the cursor. This is the inverse of 'thumbRect': exported for
+-- callers building custom drag handlers. Returns @0@ when the thumb fills
+-- the track (@ratio = 1@) and there is no range to move.
+mouseToTrackPos :: Orientation -> Double -> Rectangle -> Point -> Double
+mouseToTrackPos Vertical ratio r mouse =
+  let thumbH = rectHeight r * ratio
+      range  = rectHeight r - thumbH
+  in if range <= 0 then 0
+     else max 0 (min 1 ((pointY mouse - rectY r - thumbH / 2) / range))
+mouseToTrackPos Horizontal ratio r mouse =
+  let thumbW = rectWidth r * ratio
+      range  = rectWidth r - thumbW
+  in if range <= 0 then 0
+     else max 0 (min 1 ((pointX mouse - rectX r - thumbW / 2) / range))
+
+-- | Sub-parts of a slider, used as the inner tag when building the
+-- control's element IDs via a tagging function:
+--
+-- @
+-- data Element = ... | HSlider SliderPart
+-- slider HSlider Horizontal value [onChange VolumeChanged]
+-- @
+data SliderPart
+  = SliderTrack -- ^ The track area behind the thumb.
+  | SliderThumb -- ^ The draggable thumb.
+  deriving (Eq, Ord, Show)
+
+-- | Events reported by 'slider': 'Changed' with the new value when the user
+-- drags, clicks on the track, or nudges with arrow keys, or a lifecycle
+-- event via 'SliderControl' (see 'ControlEvent').
+data SliderEvent = Changed Double | SliderControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent SliderEvent where
+  liftControl = SliderControl
+  matchControl (SliderControl ce) = Just ce
+  matchControl _                  = Nothing
+
+-- | Emits @f newValue@ on every 'Changed'.
+onChange :: (Double -> msg) -> Attr e SliderEvent msg cfg
+onChange f = onAny $ \ev -> case ev of
+  Changed v -> [OutMsg (f v)]
+  _         -> []
+
+-- | Configuration for 'slider', set via 'arrowStep'.
+newtype SliderConfig = SliderConfig { configArrowStep :: Double }
+
+defaultSliderConfig :: SliderConfig
+defaultSliderConfig = SliderConfig { configArrowStep = 0.05 }
+
+-- | The amount an arrow-key press (Left\/Right for 'Horizontal', Up\/Down
+-- for 'Vertical') changes the value by. Defaults to @0.05@.
+arrowStep :: Double -> Attr e ev msg SliderConfig
+arrowStep v = configAny $ \cfg -> cfg { configArrowStep = v }
+
+-- | A slider mapping a draggable thumb to a value in @[0, 1]@. Fires
+-- 'Changed' with the new value when the user drags, clicks on the track, or
+-- nudges with arrow keys (Left\/Right for 'Horizontal', Up\/Down for
+-- 'Vertical', by 'arrowStep'). The thumb is square: its side equals the
+-- cross-axis of the track's content rectangle.
+slider :: Ord e => (SliderPart -> e) -> Orientation -> Double -> [Attr e SliderEvent msg SliderConfig] -> UI e msg ()
+slider mkId ori value attrs = do
+  let trackId = mkId SliderTrack
+      clamped = max 0 (min 1 value)
+      step    = configArrowStep (configure defaultSliderConfig attrs)
+  contentRect <- trackContentRect trackId
+  let (crossSz, mainSz) = case ori of
+        Horizontal -> (rectHeight contentRect, rectWidth contentRect)
+        Vertical   -> (rectWidth contentRect,  rectHeight contentRect)
+      thumbRatio = if mainSz > 0 then crossSz / mainSz else 0
+      bridgeAttrs = [onAny $ \ev -> case ev of
+        RangeChanged v  -> captureOuts attrs (Changed v)
+        RangeControl ce -> captureOuts attrs (liftControl ce)]
+  rangeControl trackId (mkId SliderThumb) ori clamped thumbRatio bridgeAttrs
+  let (decrKey, incrKey) = case ori of
+        Horizontal -> (KeyLeft,  KeyRight)
+        Vertical   -> (KeyUp,    KeyDown)
+  disabled  <- isDisabled
+  decrKeyed <- isKeyPressed trackId decrKey
+  incrKeyed <- isKeyPressed trackId incrKey
+  let decrPressed = not disabled && decrKeyed
+      incrPressed = not disabled && incrKeyed
+      changes = concat
+        [ [Changed (max 0 (clamped - step)) | decrPressed]
+        , [Changed (min 1 (clamped + step)) | incrPressed]
+        ]
+  fire attrs changes

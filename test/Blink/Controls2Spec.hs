@@ -47,6 +47,13 @@ import Blink.Controls2
   , inputFilter
   , displayFilter
   , textInputControl
+  , RangeEvent
+  , onRangeChange
+  , rangeControl
+  , SliderPart (..)
+  , onChange
+  , arrowStep
+  , slider
   )
 import Blink.ControlsTestSupport
   ( TestElement (..)
@@ -72,7 +79,7 @@ import Data.Char (isDigit)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Geometry (Point (..), Rectangle (..), Size (..), noBorder, uniform, uniformBorder)
+import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
 import Blink.Layout (Length (..))
 import Blink.Rendering (DrawCommand (..), TextAlign (..))
@@ -196,6 +203,33 @@ runNumberField value ctx = fmap (settle . snd) $ runUI (textInputControl TestCon
 
 runPasswordField :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
 runPasswordField value ctx = fmap (settle . snd) $ runUI (textInputControl TestControl value [displayFilter (T.map (const '•')), onInput id]) ctx
+
+-- slider takes a tagging function, so its tests use SliderPart as the
+-- element type directly and 'id' as the tagging function (matching the
+-- checkbox/scrollBar convention). App state IS the slider's value.
+-- Rect is 200x30; with zero margin/padding the thumb is 30x30, giving a
+-- travel range of 170px. mouseToTrackPos centres the thumb on the cursor:
+--   value = clamp 0 1 ((mouseX - 15) / 170)
+-- Key positions: mouseX=15 -> 0.0, mouseX=100 -> 0.5, mouseX=185 -> 1.0.
+sliderStyleSet :: StyleSet
+sliderStyleSet = StyleSet
+  { styleSetNormal   = checkboxStyle
+  , styleSetHovered  = checkboxStyle
+  , styleSetPressed  = checkboxStyle
+  , styleSetFocused  = checkboxStyle
+  , styleSetDisabled = checkboxStyle
+  }
+
+sliderTheme :: Theme SliderPart
+sliderTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = sliderStyleSet }
+
+sliderRect :: Rectangle
+sliderRect = Rectangle 0 0 200 30
+
+runSlider :: Orientation -> Double -> InputState -> IO (UIContext SliderPart Double)
+runSlider ori val input =
+  fmap (settle . snd) $ runUI (slider id ori val [onChange id])
+    (emptyUIContext sliderRect input sliderTheme noOpTextMeasurer)
 
 spec :: Spec
 spec = describe "Blink.Controls2" $ do
@@ -983,3 +1017,118 @@ spec = describe "Blink.Controls2" $ do
         (_, ctx') <- runUI (textInputControl TestControl "hello" [onSubmit "submitted"])
           (withFocus (Just OtherControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         getMessages (settle ctx') `shouldBe` []
+
+  describe "rangeControl" $ do
+    it "renders chrome like any other control" $ do
+      ctx' <- snd <$> runUI (rangeControl TestControl OtherControl Vertical 0 1 ([] :: [Attr TestElement RangeEvent () ()])) (mkCtxFor noInput)
+      getDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
+
+    describe "drag interaction" $ do
+      it "fires RangeChanged via onRangeChange with the drag position while dragging" $ do
+        (_, ctx') <- runUI (rangeControl TestControl OtherControl Vertical 0 0.5 [onRangeChange id])
+          (mkCtxFor (mouseAt (Point 50 50) True []) :: UIContext TestElement Double)
+        getMessages ctx' `shouldBe` [0.5]
+
+      it "fires nothing when the button is not held" $ do
+        (_, ctx') <- runUI (rangeControl TestControl OtherControl Vertical 0 0.5 [onRangeChange id])
+          (mkCtxFor (mouseAt (Point 50 50) False []) :: UIContext TestElement Double)
+        getMessages ctx' `shouldBe` []
+
+      it "fires nothing when not dragging even if the button is held elsewhere" $ do
+        (_, ctx') <- runUI (rangeControl TestControl OtherControl Vertical 0 0.5 [onRangeChange id])
+          (mkCtxFor (mouseAt (Point 200 200) True []) :: UIContext TestElement Double)
+        getMessages ctx' `shouldBe` []
+
+    describe "thumb placement" $ do
+      it "renders the thumb's chrome within the track's content rectangle when the thumb fills the track" $ do
+        -- With pos=0, ratio=1 the thumb fills the track's content rectangle
+        -- exactly, so the thumb's own margin-inset background lands here.
+        drawCtx <- snd <$> runUI (rangeControl TestControl OtherControl Vertical 0 1 ([] :: [Attr TestElement RangeEvent () ()])) (mkCtxFor noInput)
+        getDrawCommands drawCtx `shouldContain` [FillRect (insetRect (uniform 10) contentRect) testColour]
+
+  describe "slider" $ do
+    it "renders chrome like any other control" $ do
+      ctx' <- snd <$> runUI (slider id Horizontal 0.5 [onChange (const ())])
+        (emptyUIContext sliderRect noInput sliderTheme noOpTextMeasurer)
+      getDrawCommands ctx' `shouldContain` [FillRect sliderRect testColour]
+
+    describe "drag interaction" $ do
+      it "sets value to 0.5 when dragged to the midpoint" $ do
+        ctx' <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
+        getMessages ctx' `shouldBe` [0.5]
+
+      it "sets value to 0 when dragged to the far left" $ do
+        ctx' <- runSlider Horizontal 0.5 (mouseAt (Point 15 15) True [])
+        getMessages ctx' `shouldBe` [0.0]
+
+      it "sets value to 1 when dragged to the far right" $ do
+        ctx' <- runSlider Horizontal 0.5 (mouseAt (Point 185 15) True [])
+        getMessages ctx' `shouldBe` [1.0]
+
+      it "continues tracking when the mouse moves outside the track while button held" $ do
+        frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
+        let val1 = head (getMessages frame1)
+        frame2 <- fmap (settle . snd) $ runUI (slider id Horizontal val1 [onChange id])
+                                   (nextFrameContext sliderRect (mouseAt (Point 300 15) True []) frame1)
+        getMessages frame2 `shouldBe` [1.0]
+
+      it "stops tracking when the button is released" $ do
+        frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
+        let val1 = head (getMessages frame1)
+        frame2 <- fmap (settle . snd) $ runUI (slider id Horizontal val1 [onChange id])
+                                   (nextFrameContext sliderRect (mouseAt (Point 300 15) False []) frame1)
+        dispatchCount frame2 `shouldBe` 0
+
+      -- Releasing the mouse while it is still over the track (as opposed to
+      -- having dragged off it) must not dispatch a further change.
+      it "does not dispatch on the release frame when the mouse is still over the track" $ do
+        frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
+        let val1 = head (getMessages frame1)
+        frame2 <- fmap (settle . snd) $ runUI (slider id Horizontal val1 [onChange id])
+                                   (nextFrameContext sliderRect (mouseAt (Point 100 15) False []) frame1)
+        dispatchCount frame2 `shouldBe` 0
+
+    describe "keyboard nudging" $ do
+      it "increases value by 0.05 when Right is pressed (Horizontal)" $ do
+        ctx' <- runSlider Horizontal 0.5 noInput { inputKeyEvents = [KeyEvent KeyRight []] }
+        getMessages ctx' `shouldBe` [0.55]
+
+      it "decreases value by 0.05 when Left is pressed (Horizontal)" $ do
+        ctx' <- runSlider Horizontal 0.5 noInput { inputKeyEvents = [KeyEvent KeyLeft []] }
+        getMessages ctx' `shouldBe` [0.45]
+
+      it "increases value by 0.05 when Down is pressed (Vertical)" $ do
+        ctx' <- runSlider Vertical 0.5 noInput { inputKeyEvents = [KeyEvent KeyDown []] }
+        getMessages ctx' `shouldBe` [0.55]
+
+      it "decreases value by 0.05 when Up is pressed (Vertical)" $ do
+        ctx' <- runSlider Vertical 0.5 noInput { inputKeyEvents = [KeyEvent KeyUp []] }
+        getMessages ctx' `shouldBe` [0.45]
+
+      it "clamps to 1 when nudging at the maximum" $ do
+        ctx' <- runSlider Horizontal 1.0 noInput { inputKeyEvents = [KeyEvent KeyRight []] }
+        getMessages ctx' `shouldBe` [1.0]
+
+      it "clamps to 0 when nudging at the minimum" $ do
+        ctx' <- runSlider Horizontal 0.0 noInput { inputKeyEvents = [KeyEvent KeyLeft []] }
+        getMessages ctx' `shouldBe` [0.0]
+
+      it "uses arrowStep instead of the 0.05 default when given" $ do
+        ctx' <- fmap (settle . snd) $ runUI (slider id Horizontal 0.5 [onChange id, arrowStep 0.2])
+          (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme noOpTextMeasurer)
+        getMessages ctx' `shouldBe` [0.7]
+
+      it "does not nudge when another element has focus" $ do
+        ctx' <- fmap (settle . snd) $ runUI (slider id Horizontal 0.5 [onChange id])
+          (withFocus (Just SliderThumb) (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme noOpTextMeasurer))
+        getMessages ctx' `shouldBe` []
+
+      it "does not nudge when disabled" $ do
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (slider id Horizontal 0.5 [onChange id]))
+          (withFocus (Just SliderTrack) (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme noOpTextMeasurer))
+        dispatchCount ctx' `shouldBe` 0
+
+    describe "without interaction" $ do
+      it "does not dispatch when there is no input" $ do
+        ctx' <- runSlider Horizontal 0.5 noInput
+        dispatchCount ctx' `shouldBe` 0
