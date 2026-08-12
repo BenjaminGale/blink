@@ -235,6 +235,9 @@ module Blink.UI
   , isRegionHit
   , isHovered
   , setHovered
+  , setHot
+  , registerMouseOver
+  , wasMouseOverLastFrame
   , isButtonDown
   , isButtonReleased
   , isClicked
@@ -278,6 +281,7 @@ import Data.List (foldl')
 import Data.Maybe (isNothing, fromMaybe, listToMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..), TextMeasurer (..), noOpTextMeasurer)
 import Blink.Geometry (Point, Rectangle, Size, BorderEdges, containsPoint, intersectRect)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
@@ -389,8 +393,16 @@ data InteractionState e = InteractionState
 -- | Cross-frame per-element presentation state. Persists unchanged across
 -- frames; never exposed to the application.
 data ElementState e = ElementState
-  { elmScrollStates :: Map.Map e ScrollState
-  , elmSelections   :: Map.Map e [Selection]
+  { elmScrollStates   :: Map.Map e ScrollState
+  , elmSelections     :: Map.Map e [Selection]
+  , elmMouseOverPrev  :: Set.Set e
+    -- ^ Elements 'registerMouseOver' was called for during the previous
+    -- frame. Snapshotted by 'nextFrameContext' from the completed frame's
+    -- 'outMouseOverThisFrame'; read via 'wasMouseOverLastFrame' to derive
+    -- mouse-enter\/-exit by comparing against this frame's geometric hit
+    -- test. Unlike 'ixnHovered' (a single last-writer-wins element, reset
+    -- every frame), this tracks every element hit this frame, so more than
+    -- one control can be moused over at once.
   }
 
 -- | Outputs accumulated during a single frame: draw commands, the queued
@@ -398,9 +410,13 @@ data ElementState e = ElementState
 -- continuation flag. Reset to empty at the start of each frame by
 -- 'nextFrameContext'.
 data FrameOutputs e msg = FrameOutputs
-  { outDrawCommands     :: [DrawCommand]
-  , outEvents           :: [Out e msg]
-  , outRequiresAnimation :: Bool
+  { outDrawCommands       :: [DrawCommand]
+  , outEvents             :: [Out e msg]
+  , outRequiresAnimation  :: Bool
+  , outMouseOverThisFrame :: Set.Set e
+    -- ^ Elements 'registerMouseOver' has been called for so far this frame.
+    -- Snapshotted into 'elmMouseOverPrev' by 'nextFrameContext' once the
+    -- frame completes.
   }
 
 -- | The frame context threaded through every 'UI' computation. Carries the
@@ -472,9 +488,10 @@ emptyInteractionState = InteractionState
 
 emptyFrameOutputs :: FrameOutputs e msg
 emptyFrameOutputs = FrameOutputs
-  { outDrawCommands      = []
-  , outEvents            = []
-  , outRequiresAnimation = False
+  { outDrawCommands       = []
+  , outEvents             = []
+  , outRequiresAnimation  = False
+  , outMouseOverThisFrame = Set.empty
   }
 
 -- | Constructs the initial 'UIContext' for the first frame.
@@ -488,7 +505,11 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxAnimation       = AnimationState { animDelta = 0, animElapsed = 0, animIsTick = False }
   , ctxTextMeasure     = measurer
   , ctxInteraction     = emptyInteractionState { ixnButtonDown = inputLeftButtonDown input }
-  , ctxElements        = ElementState { elmScrollStates = Map.empty, elmSelections = Map.empty }
+  , ctxElements        = ElementState
+      { elmScrollStates  = Map.empty
+      , elmSelections    = Map.empty
+      , elmMouseOverPrev = Set.empty
+      }
   , ctxOutputs         = emptyFrameOutputs
   }
 
@@ -497,7 +518,10 @@ emptyUIContext bounds input thm measurer = UIContext
 -- scroll, and selection changes take effect starting this new frame. Then
 -- resets per-frame state (draw commands, hover element, queued messages, and
 -- the focus-visited flag) while preserving cross-frame state (theme, focus
--- element, scroll state, selections, and tab-stop bookkeeping).
+-- element, scroll state, selections, and tab-stop bookkeeping). Also
+-- snapshots the completed frame's 'outMouseOverThisFrame' into
+-- 'elmMouseOverPrev', so 'wasMouseOverLastFrame' reflects this frame once
+-- it, in turn, becomes "last frame".
 nextFrameContext :: Ord e => Rectangle -> InputState -> UIContext e msg -> UIContext e msg
 nextFrameContext bounds input ctx0 = ctx
   { ctxBounds      = bounds
@@ -506,6 +530,8 @@ nextFrameContext bounds input ctx0 = ctx
       (inputLeftButtonDown (ctxInput ctx))
       (inputLeftButtonDown input)
       (ctxInteraction ctx)
+  , ctxElements    = (ctxElements ctx)
+      { elmMouseOverPrev = outMouseOverThisFrame (ctxOutputs ctx) }
   , ctxOutputs     = emptyFrameOutputs
   }
   where
@@ -720,6 +746,37 @@ setHovered eid = modify $ \ctx ->
        if ixnButtonDown ixn && isNothing (ixnCaptured ixn)
        then ixn' { ixnCaptured = Just eid }
        else ixn' }
+
+-- | Acquires mouse capture for the element if the left button is currently
+-- down and nothing is captured yet, making this the first point of capture
+-- for that press — the "hot" control a drag holds onto once the cursor
+-- leaves the element that started it. This is the capture-acquisition half
+-- of 'setHovered', extracted so a caller building mouse-over on the
+-- geometric 'isRegionHit' test instead (rather than the single
+-- last-writer-wins 'ixnHovered') can still get drag continuation, without
+-- also writing 'ixnHovered'. Does not affect 'isHovered' \/
+-- 'getHoveredElement'.
+setHot :: e -> UI e msg ()
+setHot eid = modifyIxn $ \ixn ->
+  if ixnButtonDown ixn && isNothing (ixnCaptured ixn)
+  then ixn { ixnCaptured = Just eid }
+  else ixn
+
+-- | Records that the element was hit by the mouse this frame — typically
+-- called after a geometric hit test such as 'isRegionHit' succeeds. Building
+-- block for mouse-enter\/-exit: compare against 'wasMouseOverLastFrame' for
+-- the same element to detect the transition. Unlike 'setHovered', many
+-- elements can each call this in the same frame; all are remembered.
+registerMouseOver :: Ord e => e -> UI e msg ()
+registerMouseOver eid = modifyOut $ \out ->
+  out { outMouseOverThisFrame = Set.insert eid (outMouseOverThisFrame out) }
+
+-- | 'True' when 'registerMouseOver' was called for the element on the
+-- previous frame. Compare against this frame's own hit test to derive
+-- mouse-enter (@not wasOver && isOver@) and mouse-exit (@wasOver && not
+-- isOver@).
+wasMouseOverLastFrame :: Ord e => e -> UI e msg Bool
+wasMouseOverLastFrame eid = gets $ \ctx -> Set.member eid (elmMouseOverPrev (ctxElements ctx))
 
 -- | The element that currently holds keyboard focus, or 'Nothing' if none does.
 getFocus :: UI e msg (Maybe e)

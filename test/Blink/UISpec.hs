@@ -370,6 +370,29 @@ spec = describe "Blink.UI" $ do
       (_, ctx) <- runWith buttonDown (setHovered ())
       ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
 
+  describe "setHot" $ do
+    it "acquires capture when the button is down and nothing is captured" $ do
+      (_, ctx) <- runWith buttonDown (setHot ())
+      ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
+
+    it "does not acquire capture when another element already holds it" $ do
+      (_, ctx0) <- runTwoElem (pure ())
+      let ctx = withCapture ElemB ctx0
+      (_, ctx') <- runUI (setHot ElemA) ctx
+      ixnCaptured (ctxInteraction ctx') `shouldBe` Just ElemB
+
+    it "does nothing when the button is not down" $ do
+      (_, ctx) <- run0 (setHot ())
+      ixnCaptured (ctxInteraction ctx) `shouldBe` Nothing
+
+    it "does not mark the element as hovered" $ do
+      (_, ctx) <- runWith buttonDown (setHot ())
+      ixnHovered (ctxInteraction ctx) `shouldBe` Nothing
+
+    it "makes the element dragging once capture is acquired" $ do
+      (dragging, _) <- runWith buttonDown (setHot () >> isDragging ())
+      dragging `shouldBe` True
+
   describe "focus" $ do
     it "getFocus returns Nothing initially" $ do
       (f, _) <- run0 getFocus
@@ -609,6 +632,43 @@ spec = describe "Blink.UI" $ do
     it "returns the element currently registered as hovered" $ do
       (result, _) <- runWith mouseOnCenter (control () (pure ()) >> getHoveredElement)
       result `shouldBe` Just ()
+
+  describe "mouse-over memory (registerMouseOver / wasMouseOverLastFrame)" $ do
+    it "is False when nothing has ever been registered" $ do
+      (result, _) <- run0 (wasMouseOverLastFrame ())
+      result `shouldBe` False
+
+    it "is still False for an element registered only this frame" $ do
+      (result, _) <- run0 (registerMouseOver () >> wasMouseOverLastFrame ())
+      result `shouldBe` False
+
+    it "is True on the frame after registration" $ do
+      (_, ctx) <- run0 (registerMouseOver ())
+      let ctx' = nextFrameContext testBounds noInput ctx
+      (result, _) <- runUI (wasMouseOverLastFrame ()) ctx'
+      result `shouldBe` True
+
+    it "is False two frames after registration if not re-registered" $ do
+      (_, ctx0) <- run0 (registerMouseOver ())
+      let ctx1 = nextFrameContext testBounds noInput ctx0
+      (_, ctx1') <- runUI (pure ()) ctx1
+      let ctx2 = nextFrameContext testBounds noInput ctx1'
+      (result, _) <- runUI (wasMouseOverLastFrame ()) ctx2
+      result `shouldBe` False
+
+    it "remembers every element registered in the same frame, not just the last" $ do
+      (_, ctx) <- runTwoElem (registerMouseOver ElemA >> registerMouseOver ElemB)
+      let ctx' = nextFrameContext testBounds noInput ctx
+      (a, _) <- runUI (wasMouseOverLastFrame ElemA) ctx'
+      (b, _) <- runUI (wasMouseOverLastFrame ElemB) ctx'
+      (a, b) `shouldBe` (True, True)
+
+    it "keeps results independent per element" $ do
+      (_, ctx) <- runTwoElem (registerMouseOver ElemA)
+      let ctx' = nextFrameContext testBounds noInput ctx
+      (a, _) <- runUI (wasMouseOverLastFrame ElemA) ctx'
+      (b, _) <- runUI (wasMouseOverLastFrame ElemB) ctx'
+      (a, b) `shouldBe` (True, False)
 
   describe "clampScrollPos properties" $ do
     prop "is idempotent" $ \x ->
