@@ -63,31 +63,37 @@ renderFill renderer r color = do
   SDL.rendererDrawColor renderer $= toSDLColor color
   SDL.fillRect renderer (Just (toSDLRect r))
 
+-- | Draws each edge as its own filled rectangle, in the outer rect's own
+-- rounded integer coordinate frame throughout — rounding @r@ just once and
+-- deriving every edge from those integers, rather than rounding each edge
+-- rectangle independently. Independent rounding let adjacent edges land on
+-- different pixels for the same corner when @r@'s bounds were fractional
+-- (routine after layout centring/flex math), leaving a 1px gap or overlap
+-- at the corner; sharing one integer frame makes the four edges tile
+-- exactly.
 renderBorder :: SDL.Renderer -> Rectangle -> Colour -> BorderEdges -> IO ()
 renderBorder renderer r color edges = do
   SDL.rendererDrawColor renderer $= toSDLColor color
-  let x = rectX r
-      y = rectY r
-      w = rectWidth r
-      h = rectHeight r
-      t = edgeTop edges
-      ri = edgeRight edges
-      b = edgeBottom edges
-      l = edgeLeft edges
-  when (t > 0) $ SDL.fillRect renderer (Just (toSDLRect (Rectangle x y w t)))
-  when (b > 0) $ SDL.fillRect renderer (Just (toSDLRect (Rectangle x (y + h - b) w b)))
-  when (l > 0) $ SDL.fillRect renderer (Just (toSDLRect (Rectangle x (y + t) l (h - t - b))))
-  when (ri > 0) $ SDL.fillRect renderer (Just (toSDLRect (Rectangle (x + w - ri) (y + t) ri (h - t - b))))
+  let SDL.Rectangle (SDL.P (SDL.V2 x y)) (SDL.V2 w h) = toSDLRect r
+      t  = round (edgeTop edges)
+      ri = round (edgeRight edges)
+      b  = round (edgeBottom edges)
+      l  = round (edgeLeft edges)
+      mkRect rx ry rw rh = SDL.Rectangle (SDL.P (SDL.V2 rx ry)) (SDL.V2 rw rh)
+  when (t > 0)  $ SDL.fillRect renderer (Just (mkRect x y w t))
+  when (b > 0)  $ SDL.fillRect renderer (Just (mkRect x (y + h - b) w b))
+  when (l > 0)  $ SDL.fillRect renderer (Just (mkRect x (y + t) l (h - t - b)))
+  when (ri > 0) $ SDL.fillRect renderer (Just (mkRect (x + w - ri) (y + t) ri (h - t - b)))
 
 renderText :: SDL.Renderer -> Font.Font -> TextureCache -> Rectangle -> Text -> Colour -> TextAlign -> IO ()
-renderText renderer font cache r text color align = do
+renderText renderer font cache r txt color align = do
   let sdlColor = toSDLColor color
-      cacheKey = (text, sdlColor)
+      cacheKey = (txt, sdlColor)
   m <- readIORef cache
   (texture, tw, th) <- case Map.lookup cacheKey m of
     Just hit -> pure hit
     Nothing  -> do
-      surface <- Font.blended font sdlColor text
+      surface <- Font.blended font sdlColor txt
       tex     <- SDL.createTextureFromSurface renderer surface
       SDL.freeSurface surface
       (SDL.TextureInfo _ _ w h) <- SDL.queryTexture tex
@@ -117,8 +123,8 @@ popClip renderer clipRef = do
 submitDrawCommand :: SDL.Renderer -> Font.Font -> TextureCache -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
 submitDrawCommand renderer _ _ _        (FillRect r color)            = renderFill   renderer r color
 submitDrawCommand renderer _ _ _        (StrokeBorder r color edges)  = renderBorder renderer r color edges
-submitDrawCommand _ _ _ _               (DrawText _ text _ _) | T.null text = pure ()
-submitDrawCommand renderer font cache _ (DrawText r text color align) = renderText   renderer font cache r text color align
+submitDrawCommand _ _ _ _               (DrawText _ txt _ _) | T.null txt = pure ()
+submitDrawCommand renderer font cache _ (DrawText r txt color align) = renderText   renderer font cache r txt color align
 submitDrawCommand renderer _ _ clipRef  (PushClip r)                  = pushClip     renderer clipRef r
 submitDrawCommand renderer _ _ clipRef   PopClip                      = popClip      renderer clipRef
 

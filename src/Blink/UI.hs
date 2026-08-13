@@ -111,16 +111,25 @@ region is discarded.
 
 = Interaction
 
-Interaction queries are scoped to an element ID and are only meaningful after
-the element has registered a hover hit via 'setHovered' (or the high-level
-'Blink.Controls.control' helper, which does this automatically):
+Interaction queries are scoped to an element ID. Two independent hover
+models are available:
 
-  * 'isHovered' — the mouse is inside the element's bounds.
-  * 'isPressed' — the left button is held while the element is hovered.
-  * 'isClicked' — the left button was just released while the element is hovered.
+  * The single-owner model — 'setHovered' registers an element as /the/
+    hovered element, displacing whatever it was before, and 'isHovered' \/
+    'isPressed' \/ 'isClicked' query it. At most one element can be hovered
+    at once, which makes drag-target exclusion trivial but doesn't compose:
+    two overlapping elements can't each independently know the mouse is
+    over them.
+  * The geometric model — 'registerMouseOver' \/ 'wasMouseOverLastFrame' \/
+    'isAnyMouseOver' let any number of elements independently register and
+    query "over" this frame, with no shared slot to contend over. This is
+    what 'Blink.Controls.control' actually uses; the single-owner model
+    above remains for custom controls that want its simpler semantics
+    instead.
 
-'isRegionHit' is the lower-level primitive: it checks whether the mouse is within
-the /current bounds/, without reference to any element ID.
+'isRegionHit' is the lower-level primitive both models build on: it checks
+whether the mouse is within the /current bounds/, without reference to any
+element ID.
 
 = Focus and keyboard navigation
 
@@ -159,23 +168,24 @@ when disabled.
 = Putting it together
 
 Higher-level controls in "Blink.Controls" are built entirely from the
-primitives above. A minimal button, stripped of styling and focus handling,
-shows how the pieces interlock:
+primitives above, using the geometric hover model. A minimal button,
+stripped of styling and focus handling, shows how the pieces interlock:
 
 @
 miniButton :: Ord e => e -> Text -> UI e msg Bool
 miniButton eid label = do
   isHit <- isRegionHit
-  when isHit $ setHovered eid
+  when isHit $ registerMouseOver eid
   fillRect (if isHit then RGBA 0.3 0.3 0.3 1 else RGBA 0.2 0.2 0.2 1)
   drawText (RGBA 1 1 1 1) AlignCenter label
-  isClicked eid
+  released <- isButtonReleased
+  pure (isHit && released)
 @
 
-'setHovered' registers the hit so 'isClicked' has something to check next
-frame; 'fillRect' and 'drawText' read the current bounds implicitly. See
-'Blink.Controls.control' for the full version, which adds focus, tab
-navigation, and style-driven chrome on top of exactly this shape.
+'registerMouseOver' records the hit so a later frame can look back at it via
+'wasMouseOverLastFrame'; 'fillRect' and 'drawText' read the current bounds
+implicitly. See 'Blink.Controls.control' for the full version, which adds
+focus, tab navigation, and style-driven chrome on top of exactly this shape.
 -}
 module Blink.UI
   ( -- * The UI monad
@@ -235,6 +245,10 @@ module Blink.UI
   , isRegionHit
   , isHovered
   , setHovered
+  , setHot
+  , registerMouseOver
+  , wasMouseOverLastFrame
+  , isAnyMouseOver
   , isButtonDown
   , isButtonReleased
   , isClicked
@@ -278,6 +292,7 @@ import Data.List (foldl')
 import Data.Maybe (isNothing, fromMaybe, listToMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..), TextMeasurer (..), noOpTextMeasurer)
 import Blink.Geometry (Point, Rectangle, Size, BorderEdges, containsPoint, intersectRect)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
@@ -318,12 +333,13 @@ data Selection = Selection
 -- 'setFocus' for why it changes immediately instead.
 data UiEffect e
   = ScrollTo e Double
-    -- ^ Sets the scroll position to an absolute value, stored as given. Most
-    -- callers ('Blink.Controls.scrollBar', 'Blink.Controls.viewport',
-    -- 'Blink.Controls.listBox') use the @[0, 1]@
-    -- convention documented on 'ScrollState' and pass an already-clamped
-    -- value; 'Blink.Controls.textInputControl' is the one exception, storing an unbounded
-    -- pixel offset instead.
+    -- ^ Sets the scroll position to an absolute value, stored as given. Every
+    -- caller ('Blink.Controls.scrollBar', 'Blink.Controls.viewport',
+    -- 'Blink.Controls.listBox', 'Blink.Controls.textInputControl') uses the
+    -- @[0, 1]@ convention documented on 'ScrollState' and passes an
+    -- already-clamped value; 'Blink.Controls.textInputControl' converts to
+    -- and from pixels locally since its selection\/cursor math is naturally
+    -- pixel-based.
   | ScrollBy e Double
     -- ^ Adjusts the scroll position by a delta, clamped to @[0, 1]@ — this
     -- constructor is only ever used in the normalised @[0, 1]@ convention.
@@ -389,8 +405,16 @@ data InteractionState e = InteractionState
 -- | Cross-frame per-element presentation state. Persists unchanged across
 -- frames; never exposed to the application.
 data ElementState e = ElementState
-  { elmScrollStates :: Map.Map e ScrollState
-  , elmSelections   :: Map.Map e [Selection]
+  { elmScrollStates   :: Map.Map e ScrollState
+  , elmSelections     :: Map.Map e [Selection]
+  , elmMouseOverPrev  :: Set.Set e
+    -- ^ Elements 'registerMouseOver' was called for during the previous
+    -- frame. Snapshotted by 'nextFrameContext' from the completed frame's
+    -- 'outMouseOverThisFrame'; read via 'wasMouseOverLastFrame' to derive
+    -- mouse-enter\/-exit by comparing against this frame's geometric hit
+    -- test. Unlike 'ixnHovered' (a single last-writer-wins element, reset
+    -- every frame), this tracks every element hit this frame, so more than
+    -- one control can be moused over at once.
   }
 
 -- | Outputs accumulated during a single frame: draw commands, the queued
@@ -398,9 +422,13 @@ data ElementState e = ElementState
 -- continuation flag. Reset to empty at the start of each frame by
 -- 'nextFrameContext'.
 data FrameOutputs e msg = FrameOutputs
-  { outDrawCommands     :: [DrawCommand]
-  , outEvents           :: [Out e msg]
-  , outRequiresAnimation :: Bool
+  { outDrawCommands       :: [DrawCommand]
+  , outEvents             :: [Out e msg]
+  , outRequiresAnimation  :: Bool
+  , outMouseOverThisFrame :: Set.Set e
+    -- ^ Elements 'registerMouseOver' has been called for so far this frame.
+    -- Snapshotted into 'elmMouseOverPrev' by 'nextFrameContext' once the
+    -- frame completes.
   }
 
 -- | The frame context threaded through every 'UI' computation. Carries the
@@ -472,9 +500,10 @@ emptyInteractionState = InteractionState
 
 emptyFrameOutputs :: FrameOutputs e msg
 emptyFrameOutputs = FrameOutputs
-  { outDrawCommands      = []
-  , outEvents            = []
-  , outRequiresAnimation = False
+  { outDrawCommands       = []
+  , outEvents             = []
+  , outRequiresAnimation  = False
+  , outMouseOverThisFrame = Set.empty
   }
 
 -- | Constructs the initial 'UIContext' for the first frame.
@@ -488,7 +517,11 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxAnimation       = AnimationState { animDelta = 0, animElapsed = 0, animIsTick = False }
   , ctxTextMeasure     = measurer
   , ctxInteraction     = emptyInteractionState { ixnButtonDown = inputLeftButtonDown input }
-  , ctxElements        = ElementState { elmScrollStates = Map.empty, elmSelections = Map.empty }
+  , ctxElements        = ElementState
+      { elmScrollStates  = Map.empty
+      , elmSelections    = Map.empty
+      , elmMouseOverPrev = Set.empty
+      }
   , ctxOutputs         = emptyFrameOutputs
   }
 
@@ -497,7 +530,10 @@ emptyUIContext bounds input thm measurer = UIContext
 -- scroll, and selection changes take effect starting this new frame. Then
 -- resets per-frame state (draw commands, hover element, queued messages, and
 -- the focus-visited flag) while preserving cross-frame state (theme, focus
--- element, scroll state, selections, and tab-stop bookkeeping).
+-- element, scroll state, selections, and tab-stop bookkeeping). Also
+-- snapshots the completed frame's 'outMouseOverThisFrame' into
+-- 'elmMouseOverPrev', so 'wasMouseOverLastFrame' reflects this frame once
+-- it, in turn, becomes "last frame".
 nextFrameContext :: Ord e => Rectangle -> InputState -> UIContext e msg -> UIContext e msg
 nextFrameContext bounds input ctx0 = ctx
   { ctxBounds      = bounds
@@ -506,6 +542,8 @@ nextFrameContext bounds input ctx0 = ctx
       (inputLeftButtonDown (ctxInput ctx))
       (inputLeftButtonDown input)
       (ctxInteraction ctx)
+  , ctxElements    = (ctxElements ctx)
+      { elmMouseOverPrev = outMouseOverThisFrame (ctxOutputs ctx) }
   , ctxOutputs     = emptyFrameOutputs
   }
   where
@@ -721,6 +759,48 @@ setHovered eid = modify $ \ctx ->
        then ixn' { ixnCaptured = Just eid }
        else ixn' }
 
+-- | Acquires mouse capture for the element if the left button is currently
+-- down and nothing is captured yet, making this the first point of capture
+-- for that press — the "hot" control a drag holds onto once the cursor
+-- leaves the element that started it. This is the capture-acquisition half
+-- of 'setHovered', extracted so a caller building mouse-over on the
+-- geometric 'isRegionHit' test instead (rather than the single
+-- last-writer-wins 'ixnHovered') can still get drag continuation, without
+-- also writing 'ixnHovered'. Does not affect 'isHovered' \/
+-- 'getHoveredElement'.
+setHot :: e -> UI e msg ()
+setHot eid = modifyIxn $ \ixn ->
+  if ixnButtonDown ixn && isNothing (ixnCaptured ixn)
+  then ixn { ixnCaptured = Just eid }
+  else ixn
+
+-- | Records that the element was hit by the mouse this frame — typically
+-- called after a geometric hit test such as 'isRegionHit' succeeds. Building
+-- block for mouse-enter\/-exit: compare against 'wasMouseOverLastFrame' for
+-- the same element to detect the transition. Unlike 'setHovered', many
+-- elements can each call this in the same frame; all are remembered.
+registerMouseOver :: Ord e => e -> UI e msg ()
+registerMouseOver eid = modifyOut $ \out ->
+  out { outMouseOverThisFrame = Set.insert eid (outMouseOverThisFrame out) }
+
+-- | 'True' when 'registerMouseOver' was called for the element on the
+-- previous frame. Compare against this frame's own hit test to derive
+-- mouse-enter (@not wasOver && isOver@) and mouse-exit (@wasOver && not
+-- isOver@).
+wasMouseOverLastFrame :: Ord e => e -> UI e msg Bool
+wasMouseOverLastFrame eid = gets $ \ctx -> Set.member eid (elmMouseOverPrev (ctxElements ctx))
+
+-- | 'True' when 'registerMouseOver' has been called for any element so far
+-- this frame. Reflects the whole frame's hover set only once every control
+-- that might register one has run — call it after the rest of the view, the
+-- same way 'getHoveredElement' was read at the end of a frame under the
+-- legacy single-owner hover model this replaces for controls built with
+-- geometric hover (many elements can be "over" at once, so unlike
+-- 'getHoveredElement' there is no single element to name — only whether the
+-- set is non-empty).
+isAnyMouseOver :: UI e msg Bool
+isAnyMouseOver = gets (not . Set.null . outMouseOverThisFrame . ctxOutputs)
+
 -- | The element that currently holds keyboard focus, or 'Nothing' if none does.
 getFocus :: UI e msg (Maybe e)
 getFocus = gets (focusedElement . ixnFocus . ctxInteraction)
@@ -879,7 +959,7 @@ applyUiEffects effects ctx0 = foldl' step ctx0 effects
 -- | 'True' when the mouse cursor is within the current bounds and within the
 -- active interaction clip region (set by 'clipToCurrent'). This is the
 -- lower-level, element-agnostic primitive; for a specific control's hit area
--- (bounds inset by its margin), see @isControlHit@ in "Blink.Controls".
+-- (bounds inset by its margin), see 'Blink.Controls.isMouseOver'.
 isRegionHit :: UI e msg Bool
 isRegionHit = do
   r    <- getBounds

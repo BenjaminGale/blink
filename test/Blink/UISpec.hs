@@ -6,13 +6,31 @@ import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (forAll, choose)
 
-import Blink.Geometry (Point (..), Rectangle (..), uniform, noBorder, uniformBorder)
+import Control.Monad (when)
+import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform, noBorder, uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
-import Blink.Controls (control)
 import Blink.UI
 import Blink.Generators ()
+
+-- | Minimal stand-in for the pre-migration @Blink.Controls.control@ (now
+-- deleted): registers hover via the legacy single-owner 'setHovered' \/
+-- 'ixnHovered' field these tests specifically target, gated the same way —
+-- geometrically hit, and only when the mouse is free or this element itself
+-- holds capture. The current 'Blink.Controls.control' no longer touches
+-- this field at all (it uses the newer geometric hover model instead), so
+-- these 'Blink.UI'-level primitives need their own minimal exerciser.
+legacyHoverControl :: Ord e => e -> UI e msg () -> UI e msg ()
+legacyHoverControl eid content = do
+  free     <- isMouseFree
+  dragging <- isDragging eid
+  when (free || dragging) $ do
+    s     <- getStyle eid
+    r     <- getBounds
+    isHit <- withBounds (insetRect (styleMargin s) r) isRegionHit
+    when isHit $ setHovered eid
+  content
 
 data TwoElems = ElemA | ElemB deriving (Eq, Ord, Show)
 
@@ -92,14 +110,14 @@ spec = describe "Blink.UI" $ do
       let clipRect = Rectangle 0 0 100 50
           mouseOutsideClip = noInput { inputMousePosition = Point 50 75 }
       (_, ctx') <- runWith mouseOutsideClip
-        (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ()))
+        (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ legacyHoverControl () (pure ()))
       ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
     it "registers hover when the mouse is inside both the bounds and the clip region" $ do
       let clipRect = Rectangle 0 0 100 50
           mouseInsideClip = noInput { inputMousePosition = Point 50 25 }
       (_, ctx') <- runWith mouseInsideClip
-        (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ()))
+        (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ legacyHoverControl () (pure ()))
       ixnHovered (ctxInteraction ctx') `shouldBe` Just ()
 
     it "wraps draw commands in PushClip / PopClip" $ do
@@ -116,7 +134,7 @@ spec = describe "Blink.UI" $ do
       (_, ctx') <- runWith mouseOutside
         (withBounds outerClip $ clipToCurrent $
          withBounds innerClip $ clipToCurrent $
-         withBounds testBounds $ control () (pure ()))
+         withBounds testBounds $ legacyHoverControl () (pure ()))
       ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
   describe "withBounds" $ do
@@ -134,16 +152,16 @@ spec = describe "Blink.UI" $ do
 
     it "does not hover an element when another element holds capture" $ do
       let ctx = withCapture ElemB base
-      (_, ctx') <- runUI (control ElemA (pure ())) ctx
+      (_, ctx') <- runUI (legacyHoverControl ElemA (pure ())) ctx
       ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
     it "hovers an element when it is itself the captured element" $ do
       let ctx = withCapture ElemA base
-      (_, ctx') <- runUI (control ElemA (pure ())) ctx
+      (_, ctx') <- runUI (legacyHoverControl ElemA (pure ())) ctx
       ixnHovered (ctxInteraction ctx') `shouldBe` Just ElemA
 
     it "hovers an element when no capture is active" $ do
-      (_, ctx') <- runUI (control ElemA (pure ())) base
+      (_, ctx') <- runUI (legacyHoverControl ElemA (pure ())) base
       ixnHovered (ctxInteraction ctx') `shouldBe` Just ElemA
 
   it "getMessages returns emitted messages in emit order" $ do
@@ -370,6 +388,29 @@ spec = describe "Blink.UI" $ do
       (_, ctx) <- runWith buttonDown (setHovered ())
       ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
 
+  describe "setHot" $ do
+    it "acquires capture when the button is down and nothing is captured" $ do
+      (_, ctx) <- runWith buttonDown (setHot ())
+      ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
+
+    it "does not acquire capture when another element already holds it" $ do
+      (_, ctx0) <- runTwoElem (pure ())
+      let ctx = withCapture ElemB ctx0
+      (_, ctx') <- runUI (setHot ElemA) ctx
+      ixnCaptured (ctxInteraction ctx') `shouldBe` Just ElemB
+
+    it "does nothing when the button is not down" $ do
+      (_, ctx) <- run0 (setHot ())
+      ixnCaptured (ctxInteraction ctx) `shouldBe` Nothing
+
+    it "does not mark the element as hovered" $ do
+      (_, ctx) <- runWith buttonDown (setHot ())
+      ixnHovered (ctxInteraction ctx) `shouldBe` Nothing
+
+    it "makes the element dragging once capture is acquired" $ do
+      (dragging, _) <- runWith buttonDown (setHot () >> isDragging ())
+      dragging `shouldBe` True
+
   describe "focus" $ do
     it "getFocus returns Nothing initially" $ do
       (f, _) <- run0 getFocus
@@ -437,7 +478,7 @@ spec = describe "Blink.UI" $ do
       getDrawCommands ctx' `shouldBe` []
 
     it "nextFrameContext clears the hovered element from the previous frame" $ do
-      (_, ctx1) <- runWith mouseOnCenter (control () (pure ()))
+      (_, ctx1) <- runWith mouseOnCenter (legacyHoverControl () (pure ()))
       let ctx2 = nextFrameContext testBounds noInput ctx1
       ixnHovered (ctxInteraction ctx2) `shouldBe` Nothing
 
@@ -607,8 +648,64 @@ spec = describe "Blink.UI" $ do
       result `shouldBe` Nothing
 
     it "returns the element currently registered as hovered" $ do
-      (result, _) <- runWith mouseOnCenter (control () (pure ()) >> getHoveredElement)
+      (result, _) <- runWith mouseOnCenter (legacyHoverControl () (pure ()) >> getHoveredElement)
       result `shouldBe` Just ()
+
+  describe "mouse-over memory (registerMouseOver / wasMouseOverLastFrame)" $ do
+    it "is False when nothing has ever been registered" $ do
+      (result, _) <- run0 (wasMouseOverLastFrame ())
+      result `shouldBe` False
+
+    it "is still False for an element registered only this frame" $ do
+      (result, _) <- run0 (registerMouseOver () >> wasMouseOverLastFrame ())
+      result `shouldBe` False
+
+    it "is True on the frame after registration" $ do
+      (_, ctx) <- run0 (registerMouseOver ())
+      let ctx' = nextFrameContext testBounds noInput ctx
+      (result, _) <- runUI (wasMouseOverLastFrame ()) ctx'
+      result `shouldBe` True
+
+    it "is False two frames after registration if not re-registered" $ do
+      (_, ctx0) <- run0 (registerMouseOver ())
+      let ctx1 = nextFrameContext testBounds noInput ctx0
+      (_, ctx1') <- runUI (pure ()) ctx1
+      let ctx2 = nextFrameContext testBounds noInput ctx1'
+      (result, _) <- runUI (wasMouseOverLastFrame ()) ctx2
+      result `shouldBe` False
+
+    it "remembers every element registered in the same frame, not just the last" $ do
+      (_, ctx) <- runTwoElem (registerMouseOver ElemA >> registerMouseOver ElemB)
+      let ctx' = nextFrameContext testBounds noInput ctx
+      (a, _) <- runUI (wasMouseOverLastFrame ElemA) ctx'
+      (b, _) <- runUI (wasMouseOverLastFrame ElemB) ctx'
+      (a, b) `shouldBe` (True, True)
+
+    it "keeps results independent per element" $ do
+      (_, ctx) <- runTwoElem (registerMouseOver ElemA)
+      let ctx' = nextFrameContext testBounds noInput ctx
+      (a, _) <- runUI (wasMouseOverLastFrame ElemA) ctx'
+      (b, _) <- runUI (wasMouseOverLastFrame ElemB) ctx'
+      (a, b) `shouldBe` (True, False)
+
+  describe "isAnyMouseOver" $ do
+    it "is False when nothing has registered mouse-over this frame" $ do
+      (result, _) <- run0 isAnyMouseOver
+      result `shouldBe` False
+
+    it "is True once any element has registered mouse-over this frame" $ do
+      (result, _) <- run0 (registerMouseOver () >> isAnyMouseOver)
+      result `shouldBe` True
+
+    it "is True when a different element registered, not just the one checked" $ do
+      (result, _) <- runTwoElem (registerMouseOver ElemA >> isAnyMouseOver)
+      result `shouldBe` True
+
+    it "does not carry over from the previous frame without re-registering" $ do
+      (_, ctx) <- run0 (registerMouseOver ())
+      let ctx' = nextFrameContext testBounds noInput ctx
+      (result, _) <- runUI isAnyMouseOver ctx'
+      result `shouldBe` False
 
   describe "clampScrollPos properties" $ do
     prop "is idempotent" $ \x ->

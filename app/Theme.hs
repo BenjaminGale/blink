@@ -4,7 +4,10 @@ module Theme
   , darkTheme
   ) where
 
-import Blink
+import Blink.Controls
+import Blink.Geometry
+import Blink.Rendering
+import Blink.Style
 import qualified Data.Map.Strict as Map
 
 data Element = Label
@@ -14,7 +17,7 @@ data Element = Label
              | TextInput1
              | NumberInput1
              | PasswordInput1
-             | CheckboxBox1 | CheckboxBox2 | CheckboxBox3 | CheckboxBox4 | CheckboxBox5
+             | CheckboxN Int CheckboxPart
              | ProgressBar1 | ProgressBar2
              | Slider1 SliderPart
              | RadioOpt Int
@@ -143,8 +146,12 @@ mkProgressBarStyle p = StyleSet
       , styleBorderEdges  = noBorder
       }
 
-mkCheckboxBoxStyle :: Palette -> StyleSet
-mkCheckboxBoxStyle p = StyleSet
+-- | For a checkbox's glyph sub-part: the visible mark box (background and
+-- border the whole control used to share as one element, pre-migration),
+-- filling its 20x20 slot with minimal inset so the checkmark isn't
+-- squeezed.
+mkCheckboxGlyphStyle :: Palette -> StyleSet
+mkCheckboxGlyphStyle p = StyleSet
   { styleSetNormal   = base { styleBackground = palSurfaceInput p,         styleBorderColour = Just (palBorderDefault p) }
   , styleSetHovered  = base { styleBackground = palSurfaceInputHover p,    styleBorderColour = Just (palBorderHover p) }
   , styleSetPressed  = base { styleBackground = palSurfaceInput p,         styleBorderColour = Just (palAccent p) }
@@ -156,10 +163,56 @@ mkCheckboxBoxStyle p = StyleSet
       { styleBackground   = RGBA 0 0 0 1
       , styleTextColour   = palTextPrimary p
       , styleTextAlign    = AlignCenter
-      , styleMargin       = controlMargin
+      , styleMargin       = uniform 0
       , stylePadding      = uniform 2
       , styleBorderColour = Nothing
       , styleBorderEdges  = uniformBorder 1
+      }
+
+-- | For a checkbox's outer row (the whole clickable area spanning the
+-- glyph and label together) and its label sub-part: invisible in every
+-- state, so the glyph's own box\/border ('mkCheckboxGlyphStyle') is the
+-- only permanent chrome visible — matching the pre-migration checkbox,
+-- where only the mark itself was ever a bordered box, never the label or
+-- the row as a whole. The row still gets a focus ring border, since
+-- keyboard focus belongs to the row (the whole thing is one activation
+-- target), not to the glyph alone.
+mkCheckboxRowStyle :: Palette -> StyleSet
+mkCheckboxRowStyle p = StyleSet
+  { styleSetNormal   = base
+  , styleSetHovered  = base
+  , styleSetPressed  = base
+  , styleSetFocused  = base { styleBorderColour = Just (palAccent p) }
+  , styleSetDisabled = base
+  }
+  where
+    base = Style
+      { styleBackground   = RGBA 0 0 0 0
+      , styleTextColour   = palTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleMargin       = uniform 0
+      , stylePadding      = uniform 0
+      , styleBorderColour = Nothing
+      , styleBorderEdges  = uniformBorder 1
+      }
+
+mkCheckboxSubPartStyle :: Palette -> StyleSet
+mkCheckboxSubPartStyle p = StyleSet
+  { styleSetNormal   = base
+  , styleSetHovered  = base
+  , styleSetPressed  = base
+  , styleSetFocused  = base
+  , styleSetDisabled = base { styleTextColour = palTextMuted p }
+  }
+  where
+    base = Style
+      { styleBackground   = RGBA 0 0 0 0
+      , styleTextColour   = palTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleMargin       = uniform 0
+      , stylePadding      = uniform 0
+      , styleBorderColour = Nothing
+      , styleBorderEdges  = noBorder
       }
 
 mkLabelStyle :: Palette -> StyleSet
@@ -267,11 +320,6 @@ mkTheme p = Theme
       , (TextInput1,                mkTextInputStyle p)
       , (NumberInput1,              mkTextInputStyle p)
       , (PasswordInput1,            mkTextInputStyle p)
-      , (CheckboxBox1,              mkCheckboxBoxStyle p)
-      , (CheckboxBox2,              mkCheckboxBoxStyle p)
-      , (CheckboxBox3,              mkCheckboxBoxStyle p)
-      , (CheckboxBox4,              mkCheckboxBoxStyle p)
-      , (CheckboxBox5,              mkCheckboxBoxStyle p)
       , (Slider1 SliderTrack,       mkScrollTrackStyle p)
       , (Slider1 SliderThumb,       mkScrollThumbStyle p)
       ] ++ [(RadioOpt i,                        mkRadioItemStyle p) | i <- [0..9]]
@@ -282,6 +330,13 @@ mkTheme p = Theme
            , (ScrollRegion1 (ViewportV ScrollThumb), mkScrollThumbStyle p)
            , (ScrollList2 (ListBoxScroll ScrollTrack), mkScrollTrackStyle p)
            , (ScrollList2 (ListBoxScroll ScrollThumb), mkScrollThumbStyle p)
+           ]
+        ++ [ style
+           | i <- [1 .. 5]
+           , style <- [ (CheckboxN i CheckboxBox,   mkCheckboxRowStyle p)
+                      , (CheckboxN i CheckboxGlyph, mkCheckboxGlyphStyle p)
+                      , (CheckboxN i CheckboxLabel, mkCheckboxSubPartStyle p)
+                      ]
            ]
   , themeDefaultStyle = mkBtnStyle p
   }
