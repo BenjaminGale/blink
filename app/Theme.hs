@@ -4,7 +4,7 @@ module Theme
   , darkTheme
   ) where
 
-import Blink.Controls2
+import Blink.Controls
 import Blink.Geometry
 import Blink.Rendering
 import Blink.Style

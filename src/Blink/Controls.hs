@@ -1,304 +1,505 @@
 {-# LANGUAGE OverloadedStrings #-}
-{- |
-Module: Blink.Controls
-
-= Purpose
-
-The standard widget library, built on top of "Blink.UI". Where "Blink.UI"
-provides the render loop, input state, and low-level drawing primitives, and
-"Blink.Layout" provides sizing and arrangement, this module fuses the two
-with interaction (hover, focus, tab order, drag) and style-driven chrome
-rendering to produce ready-to-use controls — buttons, checkboxes, sliders,
-scrollable regions, and so on.
-
-This module is organised in three tiers, each building on the last. Read
-them in order:
-
-  1. /Concepts/ (this section) — shared vocabulary used throughout the rest
-     of the module.
-  2. /Building blocks/ — the primitives every control below is assembled
-     from. Reach for these when composing a custom control that isn't
-     provided directly.
-  3. /Controls/ — the ready-to-use widgets themselves, grouped by kind. Each
-     one's Haddock notes which building blocks it's made of.
-
-== Element ID hierarchy
-
-Every control takes an element ID of type @e@, used as the key for styling
-("Blink.Style"), interaction state (hover, focus, drag), and persisted
-control state (scroll position, text selection). A simple screen might use
-one sum-type constructor per control:
-
-@
-data Element = NameInput | SaveButton | VolumeSlider
-  deriving (Eq, Ord, Show)
-@
-
-Composite controls — those made of several interactive parts, like
-'scrollBar' (a track plus two buttons) or 'selector' (one entry per item) —
-take a /tagging function/ that maps a part to its own element ID, rather
-than a single ID. By convention this parameter is named @mkId@. This lets
-each part be styled, hit-tested, and focused independently while keeping the
-whole composite addressable through one sum-type branch of the caller's
-element type:
-
-@
-data Element = ... | VScroll ScrollBarPart
-              | ItemList Int
-
-scrollBar VScroll Vertical 0.3 []                        -- mkId = VScroll
-selector  ItemList items selected [onSelect Chose] renderItem  -- mkId = ItemList
-@
-
-The element ID space therefore forms a tree that mirrors the widget tree:
-each composite control's sub-parts (see 'ScrollBarPart', 'SliderPart',
-'ViewportPart') nest inside the caller's own element type the same way
-the widgets they identify nest inside the caller's UI tree. A 'viewport'
-nested inside a custom panel, for example, produces IDs like
-@MyPanel (ViewportV ScrollThumb)@.
-
-== Chrome and the box model
-
-/Chrome/ is the style-driven decoration around a control's content: margin,
-border, background, and padding, applied in that order from the outside in,
-the same as the CSS box model.
-
->  +----------------- margin -----------------+
->  |  +-------------- border --------------+  |
->  |  |  +---------- padding -----------+  |  |
->  |  |  |                              |  |  |
->  |  |  |           content            |  |  |
->  |  |  |                              |  |  |
->  |  |  +------------------------------+  |  |
->  |  +------------------------------------+  |
->  +------------------------------------------+
-
-These insets and colours come from a control's 'StyleSet' (see
-"Blink.Style"), which holds a normal and focused variant. 'renderChrome'
-applies margin, background, and border, then runs its content action within
-the padded content rectangle — this is what @content@ means for every
-control below. 'measureChrome' returns the total width\/height overhead this
-adds, for callers that need to size a control from the inside out.
-
-== Activation pattern
-
-Input controls treat "the user chose this" uniformly: a left-click, or one
-of a designated set of keys pressed while the control holds keyboard focus —
-provided the control isn't disabled. 'isActivatedBy' implements this test;
-'activatable' pairs it with 'control' so a control's draw action and its
-activation result are produced together. 'button' is the direct expression
-of this pattern; 'checkboxMark' and the per-item handling in 'selector' both
-build on it too.
-
-== Attributes
-
-Every control takes required, type-specific data positionally, followed by
-one attribute list mixing event handlers and configuration (see 'Attr',
-'fire', 'configure'):
-
-@
-textInputControl NameInput (userName model) [onInput NameChanged]
-@
-
-Handlers are registered with functions like 'onClick' and 'onInput', each
-producing an @Attr@ that maps one of the control's own event constructors to
-a message. The host reads the emitted messages back once the frame completes
-and folds them into its own state via "Blink.Update"; the control reads the
-new value back from the application data on the next frame. This keeps all
-application data outside the UI tree.
-
-@Config@ attrs (like 'arrowStep' and 'inputFilter') are a separate concern
-from layout. "Blink.Layout"'s @Layout@ value, supplied by the parent
-container at the call site, controls a control's size and position within
-its container; a @Config@ attr controls the control's own presentation or
-behaviour, independent of where it's placed. Each control's @Config@ type is
-its own — @arrowStep@ only applies to 'slider', @inputFilter@ only to
-'textInputControl' — there is no type shared across every control's
-configuration, the same way there is no type shared across every control's
-events.
-
-== Control state
-
-Controls whose state is presentational rather than application data — a
-scrollbar's position, for example — read and write it directly through the
-primitives in "Blink.UI": 'getScrollState'\/'getSelection' to read, and
-'emitUi' with a 'UiEffect' ('ScrollTo', 'ScrollBy', 'SetSelectionAt') to
-write. Writes are deferred — applied between frames by 'applyUiEffects' —
-rather than taking effect immediately. State is keyed by element ID,
-populates lazily on first write, and persists across frames inside the
-'UIContext'. The application never sees the traffic.
--}
 module Blink.Controls
-  ( -- * Attributes and events
-    Attr (..)
+  ( Attr
   , configure
   , fire
-  , onAny
-  , controlEvents
-  , controlEventsAfter
+  , onEvent
+  , configAny
+  , post
+  , postWith
+  , perform
+  , performWith
+  , forward
+  , translate
+  , translateWith
   , ControlEvent (..)
   , HasControlEvent (..)
-    -- * Building controls
-  , control
+  , onFocusGained
+  , onFocusLost
+  , onMouseEnter
+  , onMouseExit
+  , FocusOnClick (..)
+  , tabStop
+  , focusOnClick
+  , HasTextConfig (..)
+  , text
+  , isMouseOver
+  , isPressed
+  , getStyle
   , renderChrome
   , measureChrome
-  , activatable
-  , rangeControl
-  , focusRing
-  , isActivatedBy
-  , isControlHit
-  , whenFocused
+  , applyMouseOver
+  , applyFocus
+  , control
   , isKeyPressed
-    -- * Display
+  , whenFocused
+  , isActivatedBy
+  , activatable
+  , LabelEvent
   , label
   , ProgressValue (..)
   , progressBar
   , bandSpeed
-    -- * Input
+  , progress
   , button
-  , ButtonEvent (..)
+  , ButtonEvent (Clicked)
   , onClick
-  , onClickTo
-  , checkbox
-  , checkboxMark
-  , CheckboxEvent (..)
+  , CheckboxPart (..)
+  , CheckboxEvent (Toggled)
   , onToggle
-  , radioGroup
-  , selector
-  , SelectorEvent (..)
-  , onSelect
-  , textInputControl
-  , TextEvent (..)
+  , checked
+  , renderCheckboxGlyph
+  , checkbox
+  , TextEvent (Edited, Submitted)
   , onInput
   , onSubmit
   , inputFilter
   , displayFilter
-    -- * Scroll
-  , ScrollBarPart (..)
-  , scrollBar
-  , ScrollBarEvent (..)
+  , textInputControl
   , thumbRect
   , mouseToTrackPos
-    -- * Viewport
-  , ViewportPart (..)
-  , viewport
-  , scrollRegionBarSize
-    -- * Slider
   , SliderPart (..)
-  , slider
-  , SliderEvent (..)
+  , SliderEvent (Changed)
   , onChange
   , arrowStep
-    -- * Virtualized content
+  , HasThumbRatioConfig (..)
+  , thumbRatio
+  , HasOrientationConfig (..)
+  , orientation
+  , value
+  , slider
+  , ScrollBarPart (..)
+  , ScrollBarEvent
+  , scrollBar
+  , ViewportPart (..)
+  , scrollRegionBarSize
+  , contentSize
+  , viewport
   , virtualContent
+  , SelectorEvent (Selected)
+  , onSelect
+  , items
+  , selected
+  , selector
+  , radioGroup
   , ListBoxPart (..)
   , listBox
   ) where
 
-import Control.Monad (when, forM_)
-import Data.List (foldl', find)
-import Data.Maybe (isJust, isNothing)
+import Control.Monad (forM_, guard, when)
+import Data.Foldable (asum)
+import Data.Functor (($>))
+import Data.List (find, foldl')
+import Data.Maybe (fromMaybe, isJust, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Void (Void)
+
 import Blink.Geometry (Alignment (..), Insets (..), Orientation (..), Point (..), Rectangle (..), Size (..), borderInsets, insetRect, noBorder)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
-import Blink.Layout (Layout (..), Length (..), BoxConfig (..), hBox, vBox, defaultBoxConfig)
+import Blink.Layout (BoxConfig (..), Layout (..), Length (..), defaultBoxConfig, hBox, vBox)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
-import Blink.UI
+import Blink.UI hiding (getStyle, isPressed)
 
--- | The lifecycle events every focusable control shares, regardless of what
--- else it reports. Raised by 'controlEvents' by comparing focus just before
--- and just after a control's own hover\/focus\/tab handling runs.
 data ControlEvent
   = FocusGained
   | FocusLost
+  | MouseEntered
+  | MouseExited
   deriving (Eq, Show)
 
--- | Lets a control's own event type carry the shared 'ControlEvent's
--- alongside its domain-specific ones (a click, an edit), so combinators
--- like a hypothetical @onFocusLost@ can be written once against any @ev@
--- rather than once per control.
 class HasControlEvent ev where
   liftControl  :: ControlEvent -> ev
   matchControl :: ev -> Maybe ControlEvent
 
--- | One attribute in a control's attribute list: either an event handler
--- ('On', usually built with 'onClick', 'onInput', etc.) or a piece of
--- configuration ('Config', built by a control-specific attribute such as
--- 'inputFilter'). A single list carries both, in any order.
---
--- @cfg@ is each control's own configuration type (e.g. 'TextInputConfig'),
--- not one type shared across every control — a 'Config' attr built for one
--- control's @cfg@ cannot be passed to a control expecting a different one,
--- the same way an 'On' handler built for one control's @ev@ cannot be
--- passed to a control expecting a different event type. A control with no
--- configuration (e.g. 'label') simply leaves @cfg@ unconstrained.
+data FocusOnClick e
+  = FocusSelf
+  | FocusTarget e
+  | NoFocus
+  deriving (Eq, Show)
+
+-- | Configuration shared by every control, regardless of that control's own
+-- 'Config': whether Tab lands on it ('tabStop') and what clicking it does to
+-- focus ('focusOnClick').
+data ControlConfig e = ControlConfig
+  { ccTabStop      :: Bool
+  , ccFocusOnClick :: FocusOnClick e
+  }
+
+defaultControlConfig :: ControlConfig e
+defaultControlConfig = ControlConfig { ccTabStop = True, ccFocusOnClick = FocusSelf }
+
 data Attr e ev msg cfg
   = On (ev -> [Out e msg])
   | Config (cfg -> cfg)
+  | Shared (ControlConfig e -> ControlConfig e)
 
--- | Folds the 'Config' attrs in an attribute list onto a base configuration,
--- left to right; 'On' attrs are ignored.
 configure :: cfg -> [Attr e ev msg cfg] -> cfg
 configure = foldl' apply
   where
     apply cfg (Config f) = f cfg
-    apply cfg (On _)     = cfg
+    apply cfg _          = cfg
 
--- | Runs every 'On' handler in @attrs@ against every event in @evs@,
--- emitting the messages and\/or 'UiEffect's each one returns. Deterministic:
--- control event order first, handler-list order within an event — so if two
--- attrs both handle the same event, they fire in the order they were
--- written.
-fire :: [Attr e ev msg cfg] -> [ev] -> UI e msg ()
-fire attrs evs = forM_ evs $ \ev -> forM_ handlers $ \h -> mapM_ dispatch (h ev)
+controlConfig :: [Attr e ev msg cfg] -> ControlConfig e
+controlConfig = foldl' apply defaultControlConfig
   where
-    handlers = [h | On h <- attrs]
+    apply cc (Shared f) = f cc
+    apply cc _          = cc
+
+fire :: [Attr e ev msg cfg] -> [ev] -> UI e msg ()
+fire attrs evs = forM_ evs $ \ev -> mapM_ dispatch (concatMap ($ ev) [h | On h <- attrs])
+  where
     dispatch (OutMsg msg) = emit msg
     dispatch (OutUi eff)  = emitUi eff
 
--- | Escape hatch: handle an event with full access to 'Out', for a handler
--- that needs to fan out to both a message and a 'UiEffect' — or for
--- internal handlers, written where no @msg@ value is in scope, that only
--- ever emit effects.
-onAny :: (ev -> [Out e msg]) -> Attr e ev msg cfg
-onAny = On
+onEvent :: (ev -> [Out e msg]) -> Attr e ev msg cfg
+onEvent = On
 
--- | Runs 'applyHover', 'applyFocus', and 'applyTabNavigation' for the given
--- element, then reports 'FocusGained'\/'FocusLost' via 'controlEventsAfter'.
-controlEvents :: (Ord e, HasControlEvent ev) => e -> UI e msg [ev]
-controlEvents eid = do
+configAny :: (cfg -> cfg) -> Attr e ev msg cfg
+configAny = Config
+
+-- | Emits @msg@, ignoring whatever data the triggering event carried.
+post :: msg -> a -> [Out e msg]
+post msg = const [OutMsg msg]
+
+-- | Emits @f a@ — uses the triggering event's own data to build the message.
+postWith :: (a -> msg) -> a -> [Out e msg]
+postWith f a = [OutMsg (f a)]
+
+-- | Queues a 'UiEffect', ignoring whatever data the triggering event
+-- carried. For controls (like 'scrollBar') that write their own state
+-- directly to the 'UIContext' rather than routing it through the app's
+-- model.
+perform :: UiEffect e -> a -> [Out e msg]
+perform eff = const [OutUi eff]
+
+-- | Queues @f a@ as a 'UiEffect' — uses the triggering event's own data to
+-- build it.
+performWith :: (a -> UiEffect e) -> a -> [Out e msg]
+performWith f a = [OutUi (f a)]
+
+-- | Re-raises a sub-control's lifecycle event against another attrs list
+-- under the same name — e.g. @onFocusLost (forward attrs)@ calls whatever
+-- 'onFocusLost' handler (if any) is in @attrs@. Lets a composite (like
+-- 'scrollBar') mirror an inner control's lifecycle events as its own,
+-- reusing whatever focus\/hover tracking the inner control already did
+-- instead of redoing it.
+forward :: HasControlEvent ev => [Attr e ev msg cfg] -> ControlEvent -> [Out e msg]
+forward attrs ce = concatMap ($ liftControl ce) [h | On h <- attrs]
+
+-- | Re-raises @ev@ against another attrs list, ignoring whatever data the
+-- triggering event carried — for triggering a *different* event on the
+-- parent than the one that actually fired.
+translate :: [Attr e ev msg cfg] -> ev -> a -> [Out e msg]
+translate attrs ev = const (concatMap ($ ev) [h | On h <- attrs])
+
+-- | Maps the triggering event through @f@ and raises the result against
+-- another attrs list — for translating a sub-control's event, using its own
+-- data, into a different event on the parent (unlike 'translate', which
+-- always raises the same fixed event regardless of what triggered it).
+translateWith :: (subEv -> ev) -> [Attr e ev msg cfg] -> subEv -> [Out e msg]
+translateWith f attrs subEv = concatMap ($ f subEv) [h | On h <- attrs]
+
+onFocusGained :: HasControlEvent ev => (ControlEvent -> [Out e msg]) -> Attr e ev msg cfg
+onFocusGained reaction = onEvent $ \ev -> case matchControl ev of
+  Just FocusGained -> reaction FocusGained
+  _                -> []
+
+onFocusLost :: HasControlEvent ev => (ControlEvent -> [Out e msg]) -> Attr e ev msg cfg
+onFocusLost reaction = onEvent $ \ev -> case matchControl ev of
+  Just FocusLost -> reaction FocusLost
+  _              -> []
+
+onMouseEnter :: HasControlEvent ev => (ControlEvent -> [Out e msg]) -> Attr e ev msg cfg
+onMouseEnter reaction = onEvent $ \ev -> case matchControl ev of
+  Just MouseEntered -> reaction MouseEntered
+  _                 -> []
+
+onMouseExit :: HasControlEvent ev => (ControlEvent -> [Out e msg]) -> Attr e ev msg cfg
+onMouseExit reaction = onEvent $ \ev -> case matchControl ev of
+  Just MouseExited -> reaction MouseExited
+  _                -> []
+
+tabStop :: Bool -> Attr e ev msg cfg
+tabStop b = Shared $ \cc -> cc { ccTabStop = b }
+
+focusOnClick :: FocusOnClick e -> Attr e ev msg cfg
+focusOnClick foc = Shared $ \cc -> cc { ccFocusOnClick = foc }
+
+-- | Implemented by any control's own config type that carries displayed
+-- text, letting 'text' work uniformly across them (same pattern as
+-- 'HasControlEvent' for the shared lifecycle events) rather than needing a
+-- differently-named attribute per control.
+class HasTextConfig cfg where
+  setText :: Text -> cfg -> cfg
+
+-- | Sets the text a control displays — a caption for 'label'\/'button'\/
+-- 'checkbox', or the current value for 'textInputControl'. Defaults to
+-- @\"\"@ when not given.
+text :: HasTextConfig cfg => Text -> Attr e ev msg cfg
+text t = configAny (setText t)
+
+-- | 'True' when the mouse is over the element's background rectangle (bounds
+-- inset by its margin) — the control-specific hit area. Built on 'isRegionHit';
+-- a pure geometric test, so unlike the legacy single-owner hover field, many
+-- elements can each independently be "over" in the same frame.
+--
+-- Uses the element's /normal/ margin, not the margin of whichever style
+-- variant is currently active: 'getStyle' (below) determines which variant
+-- is active by calling this function, so depending on the resolved style
+-- here would be circular. Margin defining the hit region's own boundary
+-- shouldn't depend on the interaction state the hit test is being used to
+-- determine anyway — real themes don't vary margin by state.
+isMouseOver :: Ord e => e -> UI e msg Bool
+isMouseOver eid = do
+  ss <- getStyleSet eid
+  r  <- getBounds
+  withBounds (insetRect (styleMargin (styleSetNormal ss)) r) isRegionHit
+
+-- | Like 'Blink.UI.isPressed', but resolving from geometric 'isMouseOver'
+-- instead of the legacy single-owner hover field this module never writes
+-- to (see 'getStyle').
+isPressed :: Ord e => e -> UI e msg Bool
+isPressed eid = do
+  disabled <- isDisabled
+  hit      <- isMouseOver eid
+  down     <- isButtonDown
+  pure (not disabled && hit && down)
+
+-- | Like 'Blink.UI.getStyle', but resolving the hovered\/pressed priority
+-- from geometric 'isMouseOver'\/'isPressed' instead of the legacy
+-- single-owner hover field ('Blink.UI.isHovered'\/'Blink.UI.ixnHovered').
+-- Nothing in this module ever calls 'Blink.UI.setHovered', so that field is
+-- permanently empty here — resolving styling through it would mean
+-- @styleSetHovered@\/@styleSetPressed@ never activate for any control built
+-- on this module, regardless of actual mouse position.
+getStyle :: Ord e => e -> UI e msg Style
+getStyle eid = do
+  styles <- getStyleSet eid
+  isDis  <- isDisabled
+  isHov  <- isMouseOver eid
+  isFoc  <- isFocused eid
+  isPrs  <- isPressed eid
+  let candidates =
+        [ guard isDis $> styleSetDisabled styles
+        , guard isPrs $> styleSetPressed  styles
+        , guard isHov $> styleSetHovered  styles
+        , guard isFoc $> styleSetFocused  styles
+        ]
+  pure $ fromMaybe (styleSetNormal styles) (asum candidates)
+
+-- | Registers the element as moused over and as hot (for drag continuation)
+-- when the mouse is within its bounds, and fires 'onMouseEnter'\/'onMouseExit'
+-- by comparing against last frame's result. Purely geometric plus a disabled
+-- check — no exclusion for a different element's drag being in progress:
+-- unlike the legacy single-owner hover field, geometric hover has no shared
+-- slot for one element's drag to contend over, so that exclusion (present in
+-- the pre-migration code) no longer serves a purpose. 'setHot' still guards
+-- its own capture acquisition independently, so a drag can't be stolen.
+applyMouseOver :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg cfg] -> UI e msg ()
+applyMouseOver eid attrs = do
+  wasOver  <- wasMouseOverLastFrame eid
+  disabled <- isDisabled
+  hit      <- isMouseOver eid
+  let isOver = not disabled && hit
+  when isOver $ do
+    registerMouseOver eid
+    setHot eid
+  fire attrs $ concat
+    [ [liftControl MouseEntered | not wasOver && isOver]
+    , [liftControl MouseExited  | wasOver && not isOver]
+    ]
+
+-- | Applies focus rules (take focus, hand off to a target, or leave it, per
+-- 'focusOnClick') together with Tab\/Shift-Tab navigation (per 'tabStop'),
+-- firing 'onFocusGained'\/'onFocusLost'. These are one primitive, not two,
+-- because a Tab press's effect on this element's own focus must be visible
+-- in the same before\/after bracket as the click\/retain logic for those
+-- events to fire correctly — split into two separately-callable primitives,
+-- a Tab-driven loss would go undetected: 'applyFocus' alone would fire
+-- nothing (it returns before the loss happens), and by the time anything
+-- calls it again, this same element's own auto-claim (nothing is focused,
+-- so I'll take it) would have silently reclaimed focus first, masking the
+-- transition entirely.
+applyFocus :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg cfg] -> UI e msg ()
+applyFocus eid attrs = do
   wasFocused <- isFocused eid
-  applyHover eid
-  applyFocus eid
-  applyTabNavigation eid
-  controlEventsAfter eid wasFocused
-
--- | 'FocusGained'\/'FocusLost' derived from whether @eid@ was focused
--- before some action and is focused now. Used directly by controls built on
--- 'control'\/'rangeControl', which already ran that action.
-controlEventsAfter :: (Ord e, HasControlEvent ev) => e -> Bool -> UI e msg [ev]
-controlEventsAfter eid wasFocused = do
+  applyFocusRules
+  applyTabKeys wasFocused
   nowFocused <- isFocused eid
-  pure $ concat
+  fire attrs $ concat
     [ [liftControl FocusGained | not wasFocused && nowFocused]
     , [liftControl FocusLost   | wasFocused && not nowFocused]
     ]
+  where
+    cc = controlConfig attrs
 
--- | Read-only text display. Renders @text@ within the element's content
--- rectangle using the active style. Does not participate in interaction or
--- keyboard navigation.
-label :: Ord e
-      => e     -- ^ element ID
-      -> Text  -- ^ text to display
-      -> [Attr e Void msg cfg]  -- ^ attributes; 'label' is non-interactive, so
-                             -- only 'Config' attrs are meaningful (none yet)
-      -> UI e msg ()
-label eid text _attrs = renderChrome eid $ do
+    -- Takes focus on a click, hands it to a target, or leaves it, per 'focusOnClick'.
+    applyFocusRules = whenEnabled $ do
+      currentFocus <- getFocus
+      isHit        <- isMouseOver eid
+      released     <- isButtonReleased
+      captured     <- getCapturedElement
+      let nothingIsFocused = isNothing currentFocus
+          isRetainingFocus = currentFocus == Just eid
+          isDragRelease    = released && isJust captured && captured /= Just eid
+          wasClicked       = isHit && released && not isDragRelease
+          autoClaim        = case ccFocusOnClick cc of
+            FocusSelf -> nothingIsFocused && not isDragRelease
+            _         -> False
+      if isRetainingFocus || autoClaim
+        then setFocus eid
+        else when (wasClicked && not isDragRelease) $ case ccFocusOnClick cc of
+          FocusSelf     -> setFocus eid
+          FocusTarget t -> setFocus t
+          NoFocus       -> pure ()
+
+    -- Handles Tab and Shift-Tab and registers the element as a tab stop,
+    -- subject to 'tabStop'. An element with @tabStop False@ still gives up
+    -- focus normally on Tab if it happens to hold it, but is skipped by
+    -- Shift-Tab from whatever comes after it, since it never records itself
+    -- as the previous tab stop.
+    --
+    -- Uses 'wasFocused' (captured before 'applyFocusRules' ran, not a fresh
+    -- 'isFocused' read) so a same-frame auto-claim — nothing was focused,
+    -- this element just took it — isn't immediately undone by the very Tab
+    -- press that made nothing-was-focused true in the first place. Without
+    -- this, wraparound could never complete: Tab off the last control
+    -- clears focus with nothing left this frame to auto-claim it; next
+    -- frame's Tab press lets the first control auto-claim (nothing is
+    -- focused) — but a fresh 'isFocused' read here would then see that
+    -- claim and immediately clear it again, forever.
+    applyTabKeys wasFocused = whenEnabled $ do
+      input    <- getInput
+      prevCtrl <- getPreviousTabStop
+      let tabKey          = find (\e -> key e == KeyTab) (inputKeyEvents input)
+          tabPressed      = maybe False (\e -> Shift `notElem` modifiers e) tabKey
+          shiftTabPressed = maybe False (\e -> Shift `elem`    modifiers e) tabKey
+      when (wasFocused && tabPressed) $ do
+        clearFocus
+        consumeKey KeyTab
+      when (wasFocused && shiftTabPressed) $
+        forM_ prevCtrl $ \prev -> do
+          setFocus prev
+          consumeKey KeyTab
+      when (ccTabStop cc) $ setPreviousTabStop eid
+
+measureChrome :: Ord e => e -> UI e msg (Length, Length)
+measureChrome eid = do
   style <- getStyle eid
-  drawText (styleTextColour style) (styleTextAlign style) text
+  let m  = styleMargin style
+      p  = stylePadding style
+      be = case styleBorderColour style of
+             Just _  -> borderInsets (styleBorderEdges style)
+             Nothing -> borderInsets noBorder
+      dw = leftInset m + rightInset m + leftInset be + rightInset be + leftInset p + rightInset p
+      dh = topInset m  + bottomInset m  + topInset be + bottomInset be + topInset p  + bottomInset p
+  pure (Exactly dw, Exactly dh)
+
+renderChrome :: Ord e => e -> UI e msg () -> UI e msg ()
+renderChrome eid content = do
+  style <- getStyle eid
+  r     <- getBounds
+  let bg          = insetRect (styleMargin style) r
+      borderRect  = case styleBorderColour style of
+                      Just _  -> insetRect (borderInsets (styleBorderEdges style)) bg
+                      Nothing -> bg
+      contentRect = insetRect (stylePadding style) borderRect
+      inner       = withBounds contentRect $ clipToCurrent content
+  withBounds bg $
+    withBackground (styleBackground style) $
+    case styleBorderColour style of
+      Just c  -> withBorder c (styleBorderEdges style) inner
+      Nothing -> inner
+
+-- | The standard entry point for interactive controls: applies mouse-over
+-- (with hot/drag-continuation), focus and tab navigation, then renders
+-- chrome around @content@.
+control :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg cfg] -> UI e msg () -> UI e msg ()
+control eid attrs content = do
+  applyMouseOver eid attrs
+  applyFocus eid attrs
+  renderChrome eid content
+
+-- | 'True' when the element holds focus and a key event for @k@ is present
+-- in the current frame's input queue.
+isKeyPressed :: Eq e => e -> Key -> UI e msg Bool
+isKeyPressed eid k = do
+  hasFoc  <- isFocused eid
+  pressed <- any (\e -> key e == k) . inputKeyEvents <$> getInput
+  pure (hasFoc && pressed)
+
+-- | Runs @action@ only when the given element holds keyboard focus.
+whenFocused :: Eq e => e -> UI e msg () -> UI e msg ()
+whenFocused eid action = isFocused eid >>= \f -> when f action
+
+-- | 'True' when the element is a valid click target this frame: not
+-- disabled, eligible for mouse-over (mouse free, or this element itself
+-- holds capture), geometrically hit, and the button was just released.
+-- Mirrors 'applyMouseOver's own gating, so a click can't activate a control
+-- while a different control is mid-drag. Not exported: 'isMouseOver' is
+-- geometric and has no registration state of its own to query directly the
+-- way the legacy @isHovered@ did, so this is assembled fresh here rather
+-- than reused from "Blink.UI".
+isClickedOver :: Ord e => e -> UI e msg Bool
+isClickedOver eid = do
+  disabled <- isDisabled
+  free     <- isMouseFree
+  dragging <- isDragging eid
+  hit      <- isMouseOver eid
+  released <- isButtonReleased
+  pure (not disabled && (free || dragging) && hit && released)
+
+-- | 'True' when the element was clicked, or one of @keys@ was pressed while
+-- it held focus, and it is not disabled.
+isActivatedBy :: Ord e => e -> [Key] -> UI e msg Bool
+isActivatedBy eid keys = do
+  clicked  <- isClickedOver eid
+  keyPress <- or <$> mapM (isKeyPressed eid) keys
+  disabled <- isDisabled
+  pure (not disabled && (clicked || keyPress))
+
+-- | 'control' plus 'isActivatedBy': runs @draw@ as a normal interactive
+-- control, then reports whether it was activated (a click or one of @keys@)
+-- this frame.
+activatable :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg cfg] -> [Key] -> UI e msg () -> UI e msg Bool
+activatable eid attrs keys draw = do
+  control eid attrs draw
+  isActivatedBy eid keys
+
+-- | Events reported by 'label': just a lifecycle event via 'LabelControl'
+-- (see 'ControlEvent') — 'label' has no domain events of its own, but still
+-- needs a concrete event type to be a 'control' and raise the shared ones.
+newtype LabelEvent = LabelControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent LabelEvent where
+  liftControl = LabelControl
+  matchControl (LabelControl ce) = Just ce
+
+-- | Configuration for 'label', set via 'text'. Defaults to @\"\"@.
+newtype LabelConfig = LabelConfig { labelConfigText :: Text }
+
+defaultLabelConfig :: LabelConfig
+defaultLabelConfig = LabelConfig { labelConfigText = "" }
+
+instance HasTextConfig LabelConfig where
+  setText t cfg = cfg { labelConfigText = t }
+
+-- | Text in the resolved style, set via 'text'. A full 'control', so it
+-- registers mouse-over — but unlike every other control here, it never
+-- takes keyboard focus itself: defaults to @'tabStop' False@ and
+-- @'focusOnClick' 'NoFocus'@, since a plain label has no reason to hold
+-- focus. It can still hand focus /elsewhere/ — a composite like a labelled
+-- field can pass @'focusOnClick' ('FocusTarget' input)@ to redirect a click
+-- on the caption onto its input — an explicit attr always overrides these
+-- defaults (they're consulted first, so a later attr in the list wins).
+label :: Ord e => e -> [Attr e LabelEvent msg LabelConfig] -> UI e msg ()
+label eid attrs = control eid (tabStop False : focusOnClick NoFocus : attrs) $ do
+  style <- getStyle eid
+  let cfg = configure defaultLabelConfig attrs
+  drawText (styleTextColour style) (styleTextAlign style) (labelConfigText cfg)
 
 -- | The value passed to 'progressBar'.
 data ProgressValue
@@ -308,238 +509,59 @@ data ProgressValue
     -- ^ Unknown progress: a band animates continuously across the bar.
   deriving (Eq, Show)
 
--- | Configuration for 'progressBar', set via 'bandSpeed'.
-newtype ProgressBarConfig = ProgressBarConfig { configBandSpeed :: Double }
+-- | Configuration for 'progressBar', set via 'bandSpeed' and 'progress'.
+data ProgressBarConfig = ProgressBarConfig
+  { configBandSpeed     :: Double
+  , progressBarConfigValue :: ProgressValue
+  }
 
 defaultProgressBarConfig :: ProgressBarConfig
-defaultProgressBarConfig = ProgressBarConfig { configBandSpeed = 0.5 }
+defaultProgressBarConfig = ProgressBarConfig { configBandSpeed = 0.5, progressBarConfigValue = Progress 0 }
 
 -- | How fast the band sweeps across an 'Indeterminate' bar, in bar-widths
 -- per second. Defaults to 0.5.
 bandSpeed :: Double -> Attr e ev msg ProgressBarConfig
-bandSpeed v = Config $ \cfg -> cfg { configBandSpeed = v }
+bandSpeed v = configAny $ \cfg -> cfg { configBandSpeed = v }
 
--- | A read-only progress indicator. Pass 'Progress' for a determinate bar or
--- 'Indeterminate' for a continuously animating band indicating activity of
--- unknown duration. The animation runs only on ticker frames; 'requiresAnimation'
--- keeps the ticker active while an 'Indeterminate' bar is visible.
-progressBar :: Ord e
-            => e             -- ^ element ID
-            -> ProgressValue -- ^ determinate or indeterminate value
-            -> [Attr e Void msg ProgressBarConfig]  -- ^ attributes; 'progressBar'
-                             -- reports no events, so only 'Config' attrs
-                             -- (currently 'bandSpeed') are meaningful
-            -> UI e msg ()
-progressBar eid (Progress value) _attrs = renderChrome eid $ do
-  style <- getStyle eid
-  r     <- getBounds
-  let clamped  = max 0 (min 1 value)
-      fillRect' = r { rectWidth = rectWidth r * clamped }
-  withBounds fillRect' $ fillRect (styleTextColour style)
-progressBar eid Indeterminate attrs = do
-  requiresAnimation
-  renderChrome eid $ do
-    r       <- getBounds
-    style   <- getStyle eid
-    elapsed <- getAnimElapsed
-    let speed = configBandSpeed (configure defaultProgressBarConfig attrs)
-        t     = realToFrac elapsed * speed
-        phase = t - fromIntegral (floor t :: Int)
-        bandW = rectWidth r * 0.3
-        left  = rectX r - bandW + (rectWidth r + bandW) * phase
-    withBounds (r { rectX = left, rectWidth = bandW }) $
-      fillRect (styleTextColour style)
+-- | Sets the bar to 'Progress' (determinate) or 'Indeterminate'. Defaults
+-- to @'Progress' 0@.
+progress :: ProgressValue -> Attr e ev msg ProgressBarConfig
+progress p = configAny $ \cfg -> cfg { progressBarConfigValue = p }
 
--- | Events reported by 'checkboxMark' and 'checkbox': 'Toggled' with the new
--- checked state when activated, or a lifecycle event via 'CheckboxControl'
--- (see 'ControlEvent').
-data CheckboxEvent = Toggled Bool | CheckboxControl ControlEvent
-  deriving (Eq, Show)
-
-instance HasControlEvent CheckboxEvent where
-  liftControl = CheckboxControl
-  matchControl (CheckboxControl ce) = Just ce
-  matchControl _                    = Nothing
-
--- | Emits @f newChecked@ when 'Toggled'.
-onToggle :: (Bool -> msg) -> Attr e CheckboxEvent msg cfg
-onToggle f = On $ \ev -> case ev of
-  Toggled b -> [OutMsg (f b)]
-  _         -> []
-
--- | The interactive checkmark box on its own, with no adjacent label. An
--- activatable control (click, Enter, or Space) that draws a checkmark when
--- @checked@. Exported separately from 'checkbox' so callers that need
--- non-standard label placement can still get the standard toggle behaviour.
-checkboxMark :: Ord e
-             => e     -- ^ element ID
-             -> Bool  -- ^ current checked state
-             -> [Attr e CheckboxEvent msg cfg]
-             -> UI e msg ()
-checkboxMark boxId checked attrs = do
-  ctrlEvs   <- controlEvents boxId
-  renderChrome boxId draw
-  activated <- isActivatedBy boxId [KeyReturn, KeySpace]
-  fire attrs (ctrlEvs ++ [Toggled (not checked) | activated])
-  where
-    draw = do
-      style <- getStyle boxId
-      when checked $ drawText (styleTextColour style) AlignCenter "✓"
-
--- | Draws left-aligned label text in the given style. A small helper shared
--- by 'checkbox' so its label rendering is a one-line call.
-checkboxLabel
-  :: Style  -- ^ style to draw with
-  -> Text   -- ^ label text
-  -> UI e msg ()
-checkboxLabel style = drawText (styleTextColour style) AlignLeft
-
--- | A togglable checkbox with an adjacent label. Fires 'Toggled' with the
--- new checked state when activated by a click or the Enter key. Composed
--- from 'checkboxMark' (the interactive box) laid out beside 'checkboxLabel'
--- (plain text) via 'hBox', with 'focusRing' drawn around the pair since
--- neither half alone spans the whole composite.
---
--- @
--- checkbox NotifyMe "Notify me by email" (notifyMe model) [onToggle NotifyMeChanged]
--- @
-checkbox :: Ord e
-         => e     -- ^ element ID
-         -> Text  -- ^ label text
-         -> Bool  -- ^ current checked state
-         -> [Attr e CheckboxEvent msg cfg]
-         -> UI e msg ()
-checkbox boxId text checked attrs = do
-  style <- getStyle boxId
-  hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
-    [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, checkboxMark boxId checked attrs)
-    , (Layout Fill Fill MiddleLeft, checkboxLabel style text)
-    ]
-  focusRing boxId
-
--- | Events reported by 'selector' and 'radioGroup': 'Selected' with the
--- activated item's value. Lifecycle events aren't reported here — each item
--- is its own focusable 'control', so gaining\/losing focus is a per-item
--- concern, not a whole-selector one; a custom @renderItem@ that needs it can
--- call 'controlEvents' itself.
-newtype SelectorEvent a = Selected a
-  deriving (Eq, Show)
-
--- | Emits @f value@ when an item is 'Selected'.
-onSelect :: (a -> msg) -> Attr e (SelectorEvent a) msg cfg
-onSelect f = On $ \ev -> case ev of
-  Selected v -> [OutMsg (f v)]
-
--- | 'True' when @eid@ may handle an arrow-key navigation press this frame:
--- either it already held focus going into this pass, or it was clicked this
--- frame. Comparing against a focus snapshot taken before any item in the
--- pass ran — rather than re-reading focus per item — keeps at most one item
--- per frame handling the key, even though a same-frame 'setFocus' from an
--- earlier item in the same pass is otherwise visible to a later item's
--- 'isFocused' straight away. Shared by 'selector' and 'listBox'.
-mayHandleArrowKeys :: Eq e => Maybe e -> Bool -> e -> Bool
-mayHandleArrowKeys initialFocus clicked eid = initialFocus == Just eid || clicked
-
--- | A vertical list of items, each activated by click, Enter, or Space, with
--- arrow-key navigation between items and one item designated as selected.
--- Fires 'Selected' with the new value when a different item is activated.
--- @renderItem eid isSelected item@ draws each item's content; @selector@
--- itself owns the selection comparison, activation, and Up\/Down navigation.
--- Multiple selectors on screen each bind to their own application-state
--- field; no shared state is required. See 'radioGroup' for the radio-mark
--- rendering built on top of this. Each item is a 'control' internally, so
--- it gets its own hover, focus, and tab-stop; 'selector' layers Up\/Down
--- navigation and the shared selection value on top.
---
--- The same @attrs@ list is consulted for every item; 'fire' runs its
--- handlers in the order given regardless of which item was activated
--- ("client" handlers — attrs the caller wrote — see exactly one 'Selected'
--- event per activated frame). Arrow-key navigation is "internal" to
--- 'selector' and runs after that 'fire' call, so a client's 'onSelect'
--- handler always observes the pre-navigation state.
---
--- @
--- data Element = ... | SizeItem Int
---
--- selector SizeItem [(Small, "Small"), (Medium, "Medium"), (Large, "Large")]
---   (size model) [onSelect SizeChanged] $ \\eid isSelected (_, lbl) -> do
---     style <- getStyle eid
---     drawText (styleTextColour style) AlignLeft (if isSelected then "> " <> lbl else lbl)
--- @
-selector :: (Eq e, Ord e, Eq a)
-         => (Int -> e)                          -- ^ maps item index to an element ID
-         -> [(a, Text)]                         -- ^ @(value, label)@ pairs
-         -> a                                   -- ^ currently selected value
-         -> [Attr e (SelectorEvent a) msg cfg]
-         -> (e -> Bool -> (a, Text) -> UI e msg ()) -- ^ @eid isSelected item@
-         -> UI e msg ()
-selector mkId items selected attrs renderItem = do
-  initialFocus <- getFocus
-  vBox defaultBoxConfig (zipWith (mkItem initialFocus) [0..] items)
-  where
-    lastIdx = length items - 1
-    mkItem initialFocus idx item@(val, _) =
-      let eid = mkId idx
-      in ( Layout Fill Fill TopLeft
-         , control eid $ do
-             clicked      <- isClicked eid
-             keyActivated <- or <$> mapM (isKeyPressed eid) [KeyReturn, KeySpace]
-             disabled     <- isDisabled
-             let activated = not disabled && (clicked || keyActivated)
-             renderItem eid (selected == val) item
-             when activated $ fire attrs [Selected val]
-             whenEnabled $ when (mayHandleArrowKeys initialFocus clicked eid) $ do
-               upPressed   <- isKeyPressed eid KeyUp
-               downPressed <- isKeyPressed eid KeyDown
-               when upPressed   $ setFocus (mkId (max 0 (idx - 1)))
-               when downPressed $ setFocus (mkId (min lastIdx (idx + 1)))
-         )
-
--- | A group of mutually exclusive options, rendered as a radio mark and
--- label per item. A thin wrapper over 'selector' supplying the radio-mark
--- rendering; see 'selector' for the selection, activation, navigation, and
--- attribute-handling behaviour.
-radioGroup :: (Eq e, Ord e, Eq a)
-           => (Int -> e)     -- ^ maps item index to an element ID
-           -> [(a, Text)]    -- ^ @(value, label)@ pairs
-           -> a              -- ^ currently selected value
-           -> [Attr e (SelectorEvent a) msg cfg]
-           -> UI e msg ()
-radioGroup mkId items selected attrs =
-  selector mkId items selected attrs $ \eid isSelected (_, lbl) -> do
-    style <- getStyle eid
-    drawText (styleTextColour style) AlignLeft $
-      (if isSelected then "● " else "○ ") <> lbl
-
--- | A clickable button labelled @txt@. Fires 'Clicked' — via 'onClick' or
--- 'onClickTo' — on the frame it's activated, by a left-click or by pressing
--- Enter while focused. Also reports 'ControlEvent's through 'ButtonEvent's
--- @Control@ constructor; use 'onAny' to observe those directly.
---
--- @
--- button eid "Save" [onClick Saved]
--- @
---
--- A click that needs to do more than emit one message — set focus onto a
--- confirmation dialog, say — can use 'onAny' to return several 'Out's, or
--- combine multiple attrs that each handle 'Clicked'.
-button :: Ord e
-       => e     -- ^ element ID
-       -> Text  -- ^ button label
-       -> [Attr e ButtonEvent msg cfg]
-       -> UI e msg ()
-button eid txt attrs = do
-  ctrlEvs   <- controlEvents eid
-  renderChrome eid draw
-  activated <- isActivatedBy eid [KeyReturn]
-  fire attrs (ctrlEvs ++ [Clicked | activated])
-  where
-    draw = do
+-- | A read-only progress indicator, set via 'progress' to 'Progress' for a
+-- determinate bar or 'Indeterminate' for a continuously animating band. Not
+-- interactive — no mouse-over, focus, or tab stop, so it takes no
+-- 'tabStop'\/'focusOnClick' and never needs a real event type; 'Void' rules
+-- out anything being fired.
+progressBar :: Ord e => e -> [Attr e Void msg ProgressBarConfig] -> UI e msg ()
+progressBar eid attrs = do
+  let cfg = configure defaultProgressBarConfig attrs
+  case progressBarConfigValue cfg of
+    Progress progressValue -> renderChrome eid $ do
       style <- getStyle eid
-      drawText (styleTextColour style) (styleTextAlign style) txt
+      r     <- getBounds
+      let clamped   = max 0 (min 1 progressValue)
+          fillRect' = r { rectWidth = rectWidth r * clamped }
+      withBounds fillRect' $ fillRect (styleTextColour style)
+    Indeterminate -> do
+      requiresAnimation
+      renderChrome eid $ do
+        r       <- getBounds
+        style   <- getStyle eid
+        elapsed <- getAnimElapsed
+        let speed = configBandSpeed cfg
+            t     = realToFrac elapsed * speed
+            phase = t - fromIntegral (floor t :: Int)
+            bandW = rectWidth r * 0.3
+            left  = rectX r - bandW + (rectWidth r + bandW) * phase
+        withBounds (r { rectX = left, rectWidth = bandW }) $
+          fillRect (styleTextColour style)
 
 -- | Events reported by 'button': 'Clicked' when activated, or a lifecycle
--- event via 'Control' (see 'ControlEvent').
+-- event via 'Control' (see 'ControlEvent'). 'Control' is not exported —
+-- 'onFocusGained'\/'onFocusLost'\/'onMouseEnter'\/'onMouseExit' already cover
+-- it generically — but 'Clicked' is, so a fully custom handler can still be
+-- built with 'onEvent' when 'onClick' isn't enough.
 data ButtonEvent = Clicked | Control ControlEvent
   deriving (Eq, Show)
 
@@ -548,19 +570,127 @@ instance HasControlEvent ButtonEvent where
   matchControl (Control ce) = Just ce
   matchControl _             = Nothing
 
--- | Emits @msg@ when the button is 'Clicked'.
-onClick :: msg -> Attr e ButtonEvent msg cfg
-onClick msg = On $ \ev -> case ev of
-  Clicked -> [OutMsg msg]
+-- | Runs a reaction when the button is 'Clicked' — e.g. @onClick (post msg)@
+-- to emit a message, @onClick (perform eff)@ to queue a 'UiEffect', or
+-- @onClick (post msg \<\> perform eff)@ to do both.
+onClick :: (() -> [Out e msg]) -> Attr e ButtonEvent msg cfg
+onClick reaction = onEvent $ \ev -> case ev of
+  Clicked -> reaction ()
   _       -> []
 
--- | Queues a 'UiEffect' when the button is 'Clicked', for effects such as
--- 'ScrollTo' \/ 'ScrollBy' that don't have a @msg@ to emit — 'scrollBar's
--- own increment\/decrement buttons are built this way.
-onClickTo :: UiEffect e -> Attr e ButtonEvent msg cfg
-onClickTo eff = On $ \ev -> case ev of
-  Clicked -> [OutUi eff]
-  _       -> []
+-- | Configuration for 'button', set via 'text'. Defaults to @\"\"@.
+newtype ButtonConfig = ButtonConfig { buttonConfigText :: Text }
+
+defaultButtonConfig :: ButtonConfig
+defaultButtonConfig = ButtonConfig { buttonConfigText = "" }
+
+instance HasTextConfig ButtonConfig where
+  setText t cfg = cfg { buttonConfigText = t }
+
+-- | A clickable button labelled via 'text'. Fires 'Clicked' — via 'onClick'
+-- or 'onClickTo' — on the frame it's activated, by a left-click or by
+-- pressing Enter while focused.
+button :: Ord e => e -> [Attr e ButtonEvent msg ButtonConfig] -> UI e msg ()
+button eid attrs = do
+  activated <- activatable eid attrs [KeyReturn] draw
+  when activated $ fire attrs [Clicked]
+  where
+    draw = do
+      style <- getStyle eid
+      let cfg = configure defaultButtonConfig attrs
+      drawText (styleTextColour style) (styleTextAlign style) (buttonConfigText cfg)
+
+-- | Sub-parts of a 'checkbox', used as the inner tag when building the
+-- control's element IDs via a tagging function:
+--
+-- @
+-- data Element = ... | NotifyMe CheckboxPart
+-- checkbox NotifyMe "Notify me by email" (notifyMe model) [onToggle NotifyMeChanged]
+-- @
+data CheckboxPart
+  = CheckboxBox   -- ^ The checkbox as a whole: chrome, hit region, focus, activation.
+  | CheckboxGlyph -- ^ The checkmark glyph.
+  | CheckboxLabel -- ^ The label beside it — an ordinary 'label'.
+  deriving (Eq, Ord, Show)
+
+-- | Events reported by 'checkbox': 'Toggled' with the new checked state when
+-- activated, or a lifecycle event via 'CheckboxControl' (see 'ControlEvent').
+data CheckboxEvent = Toggled Bool | CheckboxControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent CheckboxEvent where
+  liftControl = CheckboxControl
+  matchControl (CheckboxControl ce) = Just ce
+  matchControl _                    = Nothing
+
+-- | Runs a reaction with the new checked state when 'Toggled'.
+onToggle :: (Bool -> [Out e msg]) -> Attr e CheckboxEvent msg cfg
+onToggle reaction = onEvent $ \ev -> case ev of
+  Toggled b -> reaction b
+  _         -> []
+
+-- | Draws a checkbox glyph: a checkmark centred in the current bounds when
+-- @checked@, nothing otherwise, in the resolved style's text colour. A bare
+-- rendering action with no interactive behaviour of its own — reusable by
+-- anything that wants to look like a checkbox glyph without taking on
+-- 'checkbox''s toggle behaviour.
+renderCheckboxGlyph :: Ord e => e -> Bool -> UI e msg ()
+renderCheckboxGlyph eid isChecked = do
+  style <- getStyle eid
+  when isChecked $ drawText (styleTextColour style) AlignCenter "✓"
+
+-- | Configuration for 'checkbox', set via 'checked' and 'text'. Defaults to
+-- unchecked with an empty label.
+data CheckboxConfig = CheckboxConfig
+  { checkboxConfigChecked :: Bool
+  , checkboxConfigText    :: Text
+  }
+
+defaultCheckboxConfig :: CheckboxConfig
+defaultCheckboxConfig = CheckboxConfig { checkboxConfigChecked = False, checkboxConfigText = "" }
+
+instance HasTextConfig CheckboxConfig where
+  setText t cfg = cfg { checkboxConfigText = t }
+
+-- | Sets whether the checkbox is checked. Defaults to 'False'.
+checked :: Bool -> Attr e ev msg CheckboxConfig
+checked b = configAny $ \cfg -> cfg { checkboxConfigChecked = b }
+
+-- | Attrs shared by a checkbox's glyph and label sub-parts: neither is a tab
+-- stop, and clicking either redirects focus to the checkbox itself.
+-- Committing to 'LabelEvent' here (rather than leaving it polymorphic) is
+-- what lets 'checkbox' use the same value at both the glyph's 'control' call
+-- and the label's 'label' call without either site leaving its event type
+-- ambiguous.
+checkboxSubPartAttrs :: e -> [Attr e LabelEvent msg cfg]
+checkboxSubPartAttrs boxId = [tabStop False, focusOnClick (FocusTarget boxId)]
+
+-- | A togglable checkbox with an adjacent label, as one unit, set via
+-- 'checked' and 'text': the glyph and label are purely visual sub-parts
+-- (each moused-over and styled on its own bounds, neither a tab stop, a
+-- click on either redirecting focus to the checkbox) — all interaction
+-- lives on the checkbox itself, whose own hit region spans the glyph, the
+-- label, and the gap between them. Fires 'Toggled' with the new checked
+-- state when activated by a click anywhere in that region, or by Enter or
+-- Space while focused.
+--
+-- @
+-- checkbox NotifyMe [checked (notifyMe model), text "Notify me by email", onToggle NotifyMeChanged]
+-- @
+checkbox :: Ord e => (CheckboxPart -> e) -> [Attr e CheckboxEvent msg CheckboxConfig] -> UI e msg ()
+checkbox mkId attrs = do
+  let cfg = configure defaultCheckboxConfig attrs
+      isChecked = checkboxConfigChecked cfg
+  activated <- activatable (mkId CheckboxBox) attrs [KeyReturn, KeySpace] (draw isChecked (checkboxConfigText cfg))
+  when activated $ fire attrs [Toggled (not isChecked)]
+  where
+    glyphId  = mkId CheckboxGlyph
+    subAttrs = checkboxSubPartAttrs (mkId CheckboxBox)
+    draw isChecked txt =
+      hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
+        [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, control glyphId subAttrs (renderCheckboxGlyph glyphId isChecked))
+        , (Layout Fill Fill MiddleLeft, label (mkId CheckboxLabel) (text txt : subAttrs))
+        ]
 
 -- | Click sets both selection ends at the clicked character; dragging
 -- extends only the active end, keeping the anchor from before the drag
@@ -576,13 +706,13 @@ resolveMouseSelection
   -> Double      -- ^ current horizontal scroll offset
   -> (Int, Int)  -- ^ current @(anchor, active)@ selection
   -> UI e msg (Int, Int)
-resolveMouseSelection eid bounds wasCapturing justFocused value scrollX (anchor0, active0) = do
+resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX (anchor0, active0) = do
   isCapturing <- isDragging eid
   if isCapturing
     then do
       mousePos <- getMousePos
       let localX = realToFrac (pointX mousePos - rectX bounds) + realToFrac scrollX :: Float
-      clickedPos <- charAtOffset value localX
+      clickedPos <- charAtOffset displayValue localX
       pure $ if not wasCapturing || justFocused
         then (clickedPos, clickedPos)
         else (anchor0, clickedPos)
@@ -622,9 +752,9 @@ applyEdit :: (Text -> Text)   -- ^ @inputFilter@, applied to newly typed text be
           -> InputState       -- ^ this frame's input
           -> (Int, Int)       -- ^ current @(anchor, active)@ selection
           -> ((Int, Int), Maybe Text) -- ^ new @(anchor, active)@, and the new value if it changed
-applyEdit inputFilterFn value input (anchor2, active2)
+applyEdit inputFilterFn currentValue input (anchor2, active2)
   | backspace || hasTyped =
-      ((newCursor, newCursor), if newText /= value then Just newText else Nothing)
+      ((newCursor, newCursor), if newText /= currentValue then Just newText else Nothing)
   | otherwise = ((anchor2, active2), Nothing)
   where
     keyEvts   = inputKeyEvents input
@@ -636,17 +766,20 @@ applyEdit inputFilterFn value input (anchor2, active2)
     selHi2    = max anchor2 active2
     (newText, newCursor)
       | hasSel2 && backspace =
-          (T.take selLo2 value <> T.drop selHi2 value, selLo2)
+          (T.take selLo2 currentValue <> T.drop selHi2 currentValue, selLo2)
       | hasSel2 =
-          (T.take selLo2 value <> typed <> T.drop selHi2 value, selLo2 + T.length typed)
+          (T.take selLo2 currentValue <> typed <> T.drop selHi2 currentValue, selLo2 + T.length typed)
       | backspace && active2 > 0 =
-          (T.take (active2 - 1) value <> T.drop active2 value, active2 - 1)
+          (T.take (active2 - 1) currentValue <> T.drop active2 currentValue, active2 - 1)
       | hasTyped =
-          (T.take active2 value <> typed <> T.drop active2 value, active2 + T.length typed)
-      | otherwise = (value, active2)
+          (T.take active2 currentValue <> typed <> T.drop active2 currentValue, active2 + T.length typed)
+      | otherwise = (currentValue, active2)
 
 -- | The scroll offset needed to keep a cursor at @cursorAbs@ visible within
--- a viewport of width @w@ currently scrolled to @scrollX@.
+-- a viewport of width @w@ currently scrolled to @scrollX@. Pixels in, pixels
+-- out — 'scrollFraction'\/'scrollPixels' convert at the boundary with
+-- 'getScrollState'\/'ScrollTo' so the stored value stays in the same
+-- @[0, 1]@ convention every other scroll-state consumer uses.
 resolveScroll
   :: Double  -- ^ viewport width
   -> Double  -- ^ current scroll offset
@@ -656,6 +789,24 @@ resolveScroll w scrollX cursorAbs
   | cursorAbs < scrollX         = cursorAbs
   | cursorAbs > scrollX + w - 1 = max 0 (cursorAbs - w + 1)
   | otherwise                   = scrollX
+
+-- | The largest pixel offset worth scrolling by: zero once the content
+-- already fits within the viewport.
+maxScrollPixels :: Double -> Double -> Double
+maxScrollPixels contentW viewportW = max 0 (contentW - viewportW)
+
+-- | Converts a pixel scroll offset to the @[0, 1]@ fraction 'ScrollState'
+-- stores, given the max offset from 'maxScrollPixels'. @0@ when there's
+-- nothing to scroll.
+scrollFraction :: Double -> Double -> Double
+scrollFraction maxPx px
+  | maxPx > 0 = clampScrollPos (px / maxPx)
+  | otherwise = 0
+
+-- | The inverse of 'scrollFraction': converts a stored @[0, 1]@ fraction
+-- back to a pixel offset, given the max offset from 'maxScrollPixels'.
+scrollPixels :: Double -> Double -> Double
+scrollPixels maxPx frac = frac * maxPx
 
 -- | Draws the selection highlight (focused with a non-empty selection), the
 -- text itself, and the cursor (focused and enabled), all offset by the
@@ -670,10 +821,10 @@ drawTextInputContent
   -> Double      -- ^ current horizontal scroll offset
   -> (Int, Int)  -- ^ current @(anchor, active)@ selection
   -> UI e msg ()
-drawTextInputContent style bounds value hasFocus enabled ox (anchor3, active3) = do
+drawTextInputContent style bounds displayValue hasFocus enabled ox (anchor3, active3) = do
   when (hasFocus && drawLo < drawHi) $ do
-    loX <- charOffset value drawLo
-    hiX <- charOffset value drawHi
+    loX <- charOffset displayValue drawLo
+    hiX <- charOffset displayValue drawHi
     let selRect = Rectangle
           (rectX bounds + realToFrac loX - ox)
           (rectY bounds)
@@ -682,10 +833,10 @@ drawTextInputContent style bounds value hasFocus enabled ox (anchor3, active3) =
     withBounds selRect $ fillRect (RGBA 0.3 0.5 1.0 0.4)
 
   let textBounds = bounds { rectX = rectX bounds - ox }
-  withBounds textBounds $ drawText (styleTextColour style) AlignLeft value
+  withBounds textBounds $ drawText (styleTextColour style) AlignLeft displayValue
 
   when enabled $ do
-    curX <- charOffset value active3
+    curX <- charOffset displayValue active3
     let cursorRect = Rectangle
           (rectX bounds + realToFrac curX - ox)
           (rectY bounds)
@@ -708,30 +859,36 @@ instance HasControlEvent TextEvent where
   matchControl (TextControl ce) = Just ce
   matchControl _                = Nothing
 
--- | Emits @f newValue@ on every 'Edited'.
-onInput :: (Text -> msg) -> Attr e TextEvent msg cfg
-onInput f = On $ \ev -> case ev of
-  Edited t -> [OutMsg (f t)]
+-- | Runs a reaction with the new value on every 'Edited'.
+onInput :: (Text -> [Out e msg]) -> Attr e TextEvent msg cfg
+onInput reaction = onEvent $ \ev -> case ev of
+  Edited t -> reaction t
   _        -> []
 
--- | Emits @msg@ when Enter is pressed while the field is focused ('Submitted').
-onSubmit :: msg -> Attr e TextEvent msg cfg
-onSubmit msg = On $ \ev -> case ev of
-  Submitted -> [OutMsg msg]
+-- | Runs a reaction when Enter is pressed while the field is focused
+-- ('Submitted').
+onSubmit :: (() -> [Out e msg]) -> Attr e TextEvent msg cfg
+onSubmit reaction = onEvent $ \ev -> case ev of
+  Submitted -> reaction ()
   _         -> []
 
--- | Configuration for 'textInputControl', set via 'inputFilter' and
--- 'displayFilter'.
+-- | Configuration for 'textInputControl', set via 'inputFilter',
+-- 'displayFilter', and 'text' (the field's current value). Defaults to @\"\"@.
 data TextInputConfig = TextInputConfig
-  { configInputFilter   :: Text -> Text
-  , configDisplayFilter :: Text -> Text
+  { configInputFilter    :: Text -> Text
+  , configDisplayFilter  :: Text -> Text
+  , textInputConfigValue :: Text
   }
 
 defaultTextInputConfig :: TextInputConfig
 defaultTextInputConfig = TextInputConfig
-  { configInputFilter   = id
-  , configDisplayFilter = id
+  { configInputFilter    = id
+  , configDisplayFilter  = id
+  , textInputConfigValue = ""
   }
+
+instance HasTextConfig TextInputConfig where
+  setText t cfg = cfg { textInputConfigValue = t }
 
 -- | Applied to newly typed text before it's inserted, letting callers
 -- restrict which keystrokes are accepted (e.g. @T.filter isDigit@ for a
@@ -740,7 +897,7 @@ defaultTextInputConfig = TextInputConfig
 -- control's — do it in an 'onInput' handler and pass the already-formatted
 -- value back in on the next frame. Defaults to 'id'.
 inputFilter :: (Text -> Text) -> Attr e ev msg TextInputConfig
-inputFilter f = Config $ \cfg -> cfg { configInputFilter = f }
+inputFilter f = configAny $ \cfg -> cfg { configInputFilter = f }
 
 -- | Applied to the value everywhere it is measured or drawn — the rendered
 -- text, and every character-offset calculation used for cursor placement,
@@ -750,7 +907,7 @@ inputFilter f = Config $ \cfg -> cfg { configInputFilter = f }
 -- underlying value edited by 'inputFilter'\/'onInput' is never affected by
 -- it. Defaults to 'id'.
 displayFilter :: (Text -> Text) -> Attr e ev msg TextInputConfig
-displayFilter f = Config $ \cfg -> cfg { configDisplayFilter = f }
+displayFilter f = configAny $ \cfg -> cfg { configDisplayFilter = f }
 
 -- | A single-line text entry field. Supports click-to-place cursor, drag
 -- selection, Shift+arrow extension, and selection-aware editing. Long text
@@ -758,31 +915,31 @@ displayFilter f = Config $ \cfg -> cfg { configDisplayFilter = f }
 -- 'displayFilter' attrs turn this into a digits-only or password-style
 -- field.
 --
--- Cursor position and selection are control state (see the Concepts section
--- above), not application data — 'textInputControl' reads and writes them
--- itself via 'getSelection' and 'getScrollState', keyed by @eid@, writing
--- through 'emitUi' with 'SetSelectionAt' and 'ScrollTo'.
-textInputControl :: Ord e
-                  => e     -- ^ element ID
-                  -> Text  -- ^ current value
-                  -> [Attr e TextEvent msg TextInputConfig]
-                  -> UI e msg ()
-textInputControl eid value attrs = do
+-- Cursor position and selection are control state, not application data —
+-- 'textInputControl' reads and writes them itself via 'getSelection' and
+-- 'getScrollState', keyed by @eid@, writing through 'emitUi' with
+-- 'SetSelectionAt' and 'ScrollTo'. The scroll position is stored as the same
+-- @[0, 1]@ fraction every other scroll-state consumer uses — see
+-- 'scrollFraction'\/'scrollPixels' — converted to and from pixels locally,
+-- since the selection\/cursor\/auto-scroll math below is naturally pixel-based.
+textInputControl :: Ord e => e -> [Attr e TextEvent msg TextInputConfig] -> UI e msg ()
+textInputControl eid attrs = do
   wasFocused   <- isFocused eid
   wasCapturing <- isDragging eid
-  let cfg = configure defaultTextInputConfig attrs
-  control eid $ do
+  let cfg          = configure defaultTextInputConfig attrs
+      currentValue = textInputConfigValue cfg
+  control eid attrs $ do
     style    <- getStyle eid
     hasFocus <- isFocused eid
     disabled <- isDisabled
     bounds   <- getBounds
     input    <- getInput
     sel      <- getSelection eid
-    scrollX  <- getScrollState eid
+    frac     <- getScrollState eid
 
-    let displayValue = configDisplayFilter cfg value
+    let displayValue = configDisplayFilter cfg currentValue
         w           = rectWidth bounds
-        defPos      = T.length value
+        defPos      = T.length currentValue
         anchor0     = maybe defPos selectionAnchor sel
         active0     = maybe defPos selectionActive sel
         -- Focus was gained by a click this frame (e.g. clicking from another
@@ -791,22 +948,25 @@ textInputControl eid value attrs = do
         justFocused = hasFocus && not wasFocused
         enabled     = hasFocus && not disabled
 
+    contentW <- realToFrac <$> charOffset displayValue (T.length displayValue)
+    let maxScrollPx = maxScrollPixels contentW w
+        scrollX     = scrollPixels maxScrollPx frac
+
     (anchor1, active1) <-
       if enabled
         then resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX (anchor0, active0)
         else pure (anchor0, active0)
 
     let (anchor2, active2) =
-          resolveKeyboardSelection hasFocus (inputKeyEvents input) (T.length value) (anchor1, active1)
+          resolveKeyboardSelection hasFocus (inputKeyEvents input) (T.length currentValue) (anchor1, active1)
 
         ((anchor3, active3), edited)
-          | enabled   = applyEdit (configInputFilter cfg) value input (anchor2, active2)
+          | enabled   = applyEdit (configInputFilter cfg) currentValue input (anchor2, active2)
           | otherwise = ((anchor2, active2), Nothing)
 
         submitted = enabled && any (\e -> key e == KeyReturn) (inputKeyEvents input)
 
-    ctrlEvs <- controlEventsAfter eid wasFocused
-    fire attrs (ctrlEvs ++ [Submitted | submitted] ++ [Edited t | Just t <- [edited]])
+    fire attrs ([Submitted | submitted] ++ [Edited t | Just t <- [edited]])
 
     when enabled $ emitUi (SetSelectionAt eid (Selection anchor3 active3))
 
@@ -819,25 +979,11 @@ textInputControl eid value attrs = do
         then do
           curX <- charOffset displayValue active3
           let newScrollX = resolveScroll w scrollX (realToFrac curX)
-          when (newScrollX /= scrollX) $ emitUi (ScrollTo eid newScrollX)
+          when (newScrollX /= scrollX) $ emitUi (ScrollTo eid (scrollFraction maxScrollPx newScrollX))
           pure newScrollX
         else pure scrollX
 
     drawTextInputContent style bounds displayValue hasFocus enabled effectiveScrollX (anchor3, active3)
-
--- | Sub-parts of a scrollbar, used as the inner tag when building the
--- control's element IDs via a tagging function:
---
--- @
--- data Element = ... | VScroll ScrollBarPart
--- scrollBar VScroll Vertical ratio []
--- @
-data ScrollBarPart
-  = ScrollTrack   -- ^ The track area behind the thumb.
-  | ScrollThumb   -- ^ The draggable thumb.
-  | ScrollDecrBtn -- ^ The decrement arrow button.
-  | ScrollIncrBtn -- ^ The increment arrow button.
-  deriving (Eq, Ord, Show)
 
 contentRectFor :: StyleSet -> Rectangle -> Rectangle
 contentRectFor ss r =
@@ -847,9 +993,7 @@ contentRectFor ss r =
 -- | The content rectangle of a track-style element (its slot bounds inset by
 -- margin and padding), used by both 'scrollBar' and 'slider' to size and
 -- place their thumb.
-trackContentRect :: Ord e
-                  => e  -- ^ track's element ID
-                  -> UI e msg Rectangle
+trackContentRect :: Ord e => e -> UI e msg Rectangle
 trackContentRect trackId = do
   bounds   <- getBounds
   styleSet <- getStyleSet trackId
@@ -859,12 +1003,7 @@ trackContentRect trackId = do
 -- position under the cursor; 'Nothing' otherwise. Shared drag-handling for
 -- 'scrollBar' and 'slider', both of which map a thumb drag to a position via
 -- 'mouseToTrackPos'.
-dragToTrackPos :: Ord e
-               => e            -- ^ track's element ID
-               -> Orientation  -- ^ track orientation
-               -> Double       -- ^ thumb ratio (visible / total), in @[0, 1]@
-               -> Rectangle    -- ^ track's content rectangle
-               -> UI e msg (Maybe Double)
+dragToTrackPos :: Ord e => e -> Orientation -> Double -> Rectangle -> UI e msg (Maybe Double)
 dragToTrackPos trackId ori ratio contentRect = do
   dragging <- isDragging trackId
   btnDown  <- isButtonDown
@@ -872,103 +1011,11 @@ dragToTrackPos trackId ori ratio contentRect = do
     then Just . mouseToTrackPos ori ratio contentRect <$> getMousePos
     else pure Nothing
 
--- | A track with a draggable thumb, positioned within @[0, 1]@ by @pos@ and
--- sized within the track by @ratio@ (visible \/ total, also @[0, 1]@).
--- @trackId@ is the interactive element — it receives chrome, hover, focus,
--- and tab navigation via 'control' — and @thumbId@ is a purely decorative
--- child positioned inside it. Returns the new position while @trackId@ is
--- being dragged, 'Nothing' otherwise; the caller decides how to store or
--- emit it. Shared by 'scrollBar' and 'slider'.
-rangeControl :: Ord e
-             => e            -- ^ track's element ID
-             -> e            -- ^ thumb's element ID
-             -> Orientation  -- ^ track orientation
-             -> Double       -- ^ thumb position within the track, in @[0, 1]@
-             -> Double       -- ^ thumb ratio (visible / total), in @[0, 1]@
-             -> UI e msg (Maybe Double)
-rangeControl trackId thumbId ori pos ratio = do
-  contentRect <- trackContentRect trackId
-  let thumbR = thumbRect ori pos ratio contentRect
-  control trackId $
-    withBounds thumbR $ renderChrome thumbId $ pure ()
-  dragToTrackPos trackId ori ratio contentRect
-
--- | Events reported by 'scrollBar': a lifecycle event via 'ScrollBarControl'
--- (see 'ControlEvent'). The scroll position itself is control state, not
--- reported to the caller — see "Control state" above.
-newtype ScrollBarEvent = ScrollBarControl ControlEvent
-  deriving (Eq, Show)
-
-instance HasControlEvent ScrollBarEvent where
-  liftControl = ScrollBarControl
-  matchControl (ScrollBarControl ce) = Just ce
-
--- | A scrollbar with decrement\/increment buttons flanking a draggable thumb.
--- The scroll position in @[0, 1]@ is stored in the 'UIContext', keyed by
--- @mkId ScrollTrack@; the control reads and writes it itself. @thumbRatio@ is
--- the fraction of the track the thumb fills (visible \/ total), also in
--- @[0, 1]@. Button clicks step by @thumbRatio@; dragging centres the thumb on
--- the cursor.
-scrollBar :: Ord e
-          => (ScrollBarPart -> e)  -- ^ maps scrollbar parts to element IDs
-          -> Orientation           -- ^ scrollbar orientation
-          -> Double                -- ^ thumb ratio (visible / total), in @[0, 1]@
-          -> [Attr e ScrollBarEvent msg cfg]
-          -> UI e msg ()
-scrollBar mkId ori thumbRatio attrs = do
-  bounds     <- getBounds
-  pos        <- readPos
-  wasFocused <- isFocused trackId
-  let pos'      = max 0 (min 1 pos)
-      ratio'    = max 0 (min 1 thumbRatio)
-      btnLayout = case ori of
-        Vertical   -> Layout Fill (Exactly (rectWidth bounds))  TopLeft
-        Horizontal -> Layout (Exactly (rectHeight bounds)) Fill TopLeft
-  layoutFn defaultBoxConfig
-    [ (btnLayout, decrBtn pos' ratio')
-    , (Layout Fill Fill TopLeft, track pos' ratio')
-    , (btnLayout, incrBtn pos' ratio')
-    ]
-  ctrlEvs <- controlEventsAfter trackId wasFocused
-  fire attrs ctrlEvs
-  where
-    trackId = mkId ScrollTrack
-
-    readPos = getScrollState trackId
-
-    writePosAbs v = emitUi (ScrollTo trackId v)
-
-    layoutFn = case ori of
-      Vertical   -> vBox
-      Horizontal -> hBox
-
-    decrSym = case ori of
-      Vertical   -> "▲"
-      Horizontal -> "◀"
-    incrSym = case ori of
-      Vertical   -> "▼"
-      Horizontal -> "▶"
-
-    decrBtn _ ratio' =
-      button (mkId ScrollDecrBtn) decrSym [onClickTo (ScrollBy trackId (negate ratio'))]
-
-    incrBtn _ ratio' =
-      button (mkId ScrollIncrBtn) incrSym [onClickTo (ScrollBy trackId ratio')]
-
-    track pos' ratio' = do
-      newPos <- rangeControl trackId (mkId ScrollThumb) ori pos' ratio'
-      forM_ newPos writePosAbs
-
 -- | Computes the bounding rectangle of a thumb within a track. @pos@ is the
--- position along the track and @ratio@ is the fraction of the track the thumb
--- fills (visible \/ total); both are in @[0, 1]@. The result is a
+-- position along the track and @ratio@ is the fraction of the track the
+-- thumb fills (visible \/ total); both are in @[0, 1]@. The result is a
 -- sub-rectangle of @r@.
-thumbRect
-  :: Orientation  -- ^ track orientation
-  -> Double       -- ^ thumb position along the track, in @[0, 1]@
-  -> Double       -- ^ thumb ratio (visible / total), in @[0, 1]@
-  -> Rectangle    -- ^ track rectangle to place the thumb within
-  -> Rectangle
+thumbRect :: Orientation -> Double -> Double -> Rectangle -> Rectangle
 thumbRect Vertical pos ratio r =
   let h = rectHeight r * ratio
   in r { rectY = rectY r + (rectHeight r - h) * pos, rectHeight = h }
@@ -980,12 +1027,7 @@ thumbRect Horizontal pos ratio r =
 -- thumb on the cursor. This is the inverse of 'thumbRect': exported for
 -- callers building custom drag handlers. Returns @0@ when the thumb fills
 -- the track (@ratio = 1@) and there is no range to move.
-mouseToTrackPos
-  :: Orientation  -- ^ track orientation
-  -> Double       -- ^ thumb ratio (visible / total), in @[0, 1]@
-  -> Rectangle    -- ^ track rectangle
-  -> Point        -- ^ mouse position
-  -> Double
+mouseToTrackPos :: Orientation -> Double -> Rectangle -> Point -> Double
 mouseToTrackPos Vertical ratio r mouse =
   let thumbH = rectHeight r * ratio
       range  = rectHeight r - thumbH
@@ -996,80 +1038,6 @@ mouseToTrackPos Horizontal ratio r mouse =
       range  = rectWidth r - thumbW
   in if range <= 0 then 0
      else max 0 (min 1 ((pointX mouse - rectX r - thumbW / 2) / range))
-
--- | Sub-parts of a viewport's element ID hierarchy. Wraps 'ScrollBarPart'
--- for the horizontal and vertical scrollbars:
---
--- @
--- data Element = ... | MyRegion ViewportPart
--- viewport MyRegion (Size 600 400) [] content
--- @
-data ViewportPart
-  = ViewportH ScrollBarPart -- ^ A part of the horizontal scrollbar.
-  | ViewportV ScrollBarPart -- ^ A part of the vertical scrollbar.
-  deriving (Eq, Ord, Show)
-
--- | The pixel width of a scrollbar strip used by 'viewport' and 'listBox'.
--- Exported so callers that compose a viewport inside their own layout can
--- account for the strip in their geometry without hard-coding the value.
-scrollRegionBarSize :: Double
-scrollRegionBarSize = 16
-
--- | A scrollable window onto a fixed-size virtual content area. Scrollbars
--- appear automatically on axes where the content exceeds the viewport, and
--- are drawn first so that a drag or click this frame is reflected
--- immediately. The content action then runs with virtual bounds — the full
--- content rectangle translated so the scrolled portion aligns with the
--- viewport — clipped to the visible area. Mouse interaction works naturally
--- because translated bounds are in window coordinates; the clip region
--- hides the rest.
---
--- For large, uniform item collections where building the whole content
--- every frame would be wasteful, or where scrolling needs to be driven by
--- keyboard selection, use 'listBox' instead — it manages its own scroll
--- state directly rather than wrapping content in a viewport.
-viewport
-  :: Ord e
-  => (ViewportPart -> e)  -- ^ maps viewport parts to element IDs
-  -> Size                  -- ^ virtual content size
-  -> [Attr e Void msg cfg]  -- ^ attributes; 'viewport' is non-interactive
-                          -- and has no configuration yet
-  -> UI e msg ()             -- ^ content
-  -> UI e msg ()
-viewport mkId (Size cw ch) _attrs content = do
-  outer <- getBounds
-  let ow      = rectWidth outer
-      oh      = rectHeight outer
-      -- Two-pass: check V with full height to determine reduced width, then H,
-      -- then re-check V with reduced height.
-      needsV1 = ch > oh
-      vpW1    = if needsV1 then ow - scrollRegionBarSize else ow
-      needsH  = cw > vpW1
-      vpH     = if needsH  then oh - scrollRegionBarSize else oh
-      needsV  = ch > vpH
-      vpW     = if needsV  then ow - scrollRegionBarSize else ow
-      hThumb  = if needsH then Just (max 0 (min 1 (vpW / cw))) else Nothing
-      vThumb  = if needsV then Just (max 0 (min 1 (vpH / ch))) else Nothing
-      vpRect  = outer { rectWidth = vpW, rectHeight = vpH }
-      hBar    = outer { rectY = rectY outer + vpH, rectHeight = scrollRegionBarSize, rectWidth = vpW }
-      vBar    = outer { rectX = rectX outer + vpW, rectWidth  = scrollRegionBarSize, rectHeight = vpH }
-  case hThumb of
-    Nothing -> pure ()
-    Just r  -> withBounds hBar $ scrollBar (mkId . ViewportH) Horizontal r []
-  case vThumb of
-    Nothing -> pure ()
-    Just r  -> withBounds vBar $ scrollBar (mkId . ViewportV) Vertical r []
-  hPos <- maybe (pure 0) (\_ -> getScrollState (mkId (ViewportH ScrollTrack))) hThumb
-  vPos <- maybe (pure 0) (\_ -> getScrollState (mkId (ViewportV ScrollTrack))) vThumb
-  let offsetX    = hPos * max 0 (cw - vpW)
-      offsetY    = vPos * max 0 (ch - vpH)
-      virtBounds = outer
-        { rectX      = rectX outer - offsetX
-        , rectY      = rectY outer - offsetY
-        , rectWidth  = cw
-        , rectHeight = ch
-        }
-  withBounds vpRect $ clipToCurrent $ withBounds virtBounds content
 
 -- | Sub-parts of a slider, used as the inner tag when building the
 -- control's element IDs via a tagging function:
@@ -1094,46 +1062,90 @@ instance HasControlEvent SliderEvent where
   matchControl (SliderControl ce) = Just ce
   matchControl _                  = Nothing
 
--- | Emits @f newValue@ on every 'Changed'.
-onChange :: (Double -> msg) -> Attr e SliderEvent msg cfg
-onChange f = On $ \ev -> case ev of
-  Changed v -> [OutMsg (f v)]
+-- | Runs a reaction with the new value on every 'Changed'.
+onChange :: (Double -> [Out e msg]) -> Attr e SliderEvent msg cfg
+onChange reaction = onEvent $ \ev -> case ev of
+  Changed v -> reaction v
   _         -> []
 
--- | Configuration for 'slider', set via 'arrowStep'.
-newtype SliderConfig = SliderConfig { configArrowStep :: Double }
+-- | Configuration for 'slider', set via 'arrowStep', 'thumbRatio',
+-- 'orientation', and 'value'. Defaults to a horizontal slider at 0.
+data SliderConfig = SliderConfig
+  { configArrowStep         :: Double
+  , configThumbRatio        :: Maybe Double
+  , sliderConfigOrientation :: Orientation
+  , sliderConfigValue       :: Double
+  }
 
 defaultSliderConfig :: SliderConfig
-defaultSliderConfig = SliderConfig { configArrowStep = 0.05 }
+defaultSliderConfig = SliderConfig
+  { configArrowStep         = 0.05
+  , configThumbRatio        = Nothing
+  , sliderConfigOrientation = Horizontal
+  , sliderConfigValue       = 0
+  }
 
 -- | The amount an arrow-key press (Left\/Right for 'Horizontal', Up\/Down
 -- for 'Vertical') changes the value by. Defaults to @0.05@.
 arrowStep :: Double -> Attr e ev msg SliderConfig
-arrowStep v = Config $ \cfg -> cfg { configArrowStep = v }
+arrowStep v = configAny $ \cfg -> cfg { configArrowStep = v }
 
--- | A slider mapping a draggable thumb to a value in @[0, 1]@. Fires
--- 'Changed' with the new value when the user drags, clicks on the track, or
--- nudges with arrow keys (Left\/Right for 'Horizontal', Up\/Down for
--- 'Vertical', by 'arrowStep'). The thumb is square: its side equals the
--- cross-axis of the track's content rectangle.
-slider :: Ord e
-       => (SliderPart -> e)   -- ^ maps slider parts to element IDs
-       -> Orientation         -- ^ slider orientation
-       -> Double              -- ^ current value, in @[0, 1]@
-       -> [Attr e SliderEvent msg SliderConfig]
-       -> UI e msg ()
-slider mkId ori value attrs = do
+-- | Implemented by any control's own config type that carries a thumb
+-- ratio, letting 'thumbRatio' work uniformly across them (same pattern as
+-- 'HasTextConfig').
+class HasThumbRatioConfig cfg where
+  setThumbRatio :: Double -> cfg -> cfg
+
+-- | Overrides the thumb's size (visible \/ total, in @[0, 1]@) instead of a
+-- control's own default sizing. 'slider' defaults to a square thumb (side
+-- equal to the track's cross-axis) when not given; 'scrollBar' defaults to
+-- a full-track thumb (i.e. nothing to scroll).
+thumbRatio :: HasThumbRatioConfig cfg => Double -> Attr e ev msg cfg
+thumbRatio v = configAny (setThumbRatio v)
+
+instance HasThumbRatioConfig SliderConfig where
+  setThumbRatio v cfg = cfg { configThumbRatio = Just v }
+
+-- | Implemented by any control's own config type that carries an
+-- orientation, letting 'orientation' work uniformly across them (same
+-- pattern as 'HasTextConfig').
+class HasOrientationConfig cfg where
+  setOrientation :: Orientation -> cfg -> cfg
+
+-- | Sets a control's orientation. Defaults to 'Horizontal'.
+orientation :: HasOrientationConfig cfg => Orientation -> Attr e ev msg cfg
+orientation o = configAny (setOrientation o)
+
+instance HasOrientationConfig SliderConfig where
+  setOrientation o cfg = cfg { sliderConfigOrientation = o }
+
+-- | Sets the slider's current value, in @[0, 1]@. Defaults to @0@.
+value :: Double -> Attr e ev msg SliderConfig
+value v = configAny $ \cfg -> cfg { sliderConfigValue = v }
+
+-- | A slider mapping a draggable thumb to a value in @[0, 1]@, set via
+-- 'value' and 'orientation'. Fires 'Changed' with the new value when the
+-- user drags, clicks on the track, or nudges with arrow keys (Left\/Right
+-- for 'Horizontal', Up\/Down for 'Vertical', by 'arrowStep'). The thumb is
+-- square by default; override with 'thumbRatio'.
+slider :: Ord e => (SliderPart -> e) -> [Attr e SliderEvent msg SliderConfig] -> UI e msg ()
+slider mkId attrs = do
   let trackId = mkId SliderTrack
-      clamped = max 0 (min 1 value)
-      step    = configArrowStep (configure defaultSliderConfig attrs)
-  wasFocused  <- isFocused trackId
+      thumbId = mkId SliderThumb
+      cfg     = configure defaultSliderConfig attrs
+      ori     = sliderConfigOrientation cfg
+      clamped = max 0 (min 1 (sliderConfigValue cfg))
+      step    = configArrowStep cfg
   contentRect <- trackContentRect trackId
   let (crossSz, mainSz) = case ori of
         Horizontal -> (rectHeight contentRect, rectWidth contentRect)
         Vertical   -> (rectWidth contentRect,  rectHeight contentRect)
-      thumbRatio  = if mainSz > 0 then crossSz / mainSz else 0
-  newPos  <- rangeControl trackId (mkId SliderThumb) ori clamped thumbRatio
-  ctrlEvs <- controlEventsAfter trackId wasFocused
+      autoRatio = if mainSz > 0 then crossSz / mainSz else 0
+      ratio     = fromMaybe autoRatio (configThumbRatio cfg)
+      thumbR    = thumbRect ori clamped ratio contentRect
+  control trackId attrs $
+    withBounds thumbR $ renderChrome thumbId $ pure ()
+  newPos <- dragToTrackPos trackId ori ratio contentRect
   let (decrKey, incrKey) = case ori of
         Horizontal -> (KeyLeft,  KeyRight)
         Vertical   -> (KeyUp,    KeyDown)
@@ -1143,38 +1155,335 @@ slider mkId ori value attrs = do
   let decrPressed = not disabled && decrKeyed
       incrPressed = not disabled && incrKeyed
       changes = concat
-        [ [Changed p | Just p <- [newPos]]
-        , [Changed (max 0 (clamped - step)) | decrPressed]
-        , [Changed (min 1 (clamped + step)) | incrPressed]
+        [ [Changed v | Just v <- [newPos]]
+        , [Changed (max 0 (clamped - step)) | decrPressed && step > 0]
+        , [Changed (min 1 (clamped + step)) | incrPressed && step > 0]
         ]
-  fire attrs (ctrlEvs ++ changes)
+  fire attrs changes
 
--- | Renders a windowed slice of a uniform-height item list: given the current
--- scroll position (in pixels), the height of one item, and the total item
--- count, calls @renderItem i@ only for the items that intersect the current
--- bounds, clipped to those bounds. The first and\/or last rendered item may
--- be partially clipped if the scroll position doesn't land on an item
--- boundary — this is correct: no virtual canvas or coordinate translation is
--- needed, since only the content that will actually be visible is ever
--- generated, at the right position.
+-- | Sub-parts of a scrollbar, used as the inner tag when building the
+-- control's element IDs via a tagging function:
 --
--- Does not draw a scrollbar or manage scroll state itself — pair with
--- 'scrollBar' and 'getScrollState' (see 'listBox').
+-- @
+-- data Element = ... | VScroll ScrollBarPart
+-- scrollBar VScroll [orientation Vertical, thumbRatio 0.3]
+-- @
+data ScrollBarPart
+  = ScrollTrack   -- ^ The track area behind the thumb.
+  | ScrollThumb   -- ^ The draggable thumb.
+  | ScrollDecrBtn -- ^ The decrement arrow button.
+  | ScrollIncrBtn -- ^ The increment arrow button.
+  deriving (Eq, Ord, Show)
+
+-- | Events reported by 'scrollBar': a lifecycle event via 'ScrollBarControl'
+-- (see 'ControlEvent'). The scroll position itself is control state, not
+-- reported to the caller — it lives in the 'UIContext', keyed by the
+-- track's element ID, and is read with 'getScrollState'.
+newtype ScrollBarEvent = ScrollBarControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent ScrollBarEvent where
+  liftControl = ScrollBarControl
+  matchControl (ScrollBarControl ce) = Just ce
+
+-- | Configuration for 'scrollBar', set via 'orientation' and 'thumbRatio'.
+-- Defaults to a horizontal bar with a full-track thumb (i.e. nothing to
+-- scroll) — unlike 'slider', a scrollbar's thumb size is meaningless
+-- without a caller-supplied visible\/total fraction, so there's no
+-- auto-square fallback to reach for.
+data ScrollBarConfig = ScrollBarConfig
+  { scrollBarConfigOrientation :: Orientation
+  , scrollBarConfigThumbRatio  :: Double
+  }
+
+defaultScrollBarConfig :: ScrollBarConfig
+defaultScrollBarConfig = ScrollBarConfig
+  { scrollBarConfigOrientation = Horizontal
+  , scrollBarConfigThumbRatio  = 1
+  }
+
+instance HasOrientationConfig ScrollBarConfig where
+  setOrientation o cfg = cfg { scrollBarConfigOrientation = o }
+
+instance HasThumbRatioConfig ScrollBarConfig where
+  setThumbRatio v cfg = cfg { scrollBarConfigThumbRatio = v }
+
+-- | A scrollbar with decrement\/increment buttons flanking a draggable
+-- thumb, set via 'orientation' and 'thumbRatio' (the fraction of the track
+-- the thumb fills, visible \/ total, in @[0, 1]@). The track and thumb are
+-- a 'slider' underneath — dragging, clicking the track, and arrow-key
+-- nudging while focused all move the position, written directly to the
+-- 'UIContext' at the track's element ID via 'ScrollTo'; nothing is reported
+-- back to the caller through 'ScrollBarEvent' beyond lifecycle events.
+-- Button clicks step by 'thumbRatio'.
+scrollBar :: Ord e => (ScrollBarPart -> e) -> [Attr e ScrollBarEvent msg ScrollBarConfig] -> UI e msg ()
+scrollBar mkId attrs = do
+  bounds <- getBounds
+  pos    <- getScrollState trackId
+  let btnLayout = case ori of
+        Vertical   -> Layout Fill (Exactly (rectWidth bounds))  TopLeft
+        Horizontal -> Layout (Exactly (rectHeight bounds)) Fill TopLeft
+  layoutFn defaultBoxConfig
+    [ (btnLayout, decrBtn)
+    , (Layout Fill Fill TopLeft, track pos)
+    , (btnLayout, incrBtn)
+    ]
+  where
+    cfg   = configure defaultScrollBarConfig attrs
+    ori   = scrollBarConfigOrientation cfg
+    ratio = max 0 (min 1 (scrollBarConfigThumbRatio cfg))
+
+    trackId = mkId ScrollTrack
+    thumbId = mkId ScrollThumb
+
+    layoutFn = case ori of
+      Vertical   -> vBox
+      Horizontal -> hBox
+
+    decrSym = case ori of
+      Vertical   -> "▲"
+      Horizontal -> "◀"
+    incrSym = case ori of
+      Vertical   -> "▼"
+      Horizontal -> "▶"
+
+    decrBtn = button (mkId ScrollDecrBtn) [text decrSym, onClick (perform (ScrollBy trackId (negate ratio)))]
+    incrBtn = button (mkId ScrollIncrBtn) [text incrSym, onClick (perform (ScrollBy trackId ratio))]
+
+    sliderPartId SliderTrack = trackId
+    sliderPartId SliderThumb = thumbId
+
+    track pos' =
+      slider sliderPartId
+        [ value pos'
+        , orientation ori
+        , thumbRatio ratio
+        , onChange (performWith (ScrollTo trackId))
+        , onFocusGained (forward attrs)
+        , onFocusLost   (forward attrs)
+        , onMouseEnter  (forward attrs)
+        , onMouseExit   (forward attrs)
+        ]
+
+-- | Sub-parts of a viewport's element ID hierarchy. Wraps 'ScrollBarPart'
+-- for the horizontal and vertical scrollbars:
+--
+-- @
+-- data Element = ... | MyRegion ViewportPart
+-- viewport MyRegion [contentSize (Size 600 400)] content
+-- @
+data ViewportPart
+  = ViewportH ScrollBarPart -- ^ A part of the horizontal scrollbar.
+  | ViewportV ScrollBarPart -- ^ A part of the vertical scrollbar.
+  deriving (Eq, Ord, Show)
+
+-- | The pixel width of a scrollbar strip used by 'viewport' and 'listBox'.
+-- Exported so callers that compose a viewport inside their own layout can
+-- account for the strip in their geometry without hard-coding the value.
+scrollRegionBarSize :: Double
+scrollRegionBarSize = 16
+
+-- | Configuration for 'viewport', set via 'contentSize'.
+newtype ViewportConfig = ViewportConfig { viewportConfigContentSize :: Size }
+
+defaultViewportConfig :: ViewportConfig
+defaultViewportConfig = ViewportConfig { viewportConfigContentSize = Size 0 0 }
+
+-- | Sets the virtual content size a 'viewport' scrolls over. Scrollbars
+-- appear automatically on axes where this exceeds the viewport's own
+-- bounds. Defaults to @'Size' 0 0@ (nothing to scroll).
+contentSize :: Size -> Attr e ev msg ViewportConfig
+contentSize sz = configAny $ \cfg -> cfg { viewportConfigContentSize = sz }
+
+-- | A scrollable window onto a fixed-size virtual content area, set via
+-- 'contentSize'. Scrollbars appear automatically on axes where the content
+-- exceeds the viewport, and are drawn first so that a drag or click this
+-- frame is reflected immediately. The content action then runs with
+-- virtual bounds — the full content rectangle translated so the scrolled
+-- portion aligns with the viewport — clipped to the visible area. Mouse
+-- interaction works naturally because translated bounds are in window
+-- coordinates; the clip region hides the rest.
+--
+-- For large, uniform item collections where building the whole content
+-- every frame would be wasteful, or where scrolling needs to be driven by
+-- keyboard selection, use 'listBox' instead — it manages its own scroll
+-- state directly rather than wrapping content in a viewport.
+viewport :: Ord e => (ViewportPart -> e) -> [Attr e Void msg ViewportConfig] -> UI e msg () -> UI e msg ()
+viewport mkId attrs content = do
+  outer <- getBounds
+  let Size cw ch = viewportConfigContentSize (configure defaultViewportConfig attrs)
+      ow      = rectWidth outer
+      oh      = rectHeight outer
+      -- Two-pass: check V with full height to determine reduced width, then
+      -- H, then re-check V with reduced height.
+      needsV1 = ch > oh
+      vpW1    = if needsV1 then ow - scrollRegionBarSize else ow
+      needsH  = cw > vpW1
+      vpH     = if needsH  then oh - scrollRegionBarSize else oh
+      needsV  = ch > vpH
+      vpW     = if needsV  then ow - scrollRegionBarSize else ow
+      hRatio  = if needsH then Just (max 0 (min 1 (vpW / cw))) else Nothing
+      vRatio  = if needsV then Just (max 0 (min 1 (vpH / ch))) else Nothing
+      vpRect  = outer { rectWidth = vpW, rectHeight = vpH }
+      hBar    = outer { rectY = rectY outer + vpH, rectHeight = scrollRegionBarSize, rectWidth = vpW }
+      vBar    = outer { rectX = rectX outer + vpW, rectWidth  = scrollRegionBarSize, rectHeight = vpH }
+  forM_ hRatio $ \r -> withBounds hBar $ scrollBar (mkId . ViewportH) [orientation Horizontal, thumbRatio r]
+  forM_ vRatio $ \r -> withBounds vBar $ scrollBar (mkId . ViewportV) [orientation Vertical, thumbRatio r]
+  hPos <- maybe (pure 0) (const (getScrollState (mkId (ViewportH ScrollTrack)))) hRatio
+  vPos <- maybe (pure 0) (const (getScrollState (mkId (ViewportV ScrollTrack)))) vRatio
+  let offsetX    = hPos * max 0 (cw - vpW)
+      offsetY    = vPos * max 0 (ch - vpH)
+      virtBounds = outer
+        { rectX      = rectX outer - offsetX
+        , rectY      = rectY outer - offsetY
+        , rectWidth  = cw
+        , rectHeight = ch
+        }
+  withBounds vpRect $ clipToCurrent $ withBounds virtBounds content
+
+-- | Renders only the items that fall within the current bounds of a
+-- uniform-height list, given the list's current scroll position in pixels.
+-- Not a 'control' — no element ID, no attrs, nothing with a sensible
+-- default: every argument is essential data the caller must already have,
+-- so unlike the rest of this module there's nothing to gain from making any
+-- of them attributes.
+--
+-- Renders one extra item beyond what's fully visible to cover a partially
+-- clipped final row. Does not draw a scrollbar or manage scroll state
+-- itself — pair with 'scrollBar' and 'getScrollState' (see 'listBox').
 virtualContent
-  :: Double              -- ^ current scroll position, in pixels
-  -> Double              -- ^ height of one item, in pixels
-  -> Int                 -- ^ total item count
+  :: Double                -- ^ current scroll position, in pixels
+  -> Double                -- ^ height of one item, in pixels
+  -> Int                   -- ^ total item count
   -> (Int -> UI e msg ())  -- ^ renders the item at the given index
   -> UI e msg ()
 virtualContent scrollPos itemHeight itemCount renderItem = do
   vp <- getBounds
-  let firstIdx = floor (scrollPos / itemHeight) :: Int
+  let firstIdx  = floor (scrollPos / itemHeight) :: Int
       subOffset = scrollPos - fromIntegral firstIdx * itemHeight
-      visibleN = ceiling ((rectHeight vp + subOffset) / itemHeight) :: Int
+      visibleN  = ceiling ((rectHeight vp + subOffset) / itemHeight) :: Int
   clipToCurrent $ forM_ [0 .. visibleN - 1] $ \j ->
-    let i       = firstIdx + j
+    let i        = firstIdx + j
         itemRect = vp { rectY = rectY vp + fromIntegral j * itemHeight - subOffset, rectHeight = itemHeight }
     in when (i >= 0 && i < itemCount) $ withBounds itemRect (renderItem i)
+
+-- | Events reported by 'selector' and 'radioGroup': 'Selected' with the
+-- activated item's value, or a lifecycle event via 'SelectorControl' (see
+-- 'ControlEvent') — each item is its own focusable 'control', so
+-- gaining\/losing focus is a per-item concern, reported the same way for
+-- every item through the one attrs list every item shares.
+data SelectorEvent a = Selected a | SelectorControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent (SelectorEvent a) where
+  liftControl = SelectorControl
+  matchControl (SelectorControl ce) = Just ce
+  matchControl _                    = Nothing
+
+-- | Runs a reaction with the activated item's value on every 'Selected'.
+onSelect :: (a -> [Out e msg]) -> Attr e (SelectorEvent a) msg cfg
+onSelect reaction = onEvent $ \ev -> case ev of
+  Selected v -> reaction v
+  _          -> []
+
+-- | Configuration for 'selector'\/'radioGroup', set via 'items' and
+-- 'selected'. Defaults to no items and nothing selected.
+data SelectorConfig a = SelectorConfig
+  { selectorConfigItems    :: [(a, Text)]
+  , selectorConfigSelected :: Maybe a
+  }
+
+defaultSelectorConfig :: SelectorConfig a
+defaultSelectorConfig = SelectorConfig { selectorConfigItems = [], selectorConfigSelected = Nothing }
+
+-- | Sets the @(value, label)@ pairs a 'selector'\/'radioGroup' lists, one
+-- per item in order. Defaults to @[]@.
+items :: [(a, Text)] -> Attr e ev msg (SelectorConfig a)
+items xs = configAny $ \cfg -> cfg { selectorConfigItems = xs }
+
+-- | Sets which item's value is currently selected. Defaults to
+-- 'Nothing' — no item selected, so every item's @isSelected@ is 'False'.
+selected :: a -> Attr e ev msg (SelectorConfig a)
+selected v = configAny $ \cfg -> cfg { selectorConfigSelected = Just v }
+
+-- | 'True' when @eid@ may handle an arrow-key navigation press this frame:
+-- either it already held focus going into this pass, or it was clicked this
+-- frame. Comparing against a focus snapshot taken before any item in the
+-- pass ran — rather than re-reading focus per item — keeps at most one item
+-- per frame handling the key, even though a same-frame 'setFocus' from an
+-- earlier item in the same pass is otherwise visible to a later item's
+-- 'isFocused' straight away. Shared by 'selector' and 'listBox'.
+mayHandleArrowKeys :: Eq e => Maybe e -> Bool -> e -> Bool
+mayHandleArrowKeys initialFocus clicked eid = initialFocus == Just eid || clicked
+
+-- | A vertical list of items, each activated by click, Enter, or Space, with
+-- arrow-key navigation between items, set via 'items' and 'selected'. Fires
+-- 'Selected' with the new value when a different item is activated.
+-- @renderItem eid isSelected item@ draws each item's content; 'selector'
+-- itself owns the selection comparison, activation, and Up\/Down
+-- navigation. Multiple selectors on screen each bind to their own
+-- application-state field; no shared state is required. See 'radioGroup'
+-- for the radio-mark rendering built on top of this. Each item is a
+-- 'control' internally, so it gets its own hover, focus, and tab-stop;
+-- 'selector' layers Up\/Down navigation and the shared selection value on
+-- top.
+--
+-- The same @attrs@ list is consulted for every item; 'fire' runs its
+-- handlers in the order given regardless of which item was activated
+-- ("client" handlers — attrs the caller wrote — see exactly one 'Selected'
+-- event per activated frame). Arrow-key navigation is "internal" to
+-- 'selector' and runs after that 'fire' call, so a client's 'onSelect'
+-- handler always observes the pre-navigation state.
+--
+-- @
+-- data Element = ... | SizeItem Int
+--
+-- selector SizeItem
+--   [items [(Small, "Small"), (Medium, "Medium"), (Large, "Large")], selected (size model), onSelect SizeChanged] $
+--   \\eid isSelected (_, lbl) -> do
+--     style <- getStyle eid
+--     drawText (styleTextColour style) AlignLeft (if isSelected then "> " <> lbl else lbl)
+-- @
+selector :: (Ord e, Eq a)
+         => (Int -> e)                              -- ^ maps item index to an element ID
+         -> [Attr e (SelectorEvent a) msg (SelectorConfig a)]
+         -> (e -> Bool -> (a, Text) -> UI e msg ()) -- ^ @eid isSelected item@
+         -> UI e msg ()
+selector mkId attrs renderItem = do
+  let cfg      = configure defaultSelectorConfig attrs
+      itemList = selectorConfigItems cfg
+      sel      = selectorConfigSelected cfg
+      lastIdx  = length itemList - 1
+  initialFocus <- getFocus
+  vBox defaultBoxConfig (zipWith (mkItem initialFocus sel lastIdx) [0 ..] itemList)
+  where
+    mkItem initialFocus sel lastIdx idx item@(val, _) =
+      let eid = mkId idx
+      in ( Layout Fill Fill TopLeft
+         , do
+             clicked   <- isClickedOver eid
+             activated <- activatable eid attrs [KeyReturn, KeySpace] (renderItem eid (sel == Just val) item)
+             when activated $ fire attrs [Selected val]
+             whenEnabled $ when (mayHandleArrowKeys initialFocus clicked eid) $ do
+               upPressed   <- isKeyPressed eid KeyUp
+               downPressed <- isKeyPressed eid KeyDown
+               when upPressed   $ setFocus (mkId (max 0 (idx - 1)))
+               when downPressed $ setFocus (mkId (min lastIdx (idx + 1)))
+         )
+
+-- | A group of mutually exclusive options, rendered as a radio mark and
+-- label per item, set via 'items' and 'selected'. A thin wrapper over
+-- 'selector' supplying the radio-mark rendering; see 'selector' for the
+-- selection, activation, navigation, and attribute-handling behaviour.
+radioGroup :: (Ord e, Eq a)
+           => (Int -> e)  -- ^ maps item index to an element ID
+           -> [Attr e (SelectorEvent a) msg (SelectorConfig a)]
+           -> UI e msg ()
+radioGroup mkId attrs =
+  selector mkId attrs $ \eid isSelected (_, lbl) -> do
+    style <- getStyle eid
+    drawText (styleTextColour style) AlignLeft $
+      (if isSelected then "● " else "○ ") <> lbl
 
 -- | Sub-parts of a 'listBox': individual items, and the scrollbar's own
 -- parts, tagged together so both can be addressed through one composite
@@ -1185,63 +1494,65 @@ data ListBoxPart
   deriving (Eq, Ord, Show)
 
 -- | A vertically scrolling list of items, one selected, with keyboard
--- navigation between them — the composite of 'selector'-style navigation,
--- 'scrollBar', and 'virtualContent', wired together so that only the
--- currently-visible items are ever rendered. Moving the current item off
--- the visible window with the arrow keys scrolls it back into view.
+-- navigation between them, set via 'items' and 'selected' — the composite
+-- of 'selector'-style navigation, 'scrollBar', and 'virtualContent', wired
+-- together so that only the currently-visible items are ever rendered.
+-- Moving the current item off the visible window with the arrow keys
+-- scrolls it back into view.
 --
 -- As with 'selector', the /current/ item (keyboard focus, tracked here) is
--- distinct from the /selected/ item (application state, via @selected@\/
--- @onChange@): arrow keys move the current item without emitting; Enter,
--- Space, or a click activates it and emits @onChange@.
-listBox :: (Eq e, Ord e, Eq a)
-        => (ListBoxPart -> e)                     -- ^ maps list-box parts to element IDs
-        -> Double                                  -- ^ item height, in pixels
-        -> [(a, Text)]                             -- ^ @(value, label)@ pairs
-        -> a                                       -- ^ currently selected value
-        -> [Attr e (SelectorEvent a) msg cfg]
+-- distinct from the /selected/ item (application state, via 'selected'\/
+-- 'onSelect'): arrow keys move the current item without emitting; Enter,
+-- Space, or a click activates it and emits 'Selected'.
+--
+-- @itemHeight@ stays a plain argument rather than an attribute, like
+-- 'virtualContent's own: there's no default that wouldn't just silently
+-- misrender every list a caller forgot to size, unlike a control value
+-- with a real neutral state (an unchecked checkbox, a slider at 0).
+listBox :: (Ord e, Eq a)
+        => (ListBoxPart -> e)                       -- ^ maps list-box parts to element IDs
+        -> Double                                   -- ^ item height, in pixels
+        -> [Attr e (SelectorEvent a) msg (SelectorConfig a)]
         -> (e -> Bool -> (a, Text) -> UI e msg ())  -- ^ @eid isSelected item@
         -> UI e msg ()
-listBox mkId itemHeight items selected attrs renderItem = do
+listBox mkId itemHeight attrs renderItem = do
   initialFocus <- getFocus
   hBox defaultBoxConfig
     [ (Layout Fill Fill TopLeft, itemsArea initialFocus)
     , (Layout (Exactly scrollRegionBarSize) Fill TopLeft, scrollBarArea)
     ]
   where
-    itemCount = length items
+    cfg       = configure defaultSelectorConfig attrs
+    itemList  = selectorConfigItems cfg
+    sel       = selectorConfigSelected cfg
+    itemCount = length itemList
     lastIdx   = itemCount - 1
-    trackId   = mkId (ListBoxScroll ScrollTrack)
     contentH  = fromIntegral itemCount * itemHeight
+    trackId   = mkId (ListBoxScroll ScrollTrack)
 
     -- scrollBar persists position as a [0, 1] fraction (same convention as
     -- every other scroll-state consumer in this module); virtualContent and
-    -- the scroll-to-current math below both work in pixels, so the fraction
-    -- is converted on the way in and out.
+    -- the scroll-to-current math below both work in pixels, so the
+    -- fraction is converted on the way in and out.
     itemsArea initialFocus = do
       vp <- getBounds
       let vpH       = rectHeight vp
           maxScroll = max 0 (contentH - vpH)
       frac <- getScrollState trackId
       let scrollPx = frac * maxScroll
-      virtualContent scrollPx itemHeight itemCount $ \idx ->
-        mkItem initialFocus vpH maxScroll scrollPx idx
+      virtualContent scrollPx itemHeight itemCount (mkItem initialFocus vpH maxScroll scrollPx)
 
-    mkItem initialFocus vpH maxScroll scrollPx idx =
-      let item@(val, _) = items !! idx
+    mkItem initialFocus vpH maxScroll scrollPx idx = do
+      let item@(val, _) = itemList !! idx
           eid            = mkId (ListBoxItem idx)
-      in control eid $ do
-           clicked      <- isClicked eid
-           keyActivated <- or <$> mapM (isKeyPressed eid) [KeyReturn, KeySpace]
-           disabled     <- isDisabled
-           let activated = not disabled && (clicked || keyActivated)
-           renderItem eid (selected == val) item
-           when activated $ fire attrs [Selected val]
-           whenEnabled $ when (mayHandleArrowKeys initialFocus clicked eid) $ do
-             upPressed   <- isKeyPressed eid KeyUp
-             downPressed <- isKeyPressed eid KeyDown
-             when upPressed   $ scrollToCurrent vpH maxScroll scrollPx (max 0 (idx - 1))
-             when downPressed $ scrollToCurrent vpH maxScroll scrollPx (min lastIdx (idx + 1))
+      clicked   <- isClickedOver eid
+      activated <- activatable eid attrs [KeyReturn, KeySpace] (renderItem eid (sel == Just val) item)
+      when activated $ fire attrs [Selected val]
+      whenEnabled $ when (mayHandleArrowKeys initialFocus clicked eid) $ do
+        upPressed   <- isKeyPressed eid KeyUp
+        downPressed <- isKeyPressed eid KeyDown
+        when upPressed   $ scrollToCurrent vpH maxScroll scrollPx (max 0 (idx - 1))
+        when downPressed $ scrollToCurrent vpH maxScroll scrollPx (min lastIdx (idx + 1))
 
     scrollToCurrent vpH maxScroll scrollPx newIdx = do
       setFocus (mkId (ListBoxItem newIdx))
@@ -1257,197 +1568,6 @@ listBox mkId itemHeight items selected attrs renderItem = do
 
     scrollBarArea = do
       vp <- getBounds
-      let vpH        = rectHeight vp
-          thumbRatio = if contentH > 0 then max 0 (min 1 (vpH / contentH)) else 1
-      scrollBar (mkId . ListBoxScroll) Vertical thumbRatio []
-
--- | Returns the @(width, height)@ overhead consumed by a control's margin and
--- padding as 'Length' constraints. Add these to a content size with
--- @Blink.Layout.addLength@ to get the total size needed for the control to
--- display without clipping.
-measureChrome :: Ord e
-              => e  -- ^ element ID
-              -> UI e msg (Length, Length)
-measureChrome eid = do
-  style <- getStyle eid
-  let m  = styleMargin style
-      p  = stylePadding style
-      be = case styleBorderColour style of
-             Just _  -> borderInsets (styleBorderEdges style)
-             Nothing -> borderInsets noBorder
-      dw = leftInset m + rightInset m + leftInset be + rightInset be + leftInset p + rightInset p
-      dh = topInset m  + bottomInset m  + topInset be + bottomInset be + topInset p  + bottomInset p
-  pure (Exactly dw, Exactly dh)
-
--- | Style-aware rendering for a control. Applies the element's margin, draws
--- its background and border, and runs @content@ within the padded content
--- rectangle. Does not perform hover detection, focus management, or tab
--- navigation — use this for display-only elements that should not participate
--- in interaction. See 'control' for the interactive counterpart.
-renderChrome :: Ord e
-             => e          -- ^ element ID
-             -> UI e msg ()  -- ^ content, run within the padded content rectangle
-             -> UI e msg ()
-renderChrome eid content = do
-  style <- getStyle eid
-  r     <- getBounds
-  let bgRect      = insetRect (styleMargin style) r
-      borderRect  = case styleBorderColour style of
-                      Just _  -> insetRect (borderInsets (styleBorderEdges style)) bgRect
-                      Nothing -> bgRect
-      contentRect = insetRect (stylePadding style) borderRect
-      inner       = withBounds contentRect $ clipToCurrent content
-  withBounds bgRect $
-    withBackground (styleBackground style) $
-    case styleBorderColour style of
-      Just c  -> withBorder c (styleBorderEdges style) inner
-      Nothing -> inner
-
--- | The standard entry point for interactive controls. Applies hover detection,
--- focus management, and Tab\/Shift-Tab navigation, then delegates to
--- 'renderChrome' for style-aware rendering. @content@ runs inside the padded
--- content rectangle.
---
--- @
--- control eid $ do
---   style <- getStyle eid
---   drawText (styleTextColour style) (styleTextAlign style) label
--- @
-control :: Ord e
-        => e          -- ^ element ID
-        -> UI e msg ()  -- ^ content, run within the padded content rectangle
-        -> UI e msg ()
-control eid content = do
-  applyHover eid
-  applyFocus eid
-  applyTabNavigation eid
-  renderChrome eid content
-
--- | 'True' when the mouse is over the element's background rectangle (bounds
--- inset by its margin) — the control-specific hit area. Built on 'isRegionHit';
--- use this rather than reimplementing the margin geometry in custom controls.
-isControlHit :: Ord e
-             => e  -- ^ element ID
-             -> UI e msg Bool
-isControlHit eid = do
-  s <- getStyle eid
-  r <- getBounds
-  withBounds (insetRect (styleMargin s) r) isRegionHit
-
-applyHover :: Ord e => e -> UI e msg ()
-applyHover eid = do
-  whenEnabled $ do
-    free     <- isMouseFree
-    dragging <- isDragging eid
-    when (free || dragging) $ do
-      isHit <- isControlHit eid
-      when isHit $ setHovered eid
-
-applyFocus :: Ord e => e -> UI e msg ()
-applyFocus eid = do
-  whenEnabled $ do
-    currentFocus <- getFocus
-    isHit        <- isHovered eid
-    released     <- isButtonReleased
-    captured     <- getCapturedElement
-    let nothingIsFocused = isNothing currentFocus
-        isRetainingFocus = currentFocus == Just eid
-        -- A drag release is when the button is released over a different
-        -- element than the one that was captured. Focus should not transfer
-        -- in that case — the drag origin retains focus.
-        isDragRelease = released && isJust captured && captured /= Just eid
-        wasClicked    = isHit && released && not isDragRelease
-    setFocusWhen (isRetainingFocus || ((nothingIsFocused || wasClicked) && not isDragRelease)) eid
-
-applyTabNavigation :: Ord e => e -> UI e msg ()
-applyTabNavigation eid = whenEnabled $ do
-  hasFocus <- isFocused eid
-  input    <- getInput
-  prevCtrl <- getPreviousTabStop
-  let tabKey          = find (\e -> key e == KeyTab) (inputKeyEvents input)
-      tabPressed      = maybe False (\e -> Shift `notElem` modifiers e) tabKey
-      shiftTabPressed = maybe False (\e -> Shift `elem`    modifiers e) tabKey
-  when (hasFocus && tabPressed) $ do
-    clearFocus
-    consumeKey KeyTab
-  when (hasFocus && shiftTabPressed) $
-    forM_ prevCtrl $ \prev -> do
-      setFocus prev
-      consumeKey KeyTab
-  setPreviousTabStop eid
-
--- | 'True' when the element is clicked or any of the given keys are pressed
--- while it is focused, and the element is not disabled. Use this to implement
--- the activation behaviour of interactive controls.
-isActivatedBy :: Ord e
-              => e      -- ^ element ID
-              -> [Key]  -- ^ keys that also activate, in addition to a click
-              -> UI e msg Bool
-isActivatedBy eid keys = do
-  clicked  <- isClicked eid
-  keyPress <- or <$> mapM (isKeyPressed eid) keys
-  disabled <- isDisabled
-  return (not disabled && (clicked || keyPress))
-
--- | 'control' plus 'isActivatedBy': runs @draw@ as a normal interactive
--- control, then reports whether it was activated (a click or one of @keys@)
--- this frame. The shape shared by simple activatable controls — a button, a
--- checkbox's mark — whose draw action does not itself depend on whether
--- activation occurred. This is 'button' with a fixed set of keys and a
--- fixed draw action; most custom activatable controls are exactly this
--- shape with the specifics filled in:
---
--- @
--- data StarRatingEvent = RatingClicked
---
--- starRating :: Ord e => e -> Bool -> [Attr e StarRatingEvent msg cfg] -> UI e msg ()
--- starRating eid lit attrs = do
---   activated <- activatable eid draw [KeyReturn, KeySpace]
---   when activated $ fire attrs [RatingClicked]
---   where
---     draw = do
---       style <- getStyle eid
---       drawText (styleTextColour style) AlignCenter (if lit then "\9733" else "\9734")
--- @
-activatable :: Ord e
-            => e          -- ^ element ID
-            -> UI e msg ()  -- ^ draw action
-            -> [Key]      -- ^ keys that also activate, in addition to a click
-            -> UI e msg Bool
-activatable eid draw keys = do
-  control eid draw
-  isActivatedBy eid keys
-
--- | Runs an action only when the given element holds keyboard focus.
-whenFocused :: Eq e
-            => e          -- ^ element ID
-            -> UI e msg ()  -- ^ action to run when focused
-            -> UI e msg ()
-whenFocused eid action = isFocused eid >>= \f -> when f action
-
--- | Draws @eid@'s focused-style border around the current bounds when @eid@
--- holds focus, and nothing otherwise. Composite controls made of several
--- non-'control' pieces (a checkbox's mark and label, say) have no single
--- element whose own chrome can show a focus indicator spanning the whole
--- composite; call this after laying out the composite's children, while the
--- current bounds are still the composite's own outer bounds.
-focusRing :: Ord e
-          => e  -- ^ element ID
-          -> UI e msg ()
-focusRing eid = whenFocused eid $ do
-  styleSet <- getStyleSet eid
-  let s = styleSetFocused styleSet
-  case styleBorderColour s of
-    Just c  -> strokeRect c (styleBorderEdges s)
-    Nothing -> pure ()
-
--- | 'True' when the element holds focus and a key event for @k@ is present
--- in the current frame's input queue.
-isKeyPressed :: Eq e
-             => e    -- ^ element ID
-             -> Key  -- ^ key to test for
-             -> UI e msg Bool
-isKeyPressed eid k = do
-  hasFoc  <- isFocused eid
-  pressed <- any (\e -> key e == k) . inputKeyEvents <$> getInput
-  return (hasFoc && pressed)
+      let vpH   = rectHeight vp
+          ratio = if contentH > 0 then max 0 (min 1 (vpH / contentH)) else 1
+      scrollBar (mkId . ListBoxScroll) [orientation Vertical, thumbRatio ratio]

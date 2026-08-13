@@ -1,9 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | Shared test harness for exercising controls in isolation: a minimal
 -- element type, a bare-bones theme, and helpers for constructing input and
--- inspecting the resulting context. Used by both the existing @Blink.Controls@
--- suite and its in-progress @Blink.Controls2@ replacement, so the two stay
--- comparable and neither has to duplicate this setup.
+-- inspecting the resulting context. Used by "Blink.ControlsSpec".
 module Blink.ControlsTestSupport
   ( TestElement (..)
   , WidgetRunner

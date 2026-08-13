@@ -2,7 +2,7 @@
 module UI (Element, AppState (..), demoApp) where
 
 import Blink.App
-import Blink.Controls2
+import Blink.Controls
 import Blink.Geometry
 import Blink.Input
 import Blink.Layout

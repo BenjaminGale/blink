@@ -86,14 +86,14 @@ renderBorder renderer r color edges = do
   when (ri > 0) $ SDL.fillRect renderer (Just (mkRect (x + w - ri) (y + t) ri (h - t - b)))
 
 renderText :: SDL.Renderer -> Font.Font -> TextureCache -> Rectangle -> Text -> Colour -> TextAlign -> IO ()
-renderText renderer font cache r text color align = do
+renderText renderer font cache r txt color align = do
   let sdlColor = toSDLColor color
-      cacheKey = (text, sdlColor)
+      cacheKey = (txt, sdlColor)
   m <- readIORef cache
   (texture, tw, th) <- case Map.lookup cacheKey m of
     Just hit -> pure hit
     Nothing  -> do
-      surface <- Font.blended font sdlColor text
+      surface <- Font.blended font sdlColor txt
       tex     <- SDL.createTextureFromSurface renderer surface
       SDL.freeSurface surface
       (SDL.TextureInfo _ _ w h) <- SDL.queryTexture tex
@@ -123,8 +123,8 @@ popClip renderer clipRef = do
 submitDrawCommand :: SDL.Renderer -> Font.Font -> TextureCache -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
 submitDrawCommand renderer _ _ _        (FillRect r color)            = renderFill   renderer r color
 submitDrawCommand renderer _ _ _        (StrokeBorder r color edges)  = renderBorder renderer r color edges
-submitDrawCommand _ _ _ _               (DrawText _ text _ _) | T.null text = pure ()
-submitDrawCommand renderer font cache _ (DrawText r text color align) = renderText   renderer font cache r text color align
+submitDrawCommand _ _ _ _               (DrawText _ txt _ _) | T.null txt = pure ()
+submitDrawCommand renderer font cache _ (DrawText r txt color align) = renderText   renderer font cache r txt color align
 submitDrawCommand renderer _ _ clipRef  (PushClip r)                  = pushClip     renderer clipRef r
 submitDrawCommand renderer _ _ clipRef   PopClip                      = popClip      renderer clipRef
 

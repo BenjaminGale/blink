@@ -77,5 +77,5 @@ import Blink.Input
 import Blink.Layout
 import Blink.Rendering
 import Blink.Style
-import Blink.UI
+import Blink.UI hiding (getStyle, isPressed)
 import Blink.Update

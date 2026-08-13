@@ -6,13 +6,31 @@ import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (forAll, choose)
 
-import Blink.Geometry (Point (..), Rectangle (..), uniform, noBorder, uniformBorder)
+import Control.Monad (when)
+import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform, noBorder, uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
-import Blink.Controls (control)
 import Blink.UI
 import Blink.Generators ()
+
+-- | Minimal stand-in for the pre-migration @Blink.Controls.control@ (now
+-- deleted): registers hover via the legacy single-owner 'setHovered' \/
+-- 'ixnHovered' field these tests specifically target, gated the same way —
+-- geometrically hit, and only when the mouse is free or this element itself
+-- holds capture. The current 'Blink.Controls.control' no longer touches
+-- this field at all (it uses the newer geometric hover model instead), so
+-- these 'Blink.UI'-level primitives need their own minimal exerciser.
+legacyHoverControl :: Ord e => e -> UI e msg () -> UI e msg ()
+legacyHoverControl eid content = do
+  free     <- isMouseFree
+  dragging <- isDragging eid
+  when (free || dragging) $ do
+    s     <- getStyle eid
+    r     <- getBounds
+    isHit <- withBounds (insetRect (styleMargin s) r) isRegionHit
+    when isHit $ setHovered eid
+  content
 
 data TwoElems = ElemA | ElemB deriving (Eq, Ord, Show)
 
@@ -92,14 +110,14 @@ spec = describe "Blink.UI" $ do
       let clipRect = Rectangle 0 0 100 50
           mouseOutsideClip = noInput { inputMousePosition = Point 50 75 }
       (_, ctx') <- runWith mouseOutsideClip
-        (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ()))
+        (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ legacyHoverControl () (pure ()))
       ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
     it "registers hover when the mouse is inside both the bounds and the clip region" $ do
       let clipRect = Rectangle 0 0 100 50
           mouseInsideClip = noInput { inputMousePosition = Point 50 25 }
       (_, ctx') <- runWith mouseInsideClip
-        (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ control () (pure ()))
+        (withBounds clipRect $ clipToCurrent $ withBounds testBounds $ legacyHoverControl () (pure ()))
       ixnHovered (ctxInteraction ctx') `shouldBe` Just ()
 
     it "wraps draw commands in PushClip / PopClip" $ do
@@ -116,7 +134,7 @@ spec = describe "Blink.UI" $ do
       (_, ctx') <- runWith mouseOutside
         (withBounds outerClip $ clipToCurrent $
          withBounds innerClip $ clipToCurrent $
-         withBounds testBounds $ control () (pure ()))
+         withBounds testBounds $ legacyHoverControl () (pure ()))
       ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
   describe "withBounds" $ do
@@ -134,16 +152,16 @@ spec = describe "Blink.UI" $ do
 
     it "does not hover an element when another element holds capture" $ do
       let ctx = withCapture ElemB base
-      (_, ctx') <- runUI (control ElemA (pure ())) ctx
+      (_, ctx') <- runUI (legacyHoverControl ElemA (pure ())) ctx
       ixnHovered (ctxInteraction ctx') `shouldBe` Nothing
 
     it "hovers an element when it is itself the captured element" $ do
       let ctx = withCapture ElemA base
-      (_, ctx') <- runUI (control ElemA (pure ())) ctx
+      (_, ctx') <- runUI (legacyHoverControl ElemA (pure ())) ctx
       ixnHovered (ctxInteraction ctx') `shouldBe` Just ElemA
 
     it "hovers an element when no capture is active" $ do
-      (_, ctx') <- runUI (control ElemA (pure ())) base
+      (_, ctx') <- runUI (legacyHoverControl ElemA (pure ())) base
       ixnHovered (ctxInteraction ctx') `shouldBe` Just ElemA
 
   it "getMessages returns emitted messages in emit order" $ do
@@ -460,7 +478,7 @@ spec = describe "Blink.UI" $ do
       getDrawCommands ctx' `shouldBe` []
 
     it "nextFrameContext clears the hovered element from the previous frame" $ do
-      (_, ctx1) <- runWith mouseOnCenter (control () (pure ()))
+      (_, ctx1) <- runWith mouseOnCenter (legacyHoverControl () (pure ()))
       let ctx2 = nextFrameContext testBounds noInput ctx1
       ixnHovered (ctxInteraction ctx2) `shouldBe` Nothing
 
@@ -630,7 +648,7 @@ spec = describe "Blink.UI" $ do
       result `shouldBe` Nothing
 
     it "returns the element currently registered as hovered" $ do
-      (result, _) <- runWith mouseOnCenter (control () (pure ()) >> getHoveredElement)
+      (result, _) <- runWith mouseOnCenter (legacyHoverControl () (pure ()) >> getHoveredElement)
       result `shouldBe` Just ()
 
   describe "mouse-over memory (registerMouseOver / wasMouseOverLastFrame)" $ do
