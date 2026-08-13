@@ -3,9 +3,14 @@ module Blink.Controls2
   ( Attr
   , configure
   , fire
-  , captureOuts
-  , onAny
+  , onEvent
   , configAny
+  , post
+  , postWith
+  , perform
+  , performWith
+  , forward
+  , translate
   , ControlEvent (..)
   , HasControlEvent (..)
   , onFocusGained
@@ -38,7 +43,6 @@ module Blink.Controls2
   , button
   , ButtonEvent (Clicked)
   , onClick
-  , onClickTo
   , CheckboxPart (..)
   , CheckboxEvent (Toggled)
   , onToggle
@@ -129,37 +133,72 @@ controlConfig = foldl' apply defaultControlConfig
     apply cc (Shared f) = f cc
     apply cc _          = cc
 
--- | The outs a set of attrs' handlers would produce for one event, without
--- executing any of them — the pure half of 'fire'. Lets a composite bridge
--- an inner control's events into its own attrs (see 'rangeControl') by
--- capturing what firing against them would do, then handing that result
--- back through its own dispatch instead of triggering it directly.
-captureOuts :: [Attr e ev msg cfg] -> ev -> [Out e msg]
-captureOuts attrs ev = concatMap ($ ev) [h | On h <- attrs]
-
 fire :: [Attr e ev msg cfg] -> [ev] -> UI e msg ()
-fire attrs evs = forM_ evs $ \ev -> mapM_ dispatch (captureOuts attrs ev)
+fire attrs evs = forM_ evs $ \ev -> mapM_ dispatch (concatMap ($ ev) [h | On h <- attrs])
   where
     dispatch (OutMsg msg) = emit msg
     dispatch (OutUi eff)  = emitUi eff
 
-onAny :: (ev -> [Out e msg]) -> Attr e ev msg cfg
-onAny = On
+onEvent :: (ev -> [Out e msg]) -> Attr e ev msg cfg
+onEvent = On
 
 configAny :: (cfg -> cfg) -> Attr e ev msg cfg
 configAny = Config
 
-onFocusGained :: HasControlEvent ev => msg -> Attr e ev msg cfg
-onFocusGained msg = onAny $ \ev -> [OutMsg msg | matchControl ev == Just FocusGained]
+-- | Emits @msg@, ignoring whatever data the triggering event carried.
+post :: msg -> a -> [Out e msg]
+post msg = const [OutMsg msg]
 
-onFocusLost :: HasControlEvent ev => msg -> Attr e ev msg cfg
-onFocusLost msg = onAny $ \ev -> [OutMsg msg | matchControl ev == Just FocusLost]
+-- | Emits @f a@ — uses the triggering event's own data to build the message.
+postWith :: (a -> msg) -> a -> [Out e msg]
+postWith f a = [OutMsg (f a)]
 
-onMouseEnter :: HasControlEvent ev => msg -> Attr e ev msg cfg
-onMouseEnter msg = onAny $ \ev -> [OutMsg msg | matchControl ev == Just MouseEntered]
+-- | Queues a 'UiEffect', ignoring whatever data the triggering event
+-- carried. For controls (like 'scrollBar') that write their own state
+-- directly to the 'UIContext' rather than routing it through the app's
+-- model.
+perform :: UiEffect e -> a -> [Out e msg]
+perform eff = const [OutUi eff]
 
-onMouseExit :: HasControlEvent ev => msg -> Attr e ev msg cfg
-onMouseExit msg = onAny $ \ev -> [OutMsg msg | matchControl ev == Just MouseExited]
+-- | Queues @f a@ as a 'UiEffect' — uses the triggering event's own data to
+-- build it.
+performWith :: (a -> UiEffect e) -> a -> [Out e msg]
+performWith f a = [OutUi (f a)]
+
+-- | Re-raises a sub-control's lifecycle event against another attrs list
+-- under the same name — e.g. @onFocusLost (forward attrs)@ calls whatever
+-- 'onFocusLost' handler (if any) is in @attrs@. Lets a composite (like
+-- 'scrollBar') mirror an inner control's lifecycle events as its own,
+-- reusing whatever focus\/hover tracking the inner control already did
+-- instead of redoing it.
+forward :: HasControlEvent ev => [Attr e ev msg cfg] -> ControlEvent -> [Out e msg]
+forward attrs ce = concatMap ($ liftControl ce) [h | On h <- attrs]
+
+-- | Re-raises @ev@ against another attrs list, ignoring whatever data the
+-- triggering event carried — for triggering a *different* event on the
+-- parent than the one that actually fired.
+translate :: [Attr e ev msg cfg] -> ev -> a -> [Out e msg]
+translate attrs ev = const (concatMap ($ ev) [h | On h <- attrs])
+
+onFocusGained :: HasControlEvent ev => (ControlEvent -> [Out e msg]) -> Attr e ev msg cfg
+onFocusGained reaction = onEvent $ \ev -> case matchControl ev of
+  Just FocusGained -> reaction FocusGained
+  _                -> []
+
+onFocusLost :: HasControlEvent ev => (ControlEvent -> [Out e msg]) -> Attr e ev msg cfg
+onFocusLost reaction = onEvent $ \ev -> case matchControl ev of
+  Just FocusLost -> reaction FocusLost
+  _              -> []
+
+onMouseEnter :: HasControlEvent ev => (ControlEvent -> [Out e msg]) -> Attr e ev msg cfg
+onMouseEnter reaction = onEvent $ \ev -> case matchControl ev of
+  Just MouseEntered -> reaction MouseEntered
+  _                 -> []
+
+onMouseExit :: HasControlEvent ev => (ControlEvent -> [Out e msg]) -> Attr e ev msg cfg
+onMouseExit reaction = onEvent $ \ev -> case matchControl ev of
+  Just MouseExited -> reaction MouseExited
+  _                -> []
 
 tabStop :: Bool -> Attr e ev msg cfg
 tabStop b = Shared $ \cc -> cc { ccTabStop = b }
@@ -488,10 +527,8 @@ progressBar eid attrs = do
 -- | Events reported by 'button': 'Clicked' when activated, or a lifecycle
 -- event via 'Control' (see 'ControlEvent'). 'Control' is not exported —
 -- 'onFocusGained'\/'onFocusLost'\/'onMouseEnter'\/'onMouseExit' already cover
--- it generically — but 'Clicked' is, since 'onAny' needs to pattern-match
--- on it directly to build a custom handler ('onClick'\/'onClickTo' each only
--- cover one output; combining a message and a 'UiEffect' on the same click
--- needs 'onAny' with 'Clicked' in scope).
+-- it generically — but 'Clicked' is, so a fully custom handler can still be
+-- built with 'onEvent' when 'onClick' isn't enough.
 data ButtonEvent = Clicked | Control ControlEvent
   deriving (Eq, Show)
 
@@ -500,17 +537,12 @@ instance HasControlEvent ButtonEvent where
   matchControl (Control ce) = Just ce
   matchControl _             = Nothing
 
--- | Emits @msg@ when the button is 'Clicked'.
-onClick :: msg -> Attr e ButtonEvent msg cfg
-onClick msg = onAny $ \ev -> case ev of
-  Clicked -> [OutMsg msg]
-  _       -> []
-
--- | Queues a 'UiEffect' when the button is 'Clicked', for effects that don't
--- have a @msg@ to emit.
-onClickTo :: UiEffect e -> Attr e ButtonEvent msg cfg
-onClickTo eff = onAny $ \ev -> case ev of
-  Clicked -> [OutUi eff]
+-- | Runs a reaction when the button is 'Clicked' — e.g. @onClick (post msg)@
+-- to emit a message, @onClick (perform eff)@ to queue a 'UiEffect', or
+-- @onClick (post msg \<\> perform eff)@ to do both.
+onClick :: (() -> [Out e msg]) -> Attr e ButtonEvent msg cfg
+onClick reaction = onEvent $ \ev -> case ev of
+  Clicked -> reaction ()
   _       -> []
 
 -- | Configuration for 'button', set via 'text'. Defaults to @\"\"@.
@@ -558,10 +590,10 @@ instance HasControlEvent CheckboxEvent where
   matchControl (CheckboxControl ce) = Just ce
   matchControl _                    = Nothing
 
--- | Emits @f newChecked@ when 'Toggled'.
-onToggle :: (Bool -> msg) -> Attr e CheckboxEvent msg cfg
-onToggle f = onAny $ \ev -> case ev of
-  Toggled b -> [OutMsg (f b)]
+-- | Runs a reaction with the new checked state when 'Toggled'.
+onToggle :: (Bool -> [Out e msg]) -> Attr e CheckboxEvent msg cfg
+onToggle reaction = onEvent $ \ev -> case ev of
+  Toggled b -> reaction b
   _         -> []
 
 -- | Draws a checkbox glyph: a checkmark centred in the current bounds when
@@ -794,16 +826,17 @@ instance HasControlEvent TextEvent where
   matchControl (TextControl ce) = Just ce
   matchControl _                = Nothing
 
--- | Emits @f newValue@ on every 'Edited'.
-onInput :: (Text -> msg) -> Attr e TextEvent msg cfg
-onInput f = onAny $ \ev -> case ev of
-  Edited t -> [OutMsg (f t)]
+-- | Runs a reaction with the new value on every 'Edited'.
+onInput :: (Text -> [Out e msg]) -> Attr e TextEvent msg cfg
+onInput reaction = onEvent $ \ev -> case ev of
+  Edited t -> reaction t
   _        -> []
 
--- | Emits @msg@ when Enter is pressed while the field is focused ('Submitted').
-onSubmit :: msg -> Attr e TextEvent msg cfg
-onSubmit msg = onAny $ \ev -> case ev of
-  Submitted -> [OutMsg msg]
+-- | Runs a reaction when Enter is pressed while the field is focused
+-- ('Submitted').
+onSubmit :: (() -> [Out e msg]) -> Attr e TextEvent msg cfg
+onSubmit reaction = onEvent $ \ev -> case ev of
+  Submitted -> reaction ()
   _         -> []
 
 -- | Configuration for 'textInputControl', set via 'inputFilter',
@@ -996,10 +1029,10 @@ instance HasControlEvent SliderEvent where
   matchControl (SliderControl ce) = Just ce
   matchControl _                  = Nothing
 
--- | Emits @f newValue@ on every 'Changed'.
-onChange :: (Double -> msg) -> Attr e SliderEvent msg cfg
-onChange f = onAny $ \ev -> case ev of
-  Changed v -> [OutMsg (f v)]
+-- | Runs a reaction with the new value on every 'Changed'.
+onChange :: (Double -> [Out e msg]) -> Attr e SliderEvent msg cfg
+onChange reaction = onEvent $ \ev -> case ev of
+  Changed v -> reaction v
   _         -> []
 
 -- | Configuration for 'slider', set via 'arrowStep', 'thumbRatio',
@@ -1181,8 +1214,8 @@ scrollBar mkId attrs = do
       Vertical   -> "▼"
       Horizontal -> "▶"
 
-    decrBtn = button (mkId ScrollDecrBtn) [text decrSym, onClickTo (ScrollBy trackId (negate ratio))]
-    incrBtn = button (mkId ScrollIncrBtn) [text incrSym, onClickTo (ScrollBy trackId ratio)]
+    decrBtn = button (mkId ScrollDecrBtn) [text decrSym, onClick (perform (ScrollBy trackId (negate ratio)))]
+    incrBtn = button (mkId ScrollIncrBtn) [text incrSym, onClick (perform (ScrollBy trackId ratio))]
 
     sliderPartId SliderTrack = trackId
     sliderPartId SliderThumb = thumbId
@@ -1192,7 +1225,9 @@ scrollBar mkId attrs = do
         [ value pos'
         , orientation ori
         , thumbRatio ratio
-        , onAny $ \ev -> case ev of
-            Changed v        -> [OutUi (ScrollTo trackId v)]
-            SliderControl ce -> captureOuts attrs (liftControl ce)
+        , onChange (performWith (ScrollTo trackId))
+        , onFocusGained (forward attrs)
+        , onFocusLost   (forward attrs)
+        , onMouseEnter  (forward attrs)
+        , onMouseExit   (forward attrs)
         ]

@@ -29,7 +29,13 @@ import Blink.Controls2
   , progressBar
   , bandSpeed
   , progress
-  , onAny
+  , onEvent
+  , post
+  , postWith
+  , perform
+  , performWith
+  , forward
+  , translate
   , onFocusGained
   , onFocusLost
   , onMouseEnter
@@ -38,9 +44,7 @@ import Blink.Controls2
   , tabStop
   , whenFocused
   , button
-  , ButtonEvent (Clicked)
   , onClick
-  , onClickTo
   , CheckboxPart (..)
   , onToggle
   , checked
@@ -108,7 +112,7 @@ instance HasControlEvent Probe where
   matchControl (Probe ce) = Just ce
 
 captureAttrs :: Attr e Probe Probe cfg
-captureAttrs = onAny (\ev -> [OutMsg ev])
+captureAttrs = onEvent (\ev -> [OutMsg ev])
 
 noProbeAttrs :: [Attr e Probe Probe ()]
 noProbeAttrs = []
@@ -132,7 +136,7 @@ addCount :: Int -> Attr e ev msg DummyConfig
 addCount n = configAny $ \cfg -> cfg { dummyCount = dummyCount cfg + n }
 
 onPing :: msg -> Attr e DummyEvent msg cfg
-onPing msg = onAny $ \ev -> case ev of
+onPing msg = onEvent $ \ev -> case ev of
   Ping -> [OutMsg msg]
   Pong -> []
 
@@ -178,7 +182,7 @@ mkCheckboxCtx :: InputState -> UIContext CheckboxPart Bool
 mkCheckboxCtx input = emptyUIContext checkboxRect input checkboxTheme noOpTextMeasurer
 
 runCheckbox :: Bool -> UIContext CheckboxPart Bool -> IO (UIContext CheckboxPart Bool)
-runCheckbox isChecked ctx = fmap (settle . snd) $ runUI (checkbox id [text "Notify me", checked isChecked, onToggle id]) ctx
+runCheckbox isChecked ctx = fmap (settle . snd) $ runUI (checkbox id [text "Notify me", checked isChecked, onToggle (postWith id)]) ctx
 
 glyphPoint :: Point
 glyphPoint = Point 10 10
@@ -203,13 +207,13 @@ mkTextCtxWith :: TextMeasurer -> Text -> InputState -> UIContext TestElement Tex
 mkTextCtxWith measurer _value input = emptyUIContext controlRect input testTheme measurer
 
 runTextField :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
-runTextField v ctx = fmap (settle . snd) $ runUI (textInputControl TestControl [text v, onInput id]) ctx
+runTextField v ctx = fmap (settle . snd) $ runUI (textInputControl TestControl [text v, onInput (postWith id)]) ctx
 
 runNumberField :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
-runNumberField v ctx = fmap (settle . snd) $ runUI (textInputControl TestControl [text v, inputFilter (T.filter isDigit), onInput id]) ctx
+runNumberField v ctx = fmap (settle . snd) $ runUI (textInputControl TestControl [text v, inputFilter (T.filter isDigit), onInput (postWith id)]) ctx
 
 runPasswordField :: Text -> UIContext TestElement Text -> IO (UIContext TestElement Text)
-runPasswordField v ctx = fmap (settle . snd) $ runUI (textInputControl TestControl [text v, displayFilter (T.map (const '•')), onInput id]) ctx
+runPasswordField v ctx = fmap (settle . snd) $ runUI (textInputControl TestControl [text v, displayFilter (T.map (const '•')), onInput (postWith id)]) ctx
 
 -- slider takes a tagging function, so its tests use SliderPart as the
 -- element type directly and 'id' as the tagging function (matching the
@@ -235,7 +239,7 @@ sliderRect = Rectangle 0 0 200 30
 
 runSlider :: Orientation -> Double -> InputState -> IO (UIContext SliderPart Double)
 runSlider ori val input =
-  fmap (settle . snd) $ runUI (slider id [orientation ori, value val, onChange id])
+  fmap (settle . snd) $ runUI (slider id [orientation ori, value val, onChange (postWith id)])
     (emptyUIContext sliderRect input sliderTheme noOpTextMeasurer)
 
 -- 20x200 vertical scrollbar with a 0.25 thumb ratio: buttons at y 0-20 and
@@ -292,28 +296,60 @@ spec = describe "Blink.Controls2" $ do
 
     it "runs in event order, then handler-list order within an event" $ do
       let attrs =
-            [ onAny (\ev -> [OutMsg (dummyLabel ev <> "-a")])
-            , onAny (\ev -> [OutMsg (dummyLabel ev <> "-b")])
+            [ onEvent (\ev -> [OutMsg (dummyLabel ev <> "-a")])
+            , onEvent (\ev -> [OutMsg (dummyLabel ev <> "-b")])
             ]
       ctx <- runFire attrs [Ping, Pong] (mkCtxFor noInput)
       getMessages ctx `shouldBe` ["Ping-a", "Ping-b", "Pong-a", "Pong-b"]
 
     it "dispatches OutUi effects via emitUi rather than as messages" $ do
-      let attrs = [onAny (const [OutUi (ScrollTo TestControl 0.5)])]
+      let attrs = [onEvent (const [OutUi (ScrollTo TestControl 0.5)])]
       ctx <- runFire attrs [Ping] (mkCtxFor noInput :: UIContext TestElement Int)
       getUiEffects ctx `shouldBe` [ScrollTo TestControl 0.5]
       getMessages ctx `shouldBe` []
 
     it "a single handler can fan out to both a message and a UiEffect" $ do
-      let attrs = [onAny (const [OutMsg (1 :: Int), OutUi (ScrollTo TestControl 0.5)])]
+      let attrs = [onEvent (const [OutMsg (1 :: Int), OutUi (ScrollTo TestControl 0.5)])]
       ctx <- runFire attrs [Ping] (mkCtxFor noInput)
       getMessages ctx `shouldBe` [1]
       getUiEffects ctx `shouldBe` [ScrollTo TestControl 0.5]
 
-  describe "onAny" $
+  describe "onEvent" $
     it "builds a handler with full access to Out, usable like any other On attr" $ do
       ctx <- runFire [onPing (1 :: Int)] [Ping] (mkCtxFor noInput)
       getMessages ctx `shouldBe` [1]
+
+  describe "post" $
+    it "emits the given message, ignoring the triggering event's data" $
+      (post (1 :: Int) Ping :: [Out TestElement Int]) `shouldBe` [OutMsg 1]
+
+  describe "postWith" $
+    it "emits a message derived from the triggering event's data" $
+      (postWith dummyLabel Ping :: [Out TestElement String]) `shouldBe` [OutMsg "Ping"]
+
+  describe "perform" $
+    it "queues the given UiEffect, ignoring the triggering event's data" $
+      (perform (ScrollTo TestControl 0.5) Ping :: [Out TestElement Int]) `shouldBe` [OutUi (ScrollTo TestControl 0.5)]
+
+  describe "performWith" $
+    it "queues a UiEffect derived from the triggering event's data" $
+      (performWith (ScrollTo TestControl) (0.5 :: Double) :: [Out TestElement Int]) `shouldBe` [OutUi (ScrollTo TestControl 0.5)]
+
+  describe "forward" $ do
+    it "calls the matching handler in the given attrs list" $
+      forward ([onFocusGained (post "gained")] :: [Attr TestElement Probe String ()]) FocusGained
+        `shouldBe` [OutMsg "gained"]
+
+    it "produces nothing when no handler in the attrs list matches" $
+      forward ([onFocusGained (post "gained")] :: [Attr TestElement Probe String ()]) FocusLost
+        `shouldBe` []
+
+  describe "translate" $ do
+    it "raises the given event against another attrs list, ignoring the triggering data" $
+      (translate [onPing (1 :: Int)] Ping () :: [Out TestElement Int]) `shouldBe` [OutMsg 1]
+
+    it "produces nothing when no handler in the attrs list matches the given event" $
+      (translate [onPing (1 :: Int)] Pong () :: [Out TestElement Int]) `shouldBe` []
 
   describe "configAny" $
     it "builds a config attr usable like any other, for a control author's own cfg type" $
@@ -403,13 +439,13 @@ spec = describe "Blink.Controls2" $ do
       getMessages ctx `shouldBe` []
 
     it "fires via onMouseEnter when the mouse enters" $ do
-      let attrs = [onMouseEnter "entered"] :: [Attr TestElement Probe String ()]
+      let attrs = [onMouseEnter (post "entered")] :: [Attr TestElement Probe String ()]
       (_, ctx) <- runUI (applyMouseOver TestControl attrs) (mkCtxFor (mouseAt (Point 50 50) False []))
       getMessages ctx `shouldBe` ["entered"]
 
     it "fires via onMouseExit when the mouse leaves after being over" $ do
       let enterAttrs = [] :: [Attr TestElement Probe String ()]
-          exitAttrs  = [onMouseExit "exited"] :: [Attr TestElement Probe String ()]
+          exitAttrs  = [onMouseExit (post "exited")] :: [Attr TestElement Probe String ()]
       (_, ctx1) <- runUI (applyMouseOver TestControl enterAttrs) (mkCtxFor (mouseAt (Point 50 50) False []))
       let ctx2 = nextFrameContext controlRect (mouseAt (Point 200 200) False []) ctx1
       (_, ctx3) <- runUI (applyMouseOver TestControl exitAttrs) ctx2
@@ -454,7 +490,7 @@ spec = describe "Blink.Controls2" $ do
         getFocused ctx' `shouldBe` Just OtherControl
 
       it "fires FocusGained via onFocusGained when focus is gained" $ do
-        ctx' <- run ([onFocusGained "gained"] :: [Attr TestElement Probe String ()]) (mkCtxFor noInput)
+        ctx' <- run ([onFocusGained (post "gained")] :: [Attr TestElement Probe String ()]) (mkCtxFor noInput)
         getMessages ctx' `shouldBe` ["gained"]
 
       it "fires FocusLost via onFocusLost when focus is lost to a Tab press" $ do
@@ -464,7 +500,7 @@ spec = describe "Blink.Controls2" $ do
         -- time anything ran again this same element would have already
         -- auto-reclaimed focus, masking the transition.
         let base = withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyTab []] })
-        ctx' <- run ([onFocusLost "lost"] :: [Attr TestElement Probe String ()]) base
+        ctx' <- run ([onFocusLost (post "lost")] :: [Attr TestElement Probe String ()]) base
         getMessages ctx' `shouldBe` ["lost"]
 
       it "fires nothing when focus is retained" $ do
@@ -751,45 +787,43 @@ spec = describe "Blink.Controls2" $ do
 
     forM_ insidePoints $ \(desc, pt) ->
       it ("is clicked when the mouse is released " <> desc) $ do
-        (_, ctx') <- runUI (button TestControl [text "label", onClick ()]) (withButtonReleased (mkCtxFor (mouseAt pt False [])))
+        (_, ctx') <- runUI (button TestControl [text "label", onClick (post ())]) (withButtonReleased (mkCtxFor (mouseAt pt False [])))
         getMessages ctx' `shouldBe` [()]
 
     forM_ outsidePoints $ \(desc, pt) ->
       it ("is not clicked when the mouse is released " <> desc) $ do
-        (_, ctx') <- runUI (button TestControl [text "label", onClick ()]) (withButtonReleased (mkCtxFor (mouseAt pt False [])))
+        (_, ctx') <- runUI (button TestControl [text "label", onClick (post ())]) (withButtonReleased (mkCtxFor (mouseAt pt False [])))
         getMessages ctx' `shouldBe` []
 
     it "is clicked when Enter is pressed and the button has focus" $ do
-      (_, ctx') <- runUI (button TestControl [text "label", onClick ()]) (withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+      (_, ctx') <- runUI (button TestControl [text "label", onClick (post ())]) (withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
       getMessages ctx' `shouldBe` [()]
 
     it "is not clicked when Enter is pressed and the button does not have focus" $ do
-      (_, ctx') <- runUI (button TestControl [text "label", onClick ()]) (withFocus (Just OtherControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+      (_, ctx') <- runUI (button TestControl [text "label", onClick (post ())]) (withFocus (Just OtherControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
       getMessages ctx' `shouldBe` []
 
     it "is not clicked when Tab and Enter are pressed simultaneously" $ do
-      (_, ctx') <- runUI (button TestControl [text "label", onClick ()])
+      (_, ctx') <- runUI (button TestControl [text "label", onClick (post ())])
         (withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyTab [], KeyEvent KeyReturn []] }))
       getMessages ctx' `shouldBe` []
 
     it "is not activated by a click when disabled" $ do
-      (_, ctx') <- runUI (disableWhen True (button TestControl [text "label", onClick ()])) (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])))
+      (_, ctx') <- runUI (disableWhen True (button TestControl [text "label", onClick (post ())])) (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])))
       getMessages ctx' `shouldBe` []
 
     it "is not activated by Enter when disabled" $ do
-      (_, ctx') <- runUI (disableWhen True (button TestControl [text "label", onClick ()])) (withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+      (_, ctx') <- runUI (disableWhen True (button TestControl [text "label", onClick (post ())])) (withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
       getMessages ctx' `shouldBe` []
 
-    it "onClickTo queues the given UiEffect when clicked, instead of emitting a message" $ do
-      (_, ctx') <- runUI (button TestControl [text "label", onClickTo (SetSelectionAt TestControl (cursor 0))])
+    it "onClick (perform eff) queues the given UiEffect when clicked, instead of emitting a message" $ do
+      (_, ctx') <- runUI (button TestControl [text "label", onClick (perform (SetSelectionAt TestControl (cursor 0)))])
         (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])) :: UIContext TestElement ())
       getUiEffects ctx' `shouldContain` [SetSelectionAt TestControl (cursor 0)]
       getMessages ctx' `shouldBe` []
 
-    it "onAny can pattern-match Clicked directly to fan out to a message and a UiEffect together" $ do
-      let attrs = [text "label", onAny (\ev -> case ev of
-                     Clicked -> [OutMsg (1 :: Int), OutUi (SetSelectionAt TestControl (cursor 0))]
-                     _       -> [])]
+    it "onClick (post msg <> perform eff) fans out to both a message and a UiEffect" $ do
+      let attrs = [text "label", onClick (post (1 :: Int) <> perform (SetSelectionAt TestControl (cursor 0)))]
       (_, ctx') <- runUI (button TestControl attrs) (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])))
       getMessages ctx' `shouldBe` [1]
       getUiEffects ctx' `shouldContain` [SetSelectionAt TestControl (cursor 0)]
@@ -835,12 +869,12 @@ spec = describe "Blink.Controls2" $ do
 
     describe "disabled" $ do
       it "does not dispatch when clicked while disabled" $ do
-        (_, ctx') <- runUI (disableWhen True (checkbox id [text "Notify me", checked False, onToggle id]))
+        (_, ctx') <- runUI (disableWhen True (checkbox id [text "Notify me", checked False, onToggle (postWith id)]))
           (withButtonReleased (mkCheckboxCtx (mouseAt labelPoint False [])))
         getMessages ctx' `shouldBe` []
 
       it "does not dispatch when Enter is pressed while disabled" $ do
-        (_, ctx') <- runUI (disableWhen True (checkbox id [text "Notify me", checked False, onToggle id]))
+        (_, ctx') <- runUI (disableWhen True (checkbox id [text "Notify me", checked False, onToggle (postWith id)]))
           (withFocus (Just CheckboxBox) (mkCheckboxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         getMessages ctx' `shouldBe` []
 
@@ -908,11 +942,11 @@ spec = describe "Blink.Controls2" $ do
 
     describe "disabled" $ do
       it "does not process input when disabled" $ do
-        (_, ctx') <- runUI (disableWhen True (textInputControl TestControl [text "hello", onInput id])) (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] }))
+        (_, ctx') <- runUI (disableWhen True (textInputControl TestControl [text "hello", onInput (postWith id)])) (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["!"] }))
         dispatchCount (settle ctx') `shouldBe` 0
 
       it "does not show a cursor when focused and disabled" $ do
-        (_, ctx') <- runUI (disableWhen True (textInputControl TestControl [text "hello", onInput id])) (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
+        (_, ctx') <- runUI (disableWhen True (textInputControl TestControl [text "hello", onInput (postWith id)])) (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
         getDrawCommands (settle ctx') `shouldNotContain` [FillRect (Rectangle 15 15 1 70) testColour]
 
     describe "cursor placement" $ do
@@ -924,7 +958,7 @@ spec = describe "Blink.Controls2" $ do
       it "extends the active end on drag while keeping anchor" $ do
         -- First frame: click starts drag; second frame: drag extends selection.
         frame1 <- runTextField "hello" (withFocus (Just TestControl) (mkTextCtx "hello" (mouseAt (Point 50 50) True [])))
-        frame2 <- fmap (settle . snd) $ runUI (textInputControl TestControl [text "hello", onInput id])
+        frame2 <- fmap (settle . snd) $ runUI (textInputControl TestControl [text "hello", onInput (postWith id)])
                     (nextFrameContext controlRect (mouseAt (Point 70 50) True []) frame1)
         case Map.lookup TestControl (elmSelections (ctxElements frame2)) of
           Just [Selection a _] -> a `shouldBe` 0
@@ -1060,29 +1094,29 @@ spec = describe "Blink.Controls2" $ do
 
     describe "custom filters" $ do
       it "lets a custom input filter reject keystrokes entirely" $ do
-        (_, ctx') <- runUI (textInputControl TestControl [text "hello", inputFilter (const T.empty), onInput id])
+        (_, ctx') <- runUI (textInputControl TestControl [text "hello", inputFilter (const T.empty), onInput (postWith id)])
           (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputTypedText = ["x"] }))
         dispatchCount (settle ctx') `shouldBe` 0
 
       it "lets a custom display filter change what is rendered without changing the value" $ do
-        (_, ctx') <- runUI (textInputControl TestControl [text "hello", displayFilter T.toUpper, onInput id])
+        (_, ctx') <- runUI (textInputControl TestControl [text "hello", displayFilter T.toUpper, onInput (postWith id)])
           (withFocus (Just TestControl) (mkTextCtx "hello" noInput))
         drawnTexts (settle ctx') `shouldContain` ["HELLO"]
 
     describe "onSubmit" $ do
       it "fires Submitted when Enter is pressed while focused" $ do
-        (_, ctx') <- runUI (textInputControl TestControl [text "hello", onSubmit "submitted"])
+        (_, ctx') <- runUI (textInputControl TestControl [text "hello", onSubmit (post "submitted")])
           (withFocus (Just TestControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         getMessages (settle ctx') `shouldBe` ["submitted"]
 
       it "does not fire Submitted when a different element is focused" $ do
-        (_, ctx') <- runUI (textInputControl TestControl [text "hello", onSubmit "submitted"])
+        (_, ctx') <- runUI (textInputControl TestControl [text "hello", onSubmit (post "submitted")])
           (withFocus (Just OtherControl) (mkTextCtx "hello" noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
         getMessages (settle ctx') `shouldBe` []
 
   describe "slider" $ do
     it "renders chrome like any other control" $ do
-      ctx' <- snd <$> runUI (slider id [orientation Horizontal, value 0.5, onChange (const ())])
+      ctx' <- snd <$> runUI (slider id [orientation Horizontal, value 0.5, onChange (post ())])
         (emptyUIContext sliderRect noInput sliderTheme noOpTextMeasurer)
       getDrawCommands ctx' `shouldContain` [FillRect sliderRect testColour]
 
@@ -1093,12 +1127,12 @@ spec = describe "Blink.Controls2" $ do
       -- to prove the override actually took effect, not just that the
       -- track's own (same-coloured) background is present regardless.
       it "defaults to a square thumb when not given" $ do
-        ctx' <- snd <$> runUI (slider id [orientation Horizontal, value 0, onChange (const ())])
+        ctx' <- snd <$> runUI (slider id [orientation Horizontal, value 0, onChange (post ())])
           (emptyUIContext sliderRect noInput sliderTheme noOpTextMeasurer)
         getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 0 30 30) testColour]
 
       it "overrides the default square-thumb sizing when given" $ do
-        ctx' <- snd <$> runUI (slider id [orientation Horizontal, value 0, onChange (const ()), thumbRatio 0.5])
+        ctx' <- snd <$> runUI (slider id [orientation Horizontal, value 0, onChange (post ()), thumbRatio 0.5])
           (emptyUIContext sliderRect noInput sliderTheme noOpTextMeasurer)
         getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 0 100 30) testColour]
 
@@ -1126,14 +1160,14 @@ spec = describe "Blink.Controls2" $ do
       it "continues tracking when the mouse moves outside the track while button held" $ do
         frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
         let val1 = head (getMessages frame1)
-        frame2 <- fmap (settle . snd) $ runUI (slider id [orientation Horizontal, value val1, onChange id])
+        frame2 <- fmap (settle . snd) $ runUI (slider id [orientation Horizontal, value val1, onChange (postWith id)])
                                    (nextFrameContext sliderRect (mouseAt (Point 300 15) True []) frame1)
         getMessages frame2 `shouldBe` [1.0]
 
       it "stops tracking when the button is released" $ do
         frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
         let val1 = head (getMessages frame1)
-        frame2 <- fmap (settle . snd) $ runUI (slider id [orientation Horizontal, value val1, onChange id])
+        frame2 <- fmap (settle . snd) $ runUI (slider id [orientation Horizontal, value val1, onChange (postWith id)])
                                    (nextFrameContext sliderRect (mouseAt (Point 300 15) False []) frame1)
         dispatchCount frame2 `shouldBe` 0
 
@@ -1142,7 +1176,7 @@ spec = describe "Blink.Controls2" $ do
       it "does not dispatch on the release frame when the mouse is still over the track" $ do
         frame1 <- runSlider Horizontal 0 (mouseAt (Point 100 15) True [])
         let val1 = head (getMessages frame1)
-        frame2 <- fmap (settle . snd) $ runUI (slider id [orientation Horizontal, value val1, onChange id])
+        frame2 <- fmap (settle . snd) $ runUI (slider id [orientation Horizontal, value val1, onChange (postWith id)])
                                    (nextFrameContext sliderRect (mouseAt (Point 100 15) False []) frame1)
         dispatchCount frame2 `shouldBe` 0
 
@@ -1172,17 +1206,17 @@ spec = describe "Blink.Controls2" $ do
         getMessages ctx' `shouldBe` [0.0]
 
       it "uses arrowStep instead of the 0.05 default when given" $ do
-        ctx' <- fmap (settle . snd) $ runUI (slider id [orientation Horizontal, value 0.5, onChange id, arrowStep 0.2])
+        ctx' <- fmap (settle . snd) $ runUI (slider id [orientation Horizontal, value 0.5, onChange (postWith id), arrowStep 0.2])
           (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme noOpTextMeasurer)
         getMessages ctx' `shouldBe` [0.7]
 
       it "does not nudge when another element has focus" $ do
-        ctx' <- fmap (settle . snd) $ runUI (slider id [orientation Horizontal, value 0.5, onChange id])
+        ctx' <- fmap (settle . snd) $ runUI (slider id [orientation Horizontal, value 0.5, onChange (postWith id)])
           (withFocus (Just SliderThumb) (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme noOpTextMeasurer))
         getMessages ctx' `shouldBe` []
 
       it "does not nudge when disabled" $ do
-        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (slider id [orientation Horizontal, value 0.5, onChange id]))
+        ctx' <- fmap (settle . snd) $ runUI (disableWhen True (slider id [orientation Horizontal, value 0.5, onChange (postWith id)]))
           (withFocus (Just SliderTrack) (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme noOpTextMeasurer))
         dispatchCount ctx' `shouldBe` 0
 
@@ -1258,13 +1292,13 @@ spec = describe "Blink.Controls2" $ do
         -- Starts with a different sub-part focused so the buttons' own
         -- default auto-claim-when-nothing-focused rule doesn't race the
         -- track for focus first; the click is what moves it explicitly.
-        let attrs = [orientation Vertical, thumbRatio 0.25, onFocusGained "gained"]
+        let attrs = [orientation Vertical, thumbRatio 0.25, onFocusGained (post "gained")]
             ctx0  = withFocus (Just ScrollIncrBtn) (withButtonReleased (mkScrollBarCtx 0 (mouseAt (Point 10 100) False []))) :: UIContext ScrollBarPart String
         ctx' <- snd <$> runUI (scrollBar id attrs) ctx0
         getMessages ctx' `shouldBe` ["gained"]
 
       it "bridges the track's MouseEntered into onMouseEnter" $ do
-        let attrs = [orientation Vertical, thumbRatio 0.25, onMouseEnter "entered"]
+        let attrs = [orientation Vertical, thumbRatio 0.25, onMouseEnter (post "entered")]
             ctx0  = mkScrollBarCtx 0 (mouseAt (Point 10 100) False []) :: UIContext ScrollBarPart String
         ctx' <- snd <$> runUI (scrollBar id attrs) ctx0
         getMessages ctx' `shouldBe` ["entered"]
