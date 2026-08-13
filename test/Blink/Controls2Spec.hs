@@ -68,6 +68,7 @@ import Blink.Controls2
   , ViewportPart (..)
   , contentSize
   , viewport
+  , virtualContent
   )
 import Blink.ControlsTestSupport
   ( TestElement (..)
@@ -1415,3 +1416,44 @@ spec = describe "Blink.Controls2" $ do
       it "fires MouseEntered for a child within the visible viewport" $ do
         ctx' <- runViewportChild (Size 400 100) [captureAttrs] (Point 100 42)
         getMessages ctx' `shouldContain` [Probe MouseEntered]
+
+  describe "virtualContent" $ do
+    -- Viewport is controlRect: 100x100. Each item marks itself with a
+    -- FillRect whose colour encodes its index, so a test can assert both
+    -- which indices were rendered and at what rectangle.
+    let marker :: Int -> Rectangle -> DrawCommand
+        marker i r = FillRect r (RGBA (fromIntegral i) 0 0 1)
+        runVirtualContent pos itemH count =
+          fmap (settle . snd) $ runUI (virtualContent pos itemH count (\i -> fillRect (RGBA (fromIntegral i) 0 0 1))) (mkCtxFor noInput :: UIContext TestElement ())
+
+    it "renders items starting from the top when unscrolled" $ do
+      -- itemHeight 20, viewport 100 tall -> exactly 5 full items fit.
+      ctx' <- runVirtualContent 0 20 10
+      getDrawCommands ctx' `shouldContain` [marker 0 (Rectangle 0 0 100 20)]
+      getDrawCommands ctx' `shouldContain` [marker 4 (Rectangle 0 80 100 20)]
+      getDrawCommands ctx' `shouldNotContain` [marker 5 (Rectangle 0 100 100 20)]
+
+    it "clips the first item by the fractional scroll offset" $ do
+      -- scrollPos 25 with itemHeight 20 -> first visible item is index 1,
+      -- pushed up 5px above the viewport top.
+      ctx' <- runVirtualContent 25 20 10
+      getDrawCommands ctx' `shouldContain` [marker 1 (Rectangle 0 (-5) 100 20)]
+      getDrawCommands ctx' `shouldNotContain` [marker 0 (Rectangle 0 0 100 20)]
+
+    it "renders one extra item to cover the clipped final row" $ do
+      ctx' <- runVirtualContent 25 20 10
+      -- 6 items are needed to cover a 100px viewport once offset by 5px.
+      getDrawCommands ctx' `shouldContain` [marker 6 (Rectangle 0 95 100 20)]
+
+    it "does not render past the last item" $ do
+      ctx' <- runVirtualContent 0 20 3
+      getDrawCommands ctx' `shouldContain` [marker 2 (Rectangle 0 40 100 20)]
+      getDrawCommands ctx' `shouldNotContain` [marker 3 (Rectangle 0 60 100 20)]
+
+    it "renders nothing when there are no items" $ do
+      ctx' <- runVirtualContent 0 20 0
+      [c | c@(FillRect _ _) <- getDrawCommands ctx'] `shouldBe` []
+
+    it "clips content to the current bounds" $ do
+      ctx' <- runVirtualContent 0 20 10
+      getDrawCommands ctx' `shouldContain` [PushClip controlRect]

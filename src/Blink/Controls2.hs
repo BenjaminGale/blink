@@ -75,6 +75,7 @@ module Blink.Controls2
   , scrollRegionBarSize
   , contentSize
   , viewport
+  , virtualContent
   ) where
 
 import Control.Monad (forM_, guard, when)
@@ -1319,3 +1320,29 @@ viewport mkId attrs content = do
         , rectHeight = ch
         }
   withBounds vpRect $ clipToCurrent $ withBounds virtBounds content
+
+-- | Renders only the items that fall within the current bounds of a
+-- uniform-height list, given the list's current scroll position in pixels.
+-- Not a 'control' — no element ID, no attrs, nothing with a sensible
+-- default: every argument is essential data the caller must already have,
+-- so unlike the rest of this module there's nothing to gain from making any
+-- of them attributes.
+--
+-- Renders one extra item beyond what's fully visible to cover a partially
+-- clipped final row. Does not draw a scrollbar or manage scroll state
+-- itself — pair with 'scrollBar' and 'getScrollState' (see 'listBox').
+virtualContent
+  :: Double                -- ^ current scroll position, in pixels
+  -> Double                -- ^ height of one item, in pixels
+  -> Int                   -- ^ total item count
+  -> (Int -> UI e msg ())  -- ^ renders the item at the given index
+  -> UI e msg ()
+virtualContent scrollPos itemHeight itemCount renderItem = do
+  vp <- getBounds
+  let firstIdx  = floor (scrollPos / itemHeight) :: Int
+      subOffset = scrollPos - fromIntegral firstIdx * itemHeight
+      visibleN  = ceiling ((rectHeight vp + subOffset) / itemHeight) :: Int
+  clipToCurrent $ forM_ [0 .. visibleN - 1] $ \j ->
+    let i        = firstIdx + j
+        itemRect = vp { rectY = rectY vp + fromIntegral j * itemHeight - subOffset, rectHeight = itemHeight }
+    in when (i >= 0 && i < itemCount) $ withBounds itemRect (renderItem i)
