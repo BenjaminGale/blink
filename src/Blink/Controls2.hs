@@ -70,6 +70,10 @@ module Blink.Controls2
   , ScrollBarPart (..)
   , ScrollBarEvent
   , scrollBar
+  , ViewportPart (..)
+  , scrollRegionBarSize
+  , contentSize
+  , viewport
   ) where
 
 import Control.Monad (forM_, guard, when)
@@ -81,7 +85,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Void (Void)
 
-import Blink.Geometry (Alignment (..), Insets (..), Orientation (..), Point (..), Rectangle (..), borderInsets, insetRect, noBorder)
+import Blink.Geometry (Alignment (..), Insets (..), Orientation (..), Point (..), Rectangle (..), Size (..), borderInsets, insetRect, noBorder)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (BoxConfig (..), Layout (..), Length (..), defaultBoxConfig, hBox, vBox)
 import Blink.Rendering (Colour (..), TextAlign (..))
@@ -1231,3 +1235,79 @@ scrollBar mkId attrs = do
         , onMouseEnter  (forward attrs)
         , onMouseExit   (forward attrs)
         ]
+
+-- | Sub-parts of a viewport's element ID hierarchy. Wraps 'ScrollBarPart'
+-- for the horizontal and vertical scrollbars:
+--
+-- @
+-- data Element = ... | MyRegion ViewportPart
+-- viewport MyRegion [contentSize (Size 600 400)] content
+-- @
+data ViewportPart
+  = ViewportH ScrollBarPart -- ^ A part of the horizontal scrollbar.
+  | ViewportV ScrollBarPart -- ^ A part of the vertical scrollbar.
+  deriving (Eq, Ord, Show)
+
+-- | The pixel width of a scrollbar strip used by 'viewport' and 'listBox'.
+-- Exported so callers that compose a viewport inside their own layout can
+-- account for the strip in their geometry without hard-coding the value.
+scrollRegionBarSize :: Double
+scrollRegionBarSize = 16
+
+-- | Configuration for 'viewport', set via 'contentSize'.
+newtype ViewportConfig = ViewportConfig { viewportConfigContentSize :: Size }
+
+defaultViewportConfig :: ViewportConfig
+defaultViewportConfig = ViewportConfig { viewportConfigContentSize = Size 0 0 }
+
+-- | Sets the virtual content size a 'viewport' scrolls over. Scrollbars
+-- appear automatically on axes where this exceeds the viewport's own
+-- bounds. Defaults to @'Size' 0 0@ (nothing to scroll).
+contentSize :: Size -> Attr e ev msg ViewportConfig
+contentSize sz = configAny $ \cfg -> cfg { viewportConfigContentSize = sz }
+
+-- | A scrollable window onto a fixed-size virtual content area, set via
+-- 'contentSize'. Scrollbars appear automatically on axes where the content
+-- exceeds the viewport, and are drawn first so that a drag or click this
+-- frame is reflected immediately. The content action then runs with
+-- virtual bounds — the full content rectangle translated so the scrolled
+-- portion aligns with the viewport — clipped to the visible area. Mouse
+-- interaction works naturally because translated bounds are in window
+-- coordinates; the clip region hides the rest.
+--
+-- For large, uniform item collections where building the whole content
+-- every frame would be wasteful, or where scrolling needs to be driven by
+-- keyboard selection, use 'listBox' instead — it manages its own scroll
+-- state directly rather than wrapping content in a viewport.
+viewport :: Ord e => (ViewportPart -> e) -> [Attr e Void msg ViewportConfig] -> UI e msg () -> UI e msg ()
+viewport mkId attrs content = do
+  outer <- getBounds
+  let Size cw ch = viewportConfigContentSize (configure defaultViewportConfig attrs)
+      ow      = rectWidth outer
+      oh      = rectHeight outer
+      -- Two-pass: check V with full height to determine reduced width, then
+      -- H, then re-check V with reduced height.
+      needsV1 = ch > oh
+      vpW1    = if needsV1 then ow - scrollRegionBarSize else ow
+      needsH  = cw > vpW1
+      vpH     = if needsH  then oh - scrollRegionBarSize else oh
+      needsV  = ch > vpH
+      vpW     = if needsV  then ow - scrollRegionBarSize else ow
+      hRatio  = if needsH then Just (max 0 (min 1 (vpW / cw))) else Nothing
+      vRatio  = if needsV then Just (max 0 (min 1 (vpH / ch))) else Nothing
+      vpRect  = outer { rectWidth = vpW, rectHeight = vpH }
+      hBar    = outer { rectY = rectY outer + vpH, rectHeight = scrollRegionBarSize, rectWidth = vpW }
+      vBar    = outer { rectX = rectX outer + vpW, rectWidth  = scrollRegionBarSize, rectHeight = vpH }
+  forM_ hRatio $ \r -> withBounds hBar $ scrollBar (mkId . ViewportH) [orientation Horizontal, thumbRatio r]
+  forM_ vRatio $ \r -> withBounds vBar $ scrollBar (mkId . ViewportV) [orientation Vertical, thumbRatio r]
+  hPos <- maybe (pure 0) (const (getScrollState (mkId (ViewportH ScrollTrack)))) hRatio
+  vPos <- maybe (pure 0) (const (getScrollState (mkId (ViewportV ScrollTrack)))) vRatio
+  let offsetX    = hPos * max 0 (cw - vpW)
+      offsetY    = vPos * max 0 (ch - vpH)
+      virtBounds = outer
+        { rectX      = rectX outer - offsetX
+        , rectY      = rectY outer - offsetY
+        , rectWidth  = cw
+        , rectHeight = ch
+        }
+  withBounds vpRect $ clipToCurrent $ withBounds virtBounds content

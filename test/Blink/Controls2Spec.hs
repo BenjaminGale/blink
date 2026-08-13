@@ -64,6 +64,9 @@ import Blink.Controls2
   , slider
   , ScrollBarPart (..)
   , scrollBar
+  , ViewportPart (..)
+  , contentSize
+  , viewport
   )
 import Blink.ControlsTestSupport
   ( TestElement (..)
@@ -261,6 +264,34 @@ runScrollBar = fmap (settle . snd) . runUI (scrollBar id [orientation Vertical, 
 
 scrollBarPos :: UIContext ScrollBarPart () -> Double
 scrollBarPos = scrollPosition . Map.findWithDefault (ScrollState 0) ScrollTrack . elmScrollStates . ctxElements
+
+-- viewport tests use a 200x100 outer rect throughout, so the same
+-- content-size scenarios (fits / H-only / V-only / both) produce the same
+-- scrollbar geometry across every describe block below:
+--   fits:    Size 100 50  -> no scrollbars,               vp 200x100
+--   H-only:  Size 300 50  -> hBar only,                   vp 200x84
+--   V-only:  Size 50  200 -> vBar only,                   vp 184x100
+--   both:    Size 300 200 -> hBar (0,84,184,16) + vBar (184,0,16,84), vp 184x84
+data ViewportElem = VPPart ViewportPart | VPChild
+  deriving (Eq, Ord, Show)
+
+vpTheme :: Theme ViewportElem
+vpTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = checkboxStyleSet }
+
+vpOuterRect :: Rectangle
+vpOuterRect = Rectangle 0 0 200 100
+
+runViewportDraw :: Size -> UIContext ViewportElem () -> IO (UIContext ViewportElem ())
+runViewportDraw sz ctx = fmap (settle . snd) $ runUI (viewport VPPart [contentSize sz] (fillRect testColour)) ctx
+
+vpCtx :: UIContext ViewportElem ()
+vpCtx = emptyUIContext vpOuterRect noInput vpTheme noOpTextMeasurer
+
+runViewportChild :: Size -> [Attr ViewportElem Probe Probe ()] -> Point -> IO (UIContext ViewportElem Probe)
+runViewportChild sz childAttrs mousePos =
+  let input = noInput { inputMousePosition = mousePos }
+      ctx   = emptyUIContext vpOuterRect input vpTheme noOpTextMeasurer
+  in fmap snd $ runUI (viewport VPPart [contentSize sz] (control VPChild childAttrs (pure ()))) ctx
 
 spec :: Spec
 spec = describe "Blink.Controls2" $ do
@@ -1302,3 +1333,74 @@ spec = describe "Blink.Controls2" $ do
             ctx0  = mkScrollBarCtx 0 (mouseAt (Point 10 100) False []) :: UIContext ScrollBarPart String
         ctx' <- snd <$> runUI (scrollBar id attrs) ctx0
         getMessages ctx' `shouldBe` ["entered"]
+
+  describe "viewport" $ do
+    describe "no scrollbars needed" $ do
+      it "renders content at its own size, unclipped and untranslated, when it fits the viewport" $ do
+        ctx' <- runViewportDraw (Size 100 50) vpCtx
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 0 100 50) testColour]
+
+      it "does not draw either scrollbar" $ do
+        ctx' <- runViewportDraw (Size 100 50) vpCtx
+        getDrawCommands ctx' `shouldNotContain` [FillRect (Rectangle 0 84 16 16) testColour]
+        getDrawCommands ctx' `shouldNotContain` [FillRect (Rectangle 184 0 16 16) testColour]
+
+      it "defaults to Size 0 0 (nothing to scroll) when contentSize is not given" $ do
+        ctx' <- fmap (settle . snd) $ runUI (viewport VPPart [] (fillRect testColour)) vpCtx
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 0 0 0) testColour]
+
+    describe "horizontal scrollbar" $ do
+      it "appears when content is wider than the viewport but not taller once reduced" $ do
+        ctx' <- runViewportDraw (Size 300 50) vpCtx
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 84 16 16) testColour]
+
+      it "does not appear on the vertical axis" $ do
+        ctx' <- runViewportDraw (Size 300 50) vpCtx
+        getDrawCommands ctx' `shouldNotContain` [FillRect (Rectangle 184 0 16 16) testColour]
+
+      it "reduces the viewport height by the scrollbar strip size" $ do
+        ctx' <- runViewportDraw (Size 300 50) vpCtx
+        getDrawCommands ctx' `shouldContain` [PushClip (Rectangle 0 0 200 84)]
+
+    describe "vertical scrollbar" $ do
+      it "appears when content is taller than the viewport but not wider once reduced" $ do
+        ctx' <- runViewportDraw (Size 50 200) vpCtx
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 184 0 16 16) testColour]
+
+      it "does not appear on the horizontal axis" $ do
+        ctx' <- runViewportDraw (Size 50 200) vpCtx
+        getDrawCommands ctx' `shouldNotContain` [FillRect (Rectangle 0 84 16 16) testColour]
+
+      it "reduces the viewport width by the scrollbar strip size" $ do
+        ctx' <- runViewportDraw (Size 50 200) vpCtx
+        getDrawCommands ctx' `shouldContain` [PushClip (Rectangle 0 0 184 100)]
+
+    describe "both scrollbars" $
+      it "appear on both axes, two-pass, when content exceeds either dimension after the other's strip is reserved" $ do
+        ctx' <- runViewportDraw (Size 300 200) vpCtx
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 84 16 16) testColour]
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 184 0 16 16) testColour]
+
+    describe "scroll offset" $ do
+      let withHScroll x ctx = ctx { ctxElements = (ctxElements ctx) { elmScrollStates = Map.singleton (VPPart (ViewportH ScrollTrack)) (ScrollState x) } }
+          withVScroll y ctx = ctx { ctxElements = (ctxElements ctx) { elmScrollStates = Map.singleton (VPPart (ViewportV ScrollTrack)) (ScrollState y) } }
+
+      it "translates content left by the stored horizontal scroll fraction" $ do
+        -- H-only (Size 300 50): vpW 200, max scroll = 300 - 200 = 100px.
+        ctx' <- runViewportDraw (Size 300 50) (withHScroll 1.0 vpCtx)
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle (-100) 0 300 50) testColour]
+
+      it "translates content up by the stored vertical scroll fraction" $ do
+        -- V-only (Size 50 200): vpH 100, max scroll = 200 - 100 = 100px.
+        ctx' <- runViewportDraw (Size 50 200) (withVScroll 1.0 vpCtx)
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 (-100) 50 200) testColour]
+
+    describe "interaction clipping" $ do
+      it "does not fire MouseEntered for a child under the horizontal scrollbar strip" $ do
+        -- Both scrollbars (Size 400 100): vpRect 184x84, hBar at y 84-100.
+        ctx' <- runViewportChild (Size 400 100) [captureAttrs] (Point 100 92)
+        getMessages ctx' `shouldNotContain` [Probe MouseEntered]
+
+      it "fires MouseEntered for a child within the visible viewport" $ do
+        ctx' <- runViewportChild (Size 400 100) [captureAttrs] (Point 100 42)
+        getMessages ctx' `shouldContain` [Probe MouseEntered]
