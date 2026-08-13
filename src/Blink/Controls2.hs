@@ -11,6 +11,7 @@ module Blink.Controls2
   , performWith
   , forward
   , translate
+  , translateWith
   , ControlEvent (..)
   , HasControlEvent (..)
   , onFocusGained
@@ -183,6 +184,13 @@ forward attrs ce = concatMap ($ liftControl ce) [h | On h <- attrs]
 -- parent than the one that actually fired.
 translate :: [Attr e ev msg cfg] -> ev -> a -> [Out e msg]
 translate attrs ev = const (concatMap ($ ev) [h | On h <- attrs])
+
+-- | Maps the triggering event through @f@ and raises the result against
+-- another attrs list — for translating a sub-control's event, using its own
+-- data, into a different event on the parent (unlike 'translate', which
+-- always raises the same fixed event regardless of what triggered it).
+translateWith :: (subEv -> ev) -> [Attr e ev msg cfg] -> subEv -> [Out e msg]
+translateWith f attrs subEv = concatMap ($ f subEv) [h | On h <- attrs]
 
 onFocusGained :: HasControlEvent ev => (ControlEvent -> [Out e msg]) -> Attr e ev msg cfg
 onFocusGained reaction = onEvent $ \ev -> case matchControl ev of

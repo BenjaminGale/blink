@@ -36,6 +36,7 @@ import Blink.Controls2
   , performWith
   , forward
   , translate
+  , translateWith
   , onFocusGained
   , onFocusLost
   , onMouseEnter
@@ -381,6 +382,16 @@ spec = describe "Blink.Controls2" $ do
 
     it "produces nothing when no handler in the attrs list matches the given event" $
       (translate [onPing (1 :: Int)] Pong () :: [Out TestElement Int]) `shouldBe` []
+
+  describe "translateWith" $ do
+    let toDummy :: Int -> DummyEvent
+        toDummy n = if n > 0 then Ping else Pong
+
+    it "maps the triggering data through f and raises the result against another attrs list" $
+      (translateWith toDummy [onPing (1 :: Int)] 5 :: [Out TestElement Int]) `shouldBe` [OutMsg 1]
+
+    it "produces nothing when the mapped event has no matching handler" $
+      (translateWith toDummy [onPing (1 :: Int)] (-1) :: [Out TestElement Int]) `shouldBe` []
 
   describe "configAny" $
     it "builds a config attr usable like any other, for a control author's own cfg type" $
