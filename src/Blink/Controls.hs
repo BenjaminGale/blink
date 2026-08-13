@@ -773,7 +773,7 @@ button eid attrs = do
 --
 -- @
 -- data Element = ... | NotifyMe CheckboxPart
--- checkbox NotifyMe "Notify me by email" (notifyMe model) [onToggle NotifyMeChanged]
+-- checkbox NotifyMe [text "Notify me by email", checked (notifyMe model), onToggle NotifyMeChanged]
 -- @
 data CheckboxPart
   = CheckboxBox   -- ^ The checkbox as a whole: chrome, hit region, focus, activation.

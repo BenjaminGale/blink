@@ -112,13 +112,13 @@ module Blink.Layout
     --   @
     --   -- Sizes a button tightly around its label plus its own chrome,
     --   -- instead of stretching to fill the parent.
-    --   tightButton :: Ord e => e -> Text -> [Attr e ButtonEvent msg cfg] -> UI e msg ()
+    --   tightButton :: Ord e => e -> Text -> [Attr e ButtonEvent msg ButtonConfig] -> UI e msg ()
     --   tightButton eid txt attrs = do
     --     (chromeW, chromeH) <- measureChrome eid
     --     Size textW textH    <- measureText txt
     --     let w = addLength chromeW (Exactly (realToFrac textW))
     --         h = addLength chromeH (Exactly (realToFrac textH))
-    --     layoutWithConstraints (Layout w h TopLeft) (button eid txt attrs)
+    --     layoutWithConstraints (Layout w h TopLeft) (button eid (text txt : attrs))
     --   @
     --
     --   The same pattern extends to a row of controls that must each be
@@ -246,7 +246,7 @@ boxTotalSpacing cfg n = boxSpacing cfg * fromIntegral (max 0 (n - 1))
 --
 -- @
 -- layoutWithConstraints (Layout (Exactly 120) (Exactly 32) Center) $
---   button MyBtn "Click me"
+--   button MyBtn [text "Click me"]
 -- @
 --
 -- This renders the button at 120×32 pixels, centred in whatever space the
@@ -378,9 +378,9 @@ vertical = Axis
 --
 -- @
 -- hBox (defaultBoxConfig { boxSpacing = 4 })
---   [ (Layout (Exactly 80) Fill TopLeft, button Btn1 "Back")
---   , (Layout Fill         Fill TopLeft, button Btn2 "Title")
---   , (Layout (Exactly 80) Fill TopLeft, button Btn3 "Next")
+--   [ (Layout (Exactly 80) Fill TopLeft, button Btn1 [text "Back"])
+--   , (Layout Fill         Fill TopLeft, button Btn2 [text "Title"])
+--   , (Layout (Exactly 80) Fill TopLeft, button Btn3 [text "Next"])
 --   ]
 -- @
 --
