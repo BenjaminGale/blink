@@ -333,12 +333,13 @@ data Selection = Selection
 -- 'setFocus' for why it changes immediately instead.
 data UiEffect e
   = ScrollTo e Double
-    -- ^ Sets the scroll position to an absolute value, stored as given. Most
-    -- callers ('Blink.Controls.scrollBar', 'Blink.Controls.viewport',
-    -- 'Blink.Controls.listBox') use the @[0, 1]@
-    -- convention documented on 'ScrollState' and pass an already-clamped
-    -- value; 'Blink.Controls.textInputControl' is the one exception, storing an unbounded
-    -- pixel offset instead.
+    -- ^ Sets the scroll position to an absolute value, stored as given. Every
+    -- caller ('Blink.Controls.scrollBar', 'Blink.Controls.viewport',
+    -- 'Blink.Controls.listBox', 'Blink.Controls.textInputControl') uses the
+    -- @[0, 1]@ convention documented on 'ScrollState' and passes an
+    -- already-clamped value; 'Blink.Controls.textInputControl' converts to
+    -- and from pixels locally since its selection\/cursor math is naturally
+    -- pixel-based.
   | ScrollBy e Double
     -- ^ Adjusts the scroll position by a delta, clamped to @[0, 1]@ — this
     -- constructor is only ever used in the normalised @[0, 1]@ convention.
