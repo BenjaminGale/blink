@@ -82,6 +82,8 @@ module Blink.Controls2
   , selected
   , selector
   , radioGroup
+  , ListBoxPart (..)
+  , listBox
   ) where
 
 import Control.Monad (forM_, guard, when)
@@ -1470,3 +1472,90 @@ radioGroup mkId attrs =
     style <- getStyle eid
     drawText (styleTextColour style) AlignLeft $
       (if isSelected then "● " else "○ ") <> lbl
+
+-- | Sub-parts of a 'listBox': individual items, and the scrollbar's own
+-- parts, tagged together so both can be addressed through one composite
+-- element ID.
+data ListBoxPart
+  = ListBoxItem Int
+  | ListBoxScroll ScrollBarPart
+  deriving (Eq, Ord, Show)
+
+-- | A vertically scrolling list of items, one selected, with keyboard
+-- navigation between them, set via 'items' and 'selected' — the composite
+-- of 'selector'-style navigation, 'scrollBar', and 'virtualContent', wired
+-- together so that only the currently-visible items are ever rendered.
+-- Moving the current item off the visible window with the arrow keys
+-- scrolls it back into view.
+--
+-- As with 'selector', the /current/ item (keyboard focus, tracked here) is
+-- distinct from the /selected/ item (application state, via 'selected'\/
+-- 'onSelect'): arrow keys move the current item without emitting; Enter,
+-- Space, or a click activates it and emits 'Selected'.
+--
+-- @itemHeight@ stays a plain argument rather than an attribute, like
+-- 'virtualContent's own: there's no default that wouldn't just silently
+-- misrender every list a caller forgot to size, unlike a control value
+-- with a real neutral state (an unchecked checkbox, a slider at 0).
+listBox :: (Ord e, Eq a)
+        => (ListBoxPart -> e)                       -- ^ maps list-box parts to element IDs
+        -> Double                                   -- ^ item height, in pixels
+        -> [Attr e (SelectorEvent a) msg (SelectorConfig a)]
+        -> (e -> Bool -> (a, Text) -> UI e msg ())  -- ^ @eid isSelected item@
+        -> UI e msg ()
+listBox mkId itemHeight attrs renderItem = do
+  initialFocus <- getFocus
+  hBox defaultBoxConfig
+    [ (Layout Fill Fill TopLeft, itemsArea initialFocus)
+    , (Layout (Exactly scrollRegionBarSize) Fill TopLeft, scrollBarArea)
+    ]
+  where
+    cfg       = configure defaultSelectorConfig attrs
+    itemList  = selectorConfigItems cfg
+    sel       = selectorConfigSelected cfg
+    itemCount = length itemList
+    lastIdx   = itemCount - 1
+    contentH  = fromIntegral itemCount * itemHeight
+    trackId   = mkId (ListBoxScroll ScrollTrack)
+
+    -- scrollBar persists position as a [0, 1] fraction (same convention as
+    -- every other scroll-state consumer in this module); virtualContent and
+    -- the scroll-to-current math below both work in pixels, so the
+    -- fraction is converted on the way in and out.
+    itemsArea initialFocus = do
+      vp <- getBounds
+      let vpH       = rectHeight vp
+          maxScroll = max 0 (contentH - vpH)
+      frac <- getScrollState trackId
+      let scrollPx = frac * maxScroll
+      virtualContent scrollPx itemHeight itemCount (mkItem initialFocus vpH maxScroll scrollPx)
+
+    mkItem initialFocus vpH maxScroll scrollPx idx = do
+      let item@(val, _) = itemList !! idx
+          eid            = mkId (ListBoxItem idx)
+      clicked   <- isClickedOver eid
+      activated <- activatable eid attrs [KeyReturn, KeySpace] (renderItem eid (sel == Just val) item)
+      when activated $ fire attrs [Selected val]
+      whenEnabled $ when (mayHandleArrowKeys initialFocus clicked eid) $ do
+        upPressed   <- isKeyPressed eid KeyUp
+        downPressed <- isKeyPressed eid KeyDown
+        when upPressed   $ scrollToCurrent vpH maxScroll scrollPx (max 0 (idx - 1))
+        when downPressed $ scrollToCurrent vpH maxScroll scrollPx (min lastIdx (idx + 1))
+
+    scrollToCurrent vpH maxScroll scrollPx newIdx = do
+      setFocus (mkId (ListBoxItem newIdx))
+      let itemTop    = fromIntegral newIdx * itemHeight
+          itemBottom = itemTop + itemHeight
+          newScrollPx
+            | itemTop < scrollPx          = itemTop
+            | itemBottom > scrollPx + vpH = itemBottom - vpH
+            | otherwise                   = scrollPx
+          clampedPx = max 0 (min maxScroll newScrollPx)
+          newFrac   = if maxScroll > 0 then clampedPx / maxScroll else 0
+      when (clampedPx /= scrollPx) $ emitUi (ScrollTo trackId newFrac)
+
+    scrollBarArea = do
+      vp <- getBounds
+      let vpH   = rectHeight vp
+          ratio = if contentH > 0 then max 0 (min 1 (vpH / contentH)) else 1
+      scrollBar (mkId . ListBoxScroll) [orientation Vertical, thumbRatio ratio]

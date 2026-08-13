@@ -74,6 +74,8 @@ import Blink.Controls2
   , selected
   , selector
   , radioGroup
+  , ListBoxPart (..)
+  , listBox
   )
 import Blink.ControlsTestSupport
   ( TestElement (..)
@@ -316,6 +318,40 @@ mkRadioGroupCtx input = emptyUIContext radioGroupRect input radioGroupTheme noOp
 
 runRadioGroup :: String -> UIContext Int String -> IO (UIContext Int String)
 runRadioGroup sel = fmap (settle . snd) . runUI (radioGroup id [items radioItems, selected sel, onSelect (postWith id)])
+
+-- listBox setup: 100x60 viewport, 20px items -> 3 fully visible at a time,
+-- 6 items total -> content is twice the viewport height, so scrolling is
+-- exercised. mkId = id, so element IDs are ListBoxPart values directly.
+listBoxTheme :: Theme ListBoxPart
+listBoxTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = checkboxStyleSet }
+
+listBoxRect :: Rectangle
+listBoxRect = Rectangle 0 0 100 60
+
+listBoxItemHeight :: Double
+listBoxItemHeight = 20
+
+listBoxItems :: [(Int, Text)]
+listBoxItems =
+  [ (0, "Item0"), (1, "Item1"), (2, "Item2")
+  , (3, "Item3"), (4, "Item4"), (5, "Item5")
+  ]
+
+listBoxRenderItem :: ListBoxPart -> Bool -> (Int, Text) -> UI ListBoxPart Int ()
+listBoxRenderItem _eid isSelected (_val, lbl) =
+  drawText testColour AlignLeft ((if isSelected then "SEL:" else "UNSEL:") <> lbl)
+
+mkListBoxCtx :: InputState -> UIContext ListBoxPart Int
+mkListBoxCtx input = emptyUIContext listBoxRect input listBoxTheme noOpTextMeasurer
+
+runListBox :: Int -> UIContext ListBoxPart Int -> IO (UIContext ListBoxPart Int)
+runListBox sel = fmap (settle . snd) . runUI (listBox id listBoxItemHeight [items listBoxItems, selected sel, onSelect (postWith id)] listBoxRenderItem)
+
+withListBoxScroll :: Double -> UIContext ListBoxPart Int -> UIContext ListBoxPart Int
+withListBoxScroll frac ctx = ctx { ctxElements = (ctxElements ctx) { elmScrollStates = Map.singleton (ListBoxScroll ScrollTrack) (ScrollState frac) } }
+
+listBoxScrollFrac :: UIContext ListBoxPart Int -> Double
+listBoxScrollFrac ctx = scrollPosition (Map.findWithDefault (ScrollState 0) (ListBoxScroll ScrollTrack) (elmScrollStates (ctxElements ctx)))
 
 spec :: Spec
 spec = describe "Blink.Controls2" $ do
@@ -1623,3 +1659,92 @@ spec = describe "Blink.Controls2" $ do
       it "displays all labels regardless of selection" $ do
         ctx' <- runRadioGroup "a" (mkRadioGroupCtx noInput)
         length (drawnTexts ctx') `shouldBe` 3
+
+  describe "listBox" $ do
+    describe "selection" $ do
+      it "dispatches the value of a clicked item" $ do
+        ctx' <- runListBox 0 (withButtonReleased (mkListBoxCtx (mouseAt (Point 50 30) False [])))
+        getMessages ctx' `shouldBe` [1]
+
+      it "dispatches the value when Enter is pressed while an item is focused" $ do
+        ctx' <- runListBox 0 (withFocus (Just (ListBoxItem 1)) (mkListBoxCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        getMessages ctx' `shouldBe` [1]
+
+      it "does not dispatch when clicked while disabled" $ do
+        (_, ctx') <- runUI (disableWhen True (listBox id listBoxItemHeight [items listBoxItems, selected 0, onSelect (postWith id)] listBoxRenderItem))
+          (withButtonReleased (mkListBoxCtx (mouseAt (Point 50 30) False [])))
+        dispatchCount (settle ctx') `shouldBe` 0
+
+      it "does not dispatch when there is no interaction" $ do
+        ctx' <- runListBox 0 (mkListBoxCtx noInput)
+        dispatchCount ctx' `shouldBe` 0
+
+    describe "keyboard navigation" $ do
+      it "moves focus to the next item when Down is pressed" $ do
+        ctx' <- runListBox 0 (withFocus (Just (ListBoxItem 0)) (mkListBoxCtx noInput { inputKeyEvents = [KeyEvent KeyDown []] }))
+        getFocused ctx' `shouldBe` Just (ListBoxItem 1)
+
+      it "moves focus to the previous item when Up is pressed" $ do
+        ctx' <- runListBox 0 (withFocus (Just (ListBoxItem 1)) (mkListBoxCtx noInput { inputKeyEvents = [KeyEvent KeyUp []] }))
+        getFocused ctx' `shouldBe` Just (ListBoxItem 0)
+
+      it "does not move focus when disabled" $ do
+        (_, ctx') <- runUI (disableWhen True (listBox id listBoxItemHeight [items listBoxItems, selected 0, onSelect (postWith id)] listBoxRenderItem))
+          (withFocus (Just (ListBoxItem 0)) (mkListBoxCtx noInput { inputKeyEvents = [KeyEvent KeyDown []] }))
+        getFocused (settle ctx') `shouldBe` Just (ListBoxItem 0)
+
+    describe "scroll-to-current" $ do
+      it "scrolls down when the current item moves past the bottom of the window" $ do
+        -- Item 2 (y 40-60) is the last visible row; moving to item 3 (y
+        -- 60-80) requires scrolling so its bottom (80) reaches the viewport
+        -- bottom: newScroll = 80 - 60 = 20px, as a fraction of the 60px of
+        -- scrollable range (120px content - 60px viewport) = 1/3.
+        ctx' <- runListBox 0 (withFocus (Just (ListBoxItem 2)) (mkListBoxCtx noInput { inputKeyEvents = [KeyEvent KeyDown []] }))
+        getFocused ctx' `shouldBe` Just (ListBoxItem 3)
+        listBoxScrollFrac ctx' `shouldBe` 20 / 60
+
+      it "scrolls up when the current item moves above the top of the window" $ do
+        -- Scrolled so item 1 (y 20-40) is the first visible row; moving to
+        -- item 0 (y 0-20) requires scrolling back to the top.
+        ctx' <- runListBox 0 (withListBoxScroll (20 / 60) (withFocus (Just (ListBoxItem 1)) (mkListBoxCtx noInput { inputKeyEvents = [KeyEvent KeyUp []] })))
+        getFocused ctx' `shouldBe` Just (ListBoxItem 0)
+        listBoxScrollFrac ctx' `shouldBe` 0
+
+      it "does not change scroll when the new current item is already visible" $ do
+        ctx' <- runListBox 0 (withFocus (Just (ListBoxItem 0)) (mkListBoxCtx noInput { inputKeyEvents = [KeyEvent KeyDown []] }))
+        listBoxScrollFrac ctx' `shouldBe` 0
+
+    describe "rendering" $ do
+      it "passes isSelected=True for the selected item" $ do
+        ctx' <- runListBox 1 (mkListBoxCtx noInput)
+        drawnTexts ctx' `shouldContain` ["SEL:Item1"]
+
+      it "passes isSelected=False for other visible items" $ do
+        ctx' <- runListBox 1 (mkListBoxCtx noInput)
+        drawnTexts ctx' `shouldContain` ["UNSEL:Item0"]
+        drawnTexts ctx' `shouldContain` ["UNSEL:Item2"]
+
+      it "only renders the items within the visible window" $ do
+        ctx' <- runListBox 0 (mkListBoxCtx noInput)
+        drawnTexts ctx' `shouldContain` ["SEL:Item0"]
+        drawnTexts ctx' `shouldContain` ["UNSEL:Item1"]
+        drawnTexts ctx' `shouldContain` ["UNSEL:Item2"]
+        drawnTexts ctx' `shouldNotContain` ["UNSEL:Item3"]
+        drawnTexts ctx' `shouldNotContain` ["UNSEL:Item4"]
+        drawnTexts ctx' `shouldNotContain` ["UNSEL:Item5"]
+
+      it "renders items scrolled into view instead of the top of the list" $ do
+        ctx' <- runListBox 0 (withListBoxScroll (20 / 60) (mkListBoxCtx noInput))
+        drawnTexts ctx' `shouldContain` ["UNSEL:Item3"]
+        drawnTexts ctx' `shouldNotContain` ["UNSEL:Item0"]
+
+    describe "defaults" $ do
+      it "renders no items when items is not given" $ do
+        -- The scrollbar (its decr/incr buttons draw "▲"/"▼") is unaffected
+        -- by the item list being empty; only item markers are checked here.
+        ctx' <- fmap (settle . snd) $ runUI (listBox id listBoxItemHeight [onSelect (postWith id)] listBoxRenderItem) (mkListBoxCtx noInput)
+        [t | t <- drawnTexts ctx', t /= "▲", t /= "▼"] `shouldBe` []
+
+      it "defaults to nothing selected when selected is not given" $ do
+        ctx' <- fmap (settle . snd) $ runUI (listBox id listBoxItemHeight [items listBoxItems, onSelect (postWith id)] listBoxRenderItem) (mkListBoxCtx noInput)
+        drawnTexts ctx' `shouldNotContain` ["SEL:Item0"]
