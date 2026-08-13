@@ -146,6 +146,7 @@ module Blink.Controls
   , control
   , isKeyPressed
   , whenFocused
+  , isClickedOver
   , isActivatedBy
   , activatable
   , LabelEvent
