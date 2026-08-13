@@ -69,6 +69,11 @@ import Blink.Controls2
   , contentSize
   , viewport
   , virtualContent
+  , onSelect
+  , items
+  , selected
+  , selector
+  , radioGroup
   )
 import Blink.ControlsTestSupport
   ( TestElement (..)
@@ -294,6 +299,23 @@ runViewportChild sz childAttrs mousePos =
   let input = noInput { inputMousePosition = mousePos }
       ctx   = emptyUIContext vpOuterRect input vpTheme noOpTextMeasurer
   in fmap snd $ runUI (viewport VPPart [contentSize sz] (control VPChild childAttrs (pure ()))) ctx
+
+-- selector/radioGroup tests use element type Int directly (mkId = id), the
+-- same convention as checkbox/scrollBar/slider.
+radioGroupTheme :: Theme Int
+radioGroupTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = checkboxStyleSet }
+
+radioGroupRect :: Rectangle
+radioGroupRect = Rectangle 0 0 100 90
+
+radioItems :: [(String, Text)]
+radioItems = [("a", "Alpha"), ("b", "Beta"), ("c", "Gamma")]
+
+mkRadioGroupCtx :: InputState -> UIContext Int String
+mkRadioGroupCtx input = emptyUIContext radioGroupRect input radioGroupTheme noOpTextMeasurer
+
+runRadioGroup :: String -> UIContext Int String -> IO (UIContext Int String)
+runRadioGroup sel = fmap (settle . snd) . runUI (radioGroup id [items radioItems, selected sel, onSelect (postWith id)])
 
 spec :: Spec
 spec = describe "Blink.Controls2" $ do
@@ -1457,3 +1479,147 @@ spec = describe "Blink.Controls2" $ do
     it "clips content to the current bounds" $ do
       ctx' <- runVirtualContent 0 20 10
       getDrawCommands ctx' `shouldContain` [PushClip controlRect]
+
+  describe "selector" $ do
+    let renderItem :: Int -> Bool -> (String, Text) -> UI Int String ()
+        renderItem _eid isSelected (_val, lbl) =
+          drawText testColour AlignLeft ((if isSelected then "SEL:" else "UNSEL:") <> lbl)
+
+        runSelector :: String -> UIContext Int String -> IO (UIContext Int String)
+        runSelector sel = fmap (settle . snd) . runUI (selector id [items radioItems, selected sel, onSelect (postWith id)] renderItem)
+
+    describe "selection" $ do
+      it "dispatches the value of a clicked item" $ do
+        ctx' <- runSelector "a" (withButtonReleased (mkRadioGroupCtx (mouseAt (Point 50 45) False [])))
+        getMessages ctx' `shouldBe` ["b"]
+
+      it "dispatches the value when Enter is pressed while an item is focused" $ do
+        ctx' <- runSelector "a" (withFocus (Just 1) (mkRadioGroupCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        getMessages ctx' `shouldBe` ["b"]
+
+      it "does not dispatch when clicked while disabled" $ do
+        (_, ctx') <- runUI (disableWhen True (selector id [items radioItems, selected "a", onSelect (postWith id)] renderItem))
+          (withButtonReleased (mkRadioGroupCtx (mouseAt (Point 50 45) False [])))
+        dispatchCount (settle ctx') `shouldBe` 0
+
+      it "does not dispatch when there is no interaction" $ do
+        ctx' <- runSelector "b" (mkRadioGroupCtx noInput)
+        dispatchCount ctx' `shouldBe` 0
+
+    describe "keyboard navigation" $ do
+      let nav focusIdx k = do
+            ctx' <- runSelector "a" (withFocus (Just focusIdx) (mkRadioGroupCtx noInput { inputKeyEvents = [KeyEvent k []] }))
+            pure $ getFocused ctx'
+
+      it "moves focus to the next item when Down is pressed" $ do
+        result <- nav 0 KeyDown
+        result `shouldBe` Just 1
+
+      it "moves focus to the previous item when Up is pressed" $ do
+        result <- nav 1 KeyUp
+        result `shouldBe` Just 0
+
+      it "does not move focus when disabled" $ do
+        (_, ctx') <- runUI (disableWhen True (selector id [items radioItems, selected "a", onSelect (postWith id)] renderItem))
+          (withFocus (Just 0) (mkRadioGroupCtx noInput { inputKeyEvents = [KeyEvent KeyDown []] }))
+        getFocused (settle ctx') `shouldBe` Just 0
+
+    describe "rendering" $ do
+      it "passes isSelected=True for the selected item" $ do
+        ctx' <- runSelector "b" (mkRadioGroupCtx noInput)
+        drawnTexts ctx' `shouldContain` ["SEL:Beta"]
+
+      it "passes isSelected=False for other items" $ do
+        ctx' <- runSelector "b" (mkRadioGroupCtx noInput)
+        drawnTexts ctx' `shouldContain` ["UNSEL:Alpha"]
+        drawnTexts ctx' `shouldContain` ["UNSEL:Gamma"]
+
+    describe "defaults" $ do
+      it "defaults to no items when items is not given" $ do
+        ctx' <- fmap (settle . snd) $ runUI (selector id [onSelect (postWith id)] renderItem) (mkRadioGroupCtx noInput)
+        drawnTexts ctx' `shouldBe` []
+
+      it "defaults to nothing selected when selected is not given" $ do
+        ctx' <- fmap (settle . snd) $ runUI (selector id [items radioItems, onSelect (postWith id)] renderItem) (mkRadioGroupCtx noInput)
+        drawnTexts ctx' `shouldNotContain` ["SEL:Alpha"]
+        drawnTexts ctx' `shouldNotContain` ["SEL:Beta"]
+        drawnTexts ctx' `shouldNotContain` ["SEL:Gamma"]
+
+    describe "lifecycle events" $
+      it "fires FocusGained via onFocusGained for whichever item gains focus" $ do
+        let attrs = [items radioItems, selected "a", onFocusGained (post "gained")]
+        ctx' <- fmap (settle . snd) $ runUI (selector id attrs renderItem) (mkRadioGroupCtx noInput)
+        getMessages ctx' `shouldBe` ["gained"]
+
+  describe "radioGroup" $ do
+    describe "selection" $ do
+      it "dispatches the value of a clicked item" $ do
+        ctx' <- runRadioGroup "a" (withButtonReleased (mkRadioGroupCtx (mouseAt (Point 50 45) False [])))
+        getMessages ctx' `shouldBe` ["b"]
+
+      it "dispatches the correct value when the last item is clicked" $ do
+        ctx' <- runRadioGroup "a" (withButtonReleased (mkRadioGroupCtx (mouseAt (Point 50 75) False [])))
+        getMessages ctx' `shouldBe` ["c"]
+
+      it "dispatches the value when Enter is pressed while an item is focused" $ do
+        ctx' <- runRadioGroup "a" (withFocus (Just 1) (mkRadioGroupCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        getMessages ctx' `shouldBe` ["b"]
+
+      it "dispatches the value when Space is pressed while an item is focused" $ do
+        ctx' <- runRadioGroup "a" (withFocus (Just 2) (mkRadioGroupCtx noInput { inputKeyEvents = [KeyEvent KeySpace []] }))
+        getMessages ctx' `shouldBe` ["c"]
+
+      it "does not dispatch when no item is focused and a key is pressed" $ do
+        ctx' <- runRadioGroup "a" (withFocus (Just 99) (mkRadioGroupCtx noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
+        dispatchCount ctx' `shouldBe` 0
+
+      it "does not dispatch when there is no interaction" $ do
+        ctx' <- runRadioGroup "b" (mkRadioGroupCtx noInput)
+        dispatchCount ctx' `shouldBe` 0
+
+    describe "keyboard navigation" $ do
+      let nav focusIdx k = do
+            ctx' <- runRadioGroup "a" (withFocus (Just focusIdx) (mkRadioGroupCtx noInput { inputKeyEvents = [KeyEvent k []] }))
+            pure $ getFocused ctx'
+
+      it "moves focus to the next item when Down is pressed" $ do
+        result <- nav 0 KeyDown
+        result `shouldBe` Just 1
+
+      it "moves focus to the previous item when Up is pressed" $ do
+        result <- nav 1 KeyUp
+        result `shouldBe` Just 0
+
+      it "stays on the last item when Down is pressed at the end" $ do
+        result <- nav 2 KeyDown
+        result `shouldBe` Just 2
+
+      it "stays on the first item when Up is pressed at the beginning" $ do
+        result <- nav 0 KeyUp
+        result `shouldBe` Just 0
+
+      it "does not move focus when disabled" $ do
+        (_, ctx') <- runUI (disableWhen True (radioGroup id [items radioItems, selected "a", onSelect (postWith id)]))
+          (withFocus (Just 0) (mkRadioGroupCtx noInput { inputKeyEvents = [KeyEvent KeyDown []] }))
+        getFocused (settle ctx') `shouldBe` Just 0
+
+      it "handles arrow keys on the frame focus is gained by click" $ do
+        -- Click on item 0 (centre Point 50 15) and press Down in the same
+        -- frame with no prior focus. The newly focused item should handle
+        -- the key.
+        ctx' <- runRadioGroup "a" (withButtonReleased (mkRadioGroupCtx noInput { inputMousePosition = Point 50 15, inputKeyEvents = [KeyEvent KeyDown []] }))
+        getFocused ctx' `shouldBe` Just 1
+
+    describe "rendering" $ do
+      it "shows the selected mark on the selected item" $ do
+        ctx' <- runRadioGroup "b" (mkRadioGroupCtx noInput)
+        drawnTexts ctx' `shouldContain` ["● Beta"]
+
+      it "shows the unselected mark on other items" $ do
+        ctx' <- runRadioGroup "b" (mkRadioGroupCtx noInput)
+        drawnTexts ctx' `shouldContain` ["○ Alpha"]
+        drawnTexts ctx' `shouldContain` ["○ Gamma"]
+
+      it "displays all labels regardless of selection" $ do
+        ctx' <- runRadioGroup "a" (mkRadioGroupCtx noInput)
+        length (drawnTexts ctx') `shouldBe` 3
