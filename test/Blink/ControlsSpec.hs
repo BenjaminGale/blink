@@ -356,6 +356,131 @@ withListBoxScroll frac ctx = ctx { ctxElements = (ctxElements ctx) { elmScrollSt
 listBoxScrollFrac :: UIContext ListBoxPart Int -> Double
 listBoxScrollFrac ctx = scrollPosition (Map.findWithDefault (ScrollState 0) (ListBoxScroll ScrollTrack) (elmScrollStates (ctxElements ctx)))
 
+-- | The generic focus\/tab\/hover\/disabled behaviour every control gets for
+-- free from 'control'\/'activatable', re-verified through each control's
+-- own real function rather than through those shared primitives directly —
+-- catching a control that mis-wires its own id or attrs into them, which a
+-- primitive-only test can't. Mirrors the pre-migration suite's
+-- @controlBehaviourSpec@, generalised over element type and app state so
+-- it's reusable across controls that don't all share one harness.
+controlBehaviourSpec
+  :: (Ord e, Show e)
+  => Rectangle                              -- ^ the harness's outer bounds, for 'nextFrameContext'
+  -> (InputState -> UIContext e s)          -- ^ builds a fresh context
+  -> e                                      -- ^ the element under test
+  -> e                                      -- ^ a distinct other element
+  -> Point                                  -- ^ a point that hits the element under test
+  -> (UIContext e s -> IO (UIContext e s))  -- ^ runs the widget under test, settled
+  -> Spec
+controlBehaviourSpec bounds mkCtx this other hitPoint run = do
+  describe "focus" $ do
+    it "receives focus when nothing else is focused" $ do
+      ctx' <- run (mkCtx noInput)
+      getFocused ctx' `shouldBe` Just this
+
+    it "does not take focus from another element" $ do
+      ctx' <- run (withFocus (Just other) (mkCtx noInput))
+      getFocused ctx' `shouldBe` Just other
+
+    it "receives focus when clicked" $ do
+      ctx' <- run (withFocus (Just other) (withButtonReleased (mkCtx (mouseAt hitPoint False []))))
+      getFocused ctx' `shouldBe` Just this
+
+    it "does not steal focus when the mouse is released on it after dragging from another element" $ do
+      let base = withButtonReleased (mkCtx (mouseAt hitPoint False []))
+          ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just other } }
+      ctx' <- run ctx
+      getFocused ctx' `shouldBe` Nothing
+
+    it "retains focus on the previously focused element when a drag releases elsewhere" $ do
+      let base = withFocus (Just other) (withButtonReleased (mkCtx (mouseAt hitPoint False [])))
+          ctx  = base { ctxInteraction = (ctxInteraction base) { ixnCaptured = Just other } }
+      ctx' <- run ctx
+      getFocused ctx' `shouldBe` Just other
+
+  describe "tab navigation" $ do
+    it "passes focus to the next control when Tab is pressed" $ do
+      ctx' <- run (withFocus (Just this) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab []] }))
+      getFocused ctx' `shouldBe` Nothing
+
+    it "passes focus to the previous control when Shift+Tab is pressed" $ do
+      let base = withFocus (Just this) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab [Shift]] })
+      ctx' <- run (base { ctxInteraction = (ctxInteraction base) { ixnPrevTabStop = Just other } })
+      getFocused ctx' `shouldBe` Just other
+
+  describe "hover detection" $ do
+    it "registers mouse-over on the frame after the mouse is inside" $ do
+      ctx1 <- run (mkCtx (mouseAt hitPoint False []))
+      let ctx2 = nextFrameContext bounds noInput ctx1
+      (result, _) <- runUI (wasMouseOverLastFrame this) ctx2
+      result `shouldBe` True
+
+    it "does not register mouse-over when the mouse is outside" $ do
+      ctx1 <- run (mkCtx (mouseAt (Point (-500) (-500)) False []))
+      let ctx2 = nextFrameContext bounds noInput ctx1
+      (result, _) <- runUI (wasMouseOverLastFrame this) ctx2
+      result `shouldBe` False
+
+  describe "when disabled" $ do
+    let disabledRun ctx = run (ctx { ctxDisabled = True })
+
+    it "does not take auto-focus" $ do
+      ctx' <- disabledRun (mkCtx noInput)
+      getFocused ctx' `shouldBe` Nothing
+
+    it "does not steal focus when clicked" $ do
+      ctx' <- disabledRun (withFocus (Just other) (withButtonReleased (mkCtx (mouseAt hitPoint False []))))
+      getFocused ctx' `shouldBe` Just other
+
+    it "does not register mouse-over when the mouse is inside" $ do
+      ctx1 <- disabledRun (mkCtx (mouseAt hitPoint False []))
+      let ctx2 = nextFrameContext bounds noInput ctx1
+      (result, _) <- runUI (wasMouseOverLastFrame this) ctx2
+      result `shouldBe` False
+
+    it "is not recorded as the previous tab stop" $ do
+      ctx' <- disabledRun (mkCtx noInput)
+      ixnPrevTabStop (ctxInteraction ctx') `shouldBe` Nothing
+
+    it "does not consume Tab or lose focus when disabled while focused" $ do
+      ctx' <- disabledRun (withFocus (Just this) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab []] }))
+      getFocused ctx' `shouldBe` Just this
+
+    it "does not hand focus to the previous tab stop on Shift+Tab when disabled while focused" $ do
+      let base = withFocus (Just this) (mkCtx noInput { inputKeyEvents = [KeyEvent KeyTab [Shift]] })
+      ctx' <- disabledRun (base { ctxInteraction = (ctxInteraction base) { ixnPrevTabStop = Just other } })
+      getFocused ctx' `shouldBe` Just this
+
+-- | Background\/border chrome rendering, re-verified through each control's
+-- own function. Only applicable to controls that render their own chrome
+-- directly across a single rectangle sized from margin\/padding\/border (not
+-- composites like 'checkbox'\/'slider' whose test harnesses use zero-margin
+-- styles for drag-position precision instead). Mirrors the pre-migration
+-- suite's @backgroundAndBorderSpec@.
+backgroundAndBorderSpec :: (UIContext TestElement s -> IO (UIContext TestElement s)) -> Spec
+backgroundAndBorderSpec run = do
+  let runWithBorder ctx = run (ctx { ctxTheme = testThemeWithBorder })
+
+  it "does not draw a background in the margin area" $ do
+    ctx' <- run (mkCtxFor noInput)
+    getDrawCommands ctx' `shouldNotContain` [FillRect controlRect testColour]
+
+  it "fills its background area" $ do
+    ctx' <- run (mkCtxFor noInput)
+    getDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
+
+  it "clips content to its padding area" $ do
+    ctx' <- run (mkCtxFor noInput)
+    getDrawCommands ctx' `shouldContain` [PushClip contentRect]
+
+  it "does not draw a border when borderColour is Nothing" $ do
+    ctx' <- run (mkCtxFor noInput)
+    getDrawCommands ctx' `shouldNotContain` [StrokeBorder bgRect testBorderColour (uniformBorder 1)]
+
+  it "draws a border when borderColour is set" $ do
+    ctx' <- runWithBorder (mkCtxFor noInput)
+    getDrawCommands ctx' `shouldContain` [StrokeBorder bgRect testBorderColour (uniformBorder 1)]
+
 spec :: Spec
 spec = describe "Blink.Controls" $ do
   describe "configure" $ do
@@ -542,12 +667,12 @@ spec = describe "Blink.Controls" $ do
       (_, ctx) <- runUI (applyMouseOver TestControl [captureAttrs]) (ctx0 { ctxDisabled = True })
       getMessages ctx `shouldBe` []
 
-    it "fires via onMouseEnter when the mouse enters" $ do
+    it "notifies the caller when the mouse enters" $ do
       let attrs = [onMouseEnter (post "entered")] :: [Attr TestElement Probe String ()]
       (_, ctx) <- runUI (applyMouseOver TestControl attrs) (mkCtxFor (mouseAt (Point 50 50) False []))
       getMessages ctx `shouldBe` ["entered"]
 
-    it "fires via onMouseExit when the mouse leaves after being over" $ do
+    it "notifies the caller when the mouse leaves after being over" $ do
       let enterAttrs = [] :: [Attr TestElement Probe String ()]
           exitAttrs  = [onMouseExit (post "exited")] :: [Attr TestElement Probe String ()]
       (_, ctx1) <- runUI (applyMouseOver TestControl enterAttrs) (mkCtxFor (mouseAt (Point 50 50) False []))
@@ -593,11 +718,11 @@ spec = describe "Blink.Controls" $ do
         ctx' <- snd <$> runUI (applyFocus OtherControl noAttrs) ctx
         getFocused ctx' `shouldBe` Just OtherControl
 
-      it "fires FocusGained via onFocusGained when focus is gained" $ do
+      it "notifies the caller when focus is gained" $ do
         ctx' <- run ([onFocusGained (post "gained")] :: [Attr TestElement Probe String ()]) (mkCtxFor noInput)
         getMessages ctx' `shouldBe` ["gained"]
 
-      it "fires FocusLost via onFocusLost when focus is lost to a Tab press" $ do
+      it "notifies the caller when focus is lost to a Tab press" $ do
         -- This is the reason focus and tab navigation are one primitive: a
         -- Tab-driven loss is only visible to a bracket spanning both, since
         -- applyFocus alone would return before the loss happens, and by the
@@ -633,11 +758,11 @@ spec = describe "Blink.Controls" $ do
         ctx' <- run noAttrs (mkCtxFor noInput)
         ixnPrevTabStop (ctxInteraction ctx') `shouldBe` Just TestControl
 
-      it "does not register itself as the previous tab stop when tabStop is False" $ do
+      it "can be excluded from Shift-Tab's target list" $ do
         ctx' <- run ([tabStop False] :: [Attr TestElement Probe Probe ()]) (mkCtxFor noInput)
         ixnPrevTabStop (ctxInteraction ctx') `shouldBe` Nothing
 
-      it "a tabStop-False control leaves the previous tab-stop record unchanged" $ do
+      it "an excluded control leaves the previous tab-stop record unchanged" $ do
         ctx0 <- run noAttrs (mkCtxFor noInput)
         ctx1 <- snd <$> runUI (applyFocus OtherControl ([tabStop False] :: [Attr TestElement Probe Probe ()])) ctx0
         ixnPrevTabStop (ctxInteraction ctx1) `shouldBe` Just TestControl
@@ -723,7 +848,7 @@ spec = describe "Blink.Controls" $ do
       getFocused ctx' `shouldBe` Just TestControl
       getDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
 
-    it "threads focusOnClick through to the underlying applyFocus" $ do
+    it "clicking moves focus onto a different element instead of itself" $ do
       let attrs = [focusOnClick (FocusTarget OtherControl)] :: [Attr TestElement Probe Probe ()]
           ctx   = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []))
       ctx' <- snd <$> runUI (control TestControl attrs (pure ())) ctx
@@ -836,23 +961,25 @@ spec = describe "Blink.Controls" $ do
       ctx' <- snd <$> runUI (label TestControl [text "Hello"]) (mkCtxFor noInput :: UIContext TestElement ())
       ixnPrevTabStop (ctxInteraction ctx') `shouldBe` Nothing
 
-    it "honours focusOnClick (FocusTarget), redirecting a click onto another element" $ do
+    it "clicking moves focus onto a different element instead of itself" $ do
       let attrs = [text "Caption", focusOnClick (FocusTarget OtherControl)]
           ctx   = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []) :: UIContext TestElement ())
       ctx' <- snd <$> runUI (label TestControl attrs) ctx
       getFocused ctx' `shouldBe` Just OtherControl
 
-    it "an explicit tabStop True overrides the default False" $ do
+    it "can still be made reachable by Tab when explicitly requested" $ do
       ctx' <- snd <$> runUI (label TestControl [text "Hello", tabStop True]) (mkCtxFor noInput :: UIContext TestElement ())
       ixnPrevTabStop (ctxInteraction ctx') `shouldBe` Just TestControl
 
-    it "an explicit focusOnClick FocusSelf overrides the default NoFocus" $ do
+    it "can still be made focusable by a direct click when explicitly requested" $ do
       let ctx = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []) :: UIContext TestElement ())
       ctx' <- snd <$> runUI (label TestControl [text "Hello", focusOnClick FocusSelf]) ctx
       getFocused ctx' `shouldBe` Just TestControl
 
   describe "progressBar" $ do
     let run v ctx = snd <$> runUI (progressBar TestControl [progress (Progress v)]) ctx
+
+    describe "background and border" $ backgroundAndBorderSpec (run 0.5)
 
     it "fills the correct proportion of the content area at 0.5" $ do
       ctx' <- run 0.5 (mkCtxFor noInput)
@@ -886,7 +1013,7 @@ spec = describe "Blink.Controls" $ do
         ctx' <- snd <$> runUI (progressBar TestControl [progress Indeterminate]) elapsedCtx
         getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 39.5 15 21 70) testColour]
 
-      it "uses bandSpeed instead of the default when given" $ do
+      it "sweeps faster when a custom speed is given" $ do
         ctx' <- snd <$> runUI (progressBar TestControl [progress Indeterminate, bandSpeed 1.0]) elapsedCtx
         getDrawCommands ctx' `shouldContain` [FillRect (Rectangle (-6) 15 21 70) testColour]
 
@@ -899,6 +1026,11 @@ spec = describe "Blink.Controls" $ do
         outRequiresAnimation (ctxOutputs ctx') `shouldBe` False
 
   describe "button" $ do
+    let runButton ctx = fmap (settle . snd) $ runUI (button TestControl [text "label"]) ctx
+
+    controlBehaviourSpec controlRect mkCtxFor TestControl OtherControl (Point 50 50) runButton
+    describe "background and border" $ backgroundAndBorderSpec runButton
+
     it "draws the label" $ do
       ctx' <- snd <$> runUI (button TestControl [text "label"]) (mkCtxFor noInput)
       drawnTexts ctx' `shouldContain` ["label"]
@@ -938,13 +1070,13 @@ spec = describe "Blink.Controls" $ do
       (_, ctx') <- runUI (disableWhen True (button TestControl [text "label", onClick (post ())])) (withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyReturn []] }))
       getMessages ctx' `shouldBe` []
 
-    it "onClick (perform eff) queues the given UiEffect when clicked, instead of emitting a message" $ do
+    it "can queue an effect instead of emitting a message when clicked" $ do
       (_, ctx') <- runUI (button TestControl [text "label", onClick (perform (SetSelectionAt TestControl (cursor 0)))])
         (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])) :: UIContext TestElement ())
       getUiEffects ctx' `shouldContain` [SetSelectionAt TestControl (cursor 0)]
       getMessages ctx' `shouldBe` []
 
-    it "onClick (post msg <> perform eff) fans out to both a message and a UiEffect" $ do
+    it "can emit a message and queue an effect together from the same click" $ do
       let attrs = [text "label", onClick (post (1 :: Int) <> perform (SetSelectionAt TestControl (cursor 0)))]
       (_, ctx') <- runUI (button TestControl attrs) (withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False [])))
       getMessages ctx' `shouldBe` [1]
@@ -960,6 +1092,8 @@ spec = describe "Blink.Controls" $ do
       drawnTexts ctx' `shouldBe` []
 
   describe "checkbox" $ do
+    controlBehaviourSpec checkboxRect mkCheckboxCtx CheckboxBox CheckboxGlyph labelPoint (runCheckbox False)
+
     describe "toggle behaviour" $ do
       it "dispatches True when clicked while unchecked" $ do
         ctx' <- runCheckbox False (withButtonReleased (mkCheckboxCtx (mouseAt labelPoint False [])))
@@ -1027,6 +1161,9 @@ spec = describe "Blink.Controls" $ do
         getFocused ctx' `shouldBe` Just CheckboxBox
 
   describe "textInputControl" $ do
+    controlBehaviourSpec controlRect (mkTextCtx "hello") TestControl OtherControl (Point 50 50) (runTextField "hello")
+    describe "background and border" $ backgroundAndBorderSpec (runTextField "hello")
+
     it "renders chrome like any other control" $ do
       ctx' <- runTextField "hello" (mkTextCtx "hello" noInput)
       getDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
@@ -1237,6 +1374,11 @@ spec = describe "Blink.Controls" $ do
         getMessages (settle ctx') `shouldBe` []
 
   describe "slider" $ do
+    let mkSliderCtx input = emptyUIContext sliderRect input sliderTheme noOpTextMeasurer
+        runSliderWidget ctx = fmap (settle . snd) $ runUI (slider id [orientation Horizontal, value 0.5, onChange (post ())]) ctx
+
+    controlBehaviourSpec sliderRect mkSliderCtx SliderTrack SliderThumb (Point 100 15) runSliderWidget
+
     it "renders chrome like any other control" $ do
       ctx' <- snd <$> runUI (slider id [orientation Horizontal, value 0.5, onChange (post ())])
         (emptyUIContext sliderRect noInput sliderTheme noOpTextMeasurer)
@@ -1327,7 +1469,7 @@ spec = describe "Blink.Controls" $ do
         ctx' <- runSlider Horizontal 0.0 noInput { inputKeyEvents = [KeyEvent KeyLeft []] }
         getMessages ctx' `shouldBe` [0.0]
 
-      it "uses arrowStep instead of the 0.05 default when given" $ do
+      it "nudges by a custom step size when given" $ do
         ctx' <- fmap (settle . snd) $ runUI (slider id [orientation Horizontal, value 0.5, onChange (postWith id), arrowStep 0.2])
           (emptyUIContext sliderRect noInput { inputKeyEvents = [KeyEvent KeyRight []] } sliderTheme noOpTextMeasurer)
         getMessages ctx' `shouldBe` [0.7]
@@ -1436,7 +1578,7 @@ spec = describe "Blink.Controls" $ do
         getDrawCommands ctx' `shouldNotContain` [FillRect (Rectangle 0 84 16 16) testColour]
         getDrawCommands ctx' `shouldNotContain` [FillRect (Rectangle 184 0 16 16) testColour]
 
-      it "defaults to Size 0 0 (nothing to scroll) when contentSize is not given" $ do
+      it "defaults to nothing to scroll when the content size isn't given" $ do
         ctx' <- fmap (settle . snd) $ runUI (viewport VPPart [] (fillRect testColour)) vpCtx
         getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 0 0 0) testColour]
 
@@ -1592,18 +1734,18 @@ spec = describe "Blink.Controls" $ do
         drawnTexts ctx' `shouldContain` ["UNSEL:Gamma"]
 
     describe "defaults" $ do
-      it "defaults to no items when items is not given" $ do
+      it "defaults to an empty list when no items are given" $ do
         ctx' <- fmap (settle . snd) $ runUI (selector id [onSelect (postWith id)] renderItem) (mkRadioGroupCtx noInput)
         drawnTexts ctx' `shouldBe` []
 
-      it "defaults to nothing selected when selected is not given" $ do
+      it "defaults to nothing selected" $ do
         ctx' <- fmap (settle . snd) $ runUI (selector id [items radioItems, onSelect (postWith id)] renderItem) (mkRadioGroupCtx noInput)
         drawnTexts ctx' `shouldNotContain` ["SEL:Alpha"]
         drawnTexts ctx' `shouldNotContain` ["SEL:Beta"]
         drawnTexts ctx' `shouldNotContain` ["SEL:Gamma"]
 
     describe "lifecycle events" $
-      it "fires FocusGained via onFocusGained for whichever item gains focus" $ do
+      it "notifies the caller when any item gains focus" $ do
         let attrs = [items radioItems, selected "a", onFocusGained (post "gained")]
         ctx' <- fmap (settle . snd) $ runUI (selector id attrs renderItem) (mkRadioGroupCtx noInput)
         getMessages ctx' `shouldBe` ["gained"]
@@ -1760,13 +1902,13 @@ spec = describe "Blink.Controls" $ do
         drawnTexts ctx' `shouldNotContain` ["UNSEL:Item0"]
 
     describe "defaults" $ do
-      it "renders no items when items is not given" $ do
+      it "renders nothing when no items are given" $ do
         -- The scrollbar (its decr/incr buttons draw "▲"/"▼") is unaffected
         -- by the item list being empty; only item markers are checked here.
         ctx' <- fmap (settle . snd) $ runUI (listBox id listBoxItemHeight [onSelect (postWith id)] listBoxRenderItem) (mkListBoxCtx noInput)
         [t | t <- drawnTexts ctx', t /= "▲", t /= "▼"] `shouldBe` []
 
-      it "defaults to nothing selected when selected is not given" $ do
+      it "defaults to nothing selected" $ do
         ctx' <- fmap (settle . snd) $ runUI (listBox id listBoxItemHeight [items listBoxItems, onSelect (postWith id)] listBoxRenderItem) (mkListBoxCtx noInput)
         drawnTexts ctx' `shouldNotContain` ["SEL:Item0"]
 
