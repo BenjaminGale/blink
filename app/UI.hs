@@ -411,11 +411,10 @@ staticScrollList ps =
 
 dynamicScrollList :: ScrollPageState -> DemoUI ()
 dynamicScrollList ps =
-  listBox ScrollList2 itemH
-    [items rowItems, selected selectedIdx, onSelect (postWith (ScrollMsg . SelectedDynamicItem))]
+  listBox ScrollList2
+    [items rowItems, selected selectedIdx, itemHeight 32, onSelect (postWith (ScrollMsg . SelectedDynamicItem))]
     renderRow
   where
-    itemH       = 32 :: Double
     rowItems    = [ (i, "Item " <> T.pack (show (i + 1))) | i <- [0 .. 99 :: Int] ]
     selectedIdx = maybe (-1) id (lastClickedDynamic ps)
 

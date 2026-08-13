@@ -80,6 +80,7 @@ module Blink.Controls
   , onSelect
   , items
   , selected
+  , itemHeight
   , selector
   , radioGroup
   , ListBoxPart (..)
@@ -1357,14 +1358,14 @@ virtualContent
   -> Int                   -- ^ total item count
   -> (Int -> UI e msg ())  -- ^ renders the item at the given index
   -> UI e msg ()
-virtualContent scrollPos itemHeight itemCount renderItem = do
+virtualContent scrollPos rowHeight itemCount renderItem = do
   vp <- getBounds
-  let firstIdx  = floor (scrollPos / itemHeight) :: Int
-      subOffset = scrollPos - fromIntegral firstIdx * itemHeight
-      visibleN  = ceiling ((rectHeight vp + subOffset) / itemHeight) :: Int
+  let firstIdx  = floor (scrollPos / rowHeight) :: Int
+      subOffset = scrollPos - fromIntegral firstIdx * rowHeight
+      visibleN  = ceiling ((rectHeight vp + subOffset) / rowHeight) :: Int
   clipToCurrent $ forM_ [0 .. visibleN - 1] $ \j ->
     let i        = firstIdx + j
-        itemRect = vp { rectY = rectY vp + fromIntegral j * itemHeight - subOffset, rectHeight = itemHeight }
+        itemRect = vp { rectY = rectY vp + fromIntegral j * rowHeight - subOffset, rectHeight = rowHeight }
     in when (i >= 0 && i < itemCount) $ withBounds itemRect (renderItem i)
 
 -- | Events reported by 'selector' and 'radioGroup': 'Selected' with the
@@ -1386,18 +1387,24 @@ onSelect reaction = onEvent $ \ev -> case ev of
   Selected v -> reaction v
   _          -> []
 
--- | Configuration for 'selector'\/'radioGroup', set via 'items' and
--- 'selected'. Defaults to no items and nothing selected.
+-- | Configuration for 'selector'\/'radioGroup'\/'listBox', set via 'items',
+-- 'selected', and (for 'listBox' only) 'itemHeight'. Defaults to no items,
+-- nothing selected, and a 20px item height.
 data SelectorConfig a = SelectorConfig
-  { selectorConfigItems    :: [(a, Text)]
-  , selectorConfigSelected :: Maybe a
+  { selectorConfigItems      :: [(a, Text)]
+  , selectorConfigSelected   :: Maybe a
+  , selectorConfigItemHeight :: Double
   }
 
 defaultSelectorConfig :: SelectorConfig a
-defaultSelectorConfig = SelectorConfig { selectorConfigItems = [], selectorConfigSelected = Nothing }
+defaultSelectorConfig = SelectorConfig
+  { selectorConfigItems      = []
+  , selectorConfigSelected   = Nothing
+  , selectorConfigItemHeight = 20
+  }
 
--- | Sets the @(value, label)@ pairs a 'selector'\/'radioGroup' lists, one
--- per item in order. Defaults to @[]@.
+-- | Sets the @(value, label)@ pairs a 'selector'\/'radioGroup'\/'listBox'
+-- lists, one per item in order. Defaults to @[]@.
 items :: [(a, Text)] -> Attr e ev msg (SelectorConfig a)
 items xs = configAny $ \cfg -> cfg { selectorConfigItems = xs }
 
@@ -1405,6 +1412,12 @@ items xs = configAny $ \cfg -> cfg { selectorConfigItems = xs }
 -- 'Nothing' — no item selected, so every item's @isSelected@ is 'False'.
 selected :: a -> Attr e ev msg (SelectorConfig a)
 selected v = configAny $ \cfg -> cfg { selectorConfigSelected = Just v }
+
+-- | Sets the height of one row, in pixels. Only meaningful for 'listBox'
+-- ('selector'\/'radioGroup' size each item from its own content instead).
+-- Defaults to @20@.
+itemHeight :: Double -> Attr e ev msg (SelectorConfig a)
+itemHeight h = configAny $ \cfg -> cfg { selectorConfigItemHeight = h }
 
 -- | 'True' when @eid@ may handle an arrow-key navigation press this frame:
 -- either it already held focus going into this pass, or it was clicked this
@@ -1494,28 +1507,22 @@ data ListBoxPart
   deriving (Eq, Ord, Show)
 
 -- | A vertically scrolling list of items, one selected, with keyboard
--- navigation between them, set via 'items' and 'selected' — the composite
--- of 'selector'-style navigation, 'scrollBar', and 'virtualContent', wired
--- together so that only the currently-visible items are ever rendered.
--- Moving the current item off the visible window with the arrow keys
--- scrolls it back into view.
+-- navigation between them, set via 'items', 'selected', and 'itemHeight' —
+-- the composite of 'selector'-style navigation, 'scrollBar', and
+-- 'virtualContent', wired together so that only the currently-visible
+-- items are ever rendered. Moving the current item off the visible window
+-- with the arrow keys scrolls it back into view.
 --
 -- As with 'selector', the /current/ item (keyboard focus, tracked here) is
 -- distinct from the /selected/ item (application state, via 'selected'\/
 -- 'onSelect'): arrow keys move the current item without emitting; Enter,
 -- Space, or a click activates it and emits 'Selected'.
---
--- @itemHeight@ stays a plain argument rather than an attribute, like
--- 'virtualContent's own: there's no default that wouldn't just silently
--- misrender every list a caller forgot to size, unlike a control value
--- with a real neutral state (an unchecked checkbox, a slider at 0).
 listBox :: (Ord e, Eq a)
         => (ListBoxPart -> e)                       -- ^ maps list-box parts to element IDs
-        -> Double                                   -- ^ item height, in pixels
         -> [Attr e (SelectorEvent a) msg (SelectorConfig a)]
         -> (e -> Bool -> (a, Text) -> UI e msg ())  -- ^ @eid isSelected item@
         -> UI e msg ()
-listBox mkId itemHeight attrs renderItem = do
+listBox mkId attrs renderItem = do
   initialFocus <- getFocus
   hBox defaultBoxConfig
     [ (Layout Fill Fill TopLeft, itemsArea initialFocus)
@@ -1525,9 +1532,10 @@ listBox mkId itemHeight attrs renderItem = do
     cfg       = configure defaultSelectorConfig attrs
     itemList  = selectorConfigItems cfg
     sel       = selectorConfigSelected cfg
+    rowHeight = selectorConfigItemHeight cfg
     itemCount = length itemList
     lastIdx   = itemCount - 1
-    contentH  = fromIntegral itemCount * itemHeight
+    contentH  = fromIntegral itemCount * rowHeight
     trackId   = mkId (ListBoxScroll ScrollTrack)
 
     -- scrollBar persists position as a [0, 1] fraction (same convention as
@@ -1540,7 +1548,7 @@ listBox mkId itemHeight attrs renderItem = do
           maxScroll = max 0 (contentH - vpH)
       frac <- getScrollState trackId
       let scrollPx = frac * maxScroll
-      virtualContent scrollPx itemHeight itemCount (mkItem initialFocus vpH maxScroll scrollPx)
+      virtualContent scrollPx rowHeight itemCount (mkItem initialFocus vpH maxScroll scrollPx)
 
     mkItem initialFocus vpH maxScroll scrollPx idx = do
       let item@(val, _) = itemList !! idx
@@ -1556,8 +1564,8 @@ listBox mkId itemHeight attrs renderItem = do
 
     scrollToCurrent vpH maxScroll scrollPx newIdx = do
       setFocus (mkId (ListBoxItem newIdx))
-      let itemTop    = fromIntegral newIdx * itemHeight
-          itemBottom = itemTop + itemHeight
+      let itemTop    = fromIntegral newIdx * rowHeight
+          itemBottom = itemTop + rowHeight
           newScrollPx
             | itemTop < scrollPx          = itemTop
             | itemBottom > scrollPx + vpH = itemBottom - vpH

@@ -72,6 +72,7 @@ import Blink.Controls
   , onSelect
   , items
   , selected
+  , itemHeight
   , selector
   , radioGroup
   , ListBoxPart (..)
@@ -348,7 +349,7 @@ mkListBoxCtx :: InputState -> UIContext ListBoxPart Int
 mkListBoxCtx input = emptyUIContext listBoxRect input listBoxTheme noOpTextMeasurer
 
 runListBox :: Int -> UIContext ListBoxPart Int -> IO (UIContext ListBoxPart Int)
-runListBox sel = fmap (settle . snd) . runUI (listBox id listBoxItemHeight [items listBoxItems, selected sel, onSelect (postWith id)] listBoxRenderItem)
+runListBox sel = fmap (settle . snd) . runUI (listBox id [items listBoxItems, selected sel, itemHeight listBoxItemHeight, onSelect (postWith id)] listBoxRenderItem)
 
 withListBoxScroll :: Double -> UIContext ListBoxPart Int -> UIContext ListBoxPart Int
 withListBoxScroll frac ctx = ctx { ctxElements = (ctxElements ctx) { elmScrollStates = Map.singleton (ListBoxScroll ScrollTrack) (ScrollState frac) } }
@@ -1834,7 +1835,7 @@ spec = describe "Blink.Controls" $ do
         getMessages ctx' `shouldBe` [1]
 
       it "does not dispatch when clicked while disabled" $ do
-        (_, ctx') <- runUI (disableWhen True (listBox id listBoxItemHeight [items listBoxItems, selected 0, onSelect (postWith id)] listBoxRenderItem))
+        (_, ctx') <- runUI (disableWhen True (listBox id [items listBoxItems, selected 0, itemHeight listBoxItemHeight, onSelect (postWith id)] listBoxRenderItem))
           (withButtonReleased (mkListBoxCtx (mouseAt (Point 50 30) False [])))
         dispatchCount (settle ctx') `shouldBe` 0
 
@@ -1852,7 +1853,7 @@ spec = describe "Blink.Controls" $ do
         getFocused ctx' `shouldBe` Just (ListBoxItem 0)
 
       it "does not move focus when disabled" $ do
-        (_, ctx') <- runUI (disableWhen True (listBox id listBoxItemHeight [items listBoxItems, selected 0, onSelect (postWith id)] listBoxRenderItem))
+        (_, ctx') <- runUI (disableWhen True (listBox id [items listBoxItems, selected 0, itemHeight listBoxItemHeight, onSelect (postWith id)] listBoxRenderItem))
           (withFocus (Just (ListBoxItem 0)) (mkListBoxCtx noInput { inputKeyEvents = [KeyEvent KeyDown []] }))
         getFocused (settle ctx') `shouldBe` Just (ListBoxItem 0)
 
@@ -1905,12 +1906,17 @@ spec = describe "Blink.Controls" $ do
       it "renders nothing when no items are given" $ do
         -- The scrollbar (its decr/incr buttons draw "▲"/"▼") is unaffected
         -- by the item list being empty; only item markers are checked here.
-        ctx' <- fmap (settle . snd) $ runUI (listBox id listBoxItemHeight [onSelect (postWith id)] listBoxRenderItem) (mkListBoxCtx noInput)
+        ctx' <- fmap (settle . snd) $ runUI (listBox id [itemHeight listBoxItemHeight, onSelect (postWith id)] listBoxRenderItem) (mkListBoxCtx noInput)
         [t | t <- drawnTexts ctx', t /= "▲", t /= "▼"] `shouldBe` []
 
       it "defaults to nothing selected" $ do
-        ctx' <- fmap (settle . snd) $ runUI (listBox id listBoxItemHeight [items listBoxItems, onSelect (postWith id)] listBoxRenderItem) (mkListBoxCtx noInput)
+        ctx' <- fmap (settle . snd) $ runUI (listBox id [items listBoxItems, itemHeight listBoxItemHeight, onSelect (postWith id)] listBoxRenderItem) (mkListBoxCtx noInput)
         drawnTexts ctx' `shouldNotContain` ["SEL:Item0"]
+
+      it "defaults to a 20px item height" $ do
+        let marker _eid _isSelected (i, _) = fillRect (RGBA (fromIntegral (i :: Int)) 0 0 1)
+        ctx' <- fmap (settle . snd) $ runUI (listBox id [items listBoxItems, onSelect (postWith id)] marker) (mkListBoxCtx noInput)
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 20 84 20) (RGBA 1 0 0 1)]
 
   describe "tab order across a real composite and a disabled sibling (integration)" $ do
     -- Mirrors the app's actual structure that regressed: two plain buttons,
