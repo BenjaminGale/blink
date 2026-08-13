@@ -1,4 +1,117 @@
 {-# LANGUAGE OverloadedStrings #-}
+{- |
+Module: Blink.Controls
+
+Ready-made interactive controls — 'button', 'checkbox', 'textInputControl',
+'slider', 'scrollBar', 'viewport', 'selector', 'radioGroup', 'listBox' — and
+the 'label'\/'progressBar' display-only ones, all built from the primitives
+in "Blink.UI".
+
+= Element IDs
+
+Every control call starts with an element ID — a value of your application's
+own @e@ type (see /Element identity/ in "Blink.UI") that identifies it for
+styling, focus, and hover tracking:
+
+@
+button OkButton [text "OK", onClick (post Confirmed)]
+@
+
+A control made of a single piece, like 'button', takes one @e@ value
+directly. A control made of several visually or interactively distinct
+pieces — 'checkbox' (its glyph vs. its label), 'slider'\/'scrollBar' (track
+vs. thumb), 'viewport' (its scroll bars vs. its content) — instead takes a
+/tagging function/: a function from a small "part" type to @e@, so you supply
+one @e@-shaped constructor and the control derives a distinct, stylable ID
+for each of its pieces from it:
+
+@
+data Elem = NotifyMe CheckboxPart
+  deriving (Eq, Ord)
+
+checkbox NotifyMe [checked (notifyMe model), text "Notify me by email", onToggle NotifyMeChanged]
+@
+
+'selector'\/'radioGroup'\/'listBox' take the same kind of function keyed on
+item index (or, for 'listBox', on its own part type) instead, since the
+number of items isn't known until the attrs (specifically 'items') are read.
+
+= Attributes
+
+Every control value — text, checked state, current value, orientation,
+selection, and so on — is set via a list of attributes passed after the ID,
+not positional arguments:
+
+@
+checkbox NotifyMe [checked (notifyMe model), text "Notify me by email", onToggle NotifyMeChanged]
+@
+
+Every attribute has a sensible default, so nothing is mandatory beyond the
+element ID (or tagging function) itself, and later entries in the list
+override earlier ones that set the same thing — so a caller can always
+override a control's default. Attributes come in three flavours:
+
+  * Value attributes like 'text', 'checked', and 'value' set one field of
+    the control's own configuration — what it displays or holds.
+  * Reaction attributes like 'onClick', 'onToggle', and 'onChange' (see
+    /Reactions/ below) say what happens when the control's state changes.
+  * 'tabStop' \/ 'focusOnClick' configure focus behaviour shared by every
+    control (see /Focus and tab order/ below).
+
+Under the hood, each attribute list carries a hidden type, 'Attr'; value and
+reaction attributes are both built from a pair of general-purpose smart
+constructors, 'configAny' and 'onEvent'. Reach for those directly only when
+assembling a new control of your own — see /Building composites/ below.
+
+= Reactions
+
+A handler built with 'onEvent' — or one of the per-control @onX@ helpers —
+runs a /reaction/: a function from whatever data the triggering event
+carried to @['Out' e msg]@, the same currency 'fire' dispatches through.
+Four small combinators build one without needing to know that:
+
+  * 'post' \/ 'postWith' emit a message, ignoring or using the event's data.
+  * 'perform' \/ 'performWith' queue a 'UiEffect' instead, for controls (like
+    'scrollBar') that write their own presentation state directly to the
+    'UIContext' rather than routing it through the app's model.
+  * 'forward' \/ 'translate' \/ 'translateWith' re-raise an event against a
+    /different/ attrs list — how a composite (like 'scrollBar', built on
+    'slider') mirrors an inner control's lifecycle events as its own.
+
+Reactions are just functions into a list, so combining more than one is
+ordinary 'Monoid' composition:
+
+@
+onClick (post SavedClicked \<\> perform (ScrollTo ResultsList 0))
+@
+
+= Lifecycle events
+
+Every control reports focus and hover changes the same way, via
+'ControlEvent' and the 'HasControlEvent' class each control's own event type
+instantiates. 'onFocusGained' \/ 'onFocusLost' \/ 'onMouseEnter' \/
+'onMouseExit' are written once, generically, against any @ev@ with a
+'HasControlEvent' instance, rather than once per control.
+
+= Focus and tab order
+
+'control' — the standard entry point for an interactive element — combines
+mouse-over ('applyMouseOver'), focus and Tab\/Shift-Tab navigation
+('applyFocus'), and style-driven chrome ('renderChrome'). An element takes
+focus automatically when nothing else holds it, retains it on click, and is
+included in Tab order unless 'tabStop' is set to 'False'. 'focusOnClick'
+overrides what a click does to focus — 'FocusTarget' redirects it elsewhere
+(used by a caption to focus the input beside it instead of itself), and
+'NoFocus' makes clicking a no-op for focus.
+
+= Building composites
+
+'activatable' (click or a listed key activates), 'isActivatedBy', and
+'renderCheckboxGlyph' are the smaller building blocks 'button' and
+'checkbox' are made from, exported for anyone assembling a custom control
+with the same shape. 'thumbRect' \/ 'mouseToTrackPos' are the drag-track
+geometry 'slider' and 'scrollBar' share.
+-}
 module Blink.Controls
   ( Attr
   , configure
@@ -103,6 +216,10 @@ import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
 import Blink.UI hiding (getStyle, isPressed)
 
+-- | The lifecycle events every control can fire, regardless of its own
+-- specific event type — see 'HasControlEvent'. Raised by 'applyFocus' and
+-- 'applyMouseOver'; handled with 'onFocusGained', 'onFocusLost',
+-- 'onMouseEnter', and 'onMouseExit'.
 data ControlEvent
   = FocusGained
   | FocusLost
@@ -110,14 +227,23 @@ data ControlEvent
   | MouseExited
   deriving (Eq, Show)
 
+-- | Lets a control's own event type carry the generic 'ControlEvent's
+-- alongside its control-specific ones (e.g. 'ButtonEvent' carries 'Clicked'
+-- and, via this class, the focus\/hover lifecycle too), so a single attrs
+-- list can react to both with 'onEvent' and friends.
 class HasControlEvent ev where
   liftControl  :: ControlEvent -> ev
   matchControl :: ev -> Maybe ControlEvent
 
+-- | What clicking a control does to focus, set with 'focusOnClick'.
 data FocusOnClick e
   = FocusSelf
+    -- ^ The control takes focus itself (the default for interactive controls).
   | FocusTarget e
+    -- ^ The control hands focus to a different element instead of taking it
+    -- itself — e.g. a checkbox's label redirecting focus onto the checkbox.
   | NoFocus
+    -- ^ Clicking the control has no effect on focus at all.
   deriving (Eq, Show)
 
 -- | Configuration shared by every control, regardless of that control's own
@@ -131,11 +257,19 @@ data ControlConfig e = ControlConfig
 defaultControlConfig :: ControlConfig e
 defaultControlConfig = ControlConfig { ccTabStop = True, ccFocusOnClick = FocusSelf }
 
+-- | One entry in a control's attrs list — either a reaction to an event
+-- ('onEvent' and the combinators built on it), a change to the control's own
+-- @cfg@ ('configAny' and the smart constructors built on it), or shared
+-- focus\/tab-stop config ('tabStop', 'focusOnClick'). Opaque: built and
+-- consumed only through the functions this module exports.
 data Attr e ev msg cfg
   = On (ev -> [Out e msg])
   | Config (cfg -> cfg)
   | Shared (ControlConfig e -> ControlConfig e)
 
+-- | Resolves a control's final @cfg@ by folding every 'Config' attr in the
+-- list over the default, left to right — so later attrs override earlier
+-- ones that touch the same field.
 configure :: cfg -> [Attr e ev msg cfg] -> cfg
 configure = foldl' apply
   where
@@ -148,15 +282,27 @@ controlConfig = foldl' apply defaultControlConfig
     apply cc (Shared f) = f cc
     apply cc _          = cc
 
+-- | Raises each event in turn against every 'On' reaction in the attrs list,
+-- dispatching the resulting 'Out's (emitting messages, queuing effects).
+-- Used internally by 'applyFocus' and 'applyMouseOver' to fire the generic
+-- lifecycle events, and by each control to fire its own.
 fire :: [Attr e ev msg cfg] -> [ev] -> UI e msg ()
 fire attrs evs = forM_ evs $ \ev -> mapM_ dispatch (concatMap ($ ev) [h | On h <- attrs])
   where
     dispatch (OutMsg msg) = emit msg
     dispatch (OutUi eff)  = emitUi eff
 
+-- | The raw escape hatch: react to an event with an arbitrary function to
+-- 'Out's. Prefer the more specific combinators ('post', 'postWith',
+-- 'perform', 'performWith', 'onFocusGained', ...) where they fit — reach for
+-- this when a reaction needs to inspect the event and choose between several
+-- different 'Out's.
 onEvent :: (ev -> [Out e msg]) -> Attr e ev msg cfg
 onEvent = On
 
+-- | The raw escape hatch for changing a control's own @cfg@. The named smart
+-- constructors ('text', 'checked', 'value', ...) are built on this — reach
+-- for it directly only when writing a new one.
 configAny :: (cfg -> cfg) -> Attr e ev msg cfg
 configAny = Config
 
@@ -202,29 +348,44 @@ translate attrs ev = const (concatMap ($ ev) [h | On h <- attrs])
 translateWith :: (subEv -> ev) -> [Attr e ev msg cfg] -> subEv -> [Out e msg]
 translateWith f attrs subEv = concatMap ($ f subEv) [h | On h <- attrs]
 
+-- | Reacts when the control gains focus. Fired by 'applyFocus' for any
+-- control built on 'control'.
 onFocusGained :: HasControlEvent ev => (ControlEvent -> [Out e msg]) -> Attr e ev msg cfg
 onFocusGained reaction = onEvent $ \ev -> case matchControl ev of
   Just FocusGained -> reaction FocusGained
   _                -> []
 
+-- | Reacts when the control loses focus. Fired by 'applyFocus' for any
+-- control built on 'control'.
 onFocusLost :: HasControlEvent ev => (ControlEvent -> [Out e msg]) -> Attr e ev msg cfg
 onFocusLost reaction = onEvent $ \ev -> case matchControl ev of
   Just FocusLost -> reaction FocusLost
   _              -> []
 
+-- | Reacts when the mouse moves over the control. Fired by 'applyMouseOver'
+-- for any control built on 'control'.
 onMouseEnter :: HasControlEvent ev => (ControlEvent -> [Out e msg]) -> Attr e ev msg cfg
 onMouseEnter reaction = onEvent $ \ev -> case matchControl ev of
   Just MouseEntered -> reaction MouseEntered
   _                 -> []
 
+-- | Reacts when the mouse moves off the control. Fired by 'applyMouseOver'
+-- for any control built on 'control'.
 onMouseExit :: HasControlEvent ev => (ControlEvent -> [Out e msg]) -> Attr e ev msg cfg
 onMouseExit reaction = onEvent $ \ev -> case matchControl ev of
   Just MouseExited -> reaction MouseExited
   _                -> []
 
+-- | Whether Tab\/Shift-Tab cycles focus onto this control. Defaults to
+-- 'True' for interactive controls; 'label' defaults it to 'False' (see
+-- 'focusOnClick' too).
 tabStop :: Bool -> Attr e ev msg cfg
 tabStop b = Shared $ \cc -> cc { ccTabStop = b }
 
+-- | What clicking this control does to focus — see 'FocusOnClick'. Defaults
+-- to 'FocusSelf' for interactive controls; 'label' defaults it to 'NoFocus'
+-- but can be given 'FocusTarget' to redirect focus onto another element
+-- (e.g. a checkbox's label onto its checkbox).
 focusOnClick :: FocusOnClick e -> Attr e ev msg cfg
 focusOnClick foc = Shared $ \cc -> cc { ccFocusOnClick = foc }
 
@@ -386,6 +547,9 @@ applyFocus eid attrs = do
           consumeKey KeyTab
       when (ccTabStop cc) $ setPreviousTabStop eid
 
+-- | The extra width\/height a control's margin, border, and padding add
+-- around its content, from the resolved style. Added to a control's own
+-- content size when reporting its size to layout.
 measureChrome :: Ord e => e -> UI e msg (Length, Length)
 measureChrome eid = do
   style <- getStyle eid
@@ -398,6 +562,9 @@ measureChrome eid = do
       dh = topInset m  + bottomInset m  + topInset be + bottomInset be + topInset p  + bottomInset p
   pure (Exactly dw, Exactly dh)
 
+-- | Draws a control's background and border from the resolved style, then
+-- runs @content@ clipped to the remaining space inside the padding. The
+-- shared rendering half of every control built on 'control'.
 renderChrome :: Ord e => e -> UI e msg () -> UI e msg ()
 renderChrome eid content = do
   style <- getStyle eid
@@ -588,9 +755,9 @@ defaultButtonConfig = ButtonConfig { buttonConfigText = "" }
 instance HasTextConfig ButtonConfig where
   setText t cfg = cfg { buttonConfigText = t }
 
--- | A clickable button labelled via 'text'. Fires 'Clicked' — via 'onClick'
--- or 'onClickTo' — on the frame it's activated, by a left-click or by
--- pressing Enter while focused.
+-- | A clickable button labelled via 'text'. Fires 'Clicked' — handled with
+-- 'onClick' — on the frame it's activated, by a left-click or by pressing
+-- Enter while focused.
 button :: Ord e => e -> [Attr e ButtonEvent msg ButtonConfig] -> UI e msg ()
 button eid attrs = do
   activated <- activatable eid attrs [KeyReturn] draw
@@ -633,8 +800,8 @@ onToggle reaction = onEvent $ \ev -> case ev of
 -- | Draws a checkbox glyph: a checkmark centred in the current bounds when
 -- @checked@, nothing otherwise, in the resolved style's text colour. A bare
 -- rendering action with no interactive behaviour of its own — reusable by
--- anything that wants to look like a checkbox glyph without taking on
--- 'checkbox''s toggle behaviour.
+-- anything that wants to look like a checkbox glyph without taking on the
+-- toggle behaviour of 'checkbox'.
 renderCheckboxGlyph :: Ord e => e -> Bool -> UI e msg ()
 renderCheckboxGlyph eid isChecked = do
   style <- getStyle eid

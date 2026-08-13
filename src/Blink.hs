@@ -50,7 +50,8 @@ Every 'App' is parameterised over three types:
   * "Blink.Update"   — The Update monad: turns a message emitted by the view
                        into an updated application state.
   * "Blink.Controls" — Ready-made controls: buttons, text inputs, checkboxes,
-                       progress bars, and labels.
+                       progress bars, labels, sliders, scroll bars, viewports,
+                       selectors, radio groups, and list boxes.
   * "Blink.Layout"   — Box layout and constraint-based sizing.
   * "Blink.Style"    — Themes and per-state styles.
   * "Blink.Rendering"— The draw command list produced each frame.

@@ -111,16 +111,25 @@ region is discarded.
 
 = Interaction
 
-Interaction queries are scoped to an element ID and are only meaningful after
-the element has registered a hover hit via 'setHovered' (or the high-level
-'Blink.Controls.control' helper, which does this automatically):
+Interaction queries are scoped to an element ID. Two independent hover
+models are available:
 
-  * 'isHovered' — the mouse is inside the element's bounds.
-  * 'isPressed' — the left button is held while the element is hovered.
-  * 'isClicked' — the left button was just released while the element is hovered.
+  * The single-owner model — 'setHovered' registers an element as /the/
+    hovered element, displacing whatever it was before, and 'isHovered' \/
+    'isPressed' \/ 'isClicked' query it. At most one element can be hovered
+    at once, which makes drag-target exclusion trivial but doesn't compose:
+    two overlapping elements can't each independently know the mouse is
+    over them.
+  * The geometric model — 'registerMouseOver' \/ 'wasMouseOverLastFrame' \/
+    'isAnyMouseOver' let any number of elements independently register and
+    query "over" this frame, with no shared slot to contend over. This is
+    what 'Blink.Controls.control' actually uses; the single-owner model
+    above remains for custom controls that want its simpler semantics
+    instead.
 
-'isRegionHit' is the lower-level primitive: it checks whether the mouse is within
-the /current bounds/, without reference to any element ID.
+'isRegionHit' is the lower-level primitive both models build on: it checks
+whether the mouse is within the /current bounds/, without reference to any
+element ID.
 
 = Focus and keyboard navigation
 
@@ -159,23 +168,24 @@ when disabled.
 = Putting it together
 
 Higher-level controls in "Blink.Controls" are built entirely from the
-primitives above. A minimal button, stripped of styling and focus handling,
-shows how the pieces interlock:
+primitives above, using the geometric hover model. A minimal button,
+stripped of styling and focus handling, shows how the pieces interlock:
 
 @
 miniButton :: Ord e => e -> Text -> UI e msg Bool
 miniButton eid label = do
   isHit <- isRegionHit
-  when isHit $ setHovered eid
+  when isHit $ registerMouseOver eid
   fillRect (if isHit then RGBA 0.3 0.3 0.3 1 else RGBA 0.2 0.2 0.2 1)
   drawText (RGBA 1 1 1 1) AlignCenter label
-  isClicked eid
+  released <- isButtonReleased
+  pure (isHit && released)
 @
 
-'setHovered' registers the hit so 'isClicked' has something to check next
-frame; 'fillRect' and 'drawText' read the current bounds implicitly. See
-'Blink.Controls.control' for the full version, which adds focus, tab
-navigation, and style-driven chrome on top of exactly this shape.
+'registerMouseOver' records the hit so a later frame can look back at it via
+'wasMouseOverLastFrame'; 'fillRect' and 'drawText' read the current bounds
+implicitly. See 'Blink.Controls.control' for the full version, which adds
+focus, tab navigation, and style-driven chrome on top of exactly this shape.
 -}
 module Blink.UI
   ( -- * The UI monad
@@ -948,7 +958,7 @@ applyUiEffects effects ctx0 = foldl' step ctx0 effects
 -- | 'True' when the mouse cursor is within the current bounds and within the
 -- active interaction clip region (set by 'clipToCurrent'). This is the
 -- lower-level, element-agnostic primitive; for a specific control's hit area
--- (bounds inset by its margin), see @isControlHit@ in "Blink.Controls".
+-- (bounds inset by its margin), see 'Blink.Controls.isMouseOver'.
 isRegionHit :: UI e msg Bool
 isRegionHit = do
   r    <- getBounds

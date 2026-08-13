@@ -17,27 +17,28 @@ data Element = Increment | CountLabel
 
 data Msg = Increment'
 
-view :: Int -> UI Element Msg ()
-view count = vBox defaultBoxConfig
+counterView :: Int -> UI Element Msg ()
+counterView count = vBox defaultBoxConfig
   [ ( Layout Fill (Exactly 24) TopLeft,
-        label CountLabel (T.pack (show count)) []
+        label CountLabel [text (T.pack (show count))]
     )
   , ( Layout Fill (Exactly 32) TopLeft,
-        button Increment "+1" [onClick Increment']
+        button Increment [text "+1", onClick (post Increment')]
     )
   ]
 
-update :: Msg -> Update Int ()
-update Increment' = modify (+ 1)
+counterUpdate :: Msg -> Update Int ()
+counterUpdate Increment' = modify (+ 1)
 
 app :: App Element Msg Int
-app = App { startUp = pure 0, theme = const myTheme, view = view, update = update }
+app = App { startUp = pure 0, theme = const myTheme, view = counterView, update = counterUpdate }
 ```
 
 `Element` identifies each interactive control, used to look up styles and
-route keyboard focus. `Msg` is what the view emits — here, `onClick` queues
-`Increment'` when the button fires. `Int` is the application state, passed
-into `view` explicitly each frame; `update` folds each queued `Msg` into the
+route keyboard focus. `Msg` is what the view emits — here, `onClick (post
+Increment')` queues `Increment'` when the button fires. `Int` is the
+application state, passed into `view` explicitly each frame; `update` folds
+each queued `Msg` into the
 state once the frame completes, in emission order. Pass `app` to
 `configureContinuous` or `configureEventDriven` to get a `BlinkHandle`, then
 drive it with `stepFrame` each iteration of your platform's event loop.
@@ -49,7 +50,8 @@ drive it with `stepFrame` each iteration of your platform's event loop.
   * `Blink.Update` — the Update monad: turns a message emitted by the view
     into an updated application state.
   * `Blink.Controls` — ready-made controls: buttons, text inputs, checkboxes,
-    progress bars, and labels.
+    progress bars, labels, sliders, scroll bars, viewports, selectors, radio
+    groups, and list boxes.
   * `Blink.Layout` — box layout and constraint-based sizing.
   * `Blink.Style` — themes and per-state styles.
   * `Blink.Rendering` — the draw command list produced each frame.
