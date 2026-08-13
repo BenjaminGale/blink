@@ -326,7 +326,7 @@ applyFocus :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg cfg] -> UI e ms
 applyFocus eid attrs = do
   wasFocused <- isFocused eid
   applyFocusRules
-  applyTabKeys
+  applyTabKeys wasFocused
   nowFocused <- isFocused eid
   fire attrs $ concat
     [ [liftControl FocusGained | not wasFocused && nowFocused]
@@ -360,17 +360,26 @@ applyFocus eid attrs = do
     -- focus normally on Tab if it happens to hold it, but is skipped by
     -- Shift-Tab from whatever comes after it, since it never records itself
     -- as the previous tab stop.
-    applyTabKeys = whenEnabled $ do
-      hasFocus <- isFocused eid
+    --
+    -- Uses 'wasFocused' (captured before 'applyFocusRules' ran, not a fresh
+    -- 'isFocused' read) so a same-frame auto-claim — nothing was focused,
+    -- this element just took it — isn't immediately undone by the very Tab
+    -- press that made nothing-was-focused true in the first place. Without
+    -- this, wraparound could never complete: Tab off the last control
+    -- clears focus with nothing left this frame to auto-claim it; next
+    -- frame's Tab press lets the first control auto-claim (nothing is
+    -- focused) — but a fresh 'isFocused' read here would then see that
+    -- claim and immediately clear it again, forever.
+    applyTabKeys wasFocused = whenEnabled $ do
       input    <- getInput
       prevCtrl <- getPreviousTabStop
       let tabKey          = find (\e -> key e == KeyTab) (inputKeyEvents input)
           tabPressed      = maybe False (\e -> Shift `notElem` modifiers e) tabKey
           shiftTabPressed = maybe False (\e -> Shift `elem`    modifiers e) tabKey
-      when (hasFocus && tabPressed) $ do
+      when (wasFocused && tabPressed) $ do
         clearFocus
         consumeKey KeyTab
-      when (hasFocus && shiftTabPressed) $
+      when (wasFocused && shiftTabPressed) $
         forM_ prevCtrl $ \prev -> do
           setFocus prev
           consumeKey KeyTab
@@ -479,12 +488,15 @@ instance HasTextConfig LabelConfig where
   setText t cfg = cfg { labelConfigText = t }
 
 -- | Text in the resolved style, set via 'text'. A full 'control', so it
--- registers mouse-over and honours 'tabStop'\/'focusOnClick' (both default
--- to off-the-beaten-path uses — a plain label has no reason to take focus —
--- but a composite like a labelled field can use 'focusOnClick' to redirect
--- a click on the caption onto its input).
+-- registers mouse-over — but unlike every other control here, it never
+-- takes keyboard focus itself: defaults to @'tabStop' False@ and
+-- @'focusOnClick' 'NoFocus'@, since a plain label has no reason to hold
+-- focus. It can still hand focus /elsewhere/ — a composite like a labelled
+-- field can pass @'focusOnClick' ('FocusTarget' input)@ to redirect a click
+-- on the caption onto its input — an explicit attr always overrides these
+-- defaults (they're consulted first, so a later attr in the list wins).
 label :: Ord e => e -> [Attr e LabelEvent msg LabelConfig] -> UI e msg ()
-label eid attrs = control eid attrs $ do
+label eid attrs = control eid (tabStop False : focusOnClick NoFocus : attrs) $ do
   style <- getStyle eid
   let cfg = configure defaultLabelConfig attrs
   drawText (styleTextColour style) (styleTextAlign style) (labelConfigText cfg)

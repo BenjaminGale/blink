@@ -284,6 +284,9 @@ scrollBarPos = scrollPosition . Map.findWithDefault (ScrollState 0) ScrollTrack 
 data ViewportElem = VPPart ViewportPart | VPChild
   deriving (Eq, Ord, Show)
 
+data TIElem = TIButton1 | TIButton2 | TICheckbox CheckboxPart | TIDisabledButton
+  deriving (Eq, Ord, Show)
+
 vpTheme :: Theme ViewportElem
 vpTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = checkboxStyleSet }
 
@@ -639,6 +642,15 @@ spec = describe "Blink.Controls2" $ do
         ctx1 <- snd <$> runUI (applyFocus OtherControl ([tabStop False] :: [Attr TestElement Probe Probe ()])) ctx0
         ixnPrevTabStop (ctxInteraction ctx1) `shouldBe` Just TestControl
 
+      it "keeps focus auto-claimed this frame instead of immediately clearing it on the same Tab press" $ do
+        -- Regression: wraparound after Tab runs past the last control clears
+        -- focus with nothing left this frame to auto-claim it. The *next*
+        -- frame's Tab press should let the first control auto-claim (nothing
+        -- is focused) and keep it — not immediately lose it again just
+        -- because Tab is the very key that's pressed this same frame.
+        ctx' <- run noAttrs (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyTab []] })
+        getFocused ctx' `shouldBe` Just TestControl
+
       it "does not consume Tab or lose focus when disabled while focused" $ do
         let disabledCtx = (withFocus (Just TestControl) (mkCtxFor noInput { inputKeyEvents = [KeyEvent KeyTab []] })) { ctxDisabled = True }
         ctx' <- run noAttrs disabledCtx
@@ -816,12 +828,12 @@ spec = describe "Blink.Controls2" $ do
       ctx' <- snd <$> runUI (label TestControl [text "Hello"]) (mkCtxFor noInput :: UIContext TestElement ())
       getDrawCommands ctx' `shouldContain` [FillRect bgRect testColour]
 
-    it "does not take focus by default (tabStop/focusOnClick still default like any control)" $ do
+    it "does not take focus by default, unlike every other control here" $ do
       ctx' <- snd <$> runUI (label TestControl [text "Hello"]) (mkCtxFor noInput :: UIContext TestElement ())
-      getFocused ctx' `shouldBe` Just TestControl
+      getFocused ctx' `shouldBe` Nothing
 
-    it "honours tabStop False, so it is skipped by Shift-Tab from what comes after it" $ do
-      ctx' <- snd <$> runUI (label TestControl [text "Hello", tabStop False]) (mkCtxFor noInput :: UIContext TestElement ())
+    it "does not register itself as the previous tab stop by default" $ do
+      ctx' <- snd <$> runUI (label TestControl [text "Hello"]) (mkCtxFor noInput :: UIContext TestElement ())
       ixnPrevTabStop (ctxInteraction ctx') `shouldBe` Nothing
 
     it "honours focusOnClick (FocusTarget), redirecting a click onto another element" $ do
@@ -829,6 +841,15 @@ spec = describe "Blink.Controls2" $ do
           ctx   = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []) :: UIContext TestElement ())
       ctx' <- snd <$> runUI (label TestControl attrs) ctx
       getFocused ctx' `shouldBe` Just OtherControl
+
+    it "an explicit tabStop True overrides the default False" $ do
+      ctx' <- snd <$> runUI (label TestControl [text "Hello", tabStop True]) (mkCtxFor noInput :: UIContext TestElement ())
+      ixnPrevTabStop (ctxInteraction ctx') `shouldBe` Just TestControl
+
+    it "an explicit focusOnClick FocusSelf overrides the default NoFocus" $ do
+      let ctx = withButtonReleased (mkCtxFor (mouseAt (Point 50 50) False []) :: UIContext TestElement ())
+      ctx' <- snd <$> runUI (label TestControl [text "Hello", focusOnClick FocusSelf]) ctx
+      getFocused ctx' `shouldBe` Just TestControl
 
   describe "progressBar" $ do
     let run v ctx = snd <$> runUI (progressBar TestControl [progress (Progress v)]) ctx
@@ -1748,3 +1769,43 @@ spec = describe "Blink.Controls2" $ do
       it "defaults to nothing selected when selected is not given" $ do
         ctx' <- fmap (settle . snd) $ runUI (listBox id listBoxItemHeight [items listBoxItems, onSelect (postWith id)] listBoxRenderItem) (mkListBoxCtx noInput)
         drawnTexts ctx' `shouldNotContain` ["SEL:Item0"]
+
+  describe "tab order across a real composite and a disabled sibling (integration)" $ do
+    -- Mirrors the app's actual structure that regressed: two plain buttons,
+    -- then a real checkbox (three genuine sub-controls: box, glyph, label,
+    -- each running their own applyFocus), then a permanently-disabled
+    -- button that must never be reachable. One discrete Tab press per
+    -- frame, exactly like a real key press-and-release, not a held-key
+    -- repeat.
+    let tiTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = checkboxStyleSet } :: Theme TIElem
+
+        render :: UI TIElem () ()
+        render = do
+          button TIButton1 [text "One"]
+          button TIButton2 [text "Two"]
+          checkbox TICheckbox [text "Check", checked False]
+          disableWhen True (button TIDisabledButton [text "Disabled"])
+
+        tabInput = noInput { inputKeyEvents = [KeyEvent KeyTab []] }
+
+        -- Prepares the context with this frame's input (via
+        -- 'nextFrameContext', which also resets per-frame state the same
+        -- way a real frame boundary does), then runs the view.
+        runFrame input ctx = snd <$> runUI render (nextFrameContext controlRect input ctx)
+
+        initialCtx = emptyUIContext controlRect noInput tiTheme noOpTextMeasurer :: UIContext TIElem ()
+
+    it "auto-claims the first focusable element with nothing focused and no Tab pressed" $ do
+      ctx0 <- snd <$> runUI render initialCtx
+      getFocused ctx0 `shouldBe` Just TIButton1
+
+    it "advances button -> button -> checkbox box -> (disabled skipped) -> wraps to the first button" $ do
+      ctx0 <- snd <$> runUI render initialCtx
+      ctx1 <- runFrame tabInput ctx0
+      getFocused ctx1 `shouldBe` Just TIButton2
+      ctx2 <- runFrame tabInput ctx1
+      getFocused ctx2 `shouldBe` Just (TICheckbox CheckboxBox)
+      ctx3 <- runFrame tabInput ctx2
+      getFocused ctx3 `shouldBe` Nothing
+      ctx4 <- runFrame tabInput ctx3
+      getFocused ctx4 `shouldBe` Just TIButton1

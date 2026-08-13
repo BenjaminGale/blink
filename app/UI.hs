@@ -1,11 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 module UI (Element, AppState (..), demoApp) where
 
-import Blink
+import Blink.App
+import Blink.Controls2
+import Blink.Geometry
+import Blink.Input
+import Blink.Layout
+import Blink.Rendering
+import Blink.Style
+import Blink.UI hiding (getStyle, isPressed)
+import Blink.Update
 import Theme (Element (..), lightTheme, darkTheme)
 import Control.Monad (when)
 import Data.Char (isDigit)
-import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -167,13 +174,18 @@ type DemoUI = UI Element Msg
 
 -- Shell
 
+-- | Plain, non-interactive text under the shared 'Label' element ID.
+caption :: Text -> DemoUI ()
+caption t = label Label [text t]
+
 sidebar :: AppState -> DemoUI ()
 sidebar s = do
   (_, btnChromH) <- measureChrome (NavBtn 0)
   Size _ th      <- measureText "Basic Controls"
   let btnH = addLength (Exactly th) btnChromH
-  Size _ cbTh <- measureText "Dark mode"
-  let cbH = Exactly (max 20 cbTh)
+  Size _ cbTh      <- measureText "Dark mode"
+  (_, cbChromH)    <- measureChrome (CheckboxN 2 CheckboxBox)
+  let cbH = addLength (Exactly (max 20 cbTh)) cbChromH
   vBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 8 })
     [ (Layout Fill btnH TopLeft, navBtn 0 "Basic Controls")
     , (Layout Fill btnH TopLeft, navBtn 1 "Scroll")
@@ -181,10 +193,10 @@ sidebar s = do
     , (Layout Fill btnH TopLeft, navBtn 3 "Layout")
     , (Layout Fill Fill  TopLeft, pure ())
     , (Layout Fill cbH  TopLeft,
-         checkbox CheckboxBox2 "Dark mode" (darkMode s) [onToggle SetDarkMode])
+         checkbox (CheckboxN 2) [text "Dark mode", checked (darkMode s), onToggle (postWith SetDarkMode)])
     ]
   where
-    navBtn i lbl = button (NavBtn i) lbl [onClick (Navigate i)]
+    navBtn i lbl = button (NavBtn i) [text lbl, onClick (post (Navigate i))]
 
 pageForIndex :: Int -> Page
 pageForIndex 0 = BasicControlsPage initialBasicControls
@@ -215,11 +227,11 @@ footer s (winW, winH) = do
   hoverW'  <- labelWidth hoverText
   renderChrome StatusBar $
     hBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 4, boxAlignment = Center })
-      [ (Layout winW'    Fill MiddleLeft, label Label winText [])
-      , (Layout mouseW'  Fill MiddleLeft, label Label mouseText [])
-      , (Layout buttonW' Fill MiddleLeft, label Label buttonText [])
-      , (Layout hoverW'  Fill MiddleLeft, label Label hoverText [])
-      , (Layout Fill               Fill MiddleLeft, label Label keyText [])
+      [ (Layout winW'    Fill MiddleLeft, caption winText)
+      , (Layout mouseW'  Fill MiddleLeft, caption mouseText)
+      , (Layout buttonW' Fill MiddleLeft, caption buttonText)
+      , (Layout hoverW'  Fill MiddleLeft, caption hoverText)
+      , (Layout Fill               Fill MiddleLeft, caption keyText)
       ]
 
 centrePane :: AppState -> DemoUI ()
@@ -245,13 +257,15 @@ basicControlsView ps =
 
 rowCheckboxes :: BasicControlsState -> DemoUI ()
 rowCheckboxes ps = do
-  Size tw th <- measureText "Enable editing"
-  let w = Exactly (tw + 24)  -- 20px mark + 4px spacing
-      h = Exactly (max 20 th)
+  Size tw th        <- measureText "Enable editing"
+  (chromW, chromH)  <- measureChrome (CheckboxN 1 CheckboxBox)
+  let w = addLength (Exactly (tw + 24)) chromW  -- 20px mark + 4px spacing
+      h = addLength (Exactly (max 20 th)) chromH
   hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
     [ (Layout w h MiddleLeft,
-         checkbox CheckboxBox1 "Enable editing" (editingEnabled ps)
-           [onToggle (BasicControlsMsg . ToggleEditing)])
+         checkbox (CheckboxN 1)
+           [text "Enable editing", checked (editingEnabled ps)
+           , onToggle (postWith (BasicControlsMsg . ToggleEditing))])
     ]
 
 rowButtons :: BasicControlsState -> DemoUI ()
@@ -265,15 +279,15 @@ rowButtons ps = do
            [ (Layout btnW Fill TopLeft,    btn 1 "One")
            , (Layout btnW Fill TopLeft,    btn 2 "Two")
            , (Layout btnW Fill TopLeft,    btn 3 "Three")
-           , (Layout Fill Fill MiddleLeft, label Label ("Clicks: " <> T.pack (show (clickCount ps))) [])
+           , (Layout Fill Fill MiddleLeft, caption ("Clicks: " <> T.pack (show (clickCount ps))))
            , (Layout btnW Fill TopLeft,    resetBtn)
            ])
     , (Layout Fill (Exactly 20) TopLeft,
-         progressBar ProgressBar1 (Progress (fromIntegral (clickCount ps) / 50)) [])
+         progressBar ProgressBar1 [progress (Progress (fromIntegral (clickCount ps) / 50))])
     ]
   where
-    btn i txt = button (Btn i) txt [onClick (BasicControlsMsg (AddClicks i))]
-    resetBtn  = button (Btn 0) "Reset" [onClick (BasicControlsMsg ResetClicks)]
+    btn i txt = button (Btn i) [text txt, onClick (post (BasicControlsMsg (AddClicks i)))]
+    resetBtn  = button (Btn 0) [text "Reset", onClick (post (BasicControlsMsg ResetClicks))]
 
 rowInput :: BasicControlsState -> DemoUI ()
 rowInput ps = do
@@ -281,10 +295,10 @@ rowInput ps = do
   Size tw _   <- measureText "Text input"
   let labelW = addLength (Exactly tw) chromW
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
-    [ (Layout labelW Fill         MiddleLeft, label Label "Text input" [])
+    [ (Layout labelW Fill         MiddleLeft, caption "Text input")
     , (Layout Fill   (Exactly 30) TopLeft,
-         textInputControl TextInput1 (inputText ps)
-           [onInput (BasicControlsMsg . SetInputText)])
+         textInputControl TextInput1
+           [text (inputText ps), onInput (postWith (BasicControlsMsg . SetInputText))])
     ]
 
 rowNumberInput :: BasicControlsState -> DemoUI ()
@@ -293,10 +307,10 @@ rowNumberInput ps = do
   Size tw _   <- measureText "Number input"
   let labelW = addLength (Exactly tw) chromW
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
-    [ (Layout labelW Fill         MiddleLeft, label Label "Number input" [])
+    [ (Layout labelW Fill         MiddleLeft, caption "Number input")
     , (Layout Fill   (Exactly 30) TopLeft,
-         textInputControl NumberInput1 (numberText ps)
-           [inputFilter (T.filter isDigit), onInput (BasicControlsMsg . SetNumberText)])
+         textInputControl NumberInput1
+           [text (numberText ps), inputFilter (T.filter isDigit), onInput (postWith (BasicControlsMsg . SetNumberText))])
     ]
 
 rowPasswordInput :: BasicControlsState -> DemoUI ()
@@ -305,10 +319,10 @@ rowPasswordInput ps = do
   Size tw _   <- measureText "Password input"
   let labelW = addLength (Exactly tw) chromW
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
-    [ (Layout labelW Fill         MiddleLeft, label Label "Password input" [])
+    [ (Layout labelW Fill         MiddleLeft, caption "Password input")
     , (Layout Fill   (Exactly 30) TopLeft,
-         textInputControl PasswordInput1 (passwordText ps)
-           [displayFilter (T.map (const '•')), onInput (BasicControlsMsg . SetPasswordText)])
+         textInputControl PasswordInput1
+           [text (passwordText ps), displayFilter (T.map (const '•')), onInput (postWith (BasicControlsMsg . SetPasswordText))])
     ]
 
 rowSlider :: BasicControlsState -> DemoUI ()
@@ -319,12 +333,13 @@ rowSlider ps = do
   let labelW = addLength (Exactly lw) chromW
       valueW = addLength (Exactly vw) chromW
   hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
-    [ (Layout labelW Fill         MiddleLeft, label Label "Slider" [])
+    [ (Layout labelW Fill         MiddleLeft, caption "Slider")
     , (Layout Fill   (Exactly 30) TopLeft,
-         slider Slider1 Horizontal (sliderValue ps)
-           [onChange (BasicControlsMsg . SetSliderValue)])
+         slider Slider1
+           [orientation Horizontal, value (sliderValue ps)
+           , onChange (postWith (BasicControlsMsg . SetSliderValue))])
     , (Layout valueW Fill         MiddleLeft,
-         label Label (T.pack (show (round (sliderValue ps * 100) :: Int)) <> "%") [])
+         caption (T.pack (show (round (sliderValue ps * 100) :: Int)) <> "%"))
     ]
 
 rowRadio :: BasicControlsState -> DemoUI ()
@@ -335,21 +350,23 @@ rowRadio ps = do
   hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
     [ (Layout Fill Fill TopLeft,
          vBox defaultBoxConfig
-           [ (Layout Fill labelH TopLeft, label Label "Size" [])
+           [ (Layout Fill labelH TopLeft, caption "Size")
            , (Layout Fill Fill    TopLeft,
                 radioGroup RadioOpt
-                  [(0, "Small"), (1, "Medium"), (2, "Large")]
-                  (radioSelection ps)
-                  [onSelect (BasicControlsMsg . SetRadioSelection)])
+                  [ items [(0, "Small"), (1, "Medium"), (2, "Large")]
+                  , selected (radioSelection ps)
+                  , onSelect (postWith (BasicControlsMsg . SetRadioSelection))
+                  ])
            ])
     , (Layout Fill Fill TopLeft,
          vBox defaultBoxConfig
-           [ (Layout Fill labelH TopLeft, label Label "Priority" [])
+           [ (Layout Fill labelH TopLeft, caption "Priority")
            , (Layout Fill Fill    TopLeft,
                 radioGroup RadioOpt2
-                  [(0, "Low"), (1, "Medium"), (2, "High"), (3, "Critical")]
-                  (radioSelection2 ps)
-                  [onSelect (BasicControlsMsg . SetRadioSelection2)])
+                  [ items [(0, "Low"), (1, "Medium"), (2, "High"), (3, "Critical")]
+                  , selected (radioSelection2 ps)
+                  , onSelect (postWith (BasicControlsMsg . SetRadioSelection2))
+                  ])
            ])
     ]
 
@@ -368,8 +385,8 @@ scrollView ps = do
   vBox (defaultBoxConfig { boxMargin = 8, boxSpacing = 4 })
     [ (Layout Fill headerH TopLeft,
          hBox defaultBoxConfig
-           [ (Layout Fill Fill MiddleLeft, label Label "Known size (viewport)" [])
-           , (Layout Fill Fill MiddleLeft, label Label "Virtualized (listBox, 100 items)" [])
+           [ (Layout Fill Fill MiddleLeft, caption "Known size (viewport)")
+           , (Layout Fill Fill MiddleLeft, caption "Virtualized (listBox, 100 items)")
            ])
     , (Layout Fill Fill TopLeft,
          hBox (defaultBoxConfig { boxSpacing = 8 })
@@ -380,7 +397,7 @@ scrollView ps = do
 
 staticScrollList :: ScrollPageState -> DemoUI ()
 staticScrollList ps =
-  viewport ScrollRegion1 (Size 400 (20 * 32)) [] $
+  viewport ScrollRegion1 [contentSize (Size 400 (20 * 32))] $
     vBox defaultBoxConfig
       [ (Layout Fill (Exactly 32) TopLeft, item i)
       | i <- [1 .. 20 :: Int]
@@ -389,16 +406,18 @@ staticScrollList ps =
     item i = do
       let isSelected = lastClickedStatic ps == Just i
           txt = (if isSelected then "✓ " else "") <> "Item " <> T.pack (show i)
-      button (ScrollItem1 i) txt
-        [onClick (ScrollMsg (ClickedStaticItem i))]
+      button (ScrollItem1 i)
+        [text txt, onClick (post (ScrollMsg (ClickedStaticItem i)))]
 
 dynamicScrollList :: ScrollPageState -> DemoUI ()
 dynamicScrollList ps =
-  listBox ScrollList2 itemH items selected [onSelect (ScrollMsg . SelectedDynamicItem)] renderRow
+  listBox ScrollList2 itemH
+    [items rowItems, selected selectedIdx, onSelect (postWith (ScrollMsg . SelectedDynamicItem))]
+    renderRow
   where
-    itemH  = 32 :: Double
-    items  = [ (i, "Item " <> T.pack (show (i + 1))) | i <- [0 .. 99 :: Int] ]
-    selected = maybe (-1) id (lastClickedDynamic ps)
+    itemH       = 32 :: Double
+    rowItems    = [ (i, "Item " <> T.pack (show (i + 1))) | i <- [0 .. 99 :: Int] ]
+    selectedIdx = maybe (-1) id (lastClickedDynamic ps)
 
     renderRow eid isSelected (_, txt) = do
       style <- getStyle eid
@@ -414,16 +433,17 @@ updateScrollState s f = case currentPage s of
 
 progressView :: ProgressState -> DemoUI ()
 progressView ps = do
-  Size _ th <- measureText "Animate"
-  let cbH = Exactly (max 20 th)
+  Size _ th     <- measureText "Animate"
+  (_, cbChromH) <- measureChrome (CheckboxN 3 CheckboxBox)
+  let cbH = addLength (Exactly (max 20 th)) cbChromH
   vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
     [ (Layout Fill cbH TopLeft,
-         checkbox CheckboxBox3 "Animate" (animating ps)
-           [onToggle (ProgressMsg . ToggleAnimating)])
+         checkbox (CheckboxN 3)
+           [text "Animate", checked (animating ps), onToggle (postWith (ProgressMsg . ToggleAnimating))])
     , (Layout Fill Fill TopLeft,
          if animating ps
-           then progressBar ProgressBar2 Indeterminate []
-           else progressBar ProgressBar2 (Progress 0) [])
+           then progressBar ProgressBar2 [progress Indeterminate]
+           else progressBar ProgressBar2 [progress (Progress 0)])
     ]
 
 updateProgressState :: AppState -> (ProgressState -> ProgressState) -> AppState
@@ -438,32 +458,33 @@ layoutView ps = do
   (_, labelChromH) <- measureChrome Label
   Size _ labelTh   <- measureText "Border Layout"
   Size _ cbTh      <- measureText "Fill cross axis"
+  (_, cbChromH)    <- measureChrome (CheckboxN 4 CheckboxBox)
   let labelH  = addLength (Exactly labelTh) labelChromH
-      headerH = maxLength [labelH, Exactly (max 20 cbTh)]
+      headerH = maxLength [labelH, addLength (Exactly (max 20 cbTh)) cbChromH]
   vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 8 })
     [ (Layout Fill headerH       TopLeft, sectionHeader "Border Layout" (pure ()))
     , (Layout Fill (Exactly 200) TopLeft, borderLayoutDemo)
     , (Layout Fill headerH       TopLeft, sectionHeader "hBox" $
-         checkbox CheckboxBox4 "Fill cross axis" (hboxFillCross ps)
-           [onToggle (LayoutMsg . ToggleHboxFillCross)])
+         checkbox (CheckboxN 4)
+           [text "Fill cross axis", checked (hboxFillCross ps), onToggle (postWith (LayoutMsg . ToggleHboxFillCross))])
     , (Layout Fill (Exactly 100) TopLeft, hboxDemo (hboxFillCross ps))
     , (Layout Fill headerH       TopLeft, sectionHeader "vBox" $
-         checkbox CheckboxBox5 "Fill cross axis" (vboxFillCross ps)
-           [onToggle (LayoutMsg . ToggleVboxFillCross)])
+         checkbox (CheckboxN 5)
+           [text "Fill cross axis", checked (vboxFillCross ps), onToggle (postWith (LayoutMsg . ToggleVboxFillCross))])
     , (Layout Fill Fill          TopLeft, vboxDemo (vboxFillCross ps))
     ]
 
 sectionHeader :: Text -> DemoUI () -> DemoUI ()
 sectionHeader title extra =
   hBox defaultBoxConfig
-    [ (Layout Fill          Fill TopLeft, label Label title [])
+    [ (Layout Fill          Fill TopLeft, caption title)
     , (Layout (Exactly 180) Fill TopLeft, extra)
     ]
 
 colorPane :: Colour -> Text -> DemoUI ()
 colorPane col lbl = do
   fillRect col
-  label Label lbl []
+  caption lbl
 
 borderLayoutDemo :: DemoUI ()
 borderLayoutDemo =
@@ -517,7 +538,7 @@ demoView s = do
     , centrePanel = Just (centrePane s)
     , bottomPanel = Just (footerH, footer s winSize)
     }
-  mHov  <- getHoveredElement
+  anyHov <- isAnyMouseOver
   let typed   = T.concat (inputTypedText input)
       keyName = case inputKeyEvents input of
                   []      -> ""
@@ -525,4 +546,4 @@ demoView s = do
       newInput = if not (T.null typed)
                    then if typed == " " then "Space" else "Character " <> typed
                    else keyName
-  emit (FrameObserved (isJust mHov) newInput)
+  emit (FrameObserved anyHov newInput)

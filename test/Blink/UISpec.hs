@@ -670,6 +670,25 @@ spec = describe "Blink.UI" $ do
       (b, _) <- runUI (wasMouseOverLastFrame ElemB) ctx'
       (a, b) `shouldBe` (True, False)
 
+  describe "isAnyMouseOver" $ do
+    it "is False when nothing has registered mouse-over this frame" $ do
+      (result, _) <- run0 isAnyMouseOver
+      result `shouldBe` False
+
+    it "is True once any element has registered mouse-over this frame" $ do
+      (result, _) <- run0 (registerMouseOver () >> isAnyMouseOver)
+      result `shouldBe` True
+
+    it "is True when a different element registered, not just the one checked" $ do
+      (result, _) <- runTwoElem (registerMouseOver ElemA >> isAnyMouseOver)
+      result `shouldBe` True
+
+    it "does not carry over from the previous frame without re-registering" $ do
+      (_, ctx) <- run0 (registerMouseOver ())
+      let ctx' = nextFrameContext testBounds noInput ctx
+      (result, _) <- runUI isAnyMouseOver ctx'
+      result `shouldBe` False
+
   describe "clampScrollPos properties" $ do
     prop "is idempotent" $ \x ->
       clampScrollPos (clampScrollPos x) == (clampScrollPos x :: Double)

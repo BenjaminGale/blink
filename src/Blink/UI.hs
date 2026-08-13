@@ -238,6 +238,7 @@ module Blink.UI
   , setHot
   , registerMouseOver
   , wasMouseOverLastFrame
+  , isAnyMouseOver
   , isButtonDown
   , isButtonReleased
   , isClicked
@@ -777,6 +778,17 @@ registerMouseOver eid = modifyOut $ \out ->
 -- isOver@).
 wasMouseOverLastFrame :: Ord e => e -> UI e msg Bool
 wasMouseOverLastFrame eid = gets $ \ctx -> Set.member eid (elmMouseOverPrev (ctxElements ctx))
+
+-- | 'True' when 'registerMouseOver' has been called for any element so far
+-- this frame. Reflects the whole frame's hover set only once every control
+-- that might register one has run — call it after the rest of the view, the
+-- same way 'getHoveredElement' was read at the end of a frame under the
+-- legacy single-owner hover model this replaces for controls built with
+-- geometric hover (many elements can be "over" at once, so unlike
+-- 'getHoveredElement' there is no single element to name — only whether the
+-- set is non-empty).
+isAnyMouseOver :: UI e msg Bool
+isAnyMouseOver = gets (not . Set.null . outMouseOverThisFrame . ctxOutputs)
 
 -- | The element that currently holds keyboard focus, or 'Nothing' if none does.
 getFocus :: UI e msg (Maybe e)
