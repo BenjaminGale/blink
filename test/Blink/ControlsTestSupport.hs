@@ -4,7 +4,6 @@
 -- inspecting the resulting context. Used by "Blink.ControlsSpec".
 module Blink.ControlsTestSupport
   ( TestElement (..)
-  , WidgetRunner
   , testColour
   , testStyle
   , testStyleSet
@@ -17,13 +16,11 @@ module Blink.ControlsTestSupport
   , bgRect
   , contentRect
   , mkCtx
-  , withFocus
-  , getFocused
   , settle
   , dispatchCount
   , noInput
   , mouseAt
-  , withButtonReleased
+  , minimalControl
   , insidePoints
   , outsidePoints
   , drawnTexts
@@ -32,6 +29,7 @@ module Blink.ControlsTestSupport
 import qualified Data.Map.Strict as Map
 
 import Data.Text (Text)
+import Blink.Controls (button)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..), KeyEvent (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -82,11 +80,13 @@ contentRect = insetRect (uniform 5) bgRect
 mkCtx :: InputState -> UIContext TestElement ()
 mkCtx input = emptyUIContext controlRect input testTheme noOpTextMeasurer
 
-withFocus :: Maybe e -> UIContext e s -> UIContext e s
-withFocus e ctx = ctx { ctxInteraction = (ctxInteraction ctx) { ixnFocus = (ixnFocus (ctxInteraction ctx)) { focusedElement = e } } }
-
-getFocused :: UIContext e s -> Maybe e
-getFocused = focusedElement . ixnFocus . ctxInteraction
+-- | A minimal focusable\/clickable control, standing in for "some other
+-- control" wherever a test needs a real second element to compose alongside
+-- the one under test — e.g. to genuinely acquire capture, focus, or
+-- tab-stop precedence, rather than forcing that state onto a context
+-- directly.
+minimalControl :: Ord e => e -> UI e s ()
+minimalControl eid = button eid []
 
 -- | Applies the frame's queued 'UiEffect's (focus, scroll, selection)
 -- directly to the context, without advancing to a new frame (draw commands,
@@ -116,14 +116,6 @@ mouseAt pos down keys = InputState
   , inputLeftButtonDown = down
   , inputKeyEvents      = keys
   , inputTypedText      = []
-  }
-
--- | Sets 'ixnButtonReleased' so controls see a click this frame, without
--- requiring a prior down-frame in the test sequence.
-withButtonReleased :: UIContext e s -> UIContext e s
-withButtonReleased ctx = ctx
-  { ctxInput       = (ctxInput ctx) { inputLeftButtonDown = False }
-  , ctxInteraction = (ctxInteraction ctx) { ixnButtonDown = False, ixnButtonReleased = True }
   }
 
 insidePoints :: [(String, Point)]
@@ -159,11 +151,6 @@ testThemeWithBorder = Theme
   { themeElementStyles = Map.fromList [(TestControl, testStyleSetWithBorder), (OtherControl, testStyleSetWithBorder)]
   , themeDefaultStyle  = testStyleSetWithBorder
   }
-
--- | Runs a widget against a prepared context and returns the settled result
--- — the common shape every shared behaviour spec (focus, tab, hover,
--- background\/border) is parameterized over.
-type WidgetRunner = UIContext TestElement () -> IO (UIContext TestElement ())
 
 -- | The text of every 'DrawText' command issued during the frame, in
 -- submission order.

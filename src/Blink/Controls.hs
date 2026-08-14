@@ -215,7 +215,7 @@ import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (BoxConfig (..), Layout (..), Length (..), defaultBoxConfig, hBox, vBox)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..))
-import Blink.UI hiding (getStyle, isPressed)
+import Blink.UI
 
 -- | The lifecycle events every control can fire, regardless of its own
 -- specific event type — see 'HasControlEvent'. Raised by 'applyFocus' and
@@ -405,8 +405,8 @@ text t = configAny (setText t)
 
 -- | 'True' when the mouse is over the element's background rectangle (bounds
 -- inset by its margin) — the control-specific hit area. Built on 'isRegionHit';
--- a pure geometric test, so unlike the legacy single-owner hover field, many
--- elements can each independently be "over" in the same frame.
+-- a pure geometric test, so any number of elements can each independently be
+-- "over" in the same frame.
 --
 -- Uses the element's /normal/ margin, not the margin of whichever style
 -- variant is currently active: 'getStyle' (below) determines which variant
@@ -420,9 +420,8 @@ isMouseOver eid = do
   r  <- getBounds
   withBounds (insetRect (styleMargin (styleSetNormal ss)) r) isRegionHit
 
--- | Like 'Blink.UI.isPressed', but resolving from geometric 'isMouseOver'
--- instead of the legacy single-owner hover field this module never writes
--- to (see 'getStyle').
+-- | 'True' when the element is hovered (per geometric 'isMouseOver') and the
+-- left button is held down, and the element is not disabled.
 isPressed :: Ord e => e -> UI e msg Bool
 isPressed eid = do
   disabled <- isDisabled
@@ -430,13 +429,9 @@ isPressed eid = do
   down     <- isButtonDown
   pure (not disabled && hit && down)
 
--- | Like 'Blink.UI.getStyle', but resolving the hovered\/pressed priority
--- from geometric 'isMouseOver'\/'isPressed' instead of the legacy
--- single-owner hover field ('Blink.UI.isHovered'\/'Blink.UI.ixnHovered').
--- Nothing in this module ever calls 'Blink.UI.setHovered', so that field is
--- permanently empty here — resolving styling through it would mean
--- @styleSetHovered@\/@styleSetPressed@ never activate for any control built
--- on this module, regardless of actual mouse position.
+-- | Resolves the active 'Style' for an element given its current interaction
+-- state, using geometric 'isMouseOver'\/'isPressed' to determine hover and
+-- press. Priority: disabled > pressed > hovered > focused > normal.
 getStyle :: Ord e => e -> UI e msg Style
 getStyle eid = do
   styles <- getStyleSet eid
@@ -455,11 +450,10 @@ getStyle eid = do
 -- | Registers the element as moused over and as hot (for drag continuation)
 -- when the mouse is within its bounds, and fires 'onMouseEnter'\/'onMouseExit'
 -- by comparing against last frame's result. Purely geometric plus a disabled
--- check — no exclusion for a different element's drag being in progress:
--- unlike the legacy single-owner hover field, geometric hover has no shared
--- slot for one element's drag to contend over, so that exclusion (present in
--- the pre-migration code) no longer serves a purpose. 'setHot' still guards
--- its own capture acquisition independently, so a drag can't be stolen.
+-- check — no exclusion for a different element's drag being in progress,
+-- since geometric hover has no shared slot for one element's drag to
+-- contend over. 'setHot' still guards its own capture acquisition
+-- independently, so a drag can't be stolen.
 applyMouseOver :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg cfg] -> UI e msg ()
 applyMouseOver eid attrs = do
   wasOver  <- wasMouseOverLastFrame eid
@@ -607,10 +601,10 @@ whenFocused eid action = isFocused eid >>= \f -> when f action
 -- disabled, eligible for mouse-over (mouse free, or this element itself
 -- holds capture), geometrically hit, and the button was just released.
 -- Mirrors 'applyMouseOver's own gating, so a click can't activate a control
--- while a different control is mid-drag. Not exported: 'isMouseOver' is
--- geometric and has no registration state of its own to query directly the
--- way the legacy @isHovered@ did, so this is assembled fresh here rather
--- than reused from "Blink.UI".
+-- while a different control is mid-drag. Not exported: 'isMouseOver' is a
+-- geometric, on-demand hit test with no registration state of its own, so
+-- this is assembled fresh here from the primitives above rather than
+-- queried as a single stored value.
 isClickedOver :: Ord e => e -> UI e msg Bool
 isClickedOver eid = do
   disabled <- isDisabled

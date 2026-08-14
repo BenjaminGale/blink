@@ -68,6 +68,8 @@ test-suite blink-tests
         Blink.ControlsTestSupport
         Blink.Generators
         Blink.GeometrySpec
+        Blink.Interaction
+        Blink.InteractionSpec
         Blink.ItemsControlSpec
         Blink.LayoutSpec
         Blink.UISpec

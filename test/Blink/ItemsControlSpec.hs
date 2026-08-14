@@ -16,20 +16,17 @@ import qualified Data.Text as T
 
 import Blink.Controls (orientation)
 import Blink.ControlsTestSupport
-  ( TestElement (..)
-  , dispatchCount
+  ( dispatchCount
   , drawnTexts
   , noInput
-  , mouseAt
   , settle
   , testColour
-  , withButtonReleased
   )
 import Blink.Geometry (Alignment (..), Orientation (..), Point (..), Rectangle (..), noBorder, uniform)
+import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Input (InputState)
 import Blink.ItemsControl
-  ( SelectionEvent (..)
-  , SelectionState (..)
+  ( SelectionState (..)
   , itemContainer
   , itemTemplate
   , items
@@ -101,16 +98,12 @@ boundsRenderItem _ _ =
       drawText testColour AlignLeft (T.pack (show (rectX r, rectY r)))
   )
 
-runItemsLayout attrs = fmap (settle . snd) . runUI (itemsLayout attrs)
-
 selectionRenderItem :: Int -> SelectionState -> Text -> (Layout, UI Int (Int, Text) ())
 selectionRenderItem _ st lbl =
   (Layout Fill Fill TopLeft, drawText testColour AlignLeft ((if st == Selected then "SEL:" else "UNSEL:") <> lbl))
 
 dispatchActivated :: Int -> Text -> [Out Int (Int, Text)]
 dispatchActivated idx val = [OutMsg (idx, val)]
-
-runSelectionControl attrs = fmap (settle . snd) . runUI (selectionControl id attrs)
 
 -- | Shared behaviour: renders 'items' via the template, in order.
 itemOrderingSpec :: (UIContext e msg -> IO (UIContext e msg)) -> UIContext e msg -> [Text] -> Spec
@@ -137,6 +130,9 @@ noChromeSpec run baseCtx =
 
 spec :: Spec
 spec = describe "Blink.ItemsControl" $ do
+  let runItemsLayout attrs = fmap (settle . snd) . runUI (itemsLayout attrs)
+      runSelectionControl attrs = fmap (settle . snd) . runUI (selectionControl id attrs)
+
   describe "itemsLayout" $ do
     let run      = runItemsLayout [items itemLabels, itemTemplate itemsRenderItem]
         runEmpty = runItemsLayout [itemTemplate itemsRenderItem]
@@ -199,15 +195,17 @@ spec = describe "Blink.ItemsControl" $ do
 
     describe "click detection" $ do
       it "fires Activated with the clicked item's index and value" $ do
-        ctx' <- run (withButtonReleased (mkListCtx (mouseAt (Point 50 45) False [])))
-        getMessages ctx' `shouldBe` [(1, "Beta")]
+        result <- runInteractions listRect (mkListCtx noInput)
+          (selectionControl id [items itemLabels, itemContainer selectionRenderItem, onSelect dispatchActivated])
+          [] [ClickAt (Point 50 45)]
+        resultMessages result `shouldBe` [(1, "Beta")]
 
       it "does not dispatch when there is no interaction" $ do
         ctx' <- run (mkListCtx noInput)
         dispatchCount ctx' `shouldBe` 0
 
       it "does not dispatch when clicked while disabled" $ do
-        (_, ctx') <- runUI
+        result <- runInteractions listRect (mkListCtx noInput)
           (disableWhen True (selectionControl id [items itemLabels, itemContainer selectionRenderItem, onSelect dispatchActivated]))
-          (withButtonReleased (mkListCtx (mouseAt (Point 50 45) False [])))
-        dispatchCount (settle ctx') `shouldBe` 0
+          [] [ClickAt (Point 50 45)]
+        resultMessages result `shouldBe` []

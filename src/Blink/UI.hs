@@ -111,25 +111,13 @@ region is discarded.
 
 = Interaction
 
-Interaction queries are scoped to an element ID. Two independent hover
-models are available:
+Interaction queries are scoped to an element ID. 'registerMouseOver' \/
+'wasMouseOverLastFrame' \/ 'isAnyMouseOver' let any number of elements
+independently register and query "over" this frame, with no shared slot to
+contend over — this is what 'Blink.Controls.control' uses.
 
-  * The single-owner model — 'setHovered' registers an element as /the/
-    hovered element, displacing whatever it was before, and 'isHovered' \/
-    'isPressed' \/ 'isClicked' query it. At most one element can be hovered
-    at once, which makes drag-target exclusion trivial but doesn't compose:
-    two overlapping elements can't each independently know the mouse is
-    over them.
-  * The geometric model — 'registerMouseOver' \/ 'wasMouseOverLastFrame' \/
-    'isAnyMouseOver' let any number of elements independently register and
-    query "over" this frame, with no shared slot to contend over. This is
-    what 'Blink.Controls.control' actually uses; the single-owner model
-    above remains for custom controls that want its simpler semantics
-    instead.
-
-'isRegionHit' is the lower-level primitive both models build on: it checks
-whether the mouse is within the /current bounds/, without reference to any
-element ID.
+'isRegionHit' is the lower-level primitive this builds on: it checks whether
+the mouse is within the /current bounds/, without reference to any element ID.
 
 = Focus and keyboard navigation
 
@@ -144,11 +132,9 @@ Tab and Shift-Tab navigation between controls is managed automatically by
 
 = Styles
 
-'getStyle' resolves the active 'Style' for an element given its current
-interaction state. Disabled takes priority over pressed, which takes priority
-over hovered, which takes priority over focused; the normal style is the
-fallback. 'getStyleSet' returns all states at once for cases where more than
-one is needed simultaneously.
+'getStyleSet' returns all style variants for an element (normal, hovered,
+pressed, focused, disabled); see 'Blink.Controls.getStyle' for how a control
+resolves the active variant from its current interaction state.
 
 = Text measurement
 
@@ -189,12 +175,13 @@ focus, tab navigation, and style-driven chrome on top of exactly this shape.
 -}
 module Blink.UI
   ( -- * The UI monad
-    UI (..)
-  , FocusState (..)
-  , UIContext (..)
-  , InteractionState (..)
-  , ElementState (..)
-  , FrameOutputs (..)
+    UI
+  , runUI
+  , FocusState
+  , UIContext
+  , InteractionState
+  , ElementState
+  , FrameOutputs
   , Out (..)
   , UiEffect (..)
     -- * Re-export for convenience
@@ -210,6 +197,7 @@ module Blink.UI
   , getMessages
   , getUiEffects
   , applyUiEffects
+  , contextRequiresAnimation
     -- * Messages
   , emit
   , emitUi
@@ -217,10 +205,12 @@ module Blink.UI
   , ScrollState (..)
   , getScrollState
   , clampScrollPos
+  , contextScrollPosition
     -- * Selections
   , Selection (..)
   , getSelections
   , getSelection
+  , contextSelections
   , selectionLow
   , selectionHigh
   , selectionHasExtent
@@ -241,22 +231,21 @@ module Blink.UI
   , withBorder
     -- * Interaction
   , getInput
+  , contextInput
   , getMousePos
   , isRegionHit
-  , isHovered
-  , setHovered
   , setHot
   , registerMouseOver
   , wasMouseOverLastFrame
   , isAnyMouseOver
   , isButtonDown
   , isButtonReleased
-  , isClicked
-  , isPressed
   , isDragging
   , isMouseFree
   , getCapturedElement
-  , getHoveredElement
+  , contextCaptured
+  , contextButtonDown
+  , contextButtonReleased
     -- * Focus and keyboard navigation
   , getFocus
   , isFocused
@@ -266,9 +255,11 @@ module Blink.UI
   , consumeKey
   , getPreviousTabStop
   , setPreviousTabStop
+  , contextFocus
+  , contextPrevTabStop
     -- * Styles
   , getStyleSet
-  , getStyle
+  , contextTheme
     -- * Text measurement
   , charOffset
   , charAtOffset
@@ -283,20 +274,19 @@ module Blink.UI
   , withAnimationFrame
   , getAnimDelta
   , getAnimElapsed
+  , contextAnimation
   ) where
 
-import Control.Monad (when, unless, guard)
-import Data.Foldable (asum)
-import Data.Functor (($>))
+import Control.Monad (when, unless)
 import Data.List (foldl')
-import Data.Maybe (isNothing, fromMaybe, listToMaybe)
+import Data.Maybe (isNothing, listToMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..), TextMeasurer (..), noOpTextMeasurer)
 import Blink.Geometry (Point, Rectangle, Size, BorderEdges, containsPoint, intersectRect)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (StyleSet (..), Theme (..))
 
 -- | Per-frame animation state threaded through the 'UIContext'. Set by the
 -- backend at the start of each frame; read by 'withAnimationFrame' and
@@ -388,9 +378,7 @@ data FocusState e = FocusState
 -- click detection. Capture is held through Released so that drag-release can be
 -- distinguished from a plain click.
 data InteractionState e = InteractionState
-  { ixnHovered         :: Maybe e
-    -- ^ The element currently under the mouse pointer, if any.
-  , ixnCaptured        :: Maybe e
+  { ixnCaptured        :: Maybe e
     -- ^ The element holding mouse capture during a drag, if any. See 'nextCapture'.
   , ixnFocus           :: FocusState e
     -- ^ Which element holds keyboard focus, and whether it's still present this frame.
@@ -412,9 +400,8 @@ data ElementState e = ElementState
     -- frame. Snapshotted by 'nextFrameContext' from the completed frame's
     -- 'outMouseOverThisFrame'; read via 'wasMouseOverLastFrame' to derive
     -- mouse-enter\/-exit by comparing against this frame's geometric hit
-    -- test. Unlike 'ixnHovered' (a single last-writer-wins element, reset
-    -- every frame), this tracks every element hit this frame, so more than
-    -- one control can be moused over at once.
+    -- test. Tracks every element hit this frame, so more than one control
+    -- can be moused over at once.
   }
 
 -- | Outputs accumulated during a single frame: draw commands, the queued
@@ -490,8 +477,7 @@ instance Monad (UI e msg) where
 
 emptyInteractionState :: InteractionState e
 emptyInteractionState = InteractionState
-  { ixnHovered        = Nothing
-  , ixnCaptured       = Nothing
+  { ixnCaptured       = Nothing
   , ixnFocus          = FocusState { focusedElement = Nothing, focusedThisFrame = False }
   , ixnPrevTabStop    = Nothing
   , ixnButtonDown     = False
@@ -525,19 +511,23 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxOutputs         = emptyFrameOutputs
   }
 
--- | Advances the context to the next frame. First runs 'applyUiEffects' on
--- the 'UiEffect's queued during the frame that just completed, so focus,
--- scroll, and selection changes take effect starting this new frame. Then
--- resets per-frame state (draw commands, hover element, queued messages, and
--- the focus-visited flag) while preserving cross-frame state (theme, focus
--- element, scroll state, selections, and tab-stop bookkeeping). Also
--- snapshots the completed frame's 'outMouseOverThisFrame' into
--- 'elmMouseOverPrev', so 'wasMouseOverLastFrame' reflects this frame once
--- it, in turn, becomes "last frame".
-nextFrameContext :: Ord e => Rectangle -> InputState -> UIContext e msg -> UIContext e msg
-nextFrameContext bounds input ctx0 = ctx
+-- | Advances the context to the next frame, given the backend-supplied
+-- inputs for the frame about to run: window bounds, raw input, active theme,
+-- and animation state. First runs 'applyUiEffects' on the 'UiEffect's queued
+-- during the frame that just completed, so focus, scroll, and selection
+-- changes take effect starting this new frame. Then resets per-frame state
+-- (draw commands, hover element, queued messages, and the focus-visited
+-- flag) while preserving cross-frame state (focus element, scroll state,
+-- selections, and tab-stop bookkeeping). Also snapshots the completed
+-- frame's 'outMouseOverThisFrame' into 'elmMouseOverPrev', so
+-- 'wasMouseOverLastFrame' reflects this frame once it, in turn, becomes
+-- "last frame".
+nextFrameContext :: Ord e => Rectangle -> InputState -> Theme e -> AnimationState -> UIContext e msg -> UIContext e msg
+nextFrameContext bounds input thm anim ctx0 = ctx
   { ctxBounds      = bounds
   , ctxInput       = input
+  , ctxTheme       = thm
+  , ctxAnimation   = anim
   , ctxInteraction = nextInteractionFrame
       (inputLeftButtonDown (ctxInput ctx))
       (inputLeftButtonDown input)
@@ -549,14 +539,13 @@ nextFrameContext bounds input ctx0 = ctx
   where
     ctx = applyUiEffects (getUiEffects ctx0) ctx0
 
--- | Advances 'InteractionState' to the next frame: clears hover, derives
--- button transition state from the previous and current raw down values,
--- advances capture, and carries focus forward only if it was visited this frame.
--- The previous tab stop is preserved for Shift-Tab navigation.
+-- | Advances 'InteractionState' to the next frame: derives button transition
+-- state from the previous and current raw down values, advances capture,
+-- and carries focus forward only if it was visited this frame. The previous
+-- tab stop is preserved for Shift-Tab navigation.
 nextInteractionFrame :: Bool -> Bool -> InteractionState e -> InteractionState e
 nextInteractionFrame prevDown currDown ixn = ixn
-  { ixnHovered        = Nothing
-  , ixnButtonDown     = currDown
+  { ixnButtonDown     = currDown
   , ixnButtonReleased = prevDown && not currDown
   , ixnCaptured       = nextCapture prevDown currDown (ixnCaptured ixn)
   , ixnFocus          = nextFocusFrame (ixnFocus ixn)
@@ -577,13 +566,24 @@ modifyOut f = modify $ \ctx -> ctx { ctxOutputs = f (ctxOutputs ctx) }
 -- | The current scroll position for the given element, in @[0, 1]@. Returns
 -- @0@ when no position has been recorded yet.
 getScrollState :: Ord e => e -> UI e msg Double
-getScrollState eid = gets $ \ctx ->
+getScrollState eid = gets (contextScrollPosition eid)
+
+-- | The current scroll position for the given element, in @[0, 1]@, read
+-- directly from a 'UIContext' outside the 'UI' monad — e.g. to assert on the
+-- result of a completed frame. Returns @0@ when no position has been
+-- recorded yet.
+contextScrollPosition :: Ord e => e -> UIContext e msg -> Double
+contextScrollPosition eid ctx =
   scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
 -- | All selections for the given element. Returns @[]@ when none have been recorded.
 getSelections :: Ord e => e -> UI e msg [Selection]
-getSelections eid = gets $ \ctx ->
-  Map.findWithDefault [] eid (elmSelections (ctxElements ctx))
+getSelections eid = gets (contextSelections eid)
+
+-- | All selections for the given element, read directly from a 'UIContext'
+-- outside the 'UI' monad. Returns @[]@ when none have been recorded.
+contextSelections :: Ord e => e -> UIContext e msg -> [Selection]
+contextSelections eid ctx = Map.findWithDefault [] eid (elmSelections (ctxElements ctx))
 
 -- | The first selection for the given element, or 'Nothing'.
 getSelection :: Ord e => e -> UI e msg (Maybe Selection)
@@ -647,7 +647,13 @@ getMousePos = inputMousePosition <$> getInput
 
 -- | The raw input state for the current frame.
 getInput :: UI e msg InputState
-getInput = gets ctxInput
+getInput = gets contextInput
+
+-- | The raw input state for the current frame, read directly from a
+-- 'UIContext' outside the 'UI' monad — e.g. so a backend or test driver can
+-- carry mouse\/button state forward into the next 'nextFrameContext' call.
+contextInput :: UIContext e msg -> InputState
+contextInput = ctxInput
 
 -- | Removes all events for the given key from the current frame's key queue,
 -- preventing other controls from handling the same keypress.
@@ -659,7 +665,12 @@ consumeKey k = modify $ \ctx ->
 -- | The element that was the most recent tab stop before the current one,
 -- used by 'Blink.Controls.control' to implement Shift-Tab navigation.
 getPreviousTabStop :: UI e msg (Maybe e)
-getPreviousTabStop = gets (ixnPrevTabStop . ctxInteraction)
+getPreviousTabStop = gets contextPrevTabStop
+
+-- | The element that was the most recent tab stop before the current one,
+-- read directly from a 'UIContext' outside the 'UI' monad.
+contextPrevTabStop :: UIContext e msg -> Maybe e
+contextPrevTabStop = ixnPrevTabStop . ctxInteraction
 
 -- | Records the current element as the previous tab stop. Called automatically
 -- by 'Blink.Controls.control'; call manually when building custom focusable controls.
@@ -667,7 +678,13 @@ setPreviousTabStop :: e -> UI e msg ()
 setPreviousTabStop eid = modifyIxn $ \ixn -> ixn { ixnPrevTabStop = Just eid }
 
 getTheme :: UI e msg (Theme e)
-getTheme = gets ctxTheme
+getTheme = gets contextTheme
+
+-- | The active 'Theme', read directly from a 'UIContext' outside the 'UI'
+-- monad — e.g. so a backend or test driver can carry it forward unchanged
+-- into the next 'nextFrameContext' call.
+contextTheme :: UIContext e msg -> Theme e
+contextTheme = ctxTheme
 
 -- | Returns all style variants for the given element. Falls back to the theme's
 -- default style when no element-specific style is registered.
@@ -676,48 +693,23 @@ getStyleSet eid = do
   t <- getTheme
   return $ Map.findWithDefault (themeDefaultStyle t) eid (themeElementStyles t)
 
--- | Resolves the active 'Style' for an element given its current interaction
--- state. Priority: disabled > pressed > hovered > focused > normal.
-getStyle :: Ord e => e -> UI e msg Style
-getStyle eid = do
-  styles <- getStyleSet eid
-  isDis  <- isDisabled
-  isHov  <- isHovered eid
-  isFoc  <- isFocused eid
-  isPrs  <- isPressed eid
-  let candidates =
-        [ guard isDis $> styleSetDisabled styles
-        , guard isPrs $> styleSetPressed  styles
-        , guard isHov $> styleSetHovered  styles
-        , guard isFoc $> styleSetFocused  styles
-        ]
-  return $ fromMaybe (styleSetNormal styles) (asum candidates)
-
--- | 'True' when the given element is the current hover target.
-isHovered :: Eq e => e -> UI e msg Bool
-isHovered eid = (== Just eid) <$> gets (ixnHovered . ctxInteraction)
-
 -- | 'True' when the left button is currently held (Pressed or Down state).
 isButtonDown :: UI e msg Bool
-isButtonDown = gets (ixnButtonDown . ctxInteraction)
+isButtonDown = gets contextButtonDown
+
+-- | 'True' when the left button is currently held, read directly from a
+-- 'UIContext' outside the 'UI' monad.
+contextButtonDown :: UIContext e msg -> Bool
+contextButtonDown = ixnButtonDown . ctxInteraction
 
 -- | 'True' on the one frame the left button transitions from held to up.
 isButtonReleased :: UI e msg Bool
-isButtonReleased = gets (ixnButtonReleased . ctxInteraction)
+isButtonReleased = gets contextButtonReleased
 
--- | 'True' when the element is hovered and the left button was just released.
-isClicked :: Eq e => e -> UI e msg Bool
-isClicked eid = do
-  isHov     <- isHovered eid
-  released  <- gets (ixnButtonReleased . ctxInteraction)
-  return (isHov && released)
-
--- | 'True' when the element is hovered and the left button is held down.
-isPressed :: Eq e => e -> UI e msg Bool
-isPressed eid = do
-  isHov <- isHovered eid
-  down  <- gets (ixnButtonDown . ctxInteraction)
-  return (isHov && down)
+-- | 'True' on the one frame the left button transitions from held to up,
+-- read directly from a 'UIContext' outside the 'UI' monad.
+contextButtonReleased :: UIContext e msg -> Bool
+contextButtonReleased = ixnButtonReleased . ctxInteraction
 
 -- | Derives the next frame's captured element from the button transition.
 -- Capture is held while the button is down and through the release frame so
@@ -725,7 +717,7 @@ isPressed eid = do
 -- plain click. Cleared as soon as the button was not down last frame — both
 -- when it is fully up and on a fresh press — so a new press never inherits a
 -- stale capture from a previous drag\/click cycle.
--- Acquisition — setting capture in the first place — happens in 'setHovered'.
+-- Acquisition — setting capture in the first place — happens in 'setHot'.
 nextCapture :: Bool -> Bool -> Maybe e -> Maybe e
 nextCapture prevDown _currDown existing
   | prevDown  = existing
@@ -741,35 +733,20 @@ isDragging eid = (== Just eid) <$> gets (ixnCaptured . ctxInteraction)
 -- state directly, e.g. when implementing focus-on-click without using
 -- 'Blink.Controls.control'.
 getCapturedElement :: UI e msg (Maybe e)
-getCapturedElement = gets (ixnCaptured . ctxInteraction)
+getCapturedElement = gets contextCaptured
+
+-- | The element that currently holds mouse capture, or 'Nothing', read
+-- directly from a 'UIContext' outside the 'UI' monad.
+contextCaptured :: UIContext e msg -> Maybe e
+contextCaptured = ixnCaptured . ctxInteraction
 
 -- | The element currently under the mouse pointer, or 'Nothing' when no
 -- element is hovered. Updated at the end of each frame after all controls
 -- have had a chance to register hover via 'setHovered'.
-getHoveredElement :: UI e msg (Maybe e)
-getHoveredElement = gets (ixnHovered . ctxInteraction)
-
--- | Registers the element as the current hover target. Also acquires mouse
--- capture for it if the left button is currently down and nothing is captured
--- yet, making this the first point of capture for that press.
-setHovered :: e -> UI e msg ()
-setHovered eid = modify $ \ctx ->
-  let ixn  = ctxInteraction ctx
-      ixn' = ixn { ixnHovered = Just eid }
-  in ctx { ctxInteraction =
-       if ixnButtonDown ixn && isNothing (ixnCaptured ixn)
-       then ixn' { ixnCaptured = Just eid }
-       else ixn' }
-
 -- | Acquires mouse capture for the element if the left button is currently
 -- down and nothing is captured yet, making this the first point of capture
 -- for that press — the "hot" control a drag holds onto once the cursor
--- leaves the element that started it. This is the capture-acquisition half
--- of 'setHovered', extracted so a caller building mouse-over on the
--- geometric 'isRegionHit' test instead (rather than the single
--- last-writer-wins 'ixnHovered') can still get drag continuation, without
--- also writing 'ixnHovered'. Does not affect 'isHovered' \/
--- 'getHoveredElement'.
+-- leaves the element that started it.
 setHot :: e -> UI e msg ()
 setHot eid = modifyIxn $ \ixn ->
   if ixnButtonDown ixn && isNothing (ixnCaptured ixn)
@@ -779,8 +756,8 @@ setHot eid = modifyIxn $ \ixn ->
 -- | Records that the element was hit by the mouse this frame — typically
 -- called after a geometric hit test such as 'isRegionHit' succeeds. Building
 -- block for mouse-enter\/-exit: compare against 'wasMouseOverLastFrame' for
--- the same element to detect the transition. Unlike 'setHovered', many
--- elements can each call this in the same frame; all are remembered.
+-- the same element to detect the transition. Any number of elements can each
+-- call this in the same frame; all are remembered.
 registerMouseOver :: Ord e => e -> UI e msg ()
 registerMouseOver eid = modifyOut $ \out ->
   out { outMouseOverThisFrame = Set.insert eid (outMouseOverThisFrame out) }
@@ -805,7 +782,12 @@ isAnyMouseOver = gets (not . Set.null . outMouseOverThisFrame . ctxOutputs)
 
 -- | The element that currently holds keyboard focus, or 'Nothing' if none does.
 getFocus :: UI e msg (Maybe e)
-getFocus = gets (focusedElement . ixnFocus . ctxInteraction)
+getFocus = gets contextFocus
+
+-- | The element that currently holds keyboard focus, or 'Nothing', read
+-- directly from a 'UIContext' outside the 'UI' monad.
+contextFocus :: UIContext e msg -> Maybe e
+contextFocus = focusedElement . ixnFocus . ctxInteraction
 
 -- | 'True' when the given element holds keyboard focus.
 isFocused :: Eq e => e -> UI e msg Bool
@@ -941,6 +923,13 @@ getMessages ctx = [msg | OutMsg msg <- reverse (outEvents (ctxOutputs ctx))]
 getUiEffects :: UIContext e msg -> [UiEffect e]
 getUiEffects ctx = [eff | OutUi eff <- reverse (outEvents (ctxOutputs ctx))]
 
+-- | 'True' when 'requiresAnimation' was called at least once during the
+-- frame, read directly from a 'UIContext' outside the 'UI' monad. The
+-- backend reads this after each frame to decide whether to keep its
+-- animation ticker running.
+contextRequiresAnimation :: UIContext e msg -> Bool
+contextRequiresAnimation = outRequiresAnimation . ctxOutputs
+
 -- | Applies the 'UiEffect's queued during a frame (via 'emitUi' or a
 -- control's scroll\/selection writes) to the context handed to the next
 -- frame. Run automatically by 'nextFrameContext' — no host or application
@@ -1008,6 +997,12 @@ getAnimDelta = gets (animDelta . ctxAnimation)
 -- animation phase without storing per-component state.
 getAnimElapsed :: UI e msg Float
 getAnimElapsed = gets (animElapsed . ctxAnimation)
+
+-- | The frame's full 'AnimationState', read directly from a 'UIContext'
+-- outside the 'UI' monad — e.g. so a backend can carry it forward into the
+-- next 'nextFrameContext' call.
+contextAnimation :: UIContext e msg -> AnimationState
+contextAnimation = ctxAnimation
 
 -- | Returns the x offset (pixels) of character index @n@ from the start of
 -- @text@, using the backend's text measurer.

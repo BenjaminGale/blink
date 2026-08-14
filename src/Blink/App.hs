@@ -110,10 +110,11 @@ import Blink.Input (KeyEvent, InputState (..))
 import Blink.Rendering (DrawCommand, TextMeasurer (..))
 import Blink.Style (Theme)
 import Blink.UI
-  ( UI, UIContext (..), FrameOutputs (..)
+  ( UI, UIContext
   , AnimationState (..)
   , emptyUIContext, nextFrameContext
   , runUI, getDrawCommands, getMessages
+  , contextAnimation, contextRequiresAnimation
   )
 import Blink.Update (Update, runUpdate)
 
@@ -221,12 +222,9 @@ data AppRefs e msg s = AppRefs
 
 buildCtx :: Ord e => App e msg s -> Rectangle -> InputState -> Float -> Bool -> s -> UIContext e msg -> UIContext e msg
 buildCtx app winRect inputState delta isAnimTick state prevCtx =
-  let elapsed   = animElapsed (ctxAnimation prevCtx) + delta
+  let elapsed   = animElapsed (contextAnimation prevCtx) + delta
       animState = AnimationState { animDelta = delta, animElapsed = elapsed, animIsTick = isAnimTick }
-      ctx = (nextFrameContext winRect inputState prevCtx)
-        { ctxTheme    = theme app state
-        }
-  in ctx { ctxAnimation = animState }
+  in nextFrameContext winRect inputState (theme app state) animState prevCtx
 
 runFrame
   :: Ord e
@@ -262,14 +260,12 @@ doStepEventDriven app refs notify input = do
   (firstPassCtx, state') <- runFrame app refs input
   let winRect    = rectFromSize (windowSize input)
       inputState = toInputState input
-      freshCtx   =
-          withTheme (theme app state')
-        . nextFrameContext winRect (clearKeyEvents inputState)
-        $ firstPassCtx
+      freshCtx   = nextFrameContext winRect (clearKeyEvents inputState)
+                     (theme app state') (contextAnimation firstPassCtx) firstPassCtx
   ((), renderedCtx) <- runUI (view app state') freshCtx
   writeIORef (refsCtx refs) renderedCtx
   wasActive <- readIORef (refsAnimActive refs)
-  let nowActive = outRequiresAnimation (ctxOutputs renderedCtx)
+  let nowActive = contextRequiresAnimation renderedCtx
   writeIORef (refsAnimActive refs) nowActive
   when (not wasActive && nowActive) $
     forkAnimationTicker (refsAnimActive refs) notify
@@ -299,9 +295,6 @@ toInputState fi = InputState
 -- Clears keyboard and text events for the second render pass in event-driven mode.
 clearKeyEvents :: InputState -> InputState
 clearKeyEvents is = is { inputKeyEvents = [], inputTypedText = [] }
-
-withTheme :: Theme e -> UIContext e msg -> UIContext e msg
-withTheme t ctx = ctx { ctxTheme = t }
 
 sampleDelta :: IORef (Maybe Word64) -> Bool -> IO Float
 sampleDelta _ False = pure 0

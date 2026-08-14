@@ -8,7 +8,7 @@ import Blink.Input
 import Blink.Layout
 import Blink.Rendering
 import Blink.Style
-import Blink.UI hiding (getStyle, isPressed)
+import Blink.UI
 import Blink.Update
 import Theme (Element (..), lightTheme, darkTheme)
 import Control.Monad (when)
