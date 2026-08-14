@@ -722,12 +722,14 @@ isPressed eid = do
 -- | Derives the next frame's captured element from the button transition.
 -- Capture is held while the button is down and through the release frame so
 -- that a control's focus handling can distinguish a drag release from a
--- plain click. Cleared once the button is fully up (both prev and curr false).
+-- plain click. Cleared as soon as the button was not down last frame — both
+-- when it is fully up and on a fresh press — so a new press never inherits a
+-- stale capture from a previous drag\/click cycle.
 -- Acquisition — setting capture in the first place — happens in 'setHovered'.
 nextCapture :: Bool -> Bool -> Maybe e -> Maybe e
-nextCapture prevDown currDown existing
-  | prevDown || currDown = existing
-  | otherwise            = Nothing
+nextCapture prevDown _currDown existing
+  | prevDown  = existing
+  | otherwise = Nothing
 
 -- | 'True' on every frame that the given element is being dragged — from the
 -- initial press through to release.

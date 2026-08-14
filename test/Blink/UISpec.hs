@@ -302,10 +302,20 @@ spec = describe "Blink.UI" $ do
       clampScrollPos 1 `shouldBe` 1
 
   describe "nextFrameContext capture" $ do
-    it "carries existing capture forward on subsequent ButtonDown frames" $ do
-      ctx0 <- freshCtx
+    it "carries existing capture forward on continued ButtonDown frames" $ do
+      (_, ctx0) <- runWith buttonDown (pure ())
       let ctx = nextFrameContext testBounds buttonDown (withCapture () ctx0)
       ixnCaptured (ctxInteraction ctx) `shouldBe` Just ()
+
+    it "clears capture on a fresh press even if capture was stale" $ do
+      ctx0 <- freshCtx
+      let ctx = nextFrameContext testBounds buttonDown (withCapture () ctx0)
+      ixnCaptured (ctxInteraction ctx) `shouldBe` Nothing
+
+    it "clears capture on a fresh press (no capture existed)" $ do
+      ctx0 <- freshCtx
+      let ctx = nextFrameContext testBounds buttonDown ctx0
+      ixnCaptured (ctxInteraction ctx) `shouldBe` Nothing
 
     it "carries capture through the release frame so focus logic can inspect it" $ do
       -- Simulate: previous frame had button held, current frame it is released.
