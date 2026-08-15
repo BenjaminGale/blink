@@ -1494,6 +1494,16 @@ spec = describe "Blink.Controls" $ do
           (emptyUIContext sliderRect noInput sliderTheme noOpTextMeasurer)
         getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 0 100 30) testColour]
 
+      it "clamps a ratio above 1 to a full-width thumb" $ do
+        ctx' <- snd <$> runUI (slider id [orientation Horizontal, value 0, onChange (post ()), thumbRatio 2])
+          (emptyUIContext sliderRect noInput sliderTheme noOpTextMeasurer)
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 0 200 30) testColour]
+
+      it "clamps a negative ratio to a zero-width thumb" $ do
+        ctx' <- snd <$> runUI (slider id [orientation Horizontal, value 0, onChange (post ()), thumbRatio (-1)])
+          (emptyUIContext sliderRect noInput sliderTheme noOpTextMeasurer)
+        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 0 0 30) testColour]
+
     describe "drag interaction" $ do
       it "does not dispatch when the mouse is over the track but the button is not held" $ do
         ctx' <- runSlider Horizontal 0.5 (mouseAt (Point 100 15) False [])

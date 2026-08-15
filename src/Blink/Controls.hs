@@ -1183,6 +1183,11 @@ dragToTrackPos trackId ori ratio contentRect = do
     then Just . mouseToTrackPos ori ratio contentRect <$> getMousePos
     else pure Nothing
 
+-- | Clamps a value to the @[0, 1]@ range shared by thumb positions and
+-- ratios.
+clampUnit :: Double -> Double
+clampUnit = max 0 . min 1
+
 -- | Computes the bounding rectangle of a thumb within a track. @pos@ is the
 -- position along the track and @ratio@ is the fraction of the track the
 -- thumb fills (visible \/ total); both are in @[0, 1]@. The result is a
@@ -1306,14 +1311,14 @@ slider mkId attrs = do
       thumbId = mkId SliderThumb
       cfg     = configure defaultSliderConfig attrs
       ori     = sliderConfigOrientation cfg
-      clamped = max 0 (min 1 (sliderConfigValue cfg))
+      clamped = clampUnit (sliderConfigValue cfg)
       step    = configArrowStep cfg
   contentRect <- trackContentRect trackId
   let (crossSz, mainSz) = case ori of
         Horizontal -> (rectHeight contentRect, rectWidth contentRect)
         Vertical   -> (rectWidth contentRect,  rectHeight contentRect)
       autoRatio = if mainSz > 0 then crossSz / mainSz else 0
-      ratio     = fromMaybe autoRatio (configThumbRatio cfg)
+      ratio     = clampUnit (fromMaybe autoRatio (configThumbRatio cfg))
       thumbR    = thumbRect ori clamped ratio contentRect
   control trackId attrs $
     withBounds thumbR $ renderChrome thumbId $ pure ()
@@ -1403,7 +1408,7 @@ scrollBar mkId attrs = do
   where
     cfg   = configure defaultScrollBarConfig attrs
     ori   = scrollBarConfigOrientation cfg
-    ratio = max 0 (min 1 (scrollBarConfigThumbRatio cfg))
+    ratio = clampUnit (scrollBarConfigThumbRatio cfg)
 
     trackId = mkId ScrollTrack
     thumbId = mkId ScrollThumb
