@@ -45,14 +45,14 @@ and folds them into its own state via "Blink.Update".
 Some controls carry presentation state that is no business of the
 application — which element holds keyboard focus, a scrollbar's position, a
 text input's cursor. This state is baked directly into the 'UIContext':
-focus lives in 'InteractionState', and scroll positions ('elmScrollStates', a
-@Map e 'ScrollState'@) and selections ('elmSelections', a @Map e
-['Selection']@) live in 'ctxElements'. Both maps are keyed by element ID,
+focus lives in the interaction state, and scroll positions (@elmScrollStates@, a
+@Map e 'ScrollState'@) and selections (@elmSelections@, a @Map e
+['Selection']@) live in the element state. Both maps are keyed by element ID,
 populate lazily on first write, and persist across frames; the application
 never sees the traffic.
 
 Focus ('setFocus', 'clearFocus') changes immediately, exactly like
-'setHovered' and mouse capture: a control's decision (take focus when
+'registerMouseOver' and mouse capture: a control's decision (take focus when
 nothing else has it, hand off on Tab) is only correct if the next sibling in
 the same tree walk can see it, the same way capture arbitration needs a
 later hoverer to see that an earlier one already has the mouse. Scroll and
@@ -121,7 +121,7 @@ the mouse is within the /current bounds/, without reference to any element ID.
 
 = Focus and keyboard navigation
 
-At most one element holds keyboard focus at a time, tracked in 'FocusState'.
+At most one element holds keyboard focus at a time, tracked in the focus state.
 
   * 'isFocused' \/ 'setFocus' \/ 'clearFocus' — query and update focus.
   * 'consumeKey' — remove a key event from the frame's queue so that it is not
@@ -143,7 +143,7 @@ pixel size. Controls that must — placing a cursor, computing where a click
 landed, sizing a box to fit its label — go through the backend's
 'TextMeasurer' instead, via 'charOffset', 'charAtOffset', and 'measureText'.
 These wrap the raw 'TextMeasurer' functions so callers never touch
-'ctxTextMeasure' directly.
+@ctxTextMeasure@ directly.
 
 = Disabled state
 
@@ -177,13 +177,7 @@ module Blink.UI
   ( -- * The UI monad
     UI
   , runUI
-  , FocusState
   , UIContext
-  , InteractionState
-  , ElementState
-  , FrameOutputs
-  , Out (..)
-  , UiEffect (..)
     -- * Re-export for convenience
     -- | From "Blink.Rendering"; re-exported since 'emptyUIContext' takes a
     -- 'TextMeasurer' and 'noOpTextMeasurer' is the usual choice outside a
@@ -199,6 +193,8 @@ module Blink.UI
   , applyUiEffects
   , contextRequiresAnimation
     -- * Messages
+  , Out (..)
+  , UiEffect (..)
   , emit
   , emitUi
     -- * Scroll state
@@ -398,7 +394,7 @@ data ElementState e = ElementState
   , elmMouseOverPrev  :: Set.Set e
     -- ^ Elements 'registerMouseOver' was called for during the previous
     -- frame. Snapshotted by 'nextFrameContext' from the completed frame's
-    -- 'outMouseOverThisFrame'; read via 'wasMouseOverLastFrame' to derive
+    -- @outMouseOverThisFrame@; read via 'wasMouseOverLastFrame' to derive
     -- mouse-enter\/-exit by comparing against this frame's geometric hit
     -- test. Tracks every element hit this frame, so more than one control
     -- can be moused over at once.
@@ -414,7 +410,7 @@ data FrameOutputs e msg = FrameOutputs
   , outRequiresAnimation  :: Bool
   , outMouseOverThisFrame :: Set.Set e
     -- ^ Elements 'registerMouseOver' has been called for so far this frame.
-    -- Snapshotted into 'elmMouseOverPrev' by 'nextFrameContext' once the
+    -- Snapshotted into @elmMouseOverPrev@ by 'nextFrameContext' once the
     -- frame completes.
   }
 
@@ -455,7 +451,11 @@ data UIContext e msg = UIContext
 -- [@e@] Element identity type.
 -- [@msg@] Message type emitted via 'emit'.
 -- [@a@] Result type.
-newtype UI e msg a = UI { runUI :: UIContext e msg -> IO (a, UIContext e msg) }
+newtype UI e msg a = UI
+  { runUI :: UIContext e msg -> IO (a, UIContext e msg)
+    -- ^ Runs the computation against a context, producing a result and the
+    -- updated context.
+  }
 
 instance Functor (UI e msg) where
   fmap f (UI g) = UI $ \ctx -> do
@@ -519,7 +519,7 @@ emptyUIContext bounds input thm measurer = UIContext
 -- (draw commands, hover element, queued messages, and the focus-visited
 -- flag) while preserving cross-frame state (focus element, scroll state,
 -- selections, and tab-stop bookkeeping). Also snapshots the completed
--- frame's 'outMouseOverThisFrame' into 'elmMouseOverPrev', so
+-- frame's @outMouseOverThisFrame@ into @elmMouseOverPrev@, so
 -- 'wasMouseOverLastFrame' reflects this frame once it, in turn, becomes
 -- "last frame".
 nextFrameContext :: Ord e => Rectangle -> InputState -> Theme e -> AnimationState -> UIContext e msg -> UIContext e msg
@@ -742,7 +742,7 @@ contextCaptured = ixnCaptured . ctxInteraction
 
 -- | The element currently under the mouse pointer, or 'Nothing' when no
 -- element is hovered. Updated at the end of each frame after all controls
--- have had a chance to register hover via 'setHovered'.
+-- have had a chance to register hover via 'registerMouseOver'.
 -- | Acquires mouse capture for the element if the left button is currently
 -- down and nothing is captured yet, making this the first point of capture
 -- for that press — the "hot" control a drag holds onto once the cursor
@@ -772,11 +772,11 @@ wasMouseOverLastFrame eid = gets $ \ctx -> Set.member eid (elmMouseOverPrev (ctx
 -- | 'True' when 'registerMouseOver' has been called for any element so far
 -- this frame. Reflects the whole frame's hover set only once every control
 -- that might register one has run — call it after the rest of the view, the
--- same way 'getHoveredElement' was read at the end of a frame under the
--- legacy single-owner hover model this replaces for controls built with
--- geometric hover (many elements can be "over" at once, so unlike
--- 'getHoveredElement' there is no single element to name — only whether the
--- set is non-empty).
+-- same way the hover getter under the legacy single-owner hover model this
+-- replaces was read at the end of a frame, for controls built with
+-- geometric hover (many elements can be "over" at once, so unlike that
+-- legacy getter there is no single element to name — only whether the set
+-- is non-empty).
 isAnyMouseOver :: UI e msg Bool
 isAnyMouseOver = gets (not . Set.null . outMouseOverThisFrame . ctxOutputs)
 
@@ -794,7 +794,7 @@ isFocused :: Eq e => e -> UI e msg Bool
 isFocused eid = (== Just eid) <$> getFocus
 
 -- | Transfers keyboard focus to the given element. Takes effect immediately
--- — like 'setHovered' and mouse capture, not like the deferred
+-- — like 'registerMouseOver' and mouse capture, not like the deferred
 -- scroll\/selection writes — because a control's own focus decision (take
 -- it when nothing else has it, hand off on Tab) is only correct if the next
 -- sibling in the same tree walk can see it happened.
