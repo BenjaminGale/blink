@@ -1523,15 +1523,20 @@ viewport mkId attrs content = do
 -- Renders one extra item beyond what's fully visible to cover a partially
 -- clipped final row. Does not draw a scrollbar or manage scroll state
 -- itself — pair with 'scrollBar' and 'getScrollState' (see 'listBox').
+--
+-- @rowHeight@ is clamped to a minimum of @1@ before use, so a caller passing
+-- zero or a negative height (e.g. a miscalculated 'itemHeight') can't turn
+-- the division below into an infinite or wildly oversized render loop.
 virtualContent
   :: Double                -- ^ current scroll position, in pixels
   -> Double                -- ^ height of one item, in pixels
   -> Int                   -- ^ total item count
   -> (Int -> UI e msg ())  -- ^ renders the item at the given index
   -> UI e msg ()
-virtualContent scrollPos rowHeight itemCount renderItem = do
+virtualContent scrollPos rowHeight0 itemCount renderItem = do
   vp <- getBounds
-  let firstIdx  = floor (scrollPos / rowHeight) :: Int
+  let rowHeight = max 1 rowHeight0
+      firstIdx  = floor (scrollPos / rowHeight) :: Int
       subOffset = scrollPos - fromIntegral firstIdx * rowHeight
       visibleN  = ceiling ((rectHeight vp + subOffset) / rowHeight) :: Int
   clipToCurrent $ forM_ [0 .. visibleN - 1] $ \j ->

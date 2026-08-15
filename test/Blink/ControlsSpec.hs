@@ -1794,6 +1794,15 @@ spec = describe "Blink.Controls" $ do
       ctx' <- runVirtualContent 0 20 10
       getDrawCommands ctx' `shouldContain` [PushClip controlRect]
 
+    it "clamps a zero item height instead of hanging" $ do
+      ctx' <- runVirtualContent 0 0 10
+      -- rowHeight clamped to 1 -> 100px viewport fits 100 rows, capped at itemCount.
+      [c | c@(FillRect _ _) <- getDrawCommands ctx'] `shouldSatisfy` ((<= 10) . length)
+
+    it "clamps a negative item height instead of hanging" $ do
+      ctx' <- runVirtualContent 0 (-20) 10
+      [c | c@(FillRect _ _) <- getDrawCommands ctx'] `shouldSatisfy` ((<= 10) . length)
+
   describe "selector" $ do
     let renderItem :: Int -> Bool -> (String, Text) -> UI Int String ()
         renderItem _eid isSelected (_val, lbl) =
