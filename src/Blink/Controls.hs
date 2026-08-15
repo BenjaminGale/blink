@@ -878,7 +878,7 @@ resolveMouseSelection
   -> Double      -- ^ current horizontal scroll offset
   -> (Int, Int)  -- ^ current @(anchor, active)@ selection
   -> UI e msg (Int, Int)
-resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX (anchor0, active0) = do
+resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX (anchor, active) = do
   isCapturing <- isDragging eid
   if isCapturing
     then do
@@ -887,8 +887,8 @@ resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX (
       clickedPos <- charAtOffset displayValue localX
       pure $ if not wasCapturing || justFocused
         then (clickedPos, clickedPos)
-        else (anchor0, clickedPos)
-    else pure (anchor0, active0)
+        else (anchor, clickedPos)
+    else pure (anchor, active)
 
 -- | Shift+Left\/Right extend the selection; plain Left\/Right collapse an
 -- existing selection to its near end, or step by one otherwise.
@@ -898,16 +898,16 @@ resolveKeyboardSelection
   -> Int          -- ^ length of the underlying value
   -> (Int, Int)   -- ^ current @(anchor, active)@ selection
   -> (Int, Int)
-resolveKeyboardSelection hasFocus keyEvts len (anchor1, active1)
-  | shiftLeft  = (anchor1, max 0    (active1 - 1))
-  | shiftRight = (anchor1, min len  (active1 + 1))
-  | plainLeft  = let p = if hasSel1 then selLo1 else max 0   (active1 - 1) in (p, p)
-  | plainRight = let p = if hasSel1 then selHi1 else min len (active1 + 1) in (p, p)
-  | otherwise  = (anchor1, active1)
+resolveKeyboardSelection hasFocus keyEvts len (anchor, active)
+  | shiftLeft  = (anchor, max 0    (active - 1))
+  | shiftRight = (anchor, min len  (active + 1))
+  | plainLeft  = let p = if hasSel then selLo else max 0   (active - 1) in (p, p)
+  | plainRight = let p = if hasSel then selHi else min len (active + 1) in (p, p)
+  | otherwise  = (anchor, active)
   where
-    hasSel1    = anchor1 /= active1
-    selLo1     = min anchor1 active1
-    selHi1     = max anchor1 active1
+    hasSel     = anchor /= active
+    selLo      = min anchor active
+    selHi      = max anchor active
     shiftLeft  = hasFocus && any (\e -> key e == KeyLeft  && Shift `elem`    modifiers e) keyEvts
     shiftRight = hasFocus && any (\e -> key e == KeyRight && Shift `elem`    modifiers e) keyEvts
     plainLeft  = hasFocus && any (\e -> key e == KeyLeft  && Shift `notElem` modifiers e) keyEvts
@@ -924,28 +924,28 @@ applyEdit :: (Text -> Text)   -- ^ @inputFilter@, applied to newly typed text be
           -> InputState       -- ^ this frame's input
           -> (Int, Int)       -- ^ current @(anchor, active)@ selection
           -> ((Int, Int), Maybe Text) -- ^ new @(anchor, active)@, and the new value if it changed
-applyEdit inputFilterFn currentValue input (anchor2, active2)
+applyEdit inputFilterFn currentValue input (anchor, active)
   | backspace || hasTyped =
       ((newCursor, newCursor), if newText /= currentValue then Just newText else Nothing)
-  | otherwise = ((anchor2, active2), Nothing)
+  | otherwise = ((anchor, active), Nothing)
   where
     keyEvts   = inputKeyEvents input
     backspace = any (\e -> key e == KeyBackspace) keyEvts
     typed     = inputFilterFn (foldl' (<>) T.empty (inputTypedText input))
     hasTyped  = not (T.null typed)
-    hasSel2   = anchor2 /= active2
-    selLo2    = min anchor2 active2
-    selHi2    = max anchor2 active2
+    hasSel    = anchor /= active
+    selLo     = min anchor active
+    selHi     = max anchor active
     (newText, newCursor)
-      | hasSel2 && backspace =
-          (T.take selLo2 currentValue <> T.drop selHi2 currentValue, selLo2)
-      | hasSel2 =
-          (T.take selLo2 currentValue <> typed <> T.drop selHi2 currentValue, selLo2 + T.length typed)
-      | backspace && active2 > 0 =
-          (T.take (active2 - 1) currentValue <> T.drop active2 currentValue, active2 - 1)
+      | hasSel && backspace =
+          (T.take selLo currentValue <> T.drop selHi currentValue, selLo)
+      | hasSel =
+          (T.take selLo currentValue <> typed <> T.drop selHi currentValue, selLo + T.length typed)
+      | backspace && active > 0 =
+          (T.take (active - 1) currentValue <> T.drop active currentValue, active - 1)
       | hasTyped =
-          (T.take active2 currentValue <> typed <> T.drop active2 currentValue, active2 + T.length typed)
-      | otherwise = (currentValue, active2)
+          (T.take active currentValue <> typed <> T.drop active currentValue, active + T.length typed)
+      | otherwise = (currentValue, active)
 
 -- | The scroll offset needed to keep a cursor at @cursorAbs@ visible within
 -- a viewport of width @w@ currently scrolled to @scrollX@. Pixels in, pixels
@@ -993,7 +993,7 @@ drawTextInputContent
   -> Double      -- ^ current horizontal scroll offset
   -> (Int, Int)  -- ^ current @(anchor, active)@ selection
   -> UI e msg ()
-drawTextInputContent style bounds displayValue hasFocus enabled ox (anchor3, active3) = do
+drawTextInputContent style bounds displayValue hasFocus enabled ox (anchor, active) = do
   when (hasFocus && drawLo < drawHi) $ do
     loX <- charOffset displayValue drawLo
     hiX <- charOffset displayValue drawHi
@@ -1008,7 +1008,7 @@ drawTextInputContent style bounds displayValue hasFocus enabled ox (anchor3, act
   withBounds textBounds $ drawText (styleTextColour style) AlignLeft displayValue
 
   when enabled $ do
-    curX <- charOffset displayValue active3
+    curX <- charOffset displayValue active
     let cursorRect = Rectangle
           (rectX bounds + realToFrac curX - ox)
           (rectY bounds)
@@ -1016,8 +1016,8 @@ drawTextInputContent style bounds displayValue hasFocus enabled ox (anchor3, act
           (rectHeight bounds)
     withBounds cursorRect $ fillRect (styleTextColour style)
   where
-    drawLo = min anchor3 active3
-    drawHi = max anchor3 active3
+    drawLo = min anchor active
+    drawHi = max anchor active
 
 -- | Events reported by 'textInputControl': 'Edited' with the new value
 -- whenever a keystroke changes it, 'Submitted' when Enter is pressed while
@@ -1111,9 +1111,9 @@ textInputControl eid attrs = do
 
     let displayValue = configDisplayFilter cfg currentValue
         w           = rectWidth bounds
-        defPos      = T.length currentValue
-        anchor0     = maybe defPos selectionAnchor sel
-        active0     = maybe defPos selectionActive sel
+        defPos        = T.length currentValue
+        anchorInit    = maybe defPos selectionAnchor sel
+        activeInit    = maybe defPos selectionActive sel
         -- Focus was gained by a click this frame (e.g. clicking from another
         -- element). Treat as a fresh click rather than a drag continuation so
         -- the old anchor is not inherited.
@@ -1124,23 +1124,23 @@ textInputControl eid attrs = do
     let maxScrollPx = maxScrollPixels contentW w
         scrollX     = scrollPixels maxScrollPx frac
 
-    (anchor1, active1) <-
+    (anchorAfterMouse, activeAfterMouse) <-
       if enabled
-        then resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX (anchor0, active0)
-        else pure (anchor0, active0)
+        then resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX (anchorInit, activeInit)
+        else pure (anchorInit, activeInit)
 
-    let (anchor2, active2) =
-          resolveKeyboardSelection hasFocus (inputKeyEvents input) (T.length currentValue) (anchor1, active1)
+    let (anchorAfterKeys, activeAfterKeys) =
+          resolveKeyboardSelection hasFocus (inputKeyEvents input) (T.length currentValue) (anchorAfterMouse, activeAfterMouse)
 
-        ((anchor3, active3), edited)
-          | enabled   = applyEdit (configInputFilter cfg) currentValue input (anchor2, active2)
-          | otherwise = ((anchor2, active2), Nothing)
+        ((anchorFinal, activeFinal), edited)
+          | enabled   = applyEdit (configInputFilter cfg) currentValue input (anchorAfterKeys, activeAfterKeys)
+          | otherwise = ((anchorAfterKeys, activeAfterKeys), Nothing)
 
         submitted = enabled && any (\e -> key e == KeyReturn) (inputKeyEvents input)
 
     fire attrs ([Submitted | submitted] ++ [Edited t | Just t <- [edited]])
 
-    when enabled $ emitUi (SetSelectionAt eid (Selection anchor3 active3))
+    when enabled $ emitUi (SetSelectionAt eid (Selection anchorFinal activeFinal))
 
     -- Computed locally rather than re-read via 'getScrollState': scroll
     -- writes are deferred (applied between frames), so a same-frame re-read
@@ -1149,13 +1149,13 @@ textInputControl eid attrs = do
     effectiveScrollX <-
       if enabled
         then do
-          curX <- charOffset displayValue active3
+          curX <- charOffset displayValue activeFinal
           let newScrollX = resolveScroll w scrollX (realToFrac curX)
           when (newScrollX /= scrollX) $ emitUi (ScrollTo eid (scrollFraction maxScrollPx newScrollX))
           pure newScrollX
         else pure scrollX
 
-    drawTextInputContent style bounds displayValue hasFocus enabled effectiveScrollX (anchor3, active3)
+    drawTextInputContent style bounds displayValue hasFocus enabled effectiveScrollX (anchorFinal, activeFinal)
 
 contentRectFor :: StyleSet -> Rectangle -> Rectangle
 contentRectFor ss r =
