@@ -44,6 +44,7 @@ module Blink.ItemsControl
     -- | A primitive: renders a list of data via a template, with no id,
     -- chrome, selection, or interactivity of its own.
   , ItemTemplate
+  , ItemsLayoutConfig
   , itemTemplate
   , itemsLayout
 
@@ -55,6 +56,7 @@ module Blink.ItemsControl
   , SelectedItem (..)
   , SelectionItemTemplate
   , SelectionEvent (..)
+  , SelectionConfig
   , itemContainer
   , selected
   , selectedIndex

@@ -150,21 +150,26 @@ module Blink.Controls
   , isActivatedBy
   , activatable
   , LabelEvent
+  , LabelConfig
   , label
   , ProgressValue (..)
+  , ProgressBarConfig
   , progressBar
   , bandSpeed
   , progress
   , button
   , ButtonEvent (Clicked)
+  , ButtonConfig
   , onClick
   , CheckboxPart (..)
   , CheckboxEvent (Toggled)
+  , CheckboxConfig
   , onToggle
   , checked
   , renderCheckboxGlyph
   , checkbox
   , TextEvent (Edited, Submitted)
+  , TextInputConfig
   , onInput
   , onSubmit
   , inputFilter
@@ -174,6 +179,7 @@ module Blink.Controls
   , mouseToTrackPos
   , SliderPart (..)
   , SliderEvent (Changed)
+  , SliderConfig
   , onChange
   , arrowStep
   , HasThumbRatioConfig (..)
@@ -184,13 +190,16 @@ module Blink.Controls
   , slider
   , ScrollBarPart (..)
   , ScrollBarEvent
+  , ScrollBarConfig
   , scrollBar
   , ViewportPart (..)
+  , ViewportConfig
   , scrollRegionBarSize
   , contentSize
   , viewport
   , virtualContent
   , SelectorEvent (Selected)
+  , SelectorConfig
   , onSelect
   , items
   , selected
@@ -248,7 +257,7 @@ data FocusOnClick e
   deriving (Eq, Show)
 
 -- | Configuration shared by every control, regardless of that control's own
--- 'Config': whether Tab lands on it ('tabStop') and what clicking it does to
+-- @cfg@: whether Tab lands on it ('tabStop') and what clicking it does to
 -- focus ('focusOnClick').
 data ControlConfig e = ControlConfig
   { ccTabStop      :: Bool
@@ -268,7 +277,7 @@ data Attr e ev msg cfg
   | Config (cfg -> cfg)
   | Shared (ControlConfig e -> ControlConfig e)
 
--- | Resolves a control's final @cfg@ by folding every 'Config' attr in the
+-- | Resolves a control's final @cfg@ by folding every @Config@ attr in the
 -- list over the default, left to right — so later attrs override earlier
 -- ones that touch the same field.
 configure :: cfg -> [Attr e ev msg cfg] -> cfg
@@ -283,7 +292,7 @@ controlConfig = foldl' apply defaultControlConfig
     apply cc (Shared f) = f cc
     apply cc _          = cc
 
--- | Raises each event in turn against every 'On' reaction in the attrs list,
+-- | Raises each event in turn against every @On@ reaction in the attrs list,
 -- dispatching the resulting 'Out's (emitting messages, queuing effects).
 -- Used internally by 'applyFocus' and 'applyMouseOver' to fire the generic
 -- lifecycle events, and by each control to fire its own.
@@ -631,7 +640,7 @@ activatable eid attrs keys draw = do
   control eid attrs draw
   isActivatedBy eid keys
 
--- | Events reported by 'label': just a lifecycle event via 'LabelControl'
+-- | Events reported by 'label': just a lifecycle event via @LabelControl@
 -- (see 'ControlEvent') — 'label' has no domain events of its own, but still
 -- needs a concrete event type to be a 'control' and raise the shared ones.
 newtype LabelEvent = LabelControl ControlEvent
@@ -721,7 +730,7 @@ progressBar eid attrs = do
           fillRect (styleTextColour style)
 
 -- | Events reported by 'button': 'Clicked' when activated, or a lifecycle
--- event via 'Control' (see 'ControlEvent'). 'Control' is not exported —
+-- event via @Control@ (see 'ControlEvent'). @Control@ is not exported —
 -- 'onFocusGained'\/'onFocusLost'\/'onMouseEnter'\/'onMouseExit' already cover
 -- it generically — but 'Clicked' is, so a fully custom handler can still be
 -- built with 'onEvent' when 'onClick' isn't enough.
@@ -777,7 +786,7 @@ data CheckboxPart
   deriving (Eq, Ord, Show)
 
 -- | Events reported by 'checkbox': 'Toggled' with the new checked state when
--- activated, or a lifecycle event via 'CheckboxControl' (see 'ControlEvent').
+-- activated, or a lifecycle event via @CheckboxControl@ (see 'ControlEvent').
 data CheckboxEvent = Toggled Bool | CheckboxControl ControlEvent
   deriving (Eq, Show)
 
@@ -940,7 +949,7 @@ applyEdit inputFilterFn currentValue input (anchor2, active2)
 
 -- | The scroll offset needed to keep a cursor at @cursorAbs@ visible within
 -- a viewport of width @w@ currently scrolled to @scrollX@. Pixels in, pixels
--- out — 'scrollFraction'\/'scrollPixels' convert at the boundary with
+-- out — @scrollFraction@\/@scrollPixels@ convert at the boundary with
 -- 'getScrollState'\/'ScrollTo' so the stored value stays in the same
 -- @[0, 1]@ convention every other scroll-state consumer uses.
 resolveScroll
@@ -966,7 +975,7 @@ scrollFraction maxPx px
   | maxPx > 0 = clampScrollPos (px / maxPx)
   | otherwise = 0
 
--- | The inverse of 'scrollFraction': converts a stored @[0, 1]@ fraction
+-- | The inverse of @scrollFraction@: converts a stored @[0, 1]@ fraction
 -- back to a pixel offset, given the max offset from 'maxScrollPixels'.
 scrollPixels :: Double -> Double -> Double
 scrollPixels maxPx frac = frac * maxPx
@@ -1012,7 +1021,7 @@ drawTextInputContent style bounds displayValue hasFocus enabled ox (anchor3, act
 
 -- | Events reported by 'textInputControl': 'Edited' with the new value
 -- whenever a keystroke changes it, 'Submitted' when Enter is pressed while
--- focused and enabled, or a lifecycle event via 'TextControl' (see
+-- focused and enabled, or a lifecycle event via @TextControl@ (see
 -- 'ControlEvent').
 data TextEvent = Edited Text | Submitted | TextControl ControlEvent
   deriving (Eq, Show)
@@ -1083,7 +1092,7 @@ displayFilter f = configAny $ \cfg -> cfg { configDisplayFilter = f }
 -- 'getScrollState', keyed by @eid@, writing through 'emitUi' with
 -- 'SetSelectionAt' and 'ScrollTo'. The scroll position is stored as the same
 -- @[0, 1]@ fraction every other scroll-state consumer uses — see
--- 'scrollFraction'\/'scrollPixels' — converted to and from pixels locally,
+-- @scrollFraction@\/@scrollPixels@ — converted to and from pixels locally,
 -- since the selection\/cursor\/auto-scroll math below is naturally pixel-based.
 textInputControl :: Ord e => e -> [Attr e TextEvent msg TextInputConfig] -> UI e msg ()
 textInputControl eid attrs = do
@@ -1216,7 +1225,7 @@ data SliderPart
 
 -- | Events reported by 'slider': 'Changed' with the new value when the user
 -- drags, clicks on the track, or nudges with arrow keys, or a lifecycle
--- event via 'SliderControl' (see 'ControlEvent').
+-- event via @SliderControl@ (see 'ControlEvent').
 data SliderEvent = Changed Double | SliderControl ControlEvent
   deriving (Eq, Show)
 
@@ -1338,7 +1347,7 @@ data ScrollBarPart
   | ScrollIncrBtn -- ^ The increment arrow button.
   deriving (Eq, Ord, Show)
 
--- | Events reported by 'scrollBar': a lifecycle event via 'ScrollBarControl'
+-- | Events reported by 'scrollBar': a lifecycle event via @ScrollBarControl@
 -- (see 'ControlEvent'). The scroll position itself is control state, not
 -- reported to the caller — it lives in the 'UIContext', keyed by the
 -- track's element ID, and is read with 'getScrollState'.
@@ -1531,7 +1540,7 @@ virtualContent scrollPos rowHeight itemCount renderItem = do
     in when (i >= 0 && i < itemCount) $ withBounds itemRect (renderItem i)
 
 -- | Events reported by 'selector' and 'radioGroup': 'Selected' with the
--- activated item's value, or a lifecycle event via 'SelectorControl' (see
+-- activated item's value, or a lifecycle event via @SelectorControl@ (see
 -- 'ControlEvent') — each item is its own focusable 'control', so
 -- gaining\/losing focus is a per-item concern, reported the same way for
 -- every item through the one attrs list every item shares.
