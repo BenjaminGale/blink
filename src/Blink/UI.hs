@@ -936,7 +936,15 @@ contextRequiresAnimation = outRequiresAnimation . ctxOutputs
 -- code needs to call this directly. Effects are folded in queue order:
 -- 'ScrollTo' and 'SetSelectionAt' each overwrite what came before for the
 -- same target, while 'ScrollBy' composes with a previous write to the same
--- target, clamping to @[0, 1]@ after each step.
+-- target, clamping to @[0, 1]@ after each step:
+--
+-- @
+-- applyUiEffects [ScrollBy eid 0.6, ScrollBy eid 0.6] ctx
+--   -- scroll position 1.0 (0.6 + 0.6, clamped — not last-write-wins)
+--
+-- applyUiEffects [ScrollBy eid 0.6, ScrollTo eid 0.2] ctx
+--   -- scroll position 0.2 (ScrollTo overwrites the pending ScrollBy)
+-- @
 applyUiEffects :: Ord e => [UiEffect e] -> UIContext e msg -> UIContext e msg
 applyUiEffects effects ctx0 = foldl' step ctx0 effects
   where
