@@ -198,7 +198,7 @@ module Blink.UI
   , emit
   , emitUi
     -- * Scroll state
-  , ScrollState (..)
+  , ScrollState
   , getScrollState
   , clampScrollPos
   , contextScrollPosition
@@ -319,13 +319,13 @@ data Selection = Selection
 -- 'setFocus' for why it changes immediately instead.
 data UiEffect e
   = ScrollTo e Double
-    -- ^ Sets the scroll position to an absolute value, stored as given. Every
-    -- caller ('Blink.Controls.scrollBar', 'Blink.Controls.viewport',
-    -- 'Blink.Controls.listBox', 'Blink.Controls.textInputControl') uses the
-    -- @[0, 1]@ convention documented on 'ScrollState' and passes an
-    -- already-clamped value; 'Blink.Controls.textInputControl' converts to
-    -- and from pixels locally since its selection\/cursor math is naturally
-    -- pixel-based.
+    -- ^ Sets the scroll position to an absolute value, clamped to @[0, 1]@
+    -- by 'applyUiEffects' when the effect is applied. Every caller
+    -- ('Blink.Controls.scrollBar', 'Blink.Controls.viewport',
+    -- 'Blink.Controls.listBox', 'Blink.Controls.textInputControl') already
+    -- passes a value in the @[0, 1]@ convention documented on 'ScrollState';
+    -- 'Blink.Controls.textInputControl' converts to and from pixels locally
+    -- since its selection\/cursor math is naturally pixel-based.
   | ScrollBy e Double
     -- ^ Adjusts the scroll position by a delta, clamped to @[0, 1]@ — this
     -- constructor is only ever used in the normalised @[0, 1]@ convention.
@@ -590,10 +590,12 @@ getSelection :: Ord e => e -> UI e msg (Maybe Selection)
 getSelection eid = listToMaybe <$> getSelections eid
 
 -- Internal: writes a scroll position directly into the context, bypassing
--- the deferred-effect queue. Used only by 'applyUiEffects'.
+-- the deferred-effect queue. Clamps to @[0, 1]@ so this is the single point
+-- that enforces the 'ScrollState' invariant regardless of which 'UiEffect'
+-- reaches it. Used only by 'applyUiEffects'.
 writeScrollState :: Ord e => e -> Double -> UIContext e msg -> UIContext e msg
 writeScrollState eid v ctx = ctx { ctxElements = (ctxElements ctx)
-  { elmScrollStates = Map.insert eid (ScrollState v) (elmScrollStates (ctxElements ctx)) } }
+  { elmScrollStates = Map.insert eid (ScrollState (clampScrollPos v)) (elmScrollStates (ctxElements ctx)) } }
 
 -- Internal: writes a selection directly into the context, bypassing the
 -- deferred-effect queue. Used only by 'applyUiEffects'.
@@ -933,7 +935,8 @@ contextRequiresAnimation = outRequiresAnimation . ctxOutputs
 -- code needs to call this directly. Effects are folded in queue order:
 -- 'ScrollTo' and 'SetSelectionAt' each overwrite what came before for the
 -- same target, while 'ScrollBy' composes with a previous write to the same
--- target, clamping to @[0, 1]@ after each step:
+-- target. Every scroll write passes through the same internal clamp, so the
+-- result is always in @[0, 1]@ regardless of which constructor produced it:
 --
 -- @
 -- applyUiEffects [ScrollBy eid 0.6, ScrollBy eid 0.6] ctx
@@ -941,12 +944,15 @@ contextRequiresAnimation = outRequiresAnimation . ctxOutputs
 --
 -- applyUiEffects [ScrollBy eid 0.6, ScrollTo eid 0.2] ctx
 --   -- scroll position 0.2 (ScrollTo overwrites the pending ScrollBy)
+--
+-- applyUiEffects [ScrollTo eid 1.5] ctx
+--   -- scroll position 1.0 (out-of-range input, clamped)
 -- @
 applyUiEffects :: Ord e => [UiEffect e] -> UIContext e msg -> UIContext e msg
 applyUiEffects effects ctx0 = foldl' step ctx0 effects
   where
     step ctx (ScrollTo eid v)         = writeScrollState eid v ctx
-    step ctx (ScrollBy eid dv)        = writeScrollState eid (clampScrollPos (currentScroll eid ctx + dv)) ctx
+    step ctx (ScrollBy eid dv)        = writeScrollState eid (currentScroll eid ctx + dv) ctx
     step ctx (SetSelectionAt eid sel) = writeSelection eid sel ctx
 
     currentScroll eid ctx =

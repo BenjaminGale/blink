@@ -252,6 +252,11 @@ spec = describe "Blink.UI" $ do
       (v, _) <- runUI (getScrollState ()) (applyUiEffects (getUiEffects ctx) ctx)
       v `shouldBe` 1.0
 
+    it "ScrollTo clamps an out-of-range value to [0, 1]" $ do
+      (_, ctx) <- run0 (emitUi (ScrollTo () 1.5))
+      (v, _) <- runUI (getScrollState ()) (applyUiEffects (getUiEffects ctx) ctx)
+      v `shouldBe` 1.0
+
     it "keeps scroll positions separate per element" $ do
       (_, ctx) <- runTwoElem (emitUi (ScrollTo ElemA 0.3) >> emitUi (ScrollTo ElemB 0.7))
       (v, _) <- runUI (getScrollState ElemA) (applyUiEffects (getUiEffects ctx) ctx)
