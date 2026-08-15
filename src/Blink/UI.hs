@@ -740,9 +740,6 @@ getCapturedElement = gets contextCaptured
 contextCaptured :: UIContext e msg -> Maybe e
 contextCaptured = ixnCaptured . ctxInteraction
 
--- | The element currently under the mouse pointer, or 'Nothing' when no
--- element is hovered. Updated at the end of each frame after all controls
--- have had a chance to register hover via 'registerMouseOver'.
 -- | Acquires mouse capture for the element if the left button is currently
 -- down and nothing is captured yet, making this the first point of capture
 -- for that press — the "hot" control a drag holds onto once the cursor
