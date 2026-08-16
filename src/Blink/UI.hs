@@ -126,8 +126,8 @@ control holds a bare 'FocusSingle', but a composite (a list, a tree —
 anything with sub-items) can be focused with no child chosen yet
 ('FocusComposite' with a 'FocusNothing' tail) or with a specific child
 current ('FocusComposite' wrapping that child's own 'Focus'), nested to
-arbitrary depth for composites of composites. 'Blink.ItemsControl.withinComposite'
-is where composites actually build and consume these chains.
+arbitrary depth for composites of composites. 'withinComposite' is where
+composites actually build and consume these chains.
 
   * 'isFocused' — non-exclusive, the way 'Blink.Controls.isMouseOver' already is for
     geometric nesting (CSS's @:focus-within@, generalised to also cover plain
@@ -136,8 +136,8 @@ is where composites actually build and consume these chains.
     as it always has; an ancestor composite now correctly sees 'True' for its
     own id whenever focus is anywhere inside it.
   * 'setFocus' \/ 'clearFocus' — set or clear focus for a single element, as
-    a bare 'FocusSingle'\/'FocusNothing'. 'Blink.ItemsControl.withinComposite'
-    is where a composite writes its own 'FocusComposite' shape instead.
+    a bare 'FocusSingle'\/'FocusNothing'. 'withinComposite' is where a
+    composite writes its own 'FocusComposite' shape instead.
   * 'consumeKey' — remove a key event from the frame's queue so that it is not
     handled by multiple controls in the same frame.
 
@@ -265,6 +265,7 @@ module Blink.UI
   , setFocus
   , setFocusWhen
   , clearFocus
+  , withinComposite
   , consumeKey
   , getPreviousTabStop
   , setPreviousTabStop
@@ -365,9 +366,9 @@ data Out e msg
 -- same two-state model this replaced. A composite (a list, a tree — anything
 -- with sub-items) additionally uses 'FocusComposite' to combine its own id
 -- with whatever focus its children currently hold, nested to arbitrary depth
--- for composites of composites; see 'Blink.ItemsControl.withinComposite' for
--- how composites build and consume these chains, and 'isFocused' for how an
--- id is matched against one.
+-- for composites of composites; see 'withinComposite' for how composites
+-- build and consume these chains, and 'isFocused' for how an id is matched
+-- against one.
 --
 -- 'FocusSingle' eid and @'FocusComposite' eid 'FocusNothing'@ are
 -- semantically identical for everything this type is used for — kept as
@@ -872,6 +873,63 @@ setFocusWhen b eid = when b (setFocus eid)
 -- | Removes keyboard focus from all elements. Immediate, like 'setFocus'.
 clearFocus :: UI e msg ()
 clearFocus = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { focusedElement = FocusNothing } }
+
+-- | Marks a sub-tree as belonging to a composite element (a list, a tree —
+-- anything with sub-items) for focus purposes, the way
+-- 'Blink.Controls.isMouseOver' generalises to geometric nesting.
+-- Non-exclusive: true for every id along the current chain, not just the
+-- terminal one, so an ancestor composite
+-- correctly sees itself as focused whenever focus is anywhere inside it —
+-- see 'isFocused'.
+--
+-- Before @inner@ runs, looks at the tree-wide focus and asks one question:
+-- is this composite's own id at the front of it, is nothing focused at all,
+-- or does something else entirely already hold it?
+--
+--   * Own id at the front (@'FocusComposite' compositeId childFocus@):
+--     strips the tag, exposing @childFocus@ to @inner@ unwrapped — children
+--     compare against exactly the value they'd recognise standalone.
+--   * Nothing focused (@'FocusNothing'@): passes it through unchanged —
+--     children are free to auto-claim via their own ordinary logic, exactly
+--     as they would standalone.
+--   * Anything else — an unrelated element or a different composite's own
+--     chain: focus already legitimately belongs to something outside this
+--     composite. @inner@ runs against that value completely unmodified, and
+--     the result is left exactly as it was: no wrap, no overwrite. (Passing
+--     'FocusNothing' here instead would tell every descendant "nothing is
+--     focused," letting one of them auto-claim and steal focus from
+--     whatever legitimately holds it, purely because this composite
+--     happened to render later in the same pass.)
+--
+-- In the first two cases, once @inner@ finishes, whatever focus resulted is
+-- re-wrapped as @'FocusComposite' compositeId after@ — unconditionally,
+-- even when @after@ is 'FocusNothing'. This re-affirms "composite focused,
+-- no child chosen" every frame the composite renders, the same way a plain
+-- focused control's own focus rules re-affirm its focus every frame it
+-- renders — without this, that state would silently decay to 'FocusNothing'
+-- one frame later, since nothing else reaffirms it.
+--
+-- Composes for arbitrary nesting: a composite inside another composite's
+-- @withinComposite@ only ever strips\/re-wraps its own outermost tag, and
+-- does the same expose\/render\/re-wrap step around its own children.
+withinComposite :: Eq e => e -> UI e msg a -> UI e msg a
+withinComposite compositeId (UI f) = UI $ \ctx ->
+  case focusedElement (ixnFocus (ctxInteraction ctx)) of
+    FocusComposite cid childFocus | cid == compositeId -> claim ctx childFocus
+    FocusNothing                                        -> claim ctx FocusNothing
+    _                                                    -> f ctx
+  where
+    claim ctx exposed = do
+      let expose fs ixn = ixn { ixnFocus = (ixnFocus ixn) { focusedElement = fs } }
+          ctx' = ctx { ctxInteraction = expose exposed (ctxInteraction ctx) }
+      (a, ctx'') <- f ctx'
+      let after = focusedElement (ixnFocus (ctxInteraction ctx''))
+          ixn'' = ctxInteraction ctx''
+          ixn''' = ixn'' { ixnFocus = FocusState
+                              { focusedElement   = FocusComposite compositeId after
+                              , focusedThisFrame = True
+                              } }
+      pure (a, ctx'' { ctxInteraction = ixn''' })
 
 -- | Advances a 'FocusState' to the next frame: carries focus forward if it
 -- was explicitly set this frame, otherwise clears it. Used by 'nextInteractionFrame'.

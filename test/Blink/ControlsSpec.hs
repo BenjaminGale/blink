@@ -545,6 +545,26 @@ noChromeSpec run baseCtx =
     ctx' <- run baseCtx
     filter isFillRect (getDrawCommands ctx') `shouldBe` []
 
+-- withinComposite fixtures --------------------------------------------------
+
+-- | A composite ('ListElem'\/'GroupElem'), its direct children
+-- ('RowElem'\/'SubRowElem'), and two plain, unrelated elements used to prove
+-- a composite's focus window doesn't leak past its own boundary.
+data CompElem = ListElem | RowElem Int | GroupElem | SubRowElem Int | AfterElem | SiblingElem
+  deriving (Eq, Ord, Show)
+
+compTheme :: Theme CompElem
+compTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = zeroChromeStyleSet }
+
+mkCompCtx :: InputState -> UIContext CompElem msg
+mkCompCtx input = emptyUIContext controlRect input compTheme noOpTextMeasurer
+
+-- | A bare focusable leaf, standing in for "some unmodified control" inside
+-- a composite -- the point of 'withinComposite' is that this needs no
+-- changes of its own to compose correctly.
+leaf :: CompElem -> UI CompElem msg ()
+leaf eid = control eid ([] :: [Attr CompElem Probe msg ()]) (pure ())
+
 spec :: Spec
 spec = describe "Blink.Controls" $ do
   describe "configure" $ do
@@ -936,6 +956,53 @@ spec = describe "Blink.Controls" $ do
     it "runs content within the padded content rectangle" $ do
       ctx' <- snd <$> runUI (control TestControl ([] :: [Attr TestElement Probe Probe ()]) (fillRect testColour)) (mkCtxFor noInput)
       getDrawCommands ctx' `shouldContain` [FillRect contentRect testColour]
+
+  describe "withinComposite" $ do
+    it "claims itself and lets the first child auto-claim when nothing was focused" $ do
+      let render = withinComposite ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] []
+      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 0))
+
+    it "retains a specific child across renders instead of losing it to an earlier-rendered sibling" $ do
+      let render = withinComposite ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
+      -- Frame 1: nothing focused, RowElem 0 auto-claims. Frame 2 (Tab):
+      -- RowElem 0 gives up focus and RowElem 1 -- rendered second -- takes
+      -- it. RowElem 0 renders first on every subsequent frame, so retaining
+      -- RowElem 1 instead of reverting to it is the actual thing under test.
+      result <- runInteractions controlRect (mkCompCtx noInput) render [Wait 1, Tab] []
+      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 1))
+
+    it "claims itself with no child chosen when it has none, and that claim persists indefinitely" $ do
+      let render = withinComposite ListElem (pure ())
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] [Wait 1, Wait 1, Wait 1]
+      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem FocusNothing
+
+    it "denies a later, unrelated control the auto-claim once it has claimed itself" $ do
+      -- Even an empty composite claims the "nothing is focused" opportunity
+      -- purely by rendering first, the same way an ordinary focusable
+      -- control would -- so a plain control positioned after it must not
+      -- treat that as an invitation to auto-claim in its place.
+      let render = withinComposite ListElem (pure ()) >> leaf AfterElem
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] []
+      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem FocusNothing
+
+    it "composes across nested composites, with isFocused true along the whole chain" $ do
+      let render = withinComposite ListElem $ do
+            withinComposite GroupElem (leaf (SubRowElem 0) >> leaf (SubRowElem 1))
+            leaf (RowElem 1)
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] []
+      let chain = contextFocus (resultContext result)
+      chain `shouldBe` FocusComposite ListElem (FocusComposite GroupElem (FocusSingle (SubRowElem 0)))
+      focusContains ListElem chain `shouldBe` True
+      focusContains GroupElem chain `shouldBe` True
+      focusContains (SubRowElem 0) chain `shouldBe` True
+      focusContains (RowElem 1) chain `shouldBe` False
+      focusContains (SubRowElem 1) chain `shouldBe` False
+
+    it "leaves a pre-existing, unrelated claim untouched and lets no descendant auto-claim in its place" $ do
+      let render = leaf SiblingElem >> withinComposite ListElem (leaf (RowElem 0))
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] [Wait 1, Wait 1]
+      contextFocus (resultContext result) `shouldBe` FocusSingle SiblingElem
 
   describe "isKeyPressed" $ do
     -- isKeyPressed is a bare query primitive with no click-handling of its
