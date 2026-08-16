@@ -963,12 +963,12 @@ spec = describe "Blink.Controls" $ do
       getDrawCommands ctx' `shouldContain` [FillRect contentRect testColour]
 
   describe "withinComposite" $ do
-    it "claims itself and lets the first child auto-claim when nothing was focused" $ do
+    it "a composite is considered focused when its first child auto-claims focus" $ do
       let render = withinComposite ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
       result <- runInteractions controlRect (mkCompCtx noInput) render [] []
       contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 0))
 
-    it "retains a specific child across renders instead of losing it to an earlier-rendered sibling" $ do
+    it "a composite retains its focused child across renders" $ do
       let render = withinComposite ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
       -- Frame 1: nothing focused, RowElem 0 auto-claims. Frame 2 (Tab):
       -- RowElem 0 gives up focus and RowElem 1 -- rendered second -- takes
@@ -977,12 +977,13 @@ spec = describe "Blink.Controls" $ do
       result <- runInteractions controlRect (mkCompCtx noInput) render [Wait 1, Tab] []
       contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 1))
 
-    it "claims itself with no child chosen when it has none, and that claim persists indefinitely" $ do
-      let render = withinComposite ListElem (pure ())
-      result <- runInteractions controlRect (mkCompCtx noInput) render [] [Wait 1, Wait 1, Wait 1]
-      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem FocusNothing
+    forM_ [1, 2, 3] $ \n ->
+      it ("an empty composite keeps holding focus after " <> show n <> " idle frame(s)") $ do
+        let render = withinComposite ListElem (pure ())
+        result <- runInteractions controlRect (mkCompCtx noInput) render [] (replicate n (Wait 1))
+        contextFocus (resultContext result) `shouldBe` FocusComposite ListElem FocusNothing
 
-    it "denies a later, unrelated control the auto-claim once it has claimed itself" $ do
+    it "an empty composite claims focus" $ do
       -- Even an empty composite claims the "nothing is focused" opportunity
       -- purely by rendering first, the same way an ordinary focusable
       -- control would -- so a plain control positioned after it must not
@@ -991,7 +992,7 @@ spec = describe "Blink.Controls" $ do
       result <- runInteractions controlRect (mkCompCtx noInput) render [] []
       contextFocus (resultContext result) `shouldBe` FocusComposite ListElem FocusNothing
 
-    it "composes across nested composites, with isFocused true along the whole chain" $ do
+    it "a composite is considered focused whenever a nested composite inside it is focused" $ do
       let render = withinComposite ListElem $ do
             withinComposite GroupElem (leaf (SubRowElem 0) >> leaf (SubRowElem 1))
             leaf (RowElem 1)
@@ -1004,10 +1005,26 @@ spec = describe "Blink.Controls" $ do
       focusContains (RowElem 1) chain `shouldBe` False
       focusContains (SubRowElem 1) chain `shouldBe` False
 
-    it "leaves a pre-existing, unrelated claim untouched and lets no descendant auto-claim in its place" $ do
+    it "a composite does not steal focus already held by an unrelated element" $ do
       let render = leaf SiblingElem >> withinComposite ListElem (leaf (RowElem 0))
       result <- runInteractions controlRect (mkCompCtx noInput) render [] [Wait 1, Wait 1]
       contextFocus (resultContext result) `shouldBe` FocusSingle SiblingElem
+
+    it "Shift-Tab from a composite's first child wraps to its last child" $ do
+      let render = withinComposite ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] [Wait 1, ShiftTab]
+      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 1))
+
+    it "a child correctly sees itself as no longer focused on the frame its composite releases it" $ do
+      let focusedStyle = testStyle { styleBackground = RGBA 0 0 1 1 }
+          rowTheme = compTheme
+            { themeElementStyles = Map.fromList
+                [(RowElem 0, zeroChromeStyleSet { styleSetFocused = focusedStyle })] }
+          rowCtx = emptyUIContext controlRect noInput rowTheme noOpTextMeasurer :: UIContext CompElem ()
+          styledLeaf eid = control eid ([] :: [Attr CompElem Probe () ()]) (fillRect =<< (styleBackground <$> getStyle eid))
+          render = withinComposite ListElem (styledLeaf (RowElem 0))
+      result <- runInteractions controlRect rowCtx render [] [Wait 1, Tab]
+      resultDraws result `shouldNotContain` [FillRect controlRect (RGBA 0 0 1 1)]
 
   describe "isKeyPressed" $ do
     -- isKeyPressed is a bare query primitive with no click-handling of its

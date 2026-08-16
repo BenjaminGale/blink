@@ -431,6 +431,12 @@ data InteractionState e = InteractionState
     -- ^ Which element holds keyboard focus, and whether it's still present this frame.
   , ixnPrevTabStop     :: Maybe e
     -- ^ The element visited just before the currently focused one, for Shift-Tab.
+  , ixnCompositePrevTabStop :: Map.Map e e
+    -- ^ Per-composite equivalent of 'ixnPrevTabStop', keyed by composite id:
+    -- the last child registered as a tab stop while that composite last ran.
+    -- Keeps Tab\/Shift-Tab wraparound within one composite's children scoped
+    -- to that composite instead of reaching into the surrounding tree via
+    -- the single app-wide 'ixnPrevTabStop' slot. See 'withinComposite'.
   , ixnButtonDown      :: Bool
     -- ^ 'True' when the left button is currently held (Pressed or Down state).
   , ixnButtonReleased  :: Bool
@@ -528,11 +534,12 @@ instance Monad (UI e msg) where
 
 emptyInteractionState :: InteractionState e
 emptyInteractionState = InteractionState
-  { ixnCaptured       = Nothing
-  , ixnFocus          = FocusState { focusedElement = FocusNothing, focusedThisFrame = False }
-  , ixnPrevTabStop    = Nothing
-  , ixnButtonDown     = False
-  , ixnButtonReleased = False
+  { ixnCaptured             = Nothing
+  , ixnFocus                = FocusState { focusedElement = FocusNothing, focusedThisFrame = False }
+  , ixnPrevTabStop          = Nothing
+  , ixnCompositePrevTabStop = Map.empty
+  , ixnButtonDown           = False
+  , ixnButtonReleased       = False
   }
 
 emptyFrameOutputs :: FrameOutputs e msg
@@ -909,20 +916,42 @@ clearFocus = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { focusedElemen
 -- renders — without this, that state would silently decay to 'FocusNothing'
 -- one frame later, since nothing else reaffirms it.
 --
+-- A per-composite previous-tab-stop is substituted for the real one while
+-- @inner@ runs, so Tab\/Shift-Tab wraps within this composite's own children.
+--
 -- Composes for arbitrary nesting: a composite inside another composite's
 -- @withinComposite@ only ever strips\/re-wraps its own outermost tag, and
 -- does the same expose\/render\/re-wrap step around its own children.
-withinComposite :: Eq e => e -> UI e msg a -> UI e msg a
+withinComposite :: Ord e => e -> UI e msg a -> UI e msg a
 withinComposite compositeId (UI f) = UI $ \ctx ->
   case focusedElement (ixnFocus (ctxInteraction ctx)) of
     FocusComposite cid childFocus | cid == compositeId -> claim ctx childFocus
     FocusNothing                                        -> claim ctx FocusNothing
     _                                                    -> f ctx
   where
+    -- Runs @inner@ with @exposedFocus@ substituted for the tree-wide focus
+    -- and this composite's own scoped previous-tab-stop substituted for the
+    -- real one, then saves whatever the scoped slot ended up holding back
+    -- into the per-composite map. Leaves the real previous-tab-stop exactly
+    -- as @inner@ left it; the caller alone decides what becomes of the
+    -- resulting focus.
+    runScoped ctx exposedFocus = do
+      let ixn0       = ctxInteraction ctx
+          scopedPrev = Map.lookup compositeId (ixnCompositePrevTabStop ixn0)
+          ixnIn      = ixn0
+            { ixnFocus       = (ixnFocus ixn0) { focusedElement = exposedFocus }
+            , ixnPrevTabStop = scopedPrev
+            }
+      (a, ctx'') <- f (ctx { ctxInteraction = ixnIn })
+      let ixn''  = ctxInteraction ctx''
+          scoped = case ixnPrevTabStop ixn'' of
+            Just v  -> Map.insert compositeId v (ixnCompositePrevTabStop ixn'')
+            Nothing -> Map.delete compositeId (ixnCompositePrevTabStop ixn'')
+          ixn''' = ixn'' { ixnCompositePrevTabStop = scoped }
+      pure (a, ctx'' { ctxInteraction = ixn''' })
+
     claim ctx exposed = do
-      let expose fs ixn = ixn { ixnFocus = (ixnFocus ixn) { focusedElement = fs } }
-          ctx' = ctx { ctxInteraction = expose exposed (ctxInteraction ctx) }
-      (a, ctx'') <- f ctx'
+      (a, ctx'') <- runScoped ctx exposed
       let after = focusedElement (ixnFocus (ctxInteraction ctx''))
           ixn'' = ctxInteraction ctx''
           ixn''' = ixn'' { ixnFocus = FocusState
