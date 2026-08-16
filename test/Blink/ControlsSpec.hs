@@ -861,6 +861,11 @@ spec = describe "Blink.Controls" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) composed [] []
         contextPrevTabStop (resultContext result) `shouldBe` Just TestControl
 
+      it "does not auto-claim focus when excluded from tab order, even with nothing else focused" $ do
+        result <- runInteractions controlRect (mkCtxFor noInput)
+          (action ([tabStop False] :: [Attr TestElement Probe Probe ()])) [] []
+        contextFocus (resultContext result) `shouldBe` FocusNothing
+
       it "keeps focus auto-claimed this frame instead of immediately clearing it on the same Tab press" $ do
         -- Regression: wraparound after Tab runs past the last control clears
         -- focus with nothing left this frame to auto-claim it. The *next*

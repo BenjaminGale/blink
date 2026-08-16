@@ -95,11 +95,12 @@ instantiates. 'onFocusGained' \/ 'onFocusLost' \/ 'onMouseEnter' \/
 'control' — the standard entry point for an interactive element — combines
 mouse-over ('applyMouseOver'), focus and Tab\/Shift-Tab navigation
 ('applyFocus'), and style-driven chrome ('renderChrome'). An element takes
-focus automatically when nothing else holds it, retains it on click, and is
-included in Tab order unless 'tabStop' is set to 'False'. 'focusOnClick'
-overrides what a click does to focus — 'FocusTarget' redirects it elsewhere
-(used by a caption to focus the input beside it instead of itself), and
-'NoFocus' makes clicking a no-op for focus.
+focus automatically when nothing else holds it and retains it on click, but
+only while 'tabStop' is 'True' — 'tabStop' 'False' removes it from Tab order
+entirely, including this auto-claim. 'focusOnClick' overrides what a click
+does to focus — 'FocusTarget' redirects it elsewhere (used by a caption to
+focus the input beside it instead of itself), and 'NoFocus' makes clicking a
+no-op for focus.
 
 = Building composites
 
@@ -294,6 +295,12 @@ data ControlConfig e = ControlConfig
 defaultControlConfig :: ControlConfig e
 defaultControlConfig = ControlConfig { ccTabStop = True, ccFocusOnClick = FocusSelf }
 
+-- | Whether a control is eligible to claim focus purely by rendering first
+-- while nothing else holds it: opted into keyboard focus at all ('tabStop')
+-- and configured to take focus itself on click ('focusOnClick').
+autoClaimsFocus :: Eq e => ControlConfig e -> Bool
+autoClaimsFocus cc = ccTabStop cc && ccFocusOnClick cc == FocusSelf
+
 -- | One entry in a control's attrs list — either a reaction to an event
 -- ('onEvent' and the combinators built on it), a change to the control's own
 -- @cfg@ ('configAny' and the smart constructors built on it), or shared
@@ -413,7 +420,9 @@ onMouseExit reaction = onEvent $ \ev -> case matchControl ev of
   Just MouseExited -> reaction MouseExited
   _                -> []
 
--- | Whether Tab\/Shift-Tab cycles focus onto this control. Defaults to
+-- | Whether this control participates in keyboard focus at all: Tab\/
+-- Shift-Tab cycling onto it, and auto-claiming focus by rendering first
+-- while nothing else holds it. 'False' excludes it from both. Defaults to
 -- 'True' for interactive controls; 'label' defaults it to 'False' (see
 -- 'focusOnClick' too).
 tabStop :: Bool -> Attr e ev msg cfg
@@ -537,9 +546,7 @@ applyFocus eid attrs = do
       captured         <- getCapturedElement
       let isDragRelease = released && isJust captured && captured /= Just eid
           wasClicked     = isHit && released && not isDragRelease
-          autoClaim      = case ccFocusOnClick cc of
-            FocusSelf -> nothingIsFocused && not isDragRelease
-            _         -> False
+          autoClaim      = autoClaimsFocus cc && nothingIsFocused && not isDragRelease
       if isRetainingFocus || autoClaim
         then setFocus eid
         else when (wasClicked && not isDragRelease) $ case ccFocusOnClick cc of
