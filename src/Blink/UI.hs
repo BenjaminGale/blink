@@ -863,18 +863,26 @@ focusContains x (FocusComposite e rest) = x == e || focusContains x rest
 isFocused :: Eq e => e -> UI e msg Bool
 isFocused eid = focusContains eid <$> getFocus
 
--- | Transfers keyboard focus to the given element, as a bare 'FocusSingle'.
--- Takes effect immediately — like 'registerMouseOver' and mouse capture, not
--- like the deferred scroll\/selection writes — because a control's own focus
--- decision (take it when nothing else has it, hand off on Tab) is only
--- correct if the next sibling in the same tree walk can see it happened.
-setFocus :: e -> UI e msg ()
+-- | Transfers keyboard focus to the given element. If it already holds
+-- focus, its existing focus (including any 'FocusComposite' structure) is
+-- retained rather than replaced; otherwise it takes focus fresh, as a bare
+-- 'FocusSingle'. Takes effect immediately — like 'registerMouseOver' and
+-- mouse capture, not like the deferred scroll\/selection writes — because a
+-- control's own focus decision (take it when nothing else has it, hand off
+-- on Tab) is only correct if the next sibling in the same tree walk can see
+-- it happened.
+setFocus :: Eq e => e -> UI e msg ()
 setFocus eid = modifyIxn $ \ixn ->
-  ixn { ixnFocus = FocusState { focusedElement = FocusSingle eid, focusedThisFrame = True } }
+  let current = focusedElement (ixnFocus ixn)
+      retained = case current of
+        FocusSingle e'      | e' == eid -> current
+        FocusComposite e' _ | e' == eid -> current
+        _                                -> FocusSingle eid
+  in ixn { ixnFocus = FocusState { focusedElement = retained, focusedThisFrame = True } }
 
 -- | Transfers keyboard focus to the given element when the condition is
 -- 'True'.
-setFocusWhen :: Bool -> e -> UI e msg ()
+setFocusWhen :: Eq e => Bool -> e -> UI e msg ()
 setFocusWhen b eid = when b (setFocus eid)
 
 -- | Removes keyboard focus from all elements. Immediate, like 'setFocus'.
@@ -929,25 +937,27 @@ withinComposite compositeId (UI f) = UI $ \ctx ->
     FocusNothing                                        -> claim ctx FocusNothing
     _                                                    -> f ctx
   where
-    -- Runs @inner@ with @exposedFocus@ substituted for the tree-wide focus
-    -- and this composite's own scoped previous-tab-stop substituted for the
-    -- real one, then saves whatever the scoped slot ended up holding back
-    -- into the per-composite map. Leaves the real previous-tab-stop exactly
-    -- as @inner@ left it; the caller alone decides what becomes of the
-    -- resulting focus.
+    -- Runs @inner@ with @exposedFocus@ as its focus and its Tab\/Shift-Tab
+    -- wraparound scoped to this composite's own children. If a child
+    -- registers itself as a tab stop, it becomes the previous tab stop for
+    -- whatever renders after this composite. If no child does (e.g. an
+    -- empty composite), whatever was the previous tab stop before this
+    -- composite is left in place instead.
     runScoped ctx exposedFocus = do
       let ixn0       = ctxInteraction ctx
+          realPrev   = ixnPrevTabStop ixn0
           scopedPrev = Map.lookup compositeId (ixnCompositePrevTabStop ixn0)
           ixnIn      = ixn0
             { ixnFocus       = (ixnFocus ixn0) { focusedElement = exposedFocus }
             , ixnPrevTabStop = scopedPrev
             }
       (a, ctx'') <- f (ctx { ctxInteraction = ixnIn })
-      let ixn''  = ctxInteraction ctx''
-          scoped = case ixnPrevTabStop ixn'' of
+      let ixn''      = ctxInteraction ctx''
+          scoped     = case ixnPrevTabStop ixn'' of
             Just v  -> Map.insert compositeId v (ixnCompositePrevTabStop ixn'')
             Nothing -> Map.delete compositeId (ixnCompositePrevTabStop ixn'')
-          ixn''' = ixn'' { ixnCompositePrevTabStop = scoped }
+          flowedPrev = if ixnPrevTabStop ixn'' == scopedPrev then realPrev else ixnPrevTabStop ixn''
+          ixn'''     = ixn'' { ixnCompositePrevTabStop = scoped, ixnPrevTabStop = flowedPrev }
       pure (a, ctx'' { ctxInteraction = ixn''' })
 
     claim ctx exposed = do

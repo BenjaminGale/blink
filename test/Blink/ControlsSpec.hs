@@ -76,6 +76,8 @@ import Blink.Controls
   , items
   , itemsLayout
   , itemsPanel
+  , CompositeControlConfig
+  , compositeControl
   , onSelect
   , selected
   , selectedIndex
@@ -1979,6 +1981,61 @@ spec = describe "Blink.Controls" $ do
         let coords = map (read . T.unpack) (drawnTexts ctx') :: [(Double, Double)]
         map fst coords `shouldSatisfy` \xs -> all (== head xs) xs
         map snd coords `shouldSatisfy` \ys -> and (zipWith (<) ys (tail ys))
+
+  describe "compositeControl" $ do
+    -- Built directly on 'withinComposite' -- see that suite for the
+    -- underlying focus mechanics. These tests only check that
+    -- 'compositeControl' actually wires it (plus mouse-over and chrome) in,
+    -- not that it works, which 'withinComposite' already covers.
+    let compAttrs :: [Attr CompElem Probe msg (CompositeControlConfig CompElem msg Int)]
+        compAttrs = [items ([0, 1] :: [Int]), itemTemplate (\idx _ -> (Layout Fill Fill TopLeft, leaf (RowElem idx)))]
+        render    = compositeControl ListElem compAttrs
+
+    describe "background and border" $
+      backgroundAndBorderSpec controlRect (compositeControl TestControl ([] :: [Attr TestElement Probe () (CompositeControlConfig TestElement () Int)]))
+
+    it "a composite is considered focused when its first child auto-claims focus" $ do
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] []
+      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 0))
+
+    it "a composite retains its focused child across renders" $ do
+      result <- runInteractions controlRect (mkCompCtx noInput) render [Wait 1, Tab] []
+      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 1))
+
+    it "Tab from a composite's last child wraps to its first child" $ do
+      result <- runInteractions controlRect (mkCompCtx noInput) render [Wait 1, Tab, Tab] []
+      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 0))
+
+    it "Shift-Tab from a composite's first child wraps to its last child" $ do
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] [Wait 1, ShiftTab]
+      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 1))
+
+    it "a composite does not steal focus already held by an unrelated element" $ do
+      let withSibling = leaf SiblingElem >> render
+      result <- runInteractions controlRect (mkCompCtx noInput) withSibling [] [Wait 1, Wait 1]
+      contextFocus (resultContext result) `shouldBe` FocusSingle SiblingElem
+
+    it "disabling a composite disables the items inside it too" $ do
+      result <- runInteractions controlRect (mkCompCtx noInput) (disableWhen True render) [] [ClickAt (Point 50 45)]
+      focusContains (RowElem 0) (contextFocus (resultContext result)) `shouldBe` False
+
+    describe "an idle composite (no eligible children)" $ do
+      let emptyAttrs :: [Attr CompElem Probe msg (CompositeControlConfig CompElem msg Int)]
+          emptyAttrs = [itemTemplate (\idx _ -> (Layout Fill Fill TopLeft, leaf (RowElem idx)))]
+          renderEmpty = compositeControl ListElem emptyAttrs
+
+      it "an empty composite claims focus" $ do
+        result <- runInteractions controlRect (mkCompCtx noInput) renderEmpty [] []
+        contextFocus (resultContext result) `shouldBe` FocusComposite ListElem FocusNothing
+
+      it "Tab from an idle composite gives up focus entirely" $ do
+        result <- runInteractions controlRect (mkCompCtx noInput) renderEmpty [] [Wait 1, Tab]
+        contextFocus (resultContext result) `shouldBe` FocusNothing
+
+      it "Shift-Tab from an idle composite returns to whatever was focused before it" $ do
+        let withSibling = leaf SiblingElem >> renderEmpty
+        result <- runInteractions controlRect (mkCompCtx noInput) withSibling [] [Wait 1, Tab, Wait 1, ShiftTab]
+        contextFocus (resultContext result) `shouldBe` FocusSingle SiblingElem
 
   describe "selectionControl" $ do
     let run      = runSelectionControl [items itemLabels, itemContainer selectionRenderItem, onSelect dispatchActivated]

@@ -223,9 +223,11 @@ module Blink.Controls
   , items
   , itemsPanel
   , ItemTemplate
-  , ItemsLayoutConfig
+  , CompositeControlConfig
   , itemTemplate
   , itemsLayout
+  , CompositeEvent
+  , compositeControl
   , SelectionState (..)
   , SelectedItem (..)
   , SelectionItemTemplate
@@ -1581,7 +1583,8 @@ virtualContent scrollPos rowHeight0 itemCount renderItem = do
 -- Shared: items and panel -------------------------------------------------
 
 -- | Lets 'items' work across every config with a plain data-item list --
--- currently the configs behind 'itemsLayout' and 'selectionControl'.
+-- currently the configs behind 'itemsLayout', 'compositeControl', and
+-- 'selectionControl'.
 class HasItemsConfig cfg a where
   setItems :: [a] -> cfg -> cfg
 
@@ -1604,45 +1607,58 @@ itemsPanel p = configAny (setItemsPanel p)
 
 -- ItemsLayout ---------------------------------------------------------
 
--- | Renders one item of an 'itemsLayout', given its index and value, and
--- the 'Layout' it should occupy -- e.g. a fixed main-axis size for a
--- uniform row height, or 'Fill' to share space equally with the other
--- items. 'itemsPanel'\/'orientation' still govern the
+-- | Renders one item of an 'itemsLayout'\/'compositeControl', given its
+-- index and value, and the 'Layout' it should occupy -- e.g. a fixed
+-- main-axis size for a uniform row height, or 'Fill' to share space equally
+-- with the other items. 'itemsPanel'\/'orientation' still govern the
 -- overall arrangement and the cross axis (stretched to 'Fill' when
 -- @'Blink.Layout.boxFillCross' = 'True'@, the default).
 type ItemTemplate e msg a = Int -> a -> (Layout, UI e msg ())
 
--- | Configuration for 'itemsLayout', set via 'items', 'itemTemplate',
--- 'itemsPanel', and 'orientation'. Defaults to no items, a
--- blank template, and a vertical stack.
-data ItemsLayoutConfig e msg a = ItemsLayoutConfig
-  { itemsLayoutConfigItems       :: [a]
-  , itemsLayoutConfigTemplate    :: ItemTemplate e msg a
-  , itemsLayoutConfigOrientation :: Orientation
-  , itemsLayoutConfigBoxConfig   :: BoxConfig
+-- | Configuration for 'itemsLayout' and 'compositeControl', set via
+-- 'items', 'itemTemplate', 'itemsPanel', and 'orientation'. Defaults to no
+-- items, a blank template, and a vertical stack.
+data CompositeControlConfig e msg a = CompositeControlConfig
+  { compositeControlConfigItems       :: [a]
+  , compositeControlConfigTemplate    :: ItemTemplate e msg a
+  , compositeControlConfigOrientation :: Orientation
+  , compositeControlConfigBoxConfig   :: BoxConfig
   }
 
-defaultItemsLayoutConfig :: ItemsLayoutConfig e msg a
-defaultItemsLayoutConfig = ItemsLayoutConfig
-  { itemsLayoutConfigItems       = []
-  , itemsLayoutConfigTemplate    = \_ _ -> (Layout Fill Fill TopLeft, pure ())
-  , itemsLayoutConfigOrientation = Vertical
-  , itemsLayoutConfigBoxConfig   = defaultBoxConfig
+defaultCompositeControlConfig :: CompositeControlConfig e msg a
+defaultCompositeControlConfig = CompositeControlConfig
+  { compositeControlConfigItems       = []
+  , compositeControlConfigTemplate    = \_ _ -> (Layout Fill Fill TopLeft, pure ())
+  , compositeControlConfigOrientation = Vertical
+  , compositeControlConfigBoxConfig   = defaultBoxConfig
   }
 
-instance HasItemsConfig (ItemsLayoutConfig e msg a) a where
-  setItems xs cfg = cfg { itemsLayoutConfigItems = xs }
+instance HasItemsConfig (CompositeControlConfig e msg a) a where
+  setItems xs cfg = cfg { compositeControlConfigItems = xs }
 
-instance HasItemsPanelConfig (ItemsLayoutConfig e msg a) where
-  setItemsPanel p cfg = cfg { itemsLayoutConfigBoxConfig = p }
+instance HasItemsPanelConfig (CompositeControlConfig e msg a) where
+  setItemsPanel p cfg = cfg { compositeControlConfigBoxConfig = p }
 
-instance HasOrientationConfig (ItemsLayoutConfig e msg a) where
-  setOrientation o cfg = cfg { itemsLayoutConfigOrientation = o }
+instance HasOrientationConfig (CompositeControlConfig e msg a) where
+  setOrientation o cfg = cfg { compositeControlConfigOrientation = o }
 
 -- | Sets how each data item is rendered -- the DataTemplate. Defaults to
 -- rendering nothing.
-itemTemplate :: ItemTemplate e msg a -> Attr e ev msg (ItemsLayoutConfig e msg a)
-itemTemplate f = configAny $ \cfg -> cfg { itemsLayoutConfigTemplate = f }
+itemTemplate :: ItemTemplate e msg a -> Attr e ev msg (CompositeControlConfig e msg a)
+itemTemplate f = configAny $ \cfg -> cfg { compositeControlConfigTemplate = f }
+
+-- | Arranges 'items' via 'itemTemplate', stacked according to
+-- 'orientation' and 'itemsPanel'. Shared by 'itemsLayout' and
+-- 'compositeControl'.
+renderCompositeItems :: CompositeControlConfig e msg a -> UI e msg ()
+renderCompositeItems cfg = arrange (compositeControlConfigBoxConfig cfg)
+  [ compositeControlConfigTemplate cfg idx item
+  | (idx, item) <- zip [0 ..] (compositeControlConfigItems cfg)
+  ]
+  where
+    arrange = case compositeControlConfigOrientation cfg of
+      Horizontal -> hBox
+      Vertical   -> vBox
 
 -- | Renders each item of 'items' via 'itemTemplate', stacked according to
 -- 'orientation' and 'itemsPanel'. A primitive, not a
@@ -1654,16 +1670,33 @@ itemTemplate f = configAny $ \cfg -> cfg { itemsLayoutConfigTemplate = f }
 --   , itemTemplate $ \\_ sz -> (Layout Fill Fill TopLeft, drawText black AlignLeft (describe sz))
 --   ]
 -- @
-itemsLayout :: [Attr e Void msg (ItemsLayoutConfig e msg a)] -> UI e msg ()
-itemsLayout attrs = do
-  let cfg     = configure defaultItemsLayoutConfig attrs
-      arrange = case itemsLayoutConfigOrientation cfg of
-        Horizontal -> hBox
-        Vertical   -> vBox
-  arrange (itemsLayoutConfigBoxConfig cfg)
-    [ itemsLayoutConfigTemplate cfg idx item
-    | (idx, item) <- zip [0 ..] (itemsLayoutConfigItems cfg)
-    ]
+itemsLayout :: [Attr e Void msg (CompositeControlConfig e msg a)] -> UI e msg ()
+itemsLayout attrs = renderCompositeItems (configure defaultCompositeControlConfig attrs)
+
+-- | Events reported by 'compositeControl': a lifecycle event via
+-- @CompositeControlEvent@ (see 'ControlEvent'). A composite has no domain
+-- events of its own beyond the generic ones -- item-specific behaviour
+-- (like 'selectionControl''s 'SelectionEvent') is layered on top.
+newtype CompositeEvent = CompositeControlEvent ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent CompositeEvent where
+  liftControl = CompositeControlEvent
+  matchControl (CompositeControlEvent ce) = Just ce
+
+-- | The entry point for composite controls (radio groups, lists, trees):
+-- an 'itemsLayout' with an element id, so it gets normal mouse-over,
+-- style-driven chrome, and Tab\/Shift-Tab navigation as a single unit via
+-- 'withinComposite' -- a child that takes focus inside stays scoped to this
+-- composite's own Tab order until it's left. No bespoke focus code lives
+-- here; see 'withinComposite' for how a composite's focus is claimed,
+-- retained, and released.
+compositeControl :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg (CompositeControlConfig e msg a)] -> UI e msg ()
+compositeControl eid attrs = do
+  applyMouseOver eid attrs
+  renderChrome eid $ withinComposite eid $
+    renderCompositeItems (configure defaultCompositeControlConfig attrs)
+  applyFocus eid attrs
 
 -- SelectionControl -------------------------------------------------------
 
