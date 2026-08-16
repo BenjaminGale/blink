@@ -387,17 +387,17 @@ controlBehaviourSpec bounds mkCtx this other hitPoint action = do
   describe "focus" $ do
     it "receives focus when nothing else is focused" $ do
       result <- runInteractions bounds (mkCtx noInput) action [] []
-      contextFocus (resultContext result) `shouldBe` Just this
+      contextFocus (resultContext result) `shouldBe` FocusSingle this
 
     it "does not take focus from another element" $ do
       -- `other` renders first and auto-claims focus since nothing is
       -- focused yet — no click needed.
       result <- runInteractions bounds (mkCtx noInput) composed [] []
-      contextFocus (resultContext result) `shouldBe` Just other
+      contextFocus (resultContext result) `shouldBe` FocusSingle other
 
     it "receives focus when clicked" $ do
       result <- runInteractions bounds (mkCtx noInput) composed [] [ClickAt hitPoint]
-      contextFocus (resultContext result) `shouldBe` Just this
+      contextFocus (resultContext result) `shouldBe` FocusSingle this
 
     it "does not steal focus when the mouse is released on it after dragging from another element" $ do
       -- `other` auto-claims focus for real just by rendering first (nothing
@@ -411,24 +411,24 @@ controlBehaviourSpec bounds mkCtx this other hitPoint action = do
       -- never a state a real interaction sequence could produce.
       result <- runInteractions bounds (mkCtx noInput) composed []
         [MouseDown otherHitPoint, DragTo hitPoint, MouseUp hitPoint]
-      contextFocus (resultContext result) `shouldBe` Just other
+      contextFocus (resultContext result) `shouldBe` FocusSingle other
 
     it "retains focus on the previously focused element when a drag releases elsewhere" $ do
       result <- runInteractions bounds (mkCtx noInput) composed
         [ClickAt otherHitPoint]
         [MouseDown otherHitPoint, DragTo hitPoint, MouseUp hitPoint]
-      contextFocus (resultContext result) `shouldBe` Just other
+      contextFocus (resultContext result) `shouldBe` FocusSingle other
 
   describe "tab navigation" $ do
     it "passes focus to the next control when Tab is pressed" $ do
       result <- runInteractions bounds (mkCtx noInput) composed [ClickAt hitPoint] [Tab]
-      contextFocus (resultContext result) `shouldBe` Nothing
+      contextFocus (resultContext result) `shouldBe` FocusNothing
 
     it "passes focus to the previous control when Shift+Tab is pressed" $ do
       -- `other` renders before `this` every frame, so it legitimately
       -- becomes the previous tab stop just by being in the tree.
       result <- runInteractions bounds (mkCtx noInput) composed [ClickAt hitPoint] [ShiftTab]
-      contextFocus (resultContext result) `shouldBe` Just other
+      contextFocus (resultContext result) `shouldBe` FocusSingle other
 
   describe "hover detection" $ do
     it "registers mouse-over on the frame after the mouse is inside" $ do
@@ -447,11 +447,11 @@ controlBehaviourSpec bounds mkCtx this other hitPoint action = do
 
     it "does not take auto-focus" $ do
       result <- runInteractions bounds (mkCtx noInput) disabledAction [] []
-      contextFocus (resultContext result) `shouldBe` Nothing
+      contextFocus (resultContext result) `shouldBe` FocusNothing
 
     it "does not steal focus when clicked" $ do
       result <- runInteractions bounds (mkCtx noInput) disabledComposed [ClickAt otherHitPoint] [ClickAt hitPoint]
-      contextFocus (resultContext result) `shouldBe` Just other
+      contextFocus (resultContext result) `shouldBe` FocusSingle other
 
     it "does not register mouse-over when the mouse is inside" $ do
       result <- runInteractions bounds (mkCtx (mouseAt hitPoint False []))
@@ -465,12 +465,12 @@ controlBehaviourSpec bounds mkCtx this other hitPoint action = do
     it "does not consume Tab or lose focus when disabled while focused" $ do
       focused <- runInteractions bounds (mkCtx noInput) action [] [ClickAt hitPoint]
       result <- runInteractions bounds (resultContext focused) disabledAction [] [Tab]
-      contextFocus (resultContext result) `shouldBe` Just this
+      contextFocus (resultContext result) `shouldBe` FocusSingle this
 
     it "does not hand focus to the previous tab stop on Shift+Tab when disabled while focused" $ do
       focused <- runInteractions bounds (mkCtx noInput) composed [] [ClickAt hitPoint]
       result <- runInteractions bounds (resultContext focused) disabledComposed [] [ShiftTab]
-      contextFocus (resultContext result) `shouldBe` Just this
+      contextFocus (resultContext result) `shouldBe` FocusSingle this
 
 -- | Background\/border chrome rendering, re-verified through each control's
 -- own function. Only applicable to controls that render their own chrome
@@ -721,15 +721,15 @@ spec = describe "Blink.Controls" $ do
 
       it "receives focus when nothing else is focused" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (action noAttrs) [] []
-        contextFocus (resultContext result) `shouldBe` Just TestControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
       it "does not take focus from another element" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (otherThenThis noAttrs) [] []
-        contextFocus (resultContext result) `shouldBe` Just OtherControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
       it "receives focus when clicked" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (otherThenThis noAttrs) [] [ClickAt pt]
-        contextFocus (resultContext result) `shouldBe` Just TestControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
       it "does not steal focus when the mouse is released on it after dragging from another element" $ do
         -- 'applyFocus' alone never acquires capture (that's 'setHot'/
@@ -740,13 +740,13 @@ spec = describe "Blink.Controls" $ do
         let composedOther = setHot OtherControl >> applyFocus OtherControl noAttrs >> action noAttrs
         result <- runInteractions controlRect (mkCtxFor noInput) composedOther []
           [MouseDown pt, MouseUp pt]
-        contextFocus (resultContext result) `shouldBe` Just OtherControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
       it "retains focus on the previously focused element when a drag releases elsewhere" $ do
         let composedOther = setHot OtherControl >> applyFocus OtherControl noAttrs >> action noAttrs
         result <- runInteractions controlRect (mkCtxFor noInput) composedOther
           [ClickAt pt] [MouseDown pt, MouseUp pt]
-        contextFocus (resultContext result) `shouldBe` Just OtherControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
       it "notifies the caller when focus is gained" $ do
         result <- runInteractions controlRect (mkCtxFor noInput)
@@ -778,12 +778,12 @@ spec = describe "Blink.Controls" $ do
 
       it "clears focus when Tab is pressed while focused" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (action noAttrs) [ClickAt pt] [Tab]
-        contextFocus (resultContext result) `shouldBe` Nothing
+        contextFocus (resultContext result) `shouldBe` FocusNothing
 
       it "passes focus to the previous tab stop when Shift+Tab is pressed" $ do
         let composed = applyFocus OtherControl ([] :: [Attr TestElement Probe Probe ()]) >> action noAttrs
         result <- runInteractions controlRect (mkCtxFor noInput) composed [ClickAt pt] [ShiftTab]
-        contextFocus (resultContext result) `shouldBe` Just OtherControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
       it "registers itself as the previous tab stop by default" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (action noAttrs) [] []
@@ -806,12 +806,12 @@ spec = describe "Blink.Controls" $ do
         -- is focused) and keep it — not immediately lose it again just
         -- because Tab is the very key that's pressed this same frame.
         result <- runInteractions controlRect (mkCtxFor noInput) (action noAttrs) [] [Tab]
-        contextFocus (resultContext result) `shouldBe` Just TestControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
       it "does not consume Tab or lose focus when disabled while focused" $ do
         focused <- runInteractions controlRect (mkCtxFor noInput) (action noAttrs) [] [ClickAt pt]
         result <- runInteractions controlRect (resultContext focused) (disableWhen True (action noAttrs)) [] [Tab]
-        contextFocus (resultContext result) `shouldBe` Just TestControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
     describe "focusOnClick (FocusTarget)" $ do
       let attrs = [focusOnClick (FocusTarget OtherControl)] :: [Attr TestElement Probe Probe ()]
@@ -819,11 +819,11 @@ spec = describe "Blink.Controls" $ do
 
       it "does not auto-claim focus when nothing is focused" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (applyFocus TestControl attrs) [] []
-        contextFocus (resultContext result) `shouldBe` Nothing
+        contextFocus (resultContext result) `shouldBe` FocusNothing
 
       it "gives focus to the target when clicked, not to itself" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (applyFocus TestControl attrs) [] [ClickAt pt]
-        contextFocus (resultContext result) `shouldBe` Just OtherControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
     describe "focusOnClick (NoFocus)" $ do
       let attrs = [focusOnClick NoFocus] :: [Attr TestElement Probe Probe ()]
@@ -831,16 +831,16 @@ spec = describe "Blink.Controls" $ do
 
       it "does not auto-claim focus when nothing is focused" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (applyFocus TestControl attrs) [] []
-        contextFocus (resultContext result) `shouldBe` Nothing
+        contextFocus (resultContext result) `shouldBe` FocusNothing
 
       it "does not take focus when clicked" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (applyFocus TestControl attrs) [] [ClickAt pt]
-        contextFocus (resultContext result) `shouldBe` Nothing
+        contextFocus (resultContext result) `shouldBe` FocusNothing
 
       it "still retains focus if it already holds it" $ do
         focused <- runInteractions controlRect (mkCtxFor noInput) (applyFocus TestControl ([] :: [Attr TestElement Probe Probe ()])) [] [ClickAt pt]
         result <- runInteractions controlRect (resultContext focused) (applyFocus TestControl attrs) [] []
-        contextFocus (resultContext result) `shouldBe` Just TestControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
   describe "measureChrome" $ do
     it "sums margin, border, and padding on each axis" $ do
@@ -882,14 +882,14 @@ spec = describe "Blink.Controls" $ do
     it "composes mouse-over, focus, tab navigation, and chrome for a single interactive element" $ do
       result <- runInteractions controlRect (mkCtxFor noInput)
         (control TestControl ([] :: [Attr TestElement Probe Probe ()]) (pure ())) [] [ClickAt pt]
-      contextFocus (resultContext result) `shouldBe` Just TestControl
+      contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
       resultDraws result `shouldContain` [FillRect bgRect testColour]
 
     it "clicking moves focus onto a different element instead of itself" $ do
       let attrs = [focusOnClick (FocusTarget OtherControl)] :: [Attr TestElement Probe Probe ()]
       result <- runInteractions controlRect (mkCtxFor noInput)
         (control TestControl attrs (pure ())) [] [ClickAt pt]
-      contextFocus (resultContext result) `shouldBe` Just OtherControl
+      contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
     it "runs content within the padded content rectangle" $ do
       ctx' <- snd <$> runUI (control TestControl ([] :: [Attr TestElement Probe Probe ()]) (fillRect testColour)) (mkCtxFor noInput)
@@ -987,7 +987,7 @@ spec = describe "Blink.Controls" $ do
     it "still takes focus via the underlying control even when not activated by a key" $ do
       result <- runInteractions controlRect (mkCtxFor noInput)
         (activatable TestControl ([] :: [Attr TestElement Probe Probe ()]) [KeyReturn] (pure ())) [] [ClickAt pt]
-      contextFocus (resultContext result) `shouldBe` Just TestControl
+      contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
   describe "label" $ do
     it "draws the given text in the resolved style's colour and alignment" $ do
@@ -1000,7 +1000,7 @@ spec = describe "Blink.Controls" $ do
 
     it "does not take focus by default, unlike every other control here" $ do
       ctx' <- snd <$> runUI (label TestControl [text "Hello"]) (mkCtxFor noInput :: UIContext TestElement ())
-      contextFocus ctx' `shouldBe` Nothing
+      contextFocus ctx' `shouldBe` FocusNothing
 
     it "does not register itself as the previous tab stop by default" $ do
       ctx' <- snd <$> runUI (label TestControl [text "Hello"]) (mkCtxFor noInput :: UIContext TestElement ())
@@ -1009,7 +1009,7 @@ spec = describe "Blink.Controls" $ do
     it "clicking moves focus onto a different element instead of itself" $ do
       let attrs = [text "Caption", focusOnClick (FocusTarget OtherControl)]
       result <- runInteractions controlRect (mkCtxFor noInput) (label TestControl attrs) [] [ClickAt (Point 50 50)]
-      contextFocus (resultContext result) `shouldBe` Just OtherControl
+      contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
     it "can still be made reachable by Tab when explicitly requested" $ do
       ctx' <- snd <$> runUI (label TestControl [text "Hello", tabStop True]) (mkCtxFor noInput :: UIContext TestElement ())
@@ -1018,7 +1018,7 @@ spec = describe "Blink.Controls" $ do
     it "can still be made focusable by a direct click when explicitly requested" $ do
       result <- runInteractions controlRect (mkCtxFor noInput)
         (label TestControl [text "Hello", focusOnClick FocusSelf]) [] [ClickAt (Point 50 50)]
-      contextFocus (resultContext result) `shouldBe` Just TestControl
+      contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
   describe "progressBar" $ do
     let run v ctx = snd <$> runUI (progressBar TestControl [progress (Progress v)]) ctx
@@ -1215,11 +1215,11 @@ spec = describe "Blink.Controls" $ do
     describe "focus" $ do
       it "gives focus to the checkbox itself (not the glyph or label) when the label is clicked" $ do
         result <- runInteractions checkboxRect (mkCheckboxCtx noInput) (checkboxAction False) [] [ClickAt labelPoint]
-        contextFocus (resultContext result) `shouldBe` Just CheckboxBox
+        contextFocus (resultContext result) `shouldBe` FocusSingle CheckboxBox
 
       it "gives focus to the checkbox itself when the glyph is clicked" $ do
         result <- runInteractions checkboxRect (mkCheckboxCtx noInput) (checkboxAction False) [] [ClickAt glyphPoint]
-        contextFocus (resultContext result) `shouldBe` Just CheckboxBox
+        contextFocus (resultContext result) `shouldBe` FocusSingle CheckboxBox
 
   describe "textInputControl" $ do
     let textAction v = textInputControl TestControl [text v, onInput (postWith id)]
@@ -1853,17 +1853,17 @@ spec = describe "Blink.Controls" $ do
 
       it "moves focus to the next item when Down is pressed" $ do
         result <- nav 0 KeyDown
-        result `shouldBe` Just 1
+        result `shouldBe` FocusSingle 1
 
       it "moves focus to the previous item when Up is pressed" $ do
         result <- nav 1 KeyUp
-        result `shouldBe` Just 0
+        result `shouldBe` FocusSingle 0
 
       it "does not move focus when disabled" $ do
         focused <- runInteractions radioGroupRect (mkRadioGroupCtx noInput) (selectorAction "a") [] [ClickAt (itemPoint 0)]
         result <- runInteractions radioGroupRect (resultContext focused)
           (disableWhen True (selectorAction "a")) [] [PressKey KeyDown []]
-        contextFocus (resultContext result) `shouldBe` Just 0
+        contextFocus (resultContext result) `shouldBe` FocusSingle 0
 
     describe "rendering" $ do
       it "passes isSelected=True for the selected item" $ do
@@ -1934,25 +1934,25 @@ spec = describe "Blink.Controls" $ do
 
       it "moves focus to the next item when Down is pressed" $ do
         result <- nav 0 KeyDown
-        result `shouldBe` Just 1
+        result `shouldBe` FocusSingle 1
 
       it "moves focus to the previous item when Up is pressed" $ do
         result <- nav 1 KeyUp
-        result `shouldBe` Just 0
+        result `shouldBe` FocusSingle 0
 
       it "stays on the last item when Down is pressed at the end" $ do
         result <- nav 2 KeyDown
-        result `shouldBe` Just 2
+        result `shouldBe` FocusSingle 2
 
       it "stays on the first item when Up is pressed at the beginning" $ do
         result <- nav 0 KeyUp
-        result `shouldBe` Just 0
+        result `shouldBe` FocusSingle 0
 
       it "does not move focus when disabled" $ do
         focused <- runInteractions radioGroupRect (mkRadioGroupCtx noInput) (radioGroupAction "a") [] [ClickAt (itemPoint 0)]
         result <- runInteractions radioGroupRect (resultContext focused)
           (disableWhen True (radioGroupAction "a")) [] [PressKey KeyDown []]
-        contextFocus (resultContext result) `shouldBe` Just 0
+        contextFocus (resultContext result) `shouldBe` FocusSingle 0
 
       it "handles arrow keys on the frame focus is gained by click" $ do
         -- The click's release frame is the same frame focus is gained on,
@@ -1964,7 +1964,7 @@ spec = describe "Blink.Controls" $ do
             releaseFrame = (mouseAt (itemPoint 0) False []) { inputKeyEvents = [KeyEvent KeyDown []] }
         (_, pressCtx) <- runUI action (advance radioGroupRect pressFrame (mkRadioGroupCtx noInput))
         (_, ctx') <- runUI action (advance radioGroupRect releaseFrame pressCtx)
-        contextFocus (settle ctx') `shouldBe` Just 1
+        contextFocus (settle ctx') `shouldBe` FocusSingle 1
 
     describe "rendering" $ do
       it "shows the selected mark on the selected item" $ do
@@ -2008,17 +2008,17 @@ spec = describe "Blink.Controls" $ do
       it "moves focus to the next item when Down is pressed" $ do
         result <- runInteractions listBoxRect (mkListBoxCtx noInput) (listBoxAction 0)
           [ClickAt (itemPoint 0)] [PressKey KeyDown []]
-        contextFocus (resultContext result) `shouldBe` Just (ListBoxItem 1)
+        contextFocus (resultContext result) `shouldBe` FocusSingle (ListBoxItem 1)
 
       it "moves focus to the previous item when Up is pressed" $ do
         result <- runInteractions listBoxRect (mkListBoxCtx noInput) (listBoxAction 0)
           [ClickAt (itemPoint 1)] [PressKey KeyUp []]
-        contextFocus (resultContext result) `shouldBe` Just (ListBoxItem 0)
+        contextFocus (resultContext result) `shouldBe` FocusSingle (ListBoxItem 0)
 
       it "does not move focus when disabled" $ do
         focused <- runInteractions listBoxRect (mkListBoxCtx noInput) (listBoxAction 0) [] [ClickAt (itemPoint 0)]
         result <- runInteractions listBoxRect (resultContext focused) (disableWhen True (listBoxAction 0)) [] [PressKey KeyDown []]
-        contextFocus (resultContext result) `shouldBe` Just (ListBoxItem 0)
+        contextFocus (resultContext result) `shouldBe` FocusSingle (ListBoxItem 0)
 
     describe "scroll-to-current" $ do
       it "scrolls down when the current item moves past the bottom of the window" $ do
@@ -2028,7 +2028,7 @@ spec = describe "Blink.Controls" $ do
         -- scrollable range (120px content - 60px viewport) = 1/3.
         result <- runInteractions listBoxRect (mkListBoxCtx noInput) (listBoxAction 0)
           [ClickAt (itemPoint 2)] [PressKey KeyDown []]
-        contextFocus (resultContext result) `shouldBe` Just (ListBoxItem 3)
+        contextFocus (resultContext result) `shouldBe` FocusSingle (ListBoxItem 3)
         contextScrollPosition (ListBoxScroll ScrollTrack) (resultContext result) `shouldBe` 20 / 60
 
       it "scrolls up when the current item moves above the top of the window" $ do
@@ -2040,7 +2040,7 @@ spec = describe "Blink.Controls" $ do
         seeded <- runInteractions listBoxRect (resultContext focused)
           (listBoxAction 0 >> emitUi (ScrollTo (ListBoxScroll ScrollTrack) (20 / 60))) [] []
         result <- runInteractions listBoxRect (resultContext seeded) (listBoxAction 0) [] [PressKey KeyUp []]
-        contextFocus (resultContext result) `shouldBe` Just (ListBoxItem 0)
+        contextFocus (resultContext result) `shouldBe` FocusSingle (ListBoxItem 0)
         contextScrollPosition (ListBoxScroll ScrollTrack) (resultContext result) `shouldBe` 0
 
       it "does not change scroll when the new current item is already visible" $ do
@@ -2109,17 +2109,17 @@ spec = describe "Blink.Controls" $ do
 
     it "auto-claims the first focusable element with nothing focused and no Tab pressed" $ do
       result <- runInteractions controlRect initialCtx render [] []
-      contextFocus (resultContext result) `shouldBe` Just TIButton1
+      contextFocus (resultContext result) `shouldBe` FocusSingle TIButton1
 
     it "advances button -> button -> checkbox box -> (disabled skipped) -> wraps to the first button" $ do
       -- One discrete Tab press per 'runInteractions' call, exactly like a
       -- real key press-and-release, not a held-key repeat.
       r0 <- runInteractions controlRect initialCtx render [] []
       r1 <- runInteractions controlRect (resultContext r0) render [] [Tab]
-      contextFocus (resultContext r1) `shouldBe` Just TIButton2
+      contextFocus (resultContext r1) `shouldBe` FocusSingle TIButton2
       r2 <- runInteractions controlRect (resultContext r1) render [] [Tab]
-      contextFocus (resultContext r2) `shouldBe` Just (TICheckbox CheckboxBox)
+      contextFocus (resultContext r2) `shouldBe` FocusSingle (TICheckbox CheckboxBox)
       r3 <- runInteractions controlRect (resultContext r2) render [] [Tab]
-      contextFocus (resultContext r3) `shouldBe` Nothing
+      contextFocus (resultContext r3) `shouldBe` FocusNothing
       r4 <- runInteractions controlRect (resultContext r3) render [] [Tab]
-      contextFocus (resultContext r4) `shouldBe` Just TIButton1
+      contextFocus (resultContext r4) `shouldBe` FocusSingle TIButton1

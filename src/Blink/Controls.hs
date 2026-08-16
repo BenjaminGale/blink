@@ -214,7 +214,7 @@ import Control.Monad (forM_, guard, when)
 import Data.Foldable (asum)
 import Data.Functor (($>))
 import Data.List (find, foldl')
-import Data.Maybe (fromMaybe, isJust, isNothing)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Void (Void)
@@ -503,15 +503,14 @@ applyFocus eid attrs = do
 
     -- Takes focus on a click, hands it to a target, or leaves it, per 'focusOnClick'.
     applyFocusRules = whenEnabled $ do
-      currentFocus <- getFocus
-      isHit        <- isMouseOver eid
-      released     <- isButtonReleased
-      captured     <- getCapturedElement
-      let nothingIsFocused = isNothing currentFocus
-          isRetainingFocus = currentFocus == Just eid
-          isDragRelease    = released && isJust captured && captured /= Just eid
-          wasClicked       = isHit && released && not isDragRelease
-          autoClaim        = case ccFocusOnClick cc of
+      nothingIsFocused <- isNothingFocused <$> getFocus
+      isRetainingFocus <- isFocused eid
+      isHit            <- isMouseOver eid
+      released         <- isButtonReleased
+      captured         <- getCapturedElement
+      let isDragRelease = released && isJust captured && captured /= Just eid
+          wasClicked     = isHit && released && not isDragRelease
+          autoClaim      = case ccFocusOnClick cc of
             FocusSelf -> nothingIsFocused && not isDragRelease
             _         -> False
       if isRetainingFocus || autoClaim
@@ -1600,16 +1599,6 @@ selected v = configAny $ \cfg -> cfg { selectorConfigSelected = Just v }
 itemHeight :: Double -> Attr e ev msg (SelectorConfig a)
 itemHeight h = configAny $ \cfg -> cfg { selectorConfigItemHeight = h }
 
--- | 'True' when @eid@ may handle an arrow-key navigation press this frame:
--- either it already held focus going into this pass, or it was clicked this
--- frame. Comparing against a focus snapshot taken before any item in the
--- pass ran — rather than re-reading focus per item — keeps at most one item
--- per frame handling the key, even though a same-frame 'setFocus' from an
--- earlier item in the same pass is otherwise visible to a later item's
--- 'isFocused' straight away. Shared by 'selector' and 'listBox'.
-mayHandleArrowKeys :: Eq e => Maybe e -> Bool -> e -> Bool
-mayHandleArrowKeys initialFocus clicked eid = initialFocus == Just eid || clicked
-
 -- | A vertical list of items, each activated by click, Enter, or Space, with
 -- arrow-key navigation between items, set via 'items' and 'selected'. Fires
 -- 'Selected' with the new value when a different item is activated.
@@ -1648,21 +1637,19 @@ selector mkId attrs renderItem = do
       itemList = selectorConfigItems cfg
       sel      = selectorConfigSelected cfg
       lastIdx  = length itemList - 1
-  initialFocus <- getFocus
-  vBox defaultBoxConfig (zipWith (mkItem initialFocus sel lastIdx) [0 ..] itemList)
+  vBox defaultBoxConfig (zipWith (mkItem sel lastIdx) [0 ..] itemList)
   where
-    mkItem initialFocus sel lastIdx idx item@(val, _) =
+    mkItem sel lastIdx idx item@(val, _) =
       let eid = mkId idx
       in ( Layout Fill Fill TopLeft
          , do
-             clicked   <- isClickedOver eid
              activated <- activatable eid attrs [KeyReturn, KeySpace] (renderItem eid (sel == Just val) item)
              when activated $ fire attrs [Selected val]
-             whenEnabled $ when (mayHandleArrowKeys initialFocus clicked eid) $ do
+             whenEnabled $ do
                upPressed   <- isKeyPressed eid KeyUp
                downPressed <- isKeyPressed eid KeyDown
-               when upPressed   $ setFocus (mkId (max 0 (idx - 1)))
-               when downPressed $ setFocus (mkId (min lastIdx (idx + 1)))
+               when upPressed   $ setFocus (mkId (max 0 (idx - 1))) >> consumeKey KeyUp
+               when downPressed $ setFocus (mkId (min lastIdx (idx + 1))) >> consumeKey KeyDown
          )
 
 -- | A group of mutually exclusive options, rendered as a radio mark and
@@ -1704,9 +1691,8 @@ listBox :: (Ord e, Eq a)
         -> (e -> Bool -> (a, Text) -> UI e msg ())  -- ^ @eid isSelected item@
         -> UI e msg ()
 listBox mkId attrs renderItem = do
-  initialFocus <- getFocus
   hBox defaultBoxConfig
-    [ (Layout Fill Fill TopLeft, itemsArea initialFocus)
+    [ (Layout Fill Fill TopLeft, itemsArea)
     , (Layout (Exactly scrollRegionBarSize) Fill TopLeft, scrollBarArea)
     ]
   where
@@ -1723,25 +1709,24 @@ listBox mkId attrs renderItem = do
     -- every other scroll-state consumer in this module); virtualContent and
     -- the scroll-to-current math below both work in pixels, so the
     -- fraction is converted on the way in and out.
-    itemsArea initialFocus = do
+    itemsArea = do
       vp <- getBounds
       let vpH       = rectHeight vp
           maxScroll = max 0 (contentH - vpH)
       frac <- getScrollState trackId
       let scrollPx = frac * maxScroll
-      virtualContent scrollPx rowHeight itemCount (mkItem initialFocus vpH maxScroll scrollPx)
+      virtualContent scrollPx rowHeight itemCount (mkItem vpH maxScroll scrollPx)
 
-    mkItem initialFocus vpH maxScroll scrollPx idx = do
+    mkItem vpH maxScroll scrollPx idx = do
       let item@(val, _) = itemList !! idx
           eid            = mkId (ListBoxItem idx)
-      clicked   <- isClickedOver eid
       activated <- activatable eid attrs [KeyReturn, KeySpace] (renderItem eid (sel == Just val) item)
       when activated $ fire attrs [Selected val]
-      whenEnabled $ when (mayHandleArrowKeys initialFocus clicked eid) $ do
+      whenEnabled $ do
         upPressed   <- isKeyPressed eid KeyUp
         downPressed <- isKeyPressed eid KeyDown
-        when upPressed   $ scrollToCurrent vpH maxScroll scrollPx (max 0 (idx - 1))
-        when downPressed $ scrollToCurrent vpH maxScroll scrollPx (min lastIdx (idx + 1))
+        when upPressed   $ scrollToCurrent vpH maxScroll scrollPx (max 0 (idx - 1)) >> consumeKey KeyUp
+        when downPressed $ scrollToCurrent vpH maxScroll scrollPx (min lastIdx (idx + 1)) >> consumeKey KeyDown
 
     scrollToCurrent vpH maxScroll scrollPx newIdx = do
       setFocus (mkId (ListBoxItem newIdx))
