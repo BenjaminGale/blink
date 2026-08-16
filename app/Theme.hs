@@ -20,11 +20,8 @@ data Element = Label
              | CheckboxN Int CheckboxPart
              | ProgressBar1 | ProgressBar2
              | Slider1 SliderPart
-             | RadioOpt Int
-             | RadioOpt2 Int
              | ScrollRegion1 ViewportPart
              | ScrollItem1 Int
-             | ScrollList2 ListBoxPart
   deriving (Eq, Ord)
 
 data Palette = Palette
@@ -234,25 +231,6 @@ mkLabelStyle p = StyleSet
       , styleBorderEdges  = noBorder
       }
 
-mkRadioItemStyle :: Palette -> StyleSet
-mkRadioItemStyle p = StyleSet
-  { styleSetNormal   = base
-  , styleSetHovered  = base { styleBackground = palSurfaceButtonHover p }
-  , styleSetPressed  = base { styleBackground = palSurfaceButton p }
-  , styleSetFocused  = base { styleBorderColour = Just (palAccent p) }
-  , styleSetDisabled = base { styleTextColour = palTextMuted p }
-  }
-  where
-    base = Style
-      { styleBackground   = RGBA 0 0 0 0
-      , styleTextColour   = palTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleMargin       = uniform 0
-      , stylePadding      = Insets { topInset = 2, rightInset = 6, bottomInset = 2, leftInset = 6 }
-      , styleBorderColour = Nothing
-      , styleBorderEdges  = uniformBorder 1
-      }
-
 mkScrollTrackStyle :: Palette -> StyleSet
 mkScrollTrackStyle p = StyleSet
   { styleSetNormal   = base
@@ -322,14 +300,10 @@ mkTheme p = Theme
       , (PasswordInput1,            mkTextInputStyle p)
       , (Slider1 SliderTrack,       mkScrollTrackStyle p)
       , (Slider1 SliderThumb,       mkScrollThumbStyle p)
-      ] ++ [(RadioOpt i,                        mkRadioItemStyle p) | i <- [0..9]]
-        ++ [(RadioOpt2 i,                      mkRadioItemStyle p) | i <- [0..9]]
-        ++ [ (ScrollRegion1 (ViewportH ScrollTrack), mkScrollTrackStyle p)
+      ] ++ [ (ScrollRegion1 (ViewportH ScrollTrack), mkScrollTrackStyle p)
            , (ScrollRegion1 (ViewportH ScrollThumb), mkScrollThumbStyle p)
            , (ScrollRegion1 (ViewportV ScrollTrack), mkScrollTrackStyle p)
            , (ScrollRegion1 (ViewportV ScrollThumb), mkScrollThumbStyle p)
-           , (ScrollList2 (ListBoxScroll ScrollTrack), mkScrollTrackStyle p)
-           , (ScrollList2 (ListBoxScroll ScrollThumb), mkScrollThumbStyle p)
            ]
         ++ [ style
            | i <- [1 .. 5]

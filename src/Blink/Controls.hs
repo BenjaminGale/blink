@@ -3,9 +3,8 @@
 Module: Blink.Controls
 
 Ready-made interactive controls — 'button', 'checkbox', 'textInputControl',
-'slider', 'scrollBar', 'viewport', 'selector', 'radioGroup', 'listBox' — and
-the 'label'\/'progressBar' display-only ones, all built from the primitives
-in "Blink.UI".
+'slider', 'scrollBar', 'viewport' — and the 'label'\/'progressBar'
+display-only ones, all built from the primitives in "Blink.UI".
 
 = Element IDs
 
@@ -31,10 +30,6 @@ data Elem = NotifyMe CheckboxPart
 
 checkbox NotifyMe [checked (notifyMe model), text "Notify me by email", onToggle NotifyMeChanged]
 @
-
-'selector'\/'radioGroup'\/'listBox' take the same kind of function keyed on
-item index (or, for 'listBox', on its own part type) instead, since the
-number of items isn't known until the attrs (specifically 'items') are read.
 
 = Attributes
 
@@ -198,16 +193,6 @@ module Blink.Controls
   , contentSize
   , viewport
   , virtualContent
-  , SelectorEvent (Selected)
-  , SelectorConfig
-  , onSelect
-  , items
-  , selected
-  , itemHeight
-  , selector
-  , radioGroup
-  , ListBoxPart (..)
-  , listBox
   ) where
 
 import Control.Monad (forM_, guard, when)
@@ -1453,7 +1438,7 @@ data ViewportPart
   | ViewportV ScrollBarPart -- ^ A part of the vertical scrollbar.
   deriving (Eq, Ord, Show)
 
--- | The pixel width of a scrollbar strip used by 'viewport' and 'listBox'.
+-- | The pixel width of a scrollbar strip used by 'viewport'.
 -- Exported so callers that compose a viewport inside their own layout can
 -- account for the strip in their geometry without hard-coding the value.
 scrollRegionBarSize :: Double
@@ -1480,10 +1465,6 @@ contentSize sz = configAny $ \cfg -> cfg { viewportConfigContentSize = sz }
 -- interaction works naturally because translated bounds are in window
 -- coordinates; the clip region hides the rest.
 --
--- For large, uniform item collections where building the whole content
--- every frame would be wasteful, or where scrolling needs to be driven by
--- keyboard selection, use 'listBox' instead — it manages its own scroll
--- state directly rather than wrapping content in a viewport.
 viewport :: Ord e => (ViewportPart -> e) -> [Attr e Void msg ViewportConfig] -> UI e msg () -> UI e msg ()
 viewport mkId attrs content = do
   outer <- getBounds
@@ -1526,11 +1507,11 @@ viewport mkId attrs content = do
 --
 -- Renders one extra item beyond what's fully visible to cover a partially
 -- clipped final row. Does not draw a scrollbar or manage scroll state
--- itself — pair with 'scrollBar' and 'getScrollState' (see 'listBox').
+-- itself — pair with 'scrollBar' and 'getScrollState'.
 --
 -- @rowHeight@ is clamped to a minimum of @1@ before use, so a caller passing
--- zero or a negative height (e.g. a miscalculated 'itemHeight') can't turn
--- the division below into an infinite or wildly oversized render loop.
+-- zero or a negative height can't turn the division below into an infinite
+-- or wildly oversized render loop.
 virtualContent
   :: Double                -- ^ current scroll position, in pixels
   -> Double                -- ^ height of one item, in pixels
@@ -1548,200 +1529,3 @@ virtualContent scrollPos rowHeight0 itemCount renderItem = do
         itemRect = vp { rectY = rectY vp + fromIntegral j * rowHeight - subOffset, rectHeight = rowHeight }
     in when (i >= 0 && i < itemCount) $ withBounds itemRect (renderItem i)
 
--- | Events reported by 'selector' and 'radioGroup': 'Selected' with the
--- activated item's value, or a lifecycle event via @SelectorControl@ (see
--- 'ControlEvent') — each item is its own focusable 'control', so
--- gaining\/losing focus is a per-item concern, reported the same way for
--- every item through the one attrs list every item shares.
-data SelectorEvent a = Selected a | SelectorControl ControlEvent
-  deriving (Eq, Show)
-
-instance HasControlEvent (SelectorEvent a) where
-  liftControl = SelectorControl
-  matchControl (SelectorControl ce) = Just ce
-  matchControl _                    = Nothing
-
--- | Runs a reaction with the activated item's value on every 'Selected'.
-onSelect :: (a -> [Out e msg]) -> Attr e (SelectorEvent a) msg cfg
-onSelect reaction = onEvent $ \ev -> case ev of
-  Selected v -> reaction v
-  _          -> []
-
--- | Configuration for 'selector'\/'radioGroup'\/'listBox', set via 'items',
--- 'selected', and (for 'listBox' only) 'itemHeight'. Defaults to no items,
--- nothing selected, and a 20px item height.
-data SelectorConfig a = SelectorConfig
-  { selectorConfigItems      :: [(a, Text)]
-  , selectorConfigSelected   :: Maybe a
-  , selectorConfigItemHeight :: Double
-  }
-
-defaultSelectorConfig :: SelectorConfig a
-defaultSelectorConfig = SelectorConfig
-  { selectorConfigItems      = []
-  , selectorConfigSelected   = Nothing
-  , selectorConfigItemHeight = 20
-  }
-
--- | Sets the @(value, label)@ pairs a 'selector'\/'radioGroup'\/'listBox'
--- lists, one per item in order. Defaults to @[]@.
-items :: [(a, Text)] -> Attr e ev msg (SelectorConfig a)
-items xs = configAny $ \cfg -> cfg { selectorConfigItems = xs }
-
--- | Sets which item's value is currently selected. Defaults to
--- 'Nothing' — no item selected, so every item's @isSelected@ is 'False'.
-selected :: a -> Attr e ev msg (SelectorConfig a)
-selected v = configAny $ \cfg -> cfg { selectorConfigSelected = Just v }
-
--- | Sets the height of one row, in pixels. Only meaningful for 'listBox'
--- ('selector'\/'radioGroup' size each item from its own content instead).
--- Defaults to @20@.
-itemHeight :: Double -> Attr e ev msg (SelectorConfig a)
-itemHeight h = configAny $ \cfg -> cfg { selectorConfigItemHeight = h }
-
--- | A vertical list of items, each activated by click, Enter, or Space, with
--- arrow-key navigation between items, set via 'items' and 'selected'. Fires
--- 'Selected' with the new value when a different item is activated.
--- @renderItem eid isSelected item@ draws each item's content; 'selector'
--- itself owns the selection comparison, activation, and Up\/Down
--- navigation. Multiple selectors on screen each bind to their own
--- application-state field; no shared state is required. See 'radioGroup'
--- for the radio-mark rendering built on top of this. Each item is a
--- 'control' internally, so it gets its own hover, focus, and tab-stop;
--- 'selector' layers Up\/Down navigation and the shared selection value on
--- top.
---
--- The same @attrs@ list is consulted for every item; 'fire' runs its
--- handlers in the order given regardless of which item was activated
--- ("client" handlers — attrs the caller wrote — see exactly one 'Selected'
--- event per activated frame). Arrow-key navigation is "internal" to
--- 'selector' and runs after that 'fire' call, so a client's 'onSelect'
--- handler always observes the pre-navigation state.
---
--- @
--- data Element = ... | SizeItem Int
---
--- selector SizeItem
---   [items [(Small, "Small"), (Medium, "Medium"), (Large, "Large")], selected (size model), onSelect SizeChanged] $
---   \\eid isSelected (_, lbl) -> do
---     style <- getStyle eid
---     drawText (styleTextColour style) AlignLeft (if isSelected then "> " <> lbl else lbl)
--- @
-selector :: (Ord e, Eq a)
-         => (Int -> e)                              -- ^ maps item index to an element ID
-         -> [Attr e (SelectorEvent a) msg (SelectorConfig a)]
-         -> (e -> Bool -> (a, Text) -> UI e msg ()) -- ^ @eid isSelected item@
-         -> UI e msg ()
-selector mkId attrs renderItem = do
-  let cfg      = configure defaultSelectorConfig attrs
-      itemList = selectorConfigItems cfg
-      sel      = selectorConfigSelected cfg
-      lastIdx  = length itemList - 1
-  vBox defaultBoxConfig (zipWith (mkItem sel lastIdx) [0 ..] itemList)
-  where
-    mkItem sel lastIdx idx item@(val, _) =
-      let eid = mkId idx
-      in ( Layout Fill Fill TopLeft
-         , do
-             activated <- activatable eid attrs [KeyReturn, KeySpace] (renderItem eid (sel == Just val) item)
-             when activated $ fire attrs [Selected val]
-             whenEnabled $ do
-               upPressed   <- isKeyPressed eid KeyUp
-               downPressed <- isKeyPressed eid KeyDown
-               when upPressed   $ setFocus (mkId (max 0 (idx - 1))) >> consumeKey KeyUp
-               when downPressed $ setFocus (mkId (min lastIdx (idx + 1))) >> consumeKey KeyDown
-         )
-
--- | A group of mutually exclusive options, rendered as a radio mark and
--- label per item, set via 'items' and 'selected'. A thin wrapper over
--- 'selector' supplying the radio-mark rendering; see 'selector' for the
--- selection, activation, navigation, and attribute-handling behaviour.
-radioGroup :: (Ord e, Eq a)
-           => (Int -> e)  -- ^ maps item index to an element ID
-           -> [Attr e (SelectorEvent a) msg (SelectorConfig a)]
-           -> UI e msg ()
-radioGroup mkId attrs =
-  selector mkId attrs $ \eid isSelected (_, lbl) -> do
-    style <- getStyle eid
-    drawText (styleTextColour style) AlignLeft $
-      (if isSelected then "● " else "○ ") <> lbl
-
--- | Sub-parts of a 'listBox': individual items, and the scrollbar's own
--- parts, tagged together so both can be addressed through one composite
--- element ID.
-data ListBoxPart
-  = ListBoxItem Int
-  | ListBoxScroll ScrollBarPart
-  deriving (Eq, Ord, Show)
-
--- | A vertically scrolling list of items, one selected, with keyboard
--- navigation between them, set via 'items', 'selected', and 'itemHeight' —
--- the composite of 'selector'-style navigation, 'scrollBar', and
--- 'virtualContent', wired together so that only the currently-visible
--- items are ever rendered. Moving the current item off the visible window
--- with the arrow keys scrolls it back into view.
---
--- As with 'selector', the /current/ item (keyboard focus, tracked here) is
--- distinct from the /selected/ item (application state, via 'selected'\/
--- 'onSelect'): arrow keys move the current item without emitting; Enter,
--- Space, or a click activates it and emits 'Selected'.
-listBox :: (Ord e, Eq a)
-        => (ListBoxPart -> e)                       -- ^ maps list-box parts to element IDs
-        -> [Attr e (SelectorEvent a) msg (SelectorConfig a)]
-        -> (e -> Bool -> (a, Text) -> UI e msg ())  -- ^ @eid isSelected item@
-        -> UI e msg ()
-listBox mkId attrs renderItem = do
-  hBox defaultBoxConfig
-    [ (Layout Fill Fill TopLeft, itemsArea)
-    , (Layout (Exactly scrollRegionBarSize) Fill TopLeft, scrollBarArea)
-    ]
-  where
-    cfg       = configure defaultSelectorConfig attrs
-    itemList  = selectorConfigItems cfg
-    sel       = selectorConfigSelected cfg
-    rowHeight = selectorConfigItemHeight cfg
-    itemCount = length itemList
-    lastIdx   = itemCount - 1
-    contentH  = fromIntegral itemCount * rowHeight
-    trackId   = mkId (ListBoxScroll ScrollTrack)
-
-    -- scrollBar persists position as a [0, 1] fraction (same convention as
-    -- every other scroll-state consumer in this module); virtualContent and
-    -- the scroll-to-current math below both work in pixels, so the
-    -- fraction is converted on the way in and out.
-    itemsArea = do
-      vp <- getBounds
-      let vpH       = rectHeight vp
-          maxScroll = max 0 (contentH - vpH)
-      frac <- getScrollState trackId
-      let scrollPx = frac * maxScroll
-      virtualContent scrollPx rowHeight itemCount (mkItem vpH maxScroll scrollPx)
-
-    mkItem vpH maxScroll scrollPx idx = do
-      let item@(val, _) = itemList !! idx
-          eid            = mkId (ListBoxItem idx)
-      activated <- activatable eid attrs [KeyReturn, KeySpace] (renderItem eid (sel == Just val) item)
-      when activated $ fire attrs [Selected val]
-      whenEnabled $ do
-        upPressed   <- isKeyPressed eid KeyUp
-        downPressed <- isKeyPressed eid KeyDown
-        when upPressed   $ scrollToCurrent vpH maxScroll scrollPx (max 0 (idx - 1)) >> consumeKey KeyUp
-        when downPressed $ scrollToCurrent vpH maxScroll scrollPx (min lastIdx (idx + 1)) >> consumeKey KeyDown
-
-    scrollToCurrent vpH maxScroll scrollPx newIdx = do
-      setFocus (mkId (ListBoxItem newIdx))
-      let itemTop    = fromIntegral newIdx * rowHeight
-          itemBottom = itemTop + rowHeight
-          newScrollPx
-            | itemTop < scrollPx          = itemTop
-            | itemBottom > scrollPx + vpH = itemBottom - vpH
-            | otherwise                   = scrollPx
-          clampedPx = max 0 (min maxScroll newScrollPx)
-          newFrac   = if maxScroll > 0 then clampedPx / maxScroll else 0
-      when (clampedPx /= scrollPx) $ emitUi (ScrollTo trackId newFrac)
-
-    scrollBarArea = do
-      vp <- getBounds
-      let vpH   = rectHeight vp
-          ratio = if contentH > 0 then max 0 (min 1 (vpH / contentH)) else 1
-      scrollBar (mkId . ListBoxScroll) [orientation Vertical, thumbRatio ratio]
