@@ -339,11 +339,11 @@ data UiEffect e
   = ScrollTo e Double
     -- ^ Sets the scroll position to an absolute value, clamped to @[0, 1]@
     -- by 'applyUiEffects' when the effect is applied. Every caller
-    -- ('Blink.Controls.scrollBar', 'Blink.Controls.viewport',
-    -- 'Blink.Controls.listBox', 'Blink.Controls.textInputControl') already
-    -- passes a value in the @[0, 1]@ convention documented on 'ScrollState';
-    -- 'Blink.Controls.textInputControl' converts to and from pixels locally
-    -- since its selection\/cursor math is naturally pixel-based.
+    -- ('Blink.Controls.scrollBar', 'Blink.Controls.textInputControl')
+    -- already passes a value in the @[0, 1]@ convention documented on
+    -- 'ScrollState'; 'Blink.Controls.textInputControl' converts to and from
+    -- pixels locally since its selection\/cursor math is naturally
+    -- pixel-based.
   | ScrollBy e Double
     -- ^ Adjusts the scroll position by a delta, clamped to @[0, 1]@ — this
     -- constructor is only ever used in the normalised @[0, 1]@ convention.
