@@ -35,7 +35,6 @@ library
         Blink.Controls
         Blink.Geometry
         Blink.Input
-        Blink.ItemsControl
         Blink.Layout
         Blink.Rendering
         Blink.Style
@@ -70,7 +69,6 @@ test-suite blink-tests
         Blink.GeometrySpec
         Blink.Interaction
         Blink.InteractionSpec
-        Blink.ItemsControlSpec
         Blink.LayoutSpec
         Blink.UISpec
         Blink.UpdateSpec
