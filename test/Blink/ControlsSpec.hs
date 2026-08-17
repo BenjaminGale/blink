@@ -1076,6 +1076,26 @@ spec = describe "Blink.Controls" $ do
       result <- runInteractions controlRect rowCtx render [] [Wait 1, Tab]
       resultDraws result `shouldNotContain` [FillRect controlRect (RGBA 0 0 1 1)]
 
+    describe "when disabled" $ do
+      -- A disabled composite must never appear to hold focus, not even in
+      -- the vacuous "composite focused, no child chosen" shape -- see the
+      -- invariant documented directly on 'withinComposite'.
+      it "does not claim focus when nothing else is focused" $ do
+        let render = disableWhen True (wc ListElem (leaf (RowElem 0)))
+        result <- runInteractions controlRect (mkCompCtx noInput) render [] []
+        contextFocus (resultContext result) `shouldNotBe` FocusComposite ListElem FocusNothing
+        contextFocus (resultContext result) `shouldBe` FocusNothing
+
+      it "does not block a sibling from claiming focus" $ do
+        let render = disableWhen True (wc ListElem (leaf (RowElem 0))) >> leaf AfterElem
+        result <- runInteractions controlRect (mkCompCtx noInput) render [] []
+        contextFocus (resultContext result) `shouldBe` FocusSingle AfterElem
+
+      it "does not steal focus already held by an unrelated element" $ do
+        let render = leaf SiblingElem >> disableWhen True (wc ListElem (leaf (RowElem 0)))
+        result <- runInteractions controlRect (mkCompCtx noInput) render [] [Wait 1, Wait 1]
+        contextFocus (resultContext result) `shouldBe` FocusSingle SiblingElem
+
   describe "isKeyPressed" $ do
     -- isKeyPressed is a bare query primitive with no click-handling of its
     -- own, so a click alone can't establish focus for it — 'setFocus'
@@ -2235,6 +2255,11 @@ spec = describe "Blink.Controls" $ do
         result <- runInteractions listRect (mkRadioGroupCtx noInput) render' [] []
         contextFocus (resultContext result) `shouldBe` FocusSingle (RadioItem 0 RadioBox)
 
+      it "with tabStop off, a disabled group claims no focus at all" $ do
+        let render' = disableWhen True (radioGroup id (tabStop False : baseAttrs))
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) render' [] []
+        contextFocus (resultContext result) `shouldBe` FocusNothing
+
       it "Shift-Tab after clicking an item returns to the element before the group, not the group itself" $ do
         let withSibling = withOther (RadioItem 99 RadioBox) render
         clicked <- runInteractions listRect (mkRadioGroupCtx noInput) withSibling [] [ClickAt (Point 50 45)]
@@ -2336,7 +2361,7 @@ spec = describe "Blink.Controls" $ do
 
         initialCtx = emptyUIContext controlRect noInput tiTheme noOpTextMeasurer :: UIContext TIElem (Int, Text)
 
-    it "does not leave focus claimed by the disabled composite after Tab moves past it" $ do
+    it "Tab moves past a disabled composite without losing or misplacing focus" $ do
       r0 <- runInteractions controlRect initialCtx render [] []
       r1 <- runInteractions controlRect (resultContext r0) render [] [Tab]
       r2 <- runInteractions controlRect (resultContext r1) render [] [Tab]

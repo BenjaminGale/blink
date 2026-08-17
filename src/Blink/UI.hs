@@ -938,12 +938,28 @@ clearFocus = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { focusedElemen
 -- Composes for arbitrary nesting: a composite inside another composite's
 -- @withinComposite@ only ever strips\/re-wraps its own outermost tag, and
 -- does the same expose\/render\/re-wrap step around its own children.
+--
+-- = Invariant: a disabled composite never holds focus
+--
+-- A disabled control must never appear to hold keyboard focus, even in the
+-- vacuous "composite focused, no child chosen" shape ('FocusComposite'
+-- compositeId 'FocusNothing'). While disabled, this function runs @inner@
+-- against the ambient context completely unmodified: no substitution, no
+-- claim, no re-wrap -- so it can neither claim focus for the composite nor
+-- leave a stale claim behind, regardless of what @exposed@ says and
+-- regardless of whether the caller remembered to check 'isDisabled' itself.
+-- This is enforced here, once, rather than left as a convention every
+-- caller (present or future) has to uphold on its own -- see the
+-- integration coverage in "Blink.ControlsSpec" for the regression this
+-- guards against.
 withinComposite :: Ord e => e -> Focus e -> UI e msg a -> UI e msg a
 withinComposite compositeId exposed (UI f) = UI $ \ctx ->
-  case exposed of
-    FocusComposite cid childFocus | cid == compositeId -> claim ctx childFocus
-    FocusNothing                                        -> claim ctx FocusNothing
-    _                                                    -> passthrough ctx
+  if ctxDisabled ctx
+    then f ctx
+    else case exposed of
+      FocusComposite cid childFocus | cid == compositeId -> claim ctx childFocus
+      FocusNothing                                        -> claim ctx FocusNothing
+      _                                                    -> passthrough ctx
   where
     -- Substitutes @exposed@ for the ambient focus while @inner@ runs, same
     -- as 'claim' does. If @exposed@ comes back untouched, the real
