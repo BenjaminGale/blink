@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {- |
 Module: Blink.Controls
 
@@ -234,6 +235,7 @@ module Blink.Controls
   , SelectionItemTemplate
   , SelectionEvent (..)
   , SelectionConfig
+  , HasSelectionConfig (..)
   , itemContainer
   , selected
   , selectedIndex
@@ -247,6 +249,8 @@ module Blink.Controls
   , picked
   , radioButton
   , RadioGroupPart (..)
+  , RadioGroupConfig
+  , itemLabel
   , radioGroup
   ) where
 
@@ -1713,9 +1717,12 @@ compositeFocusToExpose compositeId heldFocusBefore focus
 -- With @tabStop@ off, the composite itself is never a focus target: its
 -- items, if individually focusable, are reachable by Tab like ordinary
 -- siblings instead, and the composite shows no focus ring of its own.
+--
+-- A press on an item that's itself a real control (its own click\/focus
+-- handling) always activates that item, never the composite around it; the
+-- composite only picks up a press that lands outside every item.
 compositeControl :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg (CompositeControlConfig e msg a)] -> UI e msg ()
 compositeControl eid attrs = do
-  applyMouseOver eid attrs
   heldFocusBefore <- isFocused eid
   applyFocus eid attrs
   focus <- getFocus
@@ -1724,6 +1731,7 @@ compositeControl eid attrs = do
     if autoClaimsFocus (controlConfig attrs)
       then withinComposite eid (compositeFocusToExpose eid heldFocusBefore focus) content
       else content
+  applyMouseOver eid attrs
 
 -- SelectionControl -------------------------------------------------------
 
@@ -1782,6 +1790,15 @@ instance HasItemsPanelConfig (SelectionConfig e msg a) where
 instance HasOrientationConfig (SelectionConfig e msg a) where
   setOrientation o cfg = cfg { selectionConfigOrientation = o }
 
+-- | Configuration that tracks a 'SelectedItem' choice, set via 'selected'\/
+-- 'selectedIndex'. Shared by 'SelectionConfig' and 'RadioGroupConfig', the
+-- same pattern as 'HasItemsConfig'.
+class HasSelectionConfig cfg a | cfg -> a where
+  setSelection :: SelectedItem a -> cfg -> cfg
+
+instance HasSelectionConfig (SelectionConfig e msg a) a where
+  setSelection s cfg = cfg { selectionConfigSelection = s }
+
 -- | Sets how each item is rendered, given its element id, 'SelectionState',
 -- and value -- see 'SelectionItemTemplate'. Defaults to rendering nothing.
 itemContainer :: SelectionItemTemplate e msg a -> Attr e ev msg (SelectionConfig e msg a)
@@ -1789,13 +1806,13 @@ itemContainer f = configAny $ \cfg -> cfg { selectionConfigTemplate = f }
 
 -- | Selects by value: an item is 'Selected' when it equals @v@. Defaults
 -- to 'None'.
-selected :: a -> Attr e ev msg (SelectionConfig e msg a)
-selected v = configAny $ \cfg -> cfg { selectionConfigSelection = Item v }
+selected :: HasSelectionConfig cfg a => a -> Attr e ev msg cfg
+selected v = configAny (setSelection (Item v))
 
 -- | Selects by position: the item at index @i@ is 'Selected'. Defaults to
 -- 'None'.
-selectedIndex :: Int -> Attr e ev msg (SelectionConfig e msg a)
-selectedIndex i = configAny $ \cfg -> cfg { selectionConfigSelection = ItemAtIndex i }
+selectedIndex :: HasSelectionConfig cfg a => Int -> Attr e ev msg cfg
+selectedIndex i = configAny (setSelection (ItemAtIndex i))
 
 -- | Renders 'items' via 'itemContainer', each resolved against 'selected'
 -- \/'selectedIndex' into a 'SelectionState', arranged by
@@ -1881,16 +1898,15 @@ onPick reaction = onEvent $ \ev -> case ev of
   Picked -> reaction ()
   _      -> []
 
--- | Draws a radio-button glyph: a filled mark centred in the current bounds
--- when @isPicked@, nothing otherwise, in the resolved style's text colour.
--- A bare rendering action with no interactive behaviour of its own --
--- reusable by anything that wants to look like a radio glyph without
--- taking on the activation behaviour of 'radioButton' -- e.g. a
--- 'radioGroup's own 'itemContainer'.
+-- | Draws a radio-button glyph, centred in the current bounds, in the
+-- resolved style's text colour: a filled mark when @isPicked@, an unfilled
+-- one otherwise. A bare rendering action with no interactive behaviour of
+-- its own -- reusable by anything that wants to look like a radio glyph
+-- without taking on the activation behaviour of 'radioButton'.
 renderRadioGlyph :: Ord e => e -> Bool -> UI e msg ()
 renderRadioGlyph eid isPicked = do
   style <- getStyle eid
-  when isPicked $ drawText (styleTextColour style) AlignCenter "●"
+  drawText (styleTextColour style) AlignCenter (if isPicked then "●" else "○")
 
 -- | Configuration for 'radioButton', set via 'picked' and 'text'. Defaults
 -- to unpicked with an empty label.
@@ -1943,102 +1959,109 @@ radioButton mkId attrs = do
 
 -- RadioGroup -----------------------------------------------------------------
 
--- | Sub-parts of a 'radioGroup's element ID hierarchy: the group as a whole
--- (chrome, focus ring, single Tab stop), and each item by index (click
--- detection only -- items never take focus of their own, same as
--- 'selectionControl').
+-- | Sub-parts of a 'radioGroup': the group as a whole, and each item's own
+-- 'RadioPart', by index.
 data RadioGroupPart
-  = RadioGroup     -- ^ The group as a whole.
-  | RadioItem Int  -- ^ One item, by index.
+  = RadioGroup
+  | RadioItem Int RadioPart
   deriving (Eq, Ord, Show)
 
--- | 'compositeControl', specialised to 'CompositeEvent': 'radioGroup' has no
--- domain events of its own to route through the inner composite (it fires
--- 'Activated' against its own, outer @attrs@ directly), so this pins down
--- @ev@ to the one concrete 'HasControlEvent' instance that carries nothing
--- extra, purely so 'radioGroup's per-item attrs list doesn't need its own
--- redundant event type.
 radioGroupComposite :: Ord e => e -> [Attr e CompositeEvent msg (CompositeControlConfig e msg a)] -> UI e msg ()
 radioGroupComposite = compositeControl
 
--- | A group of mutually exclusive options, set via exactly the same attrs
--- as 'selectionControl' -- 'items', 'itemContainer', 'selected'\/
--- 'selectedIndex', and 'onSelect' -- since a radio group /is/ a
--- 'selectionControl': same items, same selection model, same click
--- detection and 'Activated' event. What 'radioGroup' adds is focus: the
--- whole group is one atomic Tab stop (via 'compositeControl', keyed off
--- @mkId 'RadioGroup'@) with its own chrome and focus ring, and while it
--- holds focus, Up\/Down (or Left\/Right under 'Horizontal' 'orientation')
--- moves the selection directly to the adjacent item, firing 'Activated' the
--- same as a click would -- clamped at the ends, not wrapping. Since nothing
--- 'radioGroup' does ever reports "no selection", once a caller has honoured
--- one 'Activated' by feeding a 'selected'\/'selectedIndex' back in, the
--- selection can never again read as 'None' from here.
+-- | Configuration for 'radioGroup', set via 'items', 'itemLabel', and
+-- 'selected'\/'selectedIndex'. Defaults to no items, nothing selected, and
+-- an empty label.
+data RadioGroupConfig a = RadioGroupConfig
+  { radioGroupConfigItems       :: [a]
+  , radioGroupConfigSelection   :: SelectedItem a
+  , radioGroupConfigLabel       :: a -> Text
+  , radioGroupConfigOrientation :: Orientation
+  , radioGroupConfigBoxConfig   :: BoxConfig
+  }
+
+defaultRadioGroupConfig :: RadioGroupConfig a
+defaultRadioGroupConfig = RadioGroupConfig
+  { radioGroupConfigItems       = []
+  , radioGroupConfigSelection   = None
+  , radioGroupConfigLabel       = const ""
+  , radioGroupConfigOrientation = Vertical
+  , radioGroupConfigBoxConfig   = defaultBoxConfig
+  }
+
+instance HasItemsConfig (RadioGroupConfig a) a where
+  setItems xs cfg = cfg { radioGroupConfigItems = xs }
+
+instance HasItemsPanelConfig (RadioGroupConfig a) where
+  setItemsPanel p cfg = cfg { radioGroupConfigBoxConfig = p }
+
+instance HasOrientationConfig (RadioGroupConfig a) where
+  setOrientation o cfg = cfg { radioGroupConfigOrientation = o }
+
+instance HasSelectionConfig (RadioGroupConfig a) a where
+  setSelection s cfg = cfg { radioGroupConfigSelection = s }
+
+-- | Sets the label drawn beside each item's mark, given its value. Defaults
+-- to @const \"\"@.
+itemLabel :: (a -> Text) -> Attr e ev msg (RadioGroupConfig a)
+itemLabel f = configAny $ \cfg -> cfg { radioGroupConfigLabel = f }
+
+-- | A group of mutually exclusive options, set via 'items', 'itemLabel',
+-- and 'selected'\/'selectedIndex' -- one real 'radioButton' per item. The
+-- whole group is one atomic Tab stop, and while it holds focus, Up\/Down
+-- (or Left\/Right under 'Horizontal' 'orientation') moves the selection to
+-- the adjacent item, clamped at the ends. Fires 'Activated' via 'onSelect'.
 --
 -- @
 -- data Element = ... | SizeGroup RadioGroupPart
 --
 -- radioGroup SizeGroup
 --   [ items [Small, Medium, Large]
+--   , itemLabel describe
 --   , selected (size model)
 --   , onSelect (\\_ sz -> post (SizeChanged sz))
---   , itemContainer $ \\eid st sz ->
---       ( Layout Fill Fill TopLeft
---       , renderRadioGlyph eid (st == Selected) >> drawText black AlignLeft (describe sz)
---       )
 --   ]
 -- @
 radioGroup
   :: (Ord e, Eq a)
   => (RadioGroupPart -> e)
-  -> [Attr e (SelectionEvent a) msg (SelectionConfig e msg a)]
+  -> [Attr e (SelectionEvent a) msg (RadioGroupConfig a)]
   -> UI e msg ()
 radioGroup mkId attrs = do
-  let cfg      = configure defaultSelectionConfig attrs
-      itemList = selectionConfigItems cfg
-      sel      = selectionConfigSelection cfg
+  let cfg      = configure defaultRadioGroupConfig attrs
+      itemList = radioGroupConfigItems cfg
+      sel      = radioGroupConfigSelection cfg
       n        = length itemList
       selfId   = mkId RadioGroup
-      stateAt idx val = case sel of
-        None          -> Unselected
-        Item v        -> if v == val then Selected else Unselected
-        ItemAtIndex i -> if i == idx then Selected else Unselected
+      isPickedAt idx val = case sel of
+        None          -> False
+        Item v        -> v == val
+        ItemAtIndex i -> i == idx
       currentIdx = case sel of
         None          -> Nothing
         Item v        -> findIndex (== v) itemList
         ItemAtIndex i -> if i >= 0 && i < n then Just i else Nothing
-
-      -- Like 'isClickedOver', but checks drag capture against the
-      -- composite's own id rather than the item's: 'compositeControl'
-      -- already runs 'applyMouseOver' on @selfId@, so a click starts
-      -- capture there, not on whichever item happens to be under the
-      -- cursor -- an item is never itself the captured element.
-      itemClickedOver eid = do
-        disabled <- isDisabled
-        free     <- isMouseFree
-        dragging <- isDragging selfId
-        hit      <- isMouseOver eid
-        released <- isButtonReleased
-        pure (not disabled && (free || dragging) && hit && released)
+      groupIsTabStop = ccTabStop (controlConfig attrs)
 
   radioGroupComposite selfId
     ( Shared (const (controlConfig attrs))
     : [ items itemList
-      , orientation (selectionConfigOrientation cfg)
-      , itemsPanel (selectionConfigBoxConfig cfg)
+      , orientation (radioGroupConfigOrientation cfg)
+      , itemsPanel (radioGroupConfigBoxConfig cfg)
       , itemTemplate $ \idx val ->
-          let eid               = mkId (RadioItem idx)
-              (layout, content) = selectionConfigTemplate cfg eid (stateAt idx val) val
-              wrapped = do
-                clicked <- itemClickedOver eid
-                when clicked $ fire attrs [Activated idx val]
-                content
-          in (layout, wrapped)
+          ( Layout Fill Fill TopLeft
+          , radioButton (\part -> mkId (RadioItem idx part))
+              [ picked (isPickedAt idx val)
+              , text (radioGroupConfigLabel cfg val)
+              , tabStop (not groupIsTabStop)
+              , onPick (translate attrs (Activated idx val))
+              ]
+          )
       ]
     )
 
   whenEnabled $ when (n > 0) $ do
-    let (prevKey, nextKey) = case selectionConfigOrientation cfg of
+    let (prevKey, nextKey) = case radioGroupConfigOrientation cfg of
           Vertical   -> (KeyUp, KeyDown)
           Horizontal -> (KeyLeft, KeyRight)
         move d = let newIdx = case currentIdx of

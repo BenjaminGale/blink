@@ -7,7 +7,6 @@ import Blink.Geometry
 import Blink.Input
 import Blink.Layout
 import Blink.Rendering
-import Blink.Style (Style (..))
 import Blink.UI
 import Blink.Update
 import Theme (Element (..), lightTheme, darkTheme)
@@ -26,6 +25,7 @@ data BasicControlsState = BasicControlsState
   , editingEnabled  :: Bool
   , sliderValue     :: Double
   , radioSize       :: Maybe Text
+  , radioSizeNoTab  :: Maybe Text
   }
 
 initialBasicControls :: BasicControlsState
@@ -37,6 +37,7 @@ initialBasicControls = BasicControlsState
   , editingEnabled  = False
   , sliderValue     = 0.5
   , radioSize       = Nothing
+  , radioSizeNoTab  = Nothing
   }
 
 newtype ScrollPageState = ScrollPageState
@@ -91,6 +92,7 @@ data BasicControlsMsg
   | SetPasswordText Text
   | SetSliderValue Double
   | SetRadioSize Text
+  | SetRadioSizeNoTab Text
 
 newtype ScrollMsg
   = ClickedStaticItem Int
@@ -150,6 +152,7 @@ applyBasicControlsMsg msg p = case msg of
   SetPasswordText t    -> p { passwordText = t }
   SetSliderValue v     -> p { sliderValue = v }
   SetRadioSize t       -> p { radioSize = Just t }
+  SetRadioSizeNoTab t  -> p { radioSizeNoTab = Just t }
 
 applyScrollMsg :: ScrollMsg -> ScrollPageState -> ScrollPageState
 applyScrollMsg (ClickedStaticItem i) p = p { lastClickedStatic = Just i }
@@ -245,6 +248,7 @@ basicControlsView ps =
     , (Layout Fill (Exactly 50)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowPasswordInput ps)
     , (Layout Fill (Exactly 38)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowSlider ps)
     , (Layout Fill (Exactly 30)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowRadioGroup ps)
+    , (Layout Fill (Exactly 30)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowRadioGroupNoTab ps)
     ]
 
 rowCheckboxes :: BasicControlsState -> DemoUI ()
@@ -348,18 +352,30 @@ rowRadioGroup ps = do
          radioGroup RadioSize $
            [ items radioSizeOptions
            , orientation Horizontal
-           , itemContainer radioSizeItem
+           , itemLabel id
            , onSelect (\_ v -> [OutMsg (BasicControlsMsg (SetRadioSize v))])
            ] ++ [selected v | Just v <- [radioSize ps]])
     ]
-  where
-    radioSizeItem :: Element -> SelectionState -> Text -> (Layout, DemoUI ())
-    radioSizeItem eid st lbl =
-      ( Layout Fill Fill MiddleLeft
-      , do
-          style <- getStyle eid
-          drawText (styleTextColour style) AlignLeft ((if st == Selected then "● " else "○ ") <> lbl)
-      )
+
+-- | Same as 'rowRadioGroup', but with the group's own 'tabStop' off: the
+-- group itself is never a Tab stop, and each Small\/Medium\/Large item
+-- becomes individually Tab-reachable instead.
+rowRadioGroupNoTab :: BasicControlsState -> DemoUI ()
+rowRadioGroupNoTab ps = do
+  (chromW, _) <- measureChrome Label
+  Size lw _   <- measureText "Size (no group tab stop)"
+  let labelW = addLength (Exactly lw) chromW
+  hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
+    [ (Layout labelW Fill MiddleLeft, caption "Size (no group tab stop)")
+    , (Layout Fill   Fill TopLeft,
+         radioGroup RadioSizeNoTab $
+           [ items radioSizeOptions
+           , orientation Horizontal
+           , itemLabel id
+           , tabStop False
+           , onSelect (\_ v -> [OutMsg (BasicControlsMsg (SetRadioSizeNoTab v))])
+           ] ++ [selected v | Just v <- [radioSizeNoTab ps]])
+    ]
 
 updateBasicControls :: AppState -> (BasicControlsState -> BasicControlsState) -> AppState
 updateBasicControls s f = case currentPage s of

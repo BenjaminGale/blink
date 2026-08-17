@@ -72,7 +72,6 @@ import Blink.Controls
   , virtualContent
   , SelectionState (..)
   , SelectionEvent (..)
-  , SelectionConfig
   , itemContainer
   , itemTemplate
   , items
@@ -89,6 +88,8 @@ import Blink.Controls
   , picked
   , radioButton
   , RadioGroupPart (..)
+  , RadioGroupConfig
+  , itemLabel
   , radioGroup
   )
 import Blink.ControlsTestSupport
@@ -574,21 +575,18 @@ noChromeSpec run baseCtx =
 -- Reuses 'itemLabels'\/'listRect'\/'zeroChromeStyleSet' from the
 -- 'selectionControl' fixtures above -- same three-row layout, just under
 -- 'RadioGroupPart' instead of bare 'Int' since 'radioGroup' has its own
--- group-level id ('RadioGroup') alongside each item's ('RadioItem' idx).
+-- group-level id ('RadioGroup') alongside each item's own 'RadioPart's
+-- ('RadioItem' idx part).
 radioGroupTheme :: Theme RadioGroupPart
 radioGroupTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = zeroChromeStyleSet }
 
 mkRadioGroupCtx :: InputState -> UIContext RadioGroupPart msg
 mkRadioGroupCtx input = emptyUIContext listRect input radioGroupTheme noOpTextMeasurer
 
-radioGroupRenderItem :: RadioGroupPart -> SelectionState -> Text -> (Layout, UI RadioGroupPart (Int, Text) ())
-radioGroupRenderItem _ st lbl =
-  (Layout Fill Fill TopLeft, drawText testColour AlignLeft ((if st == Selected then "SEL:" else "UNSEL:") <> lbl))
-
 dispatchRGActivated :: Int -> Text -> [Out RadioGroupPart (Int, Text)]
 dispatchRGActivated idx val = [OutMsg (idx, val)]
 
-runRadioGroup :: [Attr RadioGroupPart (SelectionEvent Text) (Int, Text) (SelectionConfig RadioGroupPart (Int, Text) Text)]
+runRadioGroup :: [Attr RadioGroupPart (SelectionEvent Text) (Int, Text) (RadioGroupConfig Text)]
               -> UIContext RadioGroupPart (Int, Text) -> IO (UIContext RadioGroupPart (Int, Text))
 runRadioGroup attrs = fmap (settle . snd) . runUI (radioGroup id attrs)
 
@@ -1443,13 +1441,13 @@ spec = describe "Blink.Controls" $ do
         resultMessages result `shouldBe` []
 
     describe "rendering" $ do
-      it "draws the mark when picked" $ do
+      it "draws a filled mark when picked" $ do
         ctx' <- runRadioButton True (mkRadioCtx noInput)
         drawnTexts ctx' `shouldContain` ["●"]
 
-      it "does not draw the mark when unpicked" $ do
+      it "draws an unfilled mark when unpicked" $ do
         ctx' <- runRadioButton False (mkRadioCtx noInput)
-        drawnTexts ctx' `shouldNotContain` ["●"]
+        drawnTexts ctx' `shouldContain` ["○"]
 
       it "draws the label text" $ do
         ctx' <- runRadioButton False (mkRadioCtx noInput)
@@ -2190,28 +2188,28 @@ spec = describe "Blink.Controls" $ do
         resultMessages result `shouldBe` []
 
   describe "radioGroup" $ do
-    let render = radioGroup id [items itemLabels, itemContainer radioGroupRenderItem, onSelect dispatchRGActivated]
-        run    = runRadioGroup [items itemLabels, itemContainer radioGroupRenderItem, onSelect dispatchRGActivated]
+    let baseAttrs = [items itemLabels, itemLabel id, onSelect dispatchRGActivated]
+        render    = radioGroup id baseAttrs
+        run       = runRadioGroup baseAttrs
+        marks     = filter (`elem` ["●", "○"]) . drawnTexts
 
     describe "items" $
-      itemOrderingSpec run (mkRadioGroupCtx noInput) (map ("UNSEL:" <>) itemLabels)
+      it "renders each item's label, in order" $ do
+        ctx' <- run (mkRadioGroupCtx noInput)
+        filter (`notElem` ["●", "○"]) (drawnTexts ctx') `shouldBe` itemLabels
 
     describe "selection" $ do
       it "defaults to nothing selected" $ do
         ctx' <- run (mkRadioGroupCtx noInput)
-        drawnTexts ctx' `shouldBe` map ("UNSEL:" <>) itemLabels
+        marks ctx' `shouldBe` ["○", "○", "○"]
 
-      it "marks the item matching 'selected' as Selected" $ do
-        ctx' <- runRadioGroup
-          [items itemLabels, selected "Beta", itemContainer radioGroupRenderItem, onSelect dispatchRGActivated]
-          (mkRadioGroupCtx noInput)
-        drawnTexts ctx' `shouldBe` ["UNSEL:Alpha", "SEL:Beta", "UNSEL:Gamma"]
+      it "marks the item matching 'selected' as picked" $ do
+        ctx' <- runRadioGroup (selected "Beta" : baseAttrs) (mkRadioGroupCtx noInput)
+        marks ctx' `shouldBe` ["○", "●", "○"]
 
-      it "marks the item at 'selectedIndex' as Selected regardless of value" $ do
-        ctx' <- runRadioGroup
-          [items itemLabels, selectedIndex 2, itemContainer radioGroupRenderItem, onSelect dispatchRGActivated]
-          (mkRadioGroupCtx noInput)
-        drawnTexts ctx' `shouldBe` ["UNSEL:Alpha", "UNSEL:Beta", "SEL:Gamma"]
+      it "marks the item at 'selectedIndex' as picked regardless of value" $ do
+        ctx' <- runRadioGroup (selectedIndex 2 : baseAttrs) (mkRadioGroupCtx noInput)
+        marks ctx' `shouldBe` ["○", "○", "●"]
 
     describe "click detection" $ do
       it "fires Activated with the clicked item's index and value" $ do
@@ -2228,9 +2226,14 @@ spec = describe "Blink.Controls" $ do
         contextFocus (resultContext result) `shouldBe` FocusSingle RadioGroup
 
       it "Tab from a focused group moves past it entirely, not into its items" $ do
-        let withAfter = render >> withBounds otherRect (minimalControl (RadioItem 99))
+        let withAfter = render >> withBounds otherRect (minimalControl (RadioItem 99 RadioBox))
         result <- runInteractions listRect (mkRadioGroupCtx noInput) withAfter [Wait 1, Tab] []
-        contextFocus (resultContext result) `shouldBe` FocusSingle (RadioItem 99)
+        contextFocus (resultContext result) `shouldBe` FocusSingle (RadioItem 99 RadioBox)
+
+      it "with tabStop off, items become individually Tab-reachable instead" $ do
+        let render' = radioGroup id (tabStop False : baseAttrs)
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) render' [] []
+        contextFocus (resultContext result) `shouldBe` FocusSingle (RadioItem 0 RadioBox)
 
     describe "keyboard navigation" $ do
       it "Down selects the first item when nothing is selected yet" $ do
@@ -2242,31 +2245,27 @@ spec = describe "Blink.Controls" $ do
         resultMessages result `shouldBe` [(0, "Alpha")]
 
       it "Down moves the selection to the next item" $ do
-        let render' = radioGroup id
-              [items itemLabels, selectedIndex 0, itemContainer radioGroupRenderItem, onSelect dispatchRGActivated]
+        let render' = radioGroup id (selectedIndex 0 : baseAttrs)
         result <- runInteractions listRect (mkRadioGroupCtx noInput) render' [] [PressKey KeyDown []]
         resultMessages result `shouldBe` [(1, "Beta")]
 
       it "Up moves the selection to the previous item" $ do
-        let render' = radioGroup id
-              [items itemLabels, selectedIndex 2, itemContainer radioGroupRenderItem, onSelect dispatchRGActivated]
+        let render' = radioGroup id (selectedIndex 2 : baseAttrs)
         result <- runInteractions listRect (mkRadioGroupCtx noInput) render' [] [PressKey KeyUp []]
         resultMessages result `shouldBe` [(1, "Beta")]
 
       it "Down clamps at the last item instead of wrapping" $ do
-        let render' = radioGroup id
-              [items itemLabels, selectedIndex 2, itemContainer radioGroupRenderItem, onSelect dispatchRGActivated]
+        let render' = radioGroup id (selectedIndex 2 : baseAttrs)
         result <- runInteractions listRect (mkRadioGroupCtx noInput) render' [] [PressKey KeyDown []]
         resultMessages result `shouldBe` [(2, "Gamma")]
 
       it "Up clamps at the first item instead of wrapping" $ do
-        let render' = radioGroup id
-              [items itemLabels, selectedIndex 0, itemContainer radioGroupRenderItem, onSelect dispatchRGActivated]
+        let render' = radioGroup id (selectedIndex 0 : baseAttrs)
         result <- runInteractions listRect (mkRadioGroupCtx noInput) render' [] [PressKey KeyUp []]
         resultMessages result `shouldBe` [(0, "Alpha")]
 
       it "does not respond to arrow keys while unfocused" $ do
-        result <- runInteractions listRect (mkRadioGroupCtx noInput) (withOther (RadioItem 99) render) [] [PressKey KeyDown []]
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) (withOther (RadioItem 99 RadioBox) render) [] [PressKey KeyDown []]
         resultMessages result `shouldBe` []
 
       it "does not respond to arrow keys while disabled" $ do
