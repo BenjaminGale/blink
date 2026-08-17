@@ -610,6 +610,68 @@ mkCompCtx input = emptyUIContext controlRect input compTheme noOpTextMeasurer
 leaf :: CompElem -> UI CompElem msg ()
 leaf eid = control eid ([] :: [Attr CompElem Probe msg ()]) (pure ())
 
+-- tabTraversalSpec fixtures ---------------------------------------------
+
+-- | A slot in a full-UI traversal scenario: either a plain 'button' or a
+-- real 'radioGroup', addressed by position. Composite slots use
+-- 'radioGroup' directly (not a test-only shim), so they get its actual
+-- atomic-tab-stop behaviour -- the group itself is the one Tab target,
+-- never one of its items.
+data MultiElem = MultiButton Int | MultiGroup Int RadioGroupPart
+  deriving (Eq, Ord, Show)
+
+multiTheme :: Theme MultiElem
+multiTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = checkboxStyleSet }
+
+multiButton :: Int -> UI MultiElem msg ()
+multiButton n = button (MultiButton n) [text (T.pack ("Button" <> show n))]
+
+multiGroup :: Int -> UI MultiElem msg ()
+multiGroup n = radioGroup (MultiGroup n) [items (["X", "Y"] :: [Text]), itemLabel id]
+
+-- | Drives @key@ (Tab or ShiftTab) @n@ times from @ctx0@, collecting the
+-- focused element after each press. Each press is modelled as the key
+-- event followed by one idle frame, mirroring 'Blink.App.doStepEventDriven'
+-- -- which runs a real event-driven frame twice, key then settle -- so a
+-- hand-off that only completes on that second pass (e.g. forward wrap,
+-- which has no direct previous-tab-stop-style jump the way Shift-Tab does)
+-- still resolves within what one physical key press actually produces.
+driveFocusSequence
+  :: Ord e => Rectangle -> UI e msg () -> Interaction -> UIContext e msg -> Int -> IO [Focus e]
+driveFocusSequence bounds render interaction ctx0 n = go ctx0 n
+  where
+    go _ 0 = pure []
+    go ctx k = do
+      result <- runInteractions bounds ctx render [] [interaction, Wait 1]
+      rest <- go (resultContext result) (k - 1)
+      pure (contextFocus (resultContext result) : rest)
+
+-- | The generic Tab\/Shift-Tab cycling behaviour any full UI should have,
+-- regardless of what mix of plain and composite controls it's built from.
+-- @expectedOrder@ is the enabled, focusable elements in the order Tab
+-- should visit them -- its length doubles as the number of key presses to
+-- drive, and its own contents double as the expected landing spot at each
+-- step, so the same three checks scale to any scenario fixture without
+-- this function needing to know its shape in advance.
+tabTraversalSpec :: (Ord e, Show e) => Rectangle -> Theme e -> [e] -> UI e msg () -> Spec
+tabTraversalSpec bounds theme expectedOrder render = do
+  let ctx0 = emptyUIContext bounds noInput theme noOpTextMeasurer
+
+  it "auto-claims the first element when nothing is focused" $ do
+    result <- runInteractions bounds ctx0 render [] []
+    contextFocus (resultContext result) `shouldBe` FocusSingle (head expectedOrder)
+
+  it "Tab visits every expected element in order, then wraps" $ do
+    settled <- runInteractions bounds ctx0 render [] []
+    let steps = drop 1 expectedOrder ++ [head expectedOrder]
+    focuses <- driveFocusSequence bounds render Tab (resultContext settled) (length steps)
+    focuses `shouldBe` map FocusSingle steps
+
+  it "Shift-Tab visits the same elements in reverse" $ do
+    settled <- runInteractions bounds ctx0 render [] []
+    focuses <- driveFocusSequence bounds render ShiftTab (resultContext settled) (length expectedOrder)
+    focuses `shouldBe` map FocusSingle (reverse expectedOrder)
+
 spec :: Spec
 spec = describe "Blink.Controls" $ do
   describe "configure" $ do
@@ -2375,3 +2437,39 @@ spec = describe "Blink.Controls" $ do
       -- wasn't silently trapped on the disabled composite.
       r4 <- runInteractions controlRect (resultContext r3) render [] [Wait 1]
       contextFocus (resultContext r4) `shouldBe` FocusSingle TIButton1
+
+  describe "tab traversal across a full UI (multiple controls)" $ do
+    describe "single controls only" $
+      tabTraversalSpec controlRect multiTheme
+        [MultiButton 0, MultiButton 1, MultiButton 2]
+        (multiButton 0 >> multiButton 1 >> multiButton 2)
+
+    describe "composite only" $
+      tabTraversalSpec controlRect multiTheme
+        [MultiGroup 0 RadioGroup]
+        (multiGroup 0)
+
+    describe "mixed, starting with composite" $
+      tabTraversalSpec controlRect multiTheme
+        [MultiGroup 0 RadioGroup, MultiButton 0, MultiButton 1]
+        (multiGroup 0 >> multiButton 0 >> multiButton 1)
+
+    describe "mixed, ending with composite" $
+      tabTraversalSpec controlRect multiTheme
+        [MultiButton 0, MultiButton 1, MultiGroup 0 RadioGroup]
+        (multiButton 0 >> multiButton 1 >> multiGroup 0)
+
+    describe "mixed, composite in the middle" $
+      tabTraversalSpec controlRect multiTheme
+        [MultiButton 0, MultiGroup 0 RadioGroup, MultiButton 1]
+        (multiButton 0 >> multiGroup 0 >> multiButton 1)
+
+    describe "multiple composites, back to back" $
+      tabTraversalSpec controlRect multiTheme
+        [MultiGroup 0 RadioGroup, MultiGroup 1 RadioGroup]
+        (multiGroup 0 >> multiGroup 1)
+
+    describe "a disabled slot inside an otherwise-mixed tree" $
+      tabTraversalSpec controlRect multiTheme
+        [MultiButton 0, MultiButton 1]
+        (multiButton 0 >> disableWhen True (multiGroup 0) >> multiButton 1)
