@@ -7,6 +7,7 @@ import Blink.Geometry
 import Blink.Input
 import Blink.Layout
 import Blink.Rendering
+import Blink.Style (Style (..))
 import Blink.UI
 import Blink.Update
 import Theme (Element (..), lightTheme, darkTheme)
@@ -24,6 +25,7 @@ data BasicControlsState = BasicControlsState
   , passwordText    :: Text
   , editingEnabled  :: Bool
   , sliderValue     :: Double
+  , radioSize       :: Maybe Text
   }
 
 initialBasicControls :: BasicControlsState
@@ -34,6 +36,7 @@ initialBasicControls = BasicControlsState
   , passwordText    = ""
   , editingEnabled  = False
   , sliderValue     = 0.5
+  , radioSize       = Nothing
   }
 
 newtype ScrollPageState = ScrollPageState
@@ -87,6 +90,7 @@ data BasicControlsMsg
   | SetNumberText Text
   | SetPasswordText Text
   | SetSliderValue Double
+  | SetRadioSize Text
 
 newtype ScrollMsg
   = ClickedStaticItem Int
@@ -145,6 +149,7 @@ applyBasicControlsMsg msg p = case msg of
   SetNumberText t      -> p { numberText = t }
   SetPasswordText t    -> p { passwordText = t }
   SetSliderValue v     -> p { sliderValue = v }
+  SetRadioSize t       -> p { radioSize = Just t }
 
 applyScrollMsg :: ScrollMsg -> ScrollPageState -> ScrollPageState
 applyScrollMsg (ClickedStaticItem i) p = p { lastClickedStatic = Just i }
@@ -239,6 +244,7 @@ basicControlsView ps =
     , (Layout Fill (Exactly 50)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowNumberInput ps)
     , (Layout Fill (Exactly 50)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowPasswordInput ps)
     , (Layout Fill (Exactly 38)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowSlider ps)
+    , (Layout Fill (Exactly 30)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowRadioGroup ps)
     ]
 
 rowCheckboxes :: BasicControlsState -> DemoUI ()
@@ -327,6 +333,33 @@ rowSlider ps = do
     , (Layout valueW Fill         MiddleLeft,
          caption (T.pack (show (round (sliderValue ps * 100) :: Int)) <> "%"))
     ]
+
+radioSizeOptions :: [Text]
+radioSizeOptions = ["Small", "Medium", "Large"]
+
+rowRadioGroup :: BasicControlsState -> DemoUI ()
+rowRadioGroup ps = do
+  (chromW, _) <- measureChrome Label
+  Size lw _   <- measureText "Size"
+  let labelW = addLength (Exactly lw) chromW
+  hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
+    [ (Layout labelW Fill MiddleLeft, caption "Size")
+    , (Layout Fill   Fill TopLeft,
+         radioGroup RadioSize $
+           [ items radioSizeOptions
+           , orientation Horizontal
+           , itemContainer radioSizeItem
+           , onSelect (\_ v -> [OutMsg (BasicControlsMsg (SetRadioSize v))])
+           ] ++ [selected v | Just v <- [radioSize ps]])
+    ]
+  where
+    radioSizeItem :: Element -> SelectionState -> Text -> (Layout, DemoUI ())
+    radioSizeItem eid st lbl =
+      ( Layout Fill Fill MiddleLeft
+      , do
+          style <- getStyle eid
+          drawText (styleTextColour style) AlignLeft ((if st == Selected then "● " else "○ ") <> lbl)
+      )
 
 updateBasicControls :: AppState -> (BasicControlsState -> BasicControlsState) -> AppState
 updateBasicControls s f = case currentPage s of

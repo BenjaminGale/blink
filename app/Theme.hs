@@ -22,6 +22,7 @@ data Element = Label
              | Slider1 SliderPart
              | ScrollRegion1 ViewportPart
              | ScrollItem1 Int
+             | RadioSize RadioGroupPart
   deriving (Eq, Ord)
 
 data Palette = Palette
@@ -312,6 +313,8 @@ mkTheme p = Theme
                       , (CheckboxN i CheckboxLabel, mkCheckboxSubPartStyle p)
                       ]
            ]
+        ++ [ (RadioSize RadioGroup,      mkCheckboxRowStyle p) ]
+        ++ [ (RadioSize (RadioItem i),   mkCheckboxSubPartStyle p) | i <- [0 .. 2] ]
   , themeDefaultStyle = mkBtnStyle p
   }
 

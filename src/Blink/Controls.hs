@@ -4,9 +4,10 @@
 {- |
 Module: Blink.Controls
 
-Ready-made interactive controls — 'button', 'checkbox', 'textInputControl',
-'slider', 'scrollBar', 'viewport' — and the 'label'\/'progressBar'
-display-only ones, all built from the primitives in "Blink.UI".
+Ready-made interactive controls — 'button', 'checkbox', 'radioButton',
+'textInputControl', 'slider', 'scrollBar', 'viewport', 'radioGroup' — and
+the 'label'\/'progressBar' display-only ones, all built from the primitives
+in "Blink.UI".
 
 = Element IDs
 
@@ -238,12 +239,21 @@ module Blink.Controls
   , selectedIndex
   , onSelect
   , selectionControl
+  , RadioPart (..)
+  , RadioEvent (Picked)
+  , RadioConfig
+  , onPick
+  , renderRadioGlyph
+  , picked
+  , radioButton
+  , RadioGroupPart (..)
+  , radioGroup
   ) where
 
 import Control.Monad (forM_, guard, when)
 import Data.Foldable (asum)
 import Data.Functor (($>))
-import Data.List (find, foldl')
+import Data.List (find, findIndex, foldl')
 import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -1836,4 +1846,207 @@ selectionControl mkId attrs = do
               content
         in (layout, wrapped)
     ]
+
+-- RadioButton --------------------------------------------------------------
+
+-- | Sub-parts of a 'radioButton', used as the inner tag when building the
+-- control's element IDs via a tagging function:
+--
+-- @
+-- data Element = ... | ShipToHome RadioPart
+-- radioButton ShipToHome [text "Ship to home", picked (dest model == Home), onPick (post DestHome)]
+-- @
+data RadioPart
+  = RadioBox   -- ^ The radio button as a whole: chrome, hit region, focus, activation.
+  | RadioGlyph -- ^ The selected-mark glyph.
+  | RadioLabel -- ^ The label beside it -- an ordinary 'label'.
+  deriving (Eq, Ord, Show)
+
+-- | Events reported by 'radioButton': 'Picked' when activated, or a
+-- lifecycle event via @RadioControl@ (see 'ControlEvent'). Unlike
+-- 'checkbox's 'Toggled', 'Picked' carries no state -- a radio button only
+-- ever picks itself, never un-picks; activating one that's already picked
+-- still fires it, to the same effect.
+data RadioEvent = Picked | RadioControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent RadioEvent where
+  liftControl = RadioControl
+  matchControl (RadioControl ce) = Just ce
+  matchControl _                 = Nothing
+
+-- | Runs a reaction on every 'Picked'.
+onPick :: (() -> [Out e msg]) -> Attr e RadioEvent msg cfg
+onPick reaction = onEvent $ \ev -> case ev of
+  Picked -> reaction ()
+  _      -> []
+
+-- | Draws a radio-button glyph: a filled mark centred in the current bounds
+-- when @isPicked@, nothing otherwise, in the resolved style's text colour.
+-- A bare rendering action with no interactive behaviour of its own --
+-- reusable by anything that wants to look like a radio glyph without
+-- taking on the activation behaviour of 'radioButton' -- e.g. a
+-- 'radioGroup's own 'itemContainer'.
+renderRadioGlyph :: Ord e => e -> Bool -> UI e msg ()
+renderRadioGlyph eid isPicked = do
+  style <- getStyle eid
+  when isPicked $ drawText (styleTextColour style) AlignCenter "●"
+
+-- | Configuration for 'radioButton', set via 'picked' and 'text'. Defaults
+-- to unpicked with an empty label.
+data RadioConfig = RadioConfig
+  { radioConfigPicked :: Bool
+  , radioConfigText   :: Text
+  }
+
+defaultRadioConfig :: RadioConfig
+defaultRadioConfig = RadioConfig { radioConfigPicked = False, radioConfigText = "" }
+
+instance HasTextConfig RadioConfig where
+  setText t cfg = cfg { radioConfigText = t }
+
+-- | Sets whether the radio button is picked. Defaults to 'False'.
+picked :: Bool -> Attr e ev msg RadioConfig
+picked b = configAny $ \cfg -> cfg { radioConfigPicked = b }
+
+-- | Attrs shared by a radio button's glyph and label sub-parts: neither is a
+-- tab stop, and clicking either redirects focus to the radio button itself.
+-- Mirrors 'checkboxSubPartAttrs'.
+radioSubPartAttrs :: e -> [Attr e LabelEvent msg cfg]
+radioSubPartAttrs boxId = [tabStop False, focusOnClick (FocusTarget boxId)]
+
+-- | A single radio button with an adjacent label, as one unit, set via
+-- 'picked' and 'text' -- the glyph and label are purely visual sub-parts,
+-- same as 'checkbox'. Fires 'Picked' when activated by a click anywhere in
+-- its hit region, or by Enter or Space while focused -- always, regardless
+-- of the current 'picked' state: a radio button only ever picks itself, and
+-- relies on its caller to un-pick whichever sibling was picked before (see
+-- 'radioGroup', which does exactly that for a bound list of items).
+--
+-- @
+-- radioButton ShipToHome [text "Ship to home", picked (dest model == Home), onPick (post DestHome)]
+-- @
+radioButton :: Ord e => (RadioPart -> e) -> [Attr e RadioEvent msg RadioConfig] -> UI e msg ()
+radioButton mkId attrs = do
+  let cfg      = configure defaultRadioConfig attrs
+      isPicked = radioConfigPicked cfg
+  activated <- activatable (mkId RadioBox) attrs [KeyReturn, KeySpace] (draw isPicked (radioConfigText cfg))
+  when activated $ fire attrs [Picked]
+  where
+    glyphId  = mkId RadioGlyph
+    subAttrs = radioSubPartAttrs (mkId RadioBox)
+    draw isPicked txt =
+      hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
+        [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, control glyphId subAttrs (renderRadioGlyph glyphId isPicked))
+        , (Layout Fill Fill MiddleLeft, label (mkId RadioLabel) (text txt : subAttrs))
+        ]
+
+-- RadioGroup -----------------------------------------------------------------
+
+-- | Sub-parts of a 'radioGroup's element ID hierarchy: the group as a whole
+-- (chrome, focus ring, single Tab stop), and each item by index (click
+-- detection only -- items never take focus of their own, same as
+-- 'selectionControl').
+data RadioGroupPart
+  = RadioGroup     -- ^ The group as a whole.
+  | RadioItem Int  -- ^ One item, by index.
+  deriving (Eq, Ord, Show)
+
+-- | 'compositeControl', specialised to 'CompositeEvent': 'radioGroup' has no
+-- domain events of its own to route through the inner composite (it fires
+-- 'Activated' against its own, outer @attrs@ directly), so this pins down
+-- @ev@ to the one concrete 'HasControlEvent' instance that carries nothing
+-- extra, purely so 'radioGroup's per-item attrs list doesn't need its own
+-- redundant event type.
+radioGroupComposite :: Ord e => e -> [Attr e CompositeEvent msg (CompositeControlConfig e msg a)] -> UI e msg ()
+radioGroupComposite = compositeControl
+
+-- | A group of mutually exclusive options, set via exactly the same attrs
+-- as 'selectionControl' -- 'items', 'itemContainer', 'selected'\/
+-- 'selectedIndex', and 'onSelect' -- since a radio group /is/ a
+-- 'selectionControl': same items, same selection model, same click
+-- detection and 'Activated' event. What 'radioGroup' adds is focus: the
+-- whole group is one atomic Tab stop (via 'compositeControl', keyed off
+-- @mkId 'RadioGroup'@) with its own chrome and focus ring, and while it
+-- holds focus, Up\/Down (or Left\/Right under 'Horizontal' 'orientation')
+-- moves the selection directly to the adjacent item, firing 'Activated' the
+-- same as a click would -- clamped at the ends, not wrapping. Since nothing
+-- 'radioGroup' does ever reports "no selection", once a caller has honoured
+-- one 'Activated' by feeding a 'selected'\/'selectedIndex' back in, the
+-- selection can never again read as 'None' from here.
+--
+-- @
+-- data Element = ... | SizeGroup RadioGroupPart
+--
+-- radioGroup SizeGroup
+--   [ items [Small, Medium, Large]
+--   , selected (size model)
+--   , onSelect (\\_ sz -> post (SizeChanged sz))
+--   , itemContainer $ \\eid st sz ->
+--       ( Layout Fill Fill TopLeft
+--       , renderRadioGlyph eid (st == Selected) >> drawText black AlignLeft (describe sz)
+--       )
+--   ]
+-- @
+radioGroup
+  :: (Ord e, Eq a)
+  => (RadioGroupPart -> e)
+  -> [Attr e (SelectionEvent a) msg (SelectionConfig e msg a)]
+  -> UI e msg ()
+radioGroup mkId attrs = do
+  let cfg      = configure defaultSelectionConfig attrs
+      itemList = selectionConfigItems cfg
+      sel      = selectionConfigSelection cfg
+      n        = length itemList
+      selfId   = mkId RadioGroup
+      stateAt idx val = case sel of
+        None          -> Unselected
+        Item v        -> if v == val then Selected else Unselected
+        ItemAtIndex i -> if i == idx then Selected else Unselected
+      currentIdx = case sel of
+        None          -> Nothing
+        Item v        -> findIndex (== v) itemList
+        ItemAtIndex i -> if i >= 0 && i < n then Just i else Nothing
+
+      -- Like 'isClickedOver', but checks drag capture against the
+      -- composite's own id rather than the item's: 'compositeControl'
+      -- already runs 'applyMouseOver' on @selfId@, so a click starts
+      -- capture there, not on whichever item happens to be under the
+      -- cursor -- an item is never itself the captured element.
+      itemClickedOver eid = do
+        disabled <- isDisabled
+        free     <- isMouseFree
+        dragging <- isDragging selfId
+        hit      <- isMouseOver eid
+        released <- isButtonReleased
+        pure (not disabled && (free || dragging) && hit && released)
+
+  radioGroupComposite selfId
+    ( Shared (const (controlConfig attrs))
+    : [ items itemList
+      , orientation (selectionConfigOrientation cfg)
+      , itemsPanel (selectionConfigBoxConfig cfg)
+      , itemTemplate $ \idx val ->
+          let eid               = mkId (RadioItem idx)
+              (layout, content) = selectionConfigTemplate cfg eid (stateAt idx val) val
+              wrapped = do
+                clicked <- itemClickedOver eid
+                when clicked $ fire attrs [Activated idx val]
+                content
+          in (layout, wrapped)
+      ]
+    )
+
+  whenEnabled $ when (n > 0) $ do
+    let (prevKey, nextKey) = case selectionConfigOrientation cfg of
+          Vertical   -> (KeyUp, KeyDown)
+          Horizontal -> (KeyLeft, KeyRight)
+        move d = let newIdx = case currentIdx of
+                       Just i  -> max 0 (min (n - 1) (i + d))
+                       Nothing -> 0
+                 in fire attrs [Activated newIdx (itemList !! newIdx)]
+    prevPressed <- isKeyPressed selfId prevKey
+    nextPressed <- isKeyPressed selfId nextKey
+    when prevPressed $ move (-1)
+    when nextPressed $ move 1
 
