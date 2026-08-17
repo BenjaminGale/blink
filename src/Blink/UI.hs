@@ -1066,10 +1066,14 @@ withBackground colour content = do
 
 -- | Runs @content@, then strokes a border around the current bounds on top.
 -- Drawing the border after content ensures it is always visible over children.
+-- Skips the stroke when @colour@ is fully transparent, mirroring
+-- 'withBackground' — a caller that reserves border space in every state via
+-- @styleBorderColour@ but only wants it to actually render in some of them
+-- (e.g. a resting-state border that becomes visible on focus) relies on this.
 withBorder :: Colour -> BorderEdges -> UI e msg a -> UI e msg a
 withBorder colour edges content = do
   result <- content
-  strokeRect colour edges
+  when (isVisible colour) $ strokeRect colour edges
   pure result
 
 -- | Queues a message to be delivered to the application once the frame
