@@ -897,9 +897,16 @@ clearFocus = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { focusedElemen
 -- correctly sees itself as focused whenever focus is anywhere inside it —
 -- see 'isFocused'.
 --
--- Before @inner@ runs, looks at the tree-wide focus and asks one question:
--- is this composite's own id at the front of it, is nothing focused at all,
--- or does something else entirely already hold it?
+-- Takes the focus value to expose as an explicit argument (@exposed@)
+-- rather than reading the tree-wide ambient focus itself, so a caller that
+-- has already settled this frame's focus can hand that value down (or
+-- substitute a placeholder) instead of having it re-derived here. A
+-- standalone caller with no such value of its own just passes its current
+-- 'getFocus' straight through.
+--
+-- Asks one question of @exposed@: is this composite's own id at the front
+-- of it, is nothing focused at all, or does something else entirely
+-- already hold it?
 --
 --   * Own id at the front (@'FocusComposite' compositeId childFocus@):
 --     strips the tag, exposing @childFocus@ to @inner@ unwrapped — children
@@ -907,14 +914,15 @@ clearFocus = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { focusedElemen
 --   * Nothing focused (@'FocusNothing'@): passes it through unchanged —
 --     children are free to auto-claim via their own ordinary logic, exactly
 --     as they would standalone.
---   * Anything else — an unrelated element or a different composite's own
---     chain: focus already legitimately belongs to something outside this
---     composite. @inner@ runs against that value completely unmodified, and
---     the result is left exactly as it was: no wrap, no overwrite. (Passing
---     'FocusNothing' here instead would tell every descendant "nothing is
---     focused," letting one of them auto-claim and steal focus from
---     whatever legitimately holds it, purely because this composite
---     happened to render later in the same pass.)
+--   * Anything else — a bare @'FocusSingle' compositeId@ (this composite
+--     itself is the exact focus target, no child chosen), an unrelated
+--     element, or a different composite's own chain: @inner@ runs against
+--     that value completely unmodified, and the result is left exactly as
+--     it was: no wrap, no overwrite. (Passing 'FocusNothing' here instead
+--     would tell every descendant "nothing is focused," letting one of
+--     them auto-claim and steal focus that already legitimately belongs to
+--     this composite itself, or to something outside it, purely because
+--     this composite happened to render later in the same pass.)
 --
 -- In the first two cases, once @inner@ finishes, whatever focus resulted is
 -- re-wrapped as @'FocusComposite' compositeId after@ — unconditionally,
@@ -930,20 +938,30 @@ clearFocus = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { focusedElemen
 -- Composes for arbitrary nesting: a composite inside another composite's
 -- @withinComposite@ only ever strips\/re-wraps its own outermost tag, and
 -- does the same expose\/render\/re-wrap step around its own children.
-withinComposite :: Ord e => e -> UI e msg a -> UI e msg a
-withinComposite compositeId (UI f) = UI $ \ctx ->
-  case focusedElement (ixnFocus (ctxInteraction ctx)) of
+withinComposite :: Ord e => e -> Focus e -> UI e msg a -> UI e msg a
+withinComposite compositeId exposed (UI f) = UI $ \ctx ->
+  case exposed of
     FocusComposite cid childFocus | cid == compositeId -> claim ctx childFocus
     FocusNothing                                        -> claim ctx FocusNothing
-    _                                                    -> f ctx
+    _                                                    -> passthrough ctx
   where
-    -- Runs @inner@ with @exposedFocus@ as its focus and its Tab\/Shift-Tab
-    -- wraparound scoped to this composite's own children. If a child
-    -- registers itself as a tab stop, it becomes the previous tab stop for
-    -- whatever renders after this composite. If no child does (e.g. an
-    -- empty composite), whatever was the previous tab stop before this
-    -- composite is left in place instead.
-    runScoped ctx exposedFocus = do
+    -- Substitutes @exposed@ for the ambient focus while @inner@ runs, same
+    -- as 'claim' does, but never wraps the result: if @exposed@ comes back
+    -- untouched, the real pre-substitution focus is restored instead
+    -- (so a placeholder that blocked a claim doesn't linger); otherwise
+    -- whatever @inner@ actually set stands as-is.
+    passthrough ctx = do
+      let ixn0  = ctxInteraction ctx
+          real  = focusedElement (ixnFocus ixn0)
+          ctxIn = ctx { ctxInteraction = ixn0 { ixnFocus = (ixnFocus ixn0) { focusedElement = exposed } } }
+      (a, ctx'') <- f ctxIn
+      let ixn''  = ctxInteraction ctx''
+          after  = focusedElement (ixnFocus ixn'')
+          final  = if after == exposed then real else after
+          ixn''' = ixn'' { ixnFocus = (ixnFocus ixn'') { focusedElement = final } }
+      pure (a, ctx'' { ctxInteraction = ixn''' })
+
+    claim ctx exposedFocus = do
       let ixn0       = ctxInteraction ctx
           realPrev   = ixnPrevTabStop ixn0
           scopedPrev = Map.lookup compositeId (ixnCompositePrevTabStop ixn0)
@@ -957,17 +975,15 @@ withinComposite compositeId (UI f) = UI $ \ctx ->
             Just v  -> Map.insert compositeId v (ixnCompositePrevTabStop ixn'')
             Nothing -> Map.delete compositeId (ixnCompositePrevTabStop ixn'')
           flowedPrev = if ixnPrevTabStop ixn'' == scopedPrev then realPrev else ixnPrevTabStop ixn''
-          ixn'''     = ixn'' { ixnCompositePrevTabStop = scoped, ixnPrevTabStop = flowedPrev }
-      pure (a, ctx'' { ctxInteraction = ixn''' })
-
-    claim ctx exposed = do
-      (a, ctx'') <- runScoped ctx exposed
-      let after = focusedElement (ixnFocus (ctxInteraction ctx''))
-          ixn'' = ctxInteraction ctx''
-          ixn''' = ixn'' { ixnFocus = FocusState
-                              { focusedElement   = FocusComposite compositeId after
-                              , focusedThisFrame = True
-                              } }
+          after      = focusedElement (ixnFocus ixn'')
+          ixn'''     = ixn''
+            { ixnCompositePrevTabStop = scoped
+            , ixnPrevTabStop          = flowedPrev
+            , ixnFocus                = FocusState
+                { focusedElement   = FocusComposite compositeId after
+                , focusedThisFrame = True
+                }
+            }
       pure (a, ctx'' { ctxInteraction = ixn''' })
 
 -- | Advances a 'FocusState' to the next frame: carries focus forward if it

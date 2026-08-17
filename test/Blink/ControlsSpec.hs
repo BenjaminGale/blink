@@ -965,13 +965,18 @@ spec = describe "Blink.Controls" $ do
       getDrawCommands ctx' `shouldContain` [FillRect contentRect testColour]
 
   describe "withinComposite" $ do
+    -- Standalone usage has no focus decision of its own to hand down (that's
+    -- what 'Blink.Controls.compositeControl' adds), so it just passes its own
+    -- current ambient focus straight through, unmodified.
+    let wc eid inner = getFocus >>= \f -> withinComposite eid f inner
+
     it "a composite is considered focused when its first child auto-claims focus" $ do
-      let render = withinComposite ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
+      let render = wc ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
       result <- runInteractions controlRect (mkCompCtx noInput) render [] []
       contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 0))
 
     it "a composite retains its focused child across renders" $ do
-      let render = withinComposite ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
+      let render = wc ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
       -- Frame 1: nothing focused, RowElem 0 auto-claims. Frame 2 (Tab):
       -- RowElem 0 gives up focus and RowElem 1 -- rendered second -- takes
       -- it. RowElem 0 renders first on every subsequent frame, so retaining
@@ -981,7 +986,7 @@ spec = describe "Blink.Controls" $ do
 
     forM_ [1, 2, 3] $ \n ->
       it ("an empty composite keeps holding focus after " <> show n <> " idle frame(s)") $ do
-        let render = withinComposite ListElem (pure ())
+        let render = wc ListElem (pure ())
         result <- runInteractions controlRect (mkCompCtx noInput) render [] (replicate n (Wait 1))
         contextFocus (resultContext result) `shouldBe` FocusComposite ListElem FocusNothing
 
@@ -990,13 +995,13 @@ spec = describe "Blink.Controls" $ do
       -- purely by rendering first, the same way an ordinary focusable
       -- control would -- so a plain control positioned after it must not
       -- treat that as an invitation to auto-claim in its place.
-      let render = withinComposite ListElem (pure ()) >> leaf AfterElem
+      let render = wc ListElem (pure ()) >> leaf AfterElem
       result <- runInteractions controlRect (mkCompCtx noInput) render [] []
       contextFocus (resultContext result) `shouldBe` FocusComposite ListElem FocusNothing
 
     it "a composite is considered focused whenever a nested composite inside it is focused" $ do
-      let render = withinComposite ListElem $ do
-            withinComposite GroupElem (leaf (SubRowElem 0) >> leaf (SubRowElem 1))
+      let render = wc ListElem $ do
+            wc GroupElem (leaf (SubRowElem 0) >> leaf (SubRowElem 1))
             leaf (RowElem 1)
       result <- runInteractions controlRect (mkCompCtx noInput) render [] []
       let chain = contextFocus (resultContext result)
@@ -1008,12 +1013,12 @@ spec = describe "Blink.Controls" $ do
       focusContains (SubRowElem 1) chain `shouldBe` False
 
     it "a composite does not steal focus already held by an unrelated element" $ do
-      let render = leaf SiblingElem >> withinComposite ListElem (leaf (RowElem 0))
+      let render = leaf SiblingElem >> wc ListElem (leaf (RowElem 0))
       result <- runInteractions controlRect (mkCompCtx noInput) render [] [Wait 1, Wait 1]
       contextFocus (resultContext result) `shouldBe` FocusSingle SiblingElem
 
     it "Shift-Tab from a composite's first child wraps to its last child" $ do
-      let render = withinComposite ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
+      let render = wc ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
       result <- runInteractions controlRect (mkCompCtx noInput) render [] [Wait 1, ShiftTab]
       contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 1))
 
@@ -1024,7 +1029,7 @@ spec = describe "Blink.Controls" $ do
                 [(RowElem 0, zeroChromeStyleSet { styleSetFocused = focusedStyle })] }
           rowCtx = emptyUIContext controlRect noInput rowTheme noOpTextMeasurer :: UIContext CompElem ()
           styledLeaf eid = control eid ([] :: [Attr CompElem Probe () ()]) (fillRect =<< (styleBackground <$> getStyle eid))
-          render = withinComposite ListElem (styledLeaf (RowElem 0))
+          render = wc ListElem (styledLeaf (RowElem 0))
       result <- runInteractions controlRect rowCtx render [] [Wait 1, Tab]
       resultDraws result `shouldNotContain` [FillRect controlRect (RGBA 0 0 1 1)]
 
@@ -1994,21 +1999,14 @@ spec = describe "Blink.Controls" $ do
     describe "background and border" $
       backgroundAndBorderSpec controlRect (compositeControl TestControl ([] :: [Attr TestElement Probe () (CompositeControlConfig TestElement () Int)]))
 
-    it "a composite is considered focused when its first child auto-claims focus" $ do
+    it "a composite claims focus for itself, atomically -- not into a specific child" $ do
       result <- runInteractions controlRect (mkCompCtx noInput) render [] []
-      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 0))
+      contextFocus (resultContext result) `shouldBe` FocusSingle ListElem
 
-    it "a composite retains its focused child across renders" $ do
-      result <- runInteractions controlRect (mkCompCtx noInput) render [Wait 1, Tab] []
-      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 1))
-
-    it "Tab from a composite's last child wraps to its first child" $ do
-      result <- runInteractions controlRect (mkCompCtx noInput) render [Wait 1, Tab, Tab] []
-      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 0))
-
-    it "Shift-Tab from a composite's first child wraps to its last child" $ do
-      result <- runInteractions controlRect (mkCompCtx noInput) render [] [Wait 1, ShiftTab]
-      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 1))
+    it "Tab from a focused composite moves past it entirely, not into its own children" $ do
+      let withAfter = render >> leaf AfterElem
+      result <- runInteractions controlRect (mkCompCtx noInput) withAfter [Wait 1, Tab] []
+      contextFocus (resultContext result) `shouldBe` FocusSingle AfterElem
 
     it "a composite does not steal focus already held by an unrelated element" $ do
       let withSibling = leaf SiblingElem >> render
@@ -2026,7 +2024,7 @@ spec = describe "Blink.Controls" $ do
 
       it "an empty composite claims focus" $ do
         result <- runInteractions controlRect (mkCompCtx noInput) renderEmpty [] []
-        contextFocus (resultContext result) `shouldBe` FocusComposite ListElem FocusNothing
+        contextFocus (resultContext result) `shouldBe` FocusSingle ListElem
 
       it "Tab from an idle composite gives up focus entirely" $ do
         result <- runInteractions controlRect (mkCompCtx noInput) renderEmpty [] [Wait 1, Tab]

@@ -1676,7 +1676,7 @@ itemsLayout attrs = renderCompositeItems (configure defaultCompositeControlConfi
 -- | Events reported by 'compositeControl': a lifecycle event via
 -- @CompositeControlEvent@ (see 'ControlEvent'). A composite has no domain
 -- events of its own beyond the generic ones -- item-specific behaviour
--- (like 'selectionControl''s 'SelectionEvent') is layered on top.
+-- (like the 'SelectionEvent' from 'selectionControl') is layered on top.
 newtype CompositeEvent = CompositeControlEvent ControlEvent
   deriving (Eq, Show)
 
@@ -1684,19 +1684,35 @@ instance HasControlEvent CompositeEvent where
   liftControl = CompositeControlEvent
   matchControl (CompositeControlEvent ce) = Just ce
 
+-- | What a composite exposes to 'withinComposite' for this frame: ordinarily
+-- just its actual @focus@, but a bare focus on its own id
+-- (@'FocusSingle' compositeId@) when it held focus a moment ago and now
+-- holds none -- Tab just released it. That placeholder stops a child from
+-- mistaking the release for a fresh "nothing is focused" claim opportunity;
+-- see 'withinComposite' for how it's resolved afterwards.
+compositeFocusToExpose :: Eq e => e -> Bool -> Focus e -> Focus e
+compositeFocusToExpose compositeId heldFocusBefore focus
+  | heldFocusBefore && isNothingFocused focus = FocusSingle compositeId
+  | otherwise                                 = focus
+
 -- | The entry point for composite controls (radio groups, lists, trees):
 -- an 'itemsLayout' with an element id, so it gets normal mouse-over,
 -- style-driven chrome, and Tab\/Shift-Tab navigation as a single unit via
 -- 'withinComposite' -- a child that takes focus inside stays scoped to this
 -- composite's own Tab order until it's left. No bespoke focus code lives
--- here; see 'withinComposite' for how a composite's focus is claimed,
--- retained, and released.
+-- here: 'applyFocus' runs first, in its normal position, and makes every
+-- actual focus decision (claim, retain, Tab\/Shift-Tab, click) exactly as
+-- it would for any other control; see 'withinComposite' for how a
+-- composite's focus is claimed, retained, and released.
 compositeControl :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg (CompositeControlConfig e msg a)] -> UI e msg ()
 compositeControl eid attrs = do
   applyMouseOver eid attrs
-  renderChrome eid $ withinComposite eid $
-    renderCompositeItems (configure defaultCompositeControlConfig attrs)
+  heldFocusBefore <- isFocused eid
   applyFocus eid attrs
+  focus <- getFocus
+  let exposed = compositeFocusToExpose eid heldFocusBefore focus
+  renderChrome eid $ withinComposite eid exposed $
+    renderCompositeItems (configure defaultCompositeControlConfig attrs)
 
 -- SelectionControl -------------------------------------------------------
 
