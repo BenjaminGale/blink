@@ -2003,6 +2003,11 @@ spec = describe "Blink.Controls" $ do
       result <- runInteractions controlRect (mkCompCtx noInput) render [] []
       contextFocus (resultContext result) `shouldBe` FocusSingle ListElem
 
+    it "with tabStop off, the composite never claims focus itself, and a child does instead" $ do
+      let render' = compositeControl ListElem (tabStop False : compAttrs)
+      result <- runInteractions controlRect (mkCompCtx noInput) render' [] []
+      contextFocus (resultContext result) `shouldBe` FocusSingle (RowElem 0)
+
     it "Tab from a focused composite moves past it entirely, not into its own children" $ do
       let withAfter = render >> leaf AfterElem
       result <- runInteractions controlRect (mkCompCtx noInput) withAfter [Wait 1, Tab] []

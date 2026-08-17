@@ -1696,23 +1696,24 @@ compositeFocusToExpose compositeId heldFocusBefore focus
   | otherwise                                 = focus
 
 -- | The entry point for composite controls (radio groups, lists, trees):
--- an 'itemsLayout' with an element id, so it gets normal mouse-over,
--- style-driven chrome, and Tab\/Shift-Tab navigation as a single unit via
--- 'withinComposite' -- a child that takes focus inside stays scoped to this
--- composite's own Tab order until it's left. No bespoke focus code lives
--- here: 'applyFocus' runs first, in its normal position, and makes every
--- actual focus decision (claim, retain, Tab\/Shift-Tab, click) exactly as
--- it would for any other control; see 'withinComposite' for how a
--- composite's focus is claimed, retained, and released.
+-- an 'itemsLayout' with an element id, so it gets normal mouse-over and
+-- style-driven chrome, plus Tab\/Shift-Tab navigation as a single unit --
+-- Tab enters and leaves the whole composite, not its individual items.
+--
+-- With @tabStop@ off, the composite itself is never a focus target: its
+-- items, if individually focusable, are reachable by Tab like ordinary
+-- siblings instead, and the composite shows no focus ring of its own.
 compositeControl :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg (CompositeControlConfig e msg a)] -> UI e msg ()
 compositeControl eid attrs = do
   applyMouseOver eid attrs
   heldFocusBefore <- isFocused eid
   applyFocus eid attrs
   focus <- getFocus
-  let exposed = compositeFocusToExpose eid heldFocusBefore focus
-  renderChrome eid $ withinComposite eid exposed $
-    renderCompositeItems (configure defaultCompositeControlConfig attrs)
+  let content = renderCompositeItems (configure defaultCompositeControlConfig attrs)
+  renderChrome eid $
+    if autoClaimsFocus (controlConfig attrs)
+      then withinComposite eid (compositeFocusToExpose eid heldFocusBefore focus) content
+      else content
 
 -- SelectionControl -------------------------------------------------------
 
