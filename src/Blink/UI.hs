@@ -946,10 +946,12 @@ withinComposite compositeId exposed (UI f) = UI $ \ctx ->
     _                                                    -> passthrough ctx
   where
     -- Substitutes @exposed@ for the ambient focus while @inner@ runs, same
-    -- as 'claim' does, but never wraps the result: if @exposed@ comes back
-    -- untouched, the real pre-substitution focus is restored instead
-    -- (so a placeholder that blocked a claim doesn't linger); otherwise
-    -- whatever @inner@ actually set stands as-is.
+    -- as 'claim' does. If @exposed@ comes back untouched, the real
+    -- pre-substitution focus is restored instead (so a placeholder that
+    -- blocked a claim doesn't linger). Otherwise something inside @inner@ --
+    -- necessarily one of this composite's own children, since nothing else
+    -- runs meanwhile -- claimed focus for itself, so the result is wrapped
+    -- as belonging to this composite, the same as 'claim' would.
     passthrough ctx = do
       let ixn0  = ctxInteraction ctx
           real  = focusedElement (ixnFocus ixn0)
@@ -957,7 +959,9 @@ withinComposite compositeId exposed (UI f) = UI $ \ctx ->
       (a, ctx'') <- f ctxIn
       let ixn''  = ctxInteraction ctx''
           after  = focusedElement (ixnFocus ixn'')
-          final  = if after == exposed then real else after
+          final
+            | after == exposed = real
+            | otherwise         = FocusComposite compositeId after
           ixn''' = ixn'' { ixnFocus = (ixnFocus ixn'') { focusedElement = final } }
       pure (a, ctx'' { ctxInteraction = ixn''' })
 

@@ -2054,6 +2054,7 @@ radioGroup mkId attrs = do
               [ picked (isPickedAt idx val)
               , text (radioGroupConfigLabel cfg val)
               , tabStop (not groupIsTabStop)
+              , focusOnClick (if groupIsTabStop then FocusTarget selfId else FocusSelf)
               , onPick (translate attrs (Activated idx val))
               ]
           )

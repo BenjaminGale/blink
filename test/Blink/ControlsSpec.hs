@@ -2235,6 +2235,18 @@ spec = describe "Blink.Controls" $ do
         result <- runInteractions listRect (mkRadioGroupCtx noInput) render' [] []
         contextFocus (resultContext result) `shouldBe` FocusSingle (RadioItem 0 RadioBox)
 
+      it "Shift-Tab after clicking an item returns to the element before the group, not the group itself" $ do
+        let withSibling = withOther (RadioItem 99 RadioBox) render
+        clicked <- runInteractions listRect (mkRadioGroupCtx noInput) withSibling [] [ClickAt (Point 50 45)]
+        result <- runInteractions listRect (resultContext clicked) withSibling [] [ShiftTab]
+        contextFocus (resultContext result) `shouldBe` FocusSingle (RadioItem 99 RadioBox)
+
+      it "clicking an item leaves only the group focused, not the item's own box too" $ do
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) render [] [ClickAt (Point 50 45)]
+        let resultFocus = contextFocus (resultContext result)
+        focusContains RadioGroup resultFocus `shouldBe` True
+        focusContains (RadioItem 1 RadioBox) resultFocus `shouldBe` False
+
     describe "keyboard navigation" $ do
       it "Down selects the first item when nothing is selected yet" $ do
         result <- runInteractions listRect (mkRadioGroupCtx noInput) render [] [PressKey KeyDown []]
