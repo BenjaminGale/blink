@@ -7,7 +7,6 @@ import Blink.Geometry
 import Blink.Input
 import Blink.Layout
 import Blink.Rendering
-import Blink.Style
 import Blink.UI
 import Blink.Update
 import Theme (Element (..), lightTheme, darkTheme)
@@ -25,8 +24,8 @@ data BasicControlsState = BasicControlsState
   , passwordText    :: Text
   , editingEnabled  :: Bool
   , sliderValue     :: Double
-  , radioSelection  :: Int
-  , radioSelection2 :: Int
+  , radioSize       :: Maybe Text
+  , radioSizeNoTab  :: Maybe Text
   }
 
 initialBasicControls :: BasicControlsState
@@ -37,17 +36,16 @@ initialBasicControls = BasicControlsState
   , passwordText    = ""
   , editingEnabled  = False
   , sliderValue     = 0.5
-  , radioSelection  = 0
-  , radioSelection2 = 0
+  , radioSize       = Nothing
+  , radioSizeNoTab  = Nothing
   }
 
-data ScrollPageState = ScrollPageState
+newtype ScrollPageState = ScrollPageState
   { lastClickedStatic  :: Maybe Int
-  , lastClickedDynamic :: Maybe Int
   }
 
 initialScrollState :: ScrollPageState
-initialScrollState = ScrollPageState Nothing Nothing
+initialScrollState = ScrollPageState Nothing
 
 data ProgressState = ProgressState
   { animating :: Bool
@@ -93,12 +91,11 @@ data BasicControlsMsg
   | SetNumberText Text
   | SetPasswordText Text
   | SetSliderValue Double
-  | SetRadioSelection Int
-  | SetRadioSelection2 Int
+  | SetRadioSize Text
+  | SetRadioSizeNoTab Text
 
-data ScrollMsg
+newtype ScrollMsg
   = ClickedStaticItem Int
-  | SelectedDynamicItem Int
 
 newtype ProgressMsg = ToggleAnimating Bool
 
@@ -154,13 +151,11 @@ applyBasicControlsMsg msg p = case msg of
   SetNumberText t      -> p { numberText = t }
   SetPasswordText t    -> p { passwordText = t }
   SetSliderValue v     -> p { sliderValue = v }
-  SetRadioSelection v  -> p { radioSelection = v }
-  SetRadioSelection2 v -> p { radioSelection2 = v }
+  SetRadioSize t       -> p { radioSize = Just t }
+  SetRadioSizeNoTab t  -> p { radioSizeNoTab = Just t }
 
 applyScrollMsg :: ScrollMsg -> ScrollPageState -> ScrollPageState
-applyScrollMsg msg p = case msg of
-  ClickedStaticItem i    -> p { lastClickedStatic = Just i }
-  SelectedDynamicItem i  -> p { lastClickedDynamic = Just i }
+applyScrollMsg (ClickedStaticItem i) p = p { lastClickedStatic = Just i }
 
 applyProgressMsg :: ProgressMsg -> ProgressState -> ProgressState
 applyProgressMsg (ToggleAnimating v) p = p { animating = v }
@@ -252,7 +247,8 @@ basicControlsView ps =
     , (Layout Fill (Exactly 50)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowNumberInput ps)
     , (Layout Fill (Exactly 50)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowPasswordInput ps)
     , (Layout Fill (Exactly 38)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowSlider ps)
-    , (Layout Fill Fill          TopLeft, disableWhen (not (editingEnabled ps)) $ rowRadio ps)
+    , (Layout Fill (Exactly 30)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowRadioGroup ps)
+    , (Layout Fill (Exactly 30)  TopLeft, disableWhen (not (editingEnabled ps)) $ rowRadioGroupNoTab ps)
     ]
 
 rowCheckboxes :: BasicControlsState -> DemoUI ()
@@ -342,32 +338,43 @@ rowSlider ps = do
          caption (T.pack (show (round (sliderValue ps * 100) :: Int)) <> "%"))
     ]
 
-rowRadio :: BasicControlsState -> DemoUI ()
-rowRadio ps = do
-  (_, chromH) <- measureChrome Label
-  Size _ th   <- measureText "Size"
-  let labelH = addLength (Exactly th) chromH
-  hBox (defaultBoxConfig { boxSpacing = 16, boxMargin = 4 })
-    [ (Layout Fill Fill TopLeft,
-         vBox defaultBoxConfig
-           [ (Layout Fill labelH TopLeft, caption "Size")
-           , (Layout Fill Fill    TopLeft,
-                radioGroup RadioOpt
-                  [ items [(0, "Small"), (1, "Medium"), (2, "Large")]
-                  , selected (radioSelection ps)
-                  , onSelect (postWith (BasicControlsMsg . SetRadioSelection))
-                  ])
-           ])
-    , (Layout Fill Fill TopLeft,
-         vBox defaultBoxConfig
-           [ (Layout Fill labelH TopLeft, caption "Priority")
-           , (Layout Fill Fill    TopLeft,
-                radioGroup RadioOpt2
-                  [ items [(0, "Low"), (1, "Medium"), (2, "High"), (3, "Critical")]
-                  , selected (radioSelection2 ps)
-                  , onSelect (postWith (BasicControlsMsg . SetRadioSelection2))
-                  ])
-           ])
+radioSizeOptions :: [Text]
+radioSizeOptions = ["Small", "Medium", "Large"]
+
+rowRadioGroup :: BasicControlsState -> DemoUI ()
+rowRadioGroup ps = do
+  (chromW, _) <- measureChrome Label
+  Size lw _   <- measureText "Size"
+  let labelW = addLength (Exactly lw) chromW
+  hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
+    [ (Layout labelW Fill MiddleLeft, caption "Size")
+    , (Layout Fill   Fill TopLeft,
+         radioGroup RadioSize $
+           [ items radioSizeOptions
+           , orientation Horizontal
+           , itemLabel id
+           , onSelect (\_ v -> [OutMsg (BasicControlsMsg (SetRadioSize v))])
+           ] ++ [selected v | Just v <- [radioSize ps]])
+    ]
+
+-- | Same as 'rowRadioGroup', but with the group's own 'tabStop' off: the
+-- group itself is never a Tab stop, and each Small\/Medium\/Large item
+-- becomes individually Tab-reachable instead.
+rowRadioGroupNoTab :: BasicControlsState -> DemoUI ()
+rowRadioGroupNoTab ps = do
+  (chromW, _) <- measureChrome Label
+  Size lw _   <- measureText "Size (no group tab stop)"
+  let labelW = addLength (Exactly lw) chromW
+  hBox (defaultBoxConfig { boxSpacing = 4, boxMargin = 4, boxAlignment = Center })
+    [ (Layout labelW Fill MiddleLeft, caption "Size (no group tab stop)")
+    , (Layout Fill   Fill TopLeft,
+         radioGroup RadioSizeNoTab $
+           [ items radioSizeOptions
+           , orientation Horizontal
+           , itemLabel id
+           , tabStop False
+           , onSelect (\_ v -> [OutMsg (BasicControlsMsg (SetRadioSizeNoTab v))])
+           ] ++ [selected v | Just v <- [radioSizeNoTab ps]])
     ]
 
 updateBasicControls :: AppState -> (BasicControlsState -> BasicControlsState) -> AppState
@@ -383,16 +390,8 @@ scrollView ps = do
   Size _ th   <- measureText "Known size (viewport)"
   let headerH = addLength (Exactly th) chromH
   vBox (defaultBoxConfig { boxMargin = 8, boxSpacing = 4 })
-    [ (Layout Fill headerH TopLeft,
-         hBox defaultBoxConfig
-           [ (Layout Fill Fill MiddleLeft, caption "Known size (viewport)")
-           , (Layout Fill Fill MiddleLeft, caption "Virtualized (listBox, 100 items)")
-           ])
-    , (Layout Fill Fill TopLeft,
-         hBox (defaultBoxConfig { boxSpacing = 8 })
-           [ (Layout Fill Fill TopLeft, staticScrollList ps)
-           , (Layout Fill Fill TopLeft, dynamicScrollList ps)
-           ])
+    [ (Layout Fill headerH TopLeft, caption "Known size (viewport)")
+    , (Layout Fill Fill    TopLeft, staticScrollList ps)
     ]
 
 staticScrollList :: ScrollPageState -> DemoUI ()
@@ -408,20 +407,6 @@ staticScrollList ps =
           txt = (if isSelected then "✓ " else "") <> "Item " <> T.pack (show i)
       button (ScrollItem1 i)
         [text txt, onClick (post (ScrollMsg (ClickedStaticItem i)))]
-
-dynamicScrollList :: ScrollPageState -> DemoUI ()
-dynamicScrollList ps =
-  listBox ScrollList2
-    [items rowItems, selected selectedIdx, itemHeight 32, onSelect (postWith (ScrollMsg . SelectedDynamicItem))]
-    renderRow
-  where
-    rowItems    = [ (i, "Item " <> T.pack (show (i + 1))) | i <- [0 .. 99 :: Int] ]
-    selectedIdx = maybe (-1) id (lastClickedDynamic ps)
-
-    renderRow eid isSelected (_, txt) = do
-      style <- getStyle eid
-      let rowText = (if isSelected then "✓ " else "") <> txt
-      drawText (styleTextColour style) (styleTextAlign style) rowText
 
 updateScrollState :: AppState -> (ScrollPageState -> ScrollPageState) -> AppState
 updateScrollState s f = case currentPage s of

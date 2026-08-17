@@ -70,14 +70,27 @@ import Blink.Controls
   , contentSize
   , viewport
   , virtualContent
-  , onSelect
+  , SelectionState (..)
+  , SelectionEvent (..)
+  , itemContainer
+  , itemTemplate
   , items
+  , itemsLayout
+  , itemsPanel
+  , CompositeControlConfig
+  , compositeControl
+  , onSelect
   , selected
-  , itemHeight
-  , selector
+  , selectedIndex
+  , selectionControl
+  , RadioPart (..)
+  , onPick
+  , picked
+  , radioButton
+  , RadioGroupPart (..)
+  , RadioGroupConfig
+  , itemLabel
   , radioGroup
-  , ListBoxPart (..)
-  , listBox
   )
 import Blink.ControlsTestSupport
   ( TestElement (..)
@@ -103,9 +116,9 @@ import Data.Char (isDigit)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
-import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..), noBorder, uniform, uniformBorder)
+import Blink.Geometry (Alignment (..), Orientation (..), Point (..), Rectangle (..), Size (..), noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
-import Blink.Layout (Length (..))
+import Blink.Layout (BoxConfig (..), Layout (..), Length (..), defaultBoxConfig)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -226,6 +239,20 @@ mkCheckboxCtx input = emptyUIContext checkboxRect input checkboxTheme noOpTextMe
 runCheckbox :: Bool -> UIContext CheckboxPart Bool -> IO (UIContext CheckboxPart Bool)
 runCheckbox isChecked ctx = fmap (settle . snd) $ runUI (checkbox id [text "Notify me", checked isChecked, onToggle (postWith id)]) ctx
 
+-- radioButton fixtures ------------------------------------------------------
+
+-- radioButton shares checkbox's row layout exactly (20px glyph column then
+-- label), so it reuses 'checkboxRect'\/'checkboxStyleSet'\/'glyphPoint'\/
+-- 'labelPoint' -- only the element type and theme differ.
+radioTheme :: Theme RadioPart
+radioTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = checkboxStyleSet }
+
+mkRadioCtx :: InputState -> UIContext RadioPart ()
+mkRadioCtx input = emptyUIContext checkboxRect input radioTheme noOpTextMeasurer
+
+runRadioButton :: Bool -> UIContext RadioPart () -> IO (UIContext RadioPart ())
+runRadioButton isPicked ctx = fmap (settle . snd) $ runUI (radioButton id [text "Ship to home", picked isPicked, onPick (post ())]) ctx
+
 glyphPoint :: Point
 glyphPoint = Point 10 10
 
@@ -319,52 +346,6 @@ runViewportChild sz childAttrs mousePos =
       ctx   = emptyUIContext vpOuterRect input vpTheme noOpTextMeasurer
   in fmap snd $ runUI (viewport VPPart [contentSize sz] (control VPChild childAttrs (pure ()))) ctx
 
--- selector/radioGroup tests use element type Int directly (mkId = id), the
--- same convention as checkbox/scrollBar/slider.
-radioGroupTheme :: Theme Int
-radioGroupTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = checkboxStyleSet }
-
-radioGroupRect :: Rectangle
-radioGroupRect = Rectangle 0 0 100 90
-
-radioItems :: [(String, Text)]
-radioItems = [("a", "Alpha"), ("b", "Beta"), ("c", "Gamma")]
-
-mkRadioGroupCtx :: InputState -> UIContext Int String
-mkRadioGroupCtx input = emptyUIContext radioGroupRect input radioGroupTheme noOpTextMeasurer
-
-runRadioGroup :: String -> UIContext Int String -> IO (UIContext Int String)
-runRadioGroup sel = fmap (settle . snd) . runUI (radioGroup id [items radioItems, selected sel, onSelect (postWith id)])
-
--- listBox setup: 100x60 viewport, 20px items -> 3 fully visible at a time,
--- 6 items total -> content is twice the viewport height, so scrolling is
--- exercised. mkId = id, so element IDs are ListBoxPart values directly.
-listBoxTheme :: Theme ListBoxPart
-listBoxTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = checkboxStyleSet }
-
-listBoxRect :: Rectangle
-listBoxRect = Rectangle 0 0 100 60
-
-listBoxItemHeight :: Double
-listBoxItemHeight = 20
-
-listBoxItems :: [(Int, Text)]
-listBoxItems =
-  [ (0, "Item0"), (1, "Item1"), (2, "Item2")
-  , (3, "Item3"), (4, "Item4"), (5, "Item5")
-  ]
-
-listBoxRenderItem :: ListBoxPart -> Bool -> (Int, Text) -> UI ListBoxPart Int ()
-listBoxRenderItem _eid isSelected (_val, lbl) =
-  drawText testColour AlignLeft ((if isSelected then "SEL:" else "UNSEL:") <> lbl)
-
-mkListBoxCtx :: InputState -> UIContext ListBoxPart Int
-mkListBoxCtx input = emptyUIContext listBoxRect input listBoxTheme noOpTextMeasurer
-
-runListBox :: Int -> UIContext ListBoxPart Int -> IO (UIContext ListBoxPart Int)
-runListBox sel = fmap (settle . snd) . runUI (listBox id [items listBoxItems, selected sel, itemHeight listBoxItemHeight, onSelect (postWith id)] listBoxRenderItem)
-
-
 -- | The generic focus\/tab\/hover\/disabled behaviour every control gets for
 -- free from 'control'\/'activatable', re-verified through each control's
 -- own real function rather than through those shared primitives directly —
@@ -387,17 +368,17 @@ controlBehaviourSpec bounds mkCtx this other hitPoint action = do
   describe "focus" $ do
     it "receives focus when nothing else is focused" $ do
       result <- runInteractions bounds (mkCtx noInput) action [] []
-      contextFocus (resultContext result) `shouldBe` Just this
+      contextFocus (resultContext result) `shouldBe` FocusSingle this
 
     it "does not take focus from another element" $ do
       -- `other` renders first and auto-claims focus since nothing is
       -- focused yet — no click needed.
       result <- runInteractions bounds (mkCtx noInput) composed [] []
-      contextFocus (resultContext result) `shouldBe` Just other
+      contextFocus (resultContext result) `shouldBe` FocusSingle other
 
     it "receives focus when clicked" $ do
       result <- runInteractions bounds (mkCtx noInput) composed [] [ClickAt hitPoint]
-      contextFocus (resultContext result) `shouldBe` Just this
+      contextFocus (resultContext result) `shouldBe` FocusSingle this
 
     it "does not steal focus when the mouse is released on it after dragging from another element" $ do
       -- `other` auto-claims focus for real just by rendering first (nothing
@@ -411,24 +392,24 @@ controlBehaviourSpec bounds mkCtx this other hitPoint action = do
       -- never a state a real interaction sequence could produce.
       result <- runInteractions bounds (mkCtx noInput) composed []
         [MouseDown otherHitPoint, DragTo hitPoint, MouseUp hitPoint]
-      contextFocus (resultContext result) `shouldBe` Just other
+      contextFocus (resultContext result) `shouldBe` FocusSingle other
 
     it "retains focus on the previously focused element when a drag releases elsewhere" $ do
       result <- runInteractions bounds (mkCtx noInput) composed
         [ClickAt otherHitPoint]
         [MouseDown otherHitPoint, DragTo hitPoint, MouseUp hitPoint]
-      contextFocus (resultContext result) `shouldBe` Just other
+      contextFocus (resultContext result) `shouldBe` FocusSingle other
 
   describe "tab navigation" $ do
     it "passes focus to the next control when Tab is pressed" $ do
       result <- runInteractions bounds (mkCtx noInput) composed [ClickAt hitPoint] [Tab]
-      contextFocus (resultContext result) `shouldBe` Nothing
+      contextFocus (resultContext result) `shouldBe` FocusNothing
 
     it "passes focus to the previous control when Shift+Tab is pressed" $ do
       -- `other` renders before `this` every frame, so it legitimately
       -- becomes the previous tab stop just by being in the tree.
       result <- runInteractions bounds (mkCtx noInput) composed [ClickAt hitPoint] [ShiftTab]
-      contextFocus (resultContext result) `shouldBe` Just other
+      contextFocus (resultContext result) `shouldBe` FocusSingle other
 
   describe "hover detection" $ do
     it "registers mouse-over on the frame after the mouse is inside" $ do
@@ -447,11 +428,11 @@ controlBehaviourSpec bounds mkCtx this other hitPoint action = do
 
     it "does not take auto-focus" $ do
       result <- runInteractions bounds (mkCtx noInput) disabledAction [] []
-      contextFocus (resultContext result) `shouldBe` Nothing
+      contextFocus (resultContext result) `shouldBe` FocusNothing
 
     it "does not steal focus when clicked" $ do
       result <- runInteractions bounds (mkCtx noInput) disabledComposed [ClickAt otherHitPoint] [ClickAt hitPoint]
-      contextFocus (resultContext result) `shouldBe` Just other
+      contextFocus (resultContext result) `shouldBe` FocusSingle other
 
     it "does not register mouse-over when the mouse is inside" $ do
       result <- runInteractions bounds (mkCtx (mouseAt hitPoint False []))
@@ -465,12 +446,12 @@ controlBehaviourSpec bounds mkCtx this other hitPoint action = do
     it "does not consume Tab or lose focus when disabled while focused" $ do
       focused <- runInteractions bounds (mkCtx noInput) action [] [ClickAt hitPoint]
       result <- runInteractions bounds (resultContext focused) disabledAction [] [Tab]
-      contextFocus (resultContext result) `shouldBe` Just this
+      contextFocus (resultContext result) `shouldBe` FocusSingle this
 
     it "does not hand focus to the previous tab stop on Shift+Tab when disabled while focused" $ do
       focused <- runInteractions bounds (mkCtx noInput) composed [] [ClickAt hitPoint]
       result <- runInteractions bounds (resultContext focused) disabledComposed [] [ShiftTab]
-      contextFocus (resultContext result) `shouldBe` Just this
+      contextFocus (resultContext result) `shouldBe` FocusSingle this
 
 -- | Background\/border chrome rendering, re-verified through each control's
 -- own function. Only applicable to controls that render their own chrome
@@ -502,6 +483,132 @@ backgroundAndBorderSpec bounds action = do
   it "draws a border when borderColour is set" $ do
     result <- runInteractions bounds borderedSeed action [] []
     resultDraws result `shouldContain` [StrokeBorder bgRect testBorderColour (uniformBorder 1)]
+
+-- itemsLayout/selectionControl fixtures -----------------------------------
+
+itemLabels :: [Text]
+itemLabels = ["Alpha", "Beta", "Gamma"]
+
+-- Zero margin/padding so the whole 100x90 rect is evenly split three ways,
+-- so click points are easy to reason about.
+zeroChromeStyle :: Style
+zeroChromeStyle = Style
+  { styleBackground   = testColour
+  , styleTextColour   = testColour
+  , styleTextAlign    = AlignLeft
+  , styleMargin       = uniform 0
+  , stylePadding      = uniform 0
+  , styleBorderColour = Nothing
+  , styleBorderEdges  = noBorder
+  }
+
+zeroChromeStyleSet :: StyleSet
+zeroChromeStyleSet = StyleSet
+  { styleSetNormal   = zeroChromeStyle
+  , styleSetHovered  = zeroChromeStyle
+  , styleSetPressed  = zeroChromeStyle
+  , styleSetFocused  = zeroChromeStyle
+  , styleSetDisabled = zeroChromeStyle
+  }
+
+listRect :: Rectangle
+listRect = Rectangle 0 0 100 90
+
+-- 'itemsLayout' has no element id, so it never looks anything up in the
+-- theme; 'Int' is just a convenient, concrete element type for
+-- 'selectionControl's per-item ids.
+listTheme :: Theme Int
+listTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = zeroChromeStyleSet }
+
+mkListCtx :: InputState -> UIContext Int msg
+mkListCtx input = emptyUIContext listRect input listTheme noOpTextMeasurer
+
+isFillRect :: DrawCommand -> Bool
+isFillRect (FillRect {}) = True
+isFillRect _             = False
+
+-- | Draws only the item's label -- used to check ordering/content.
+itemsRenderItem :: Int -> Text -> (Layout, UI Int String ())
+itemsRenderItem _ lbl = (Layout Fill Fill TopLeft, drawText testColour AlignLeft lbl)
+
+-- | Draws its own bounds as @(x, y)@ -- used to check panel arrangement.
+boundsRenderItem :: Int -> Text -> (Layout, UI Int String ())
+boundsRenderItem _ _ =
+  ( Layout Fill Fill TopLeft
+  , do
+      r <- getBounds
+      drawText testColour AlignLeft (T.pack (show (rectX r, rectY r)))
+  )
+
+selectionRenderItem :: Int -> SelectionState -> Text -> (Layout, UI Int (Int, Text) ())
+selectionRenderItem _ st lbl =
+  (Layout Fill Fill TopLeft, drawText testColour AlignLeft ((if st == Selected then "SEL:" else "UNSEL:") <> lbl))
+
+dispatchActivated :: Int -> Text -> [Out Int (Int, Text)]
+dispatchActivated idx val = [OutMsg (idx, val)]
+
+-- | Shared behaviour: renders 'items' via the template, in order.
+itemOrderingSpec :: (UIContext e msg -> IO (UIContext e msg)) -> UIContext e msg -> [Text] -> Spec
+itemOrderingSpec run baseCtx expectedTexts =
+  it "renders each item's content, in order" $ do
+    ctx' <- run baseCtx
+    drawnTexts ctx' `shouldBe` expectedTexts
+
+-- | Shared behaviour: renders nothing when 'items' is left at its default
+-- (empty).
+emptyItemsSpec :: (UIContext e msg -> IO (UIContext e msg)) -> UIContext e msg -> Spec
+emptyItemsSpec run baseCtx =
+  it "renders nothing when items is empty" $ do
+    ctx' <- run baseCtx
+    drawnTexts ctx' `shouldBe` []
+
+-- | Shared behaviour: neither control is a chrome-drawing control -- see
+-- the "Items and selection" section of the "Blink.Controls" module header.
+noChromeSpec :: (UIContext e msg -> IO (UIContext e msg)) -> UIContext e msg -> Spec
+noChromeSpec run baseCtx =
+  it "draws no background or border of its own" $ do
+    ctx' <- run baseCtx
+    filter isFillRect (getDrawCommands ctx') `shouldBe` []
+
+-- radioGroup fixtures --------------------------------------------------------
+
+-- Reuses 'itemLabels'\/'listRect'\/'zeroChromeStyleSet' from the
+-- 'selectionControl' fixtures above -- same three-row layout, just under
+-- 'RadioGroupPart' instead of bare 'Int' since 'radioGroup' has its own
+-- group-level id ('RadioGroup') alongside each item's own 'RadioPart's
+-- ('RadioItem' idx part).
+radioGroupTheme :: Theme RadioGroupPart
+radioGroupTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = zeroChromeStyleSet }
+
+mkRadioGroupCtx :: InputState -> UIContext RadioGroupPart msg
+mkRadioGroupCtx input = emptyUIContext listRect input radioGroupTheme noOpTextMeasurer
+
+dispatchRGActivated :: Int -> Text -> [Out RadioGroupPart (Int, Text)]
+dispatchRGActivated idx val = [OutMsg (idx, val)]
+
+runRadioGroup :: [Attr RadioGroupPart (SelectionEvent Text) (Int, Text) (RadioGroupConfig Text)]
+              -> UIContext RadioGroupPart (Int, Text) -> IO (UIContext RadioGroupPart (Int, Text))
+runRadioGroup attrs = fmap (settle . snd) . runUI (radioGroup id attrs)
+
+-- withinComposite fixtures --------------------------------------------------
+
+-- | A composite ('ListElem'\/'GroupElem'), its direct children
+-- ('RowElem'\/'SubRowElem'), and two plain, unrelated elements used to prove
+-- a composite's focus window doesn't leak past its own boundary.
+data CompElem = ListElem | RowElem Int | GroupElem | SubRowElem Int | AfterElem | SiblingElem
+  deriving (Eq, Ord, Show)
+
+compTheme :: Theme CompElem
+compTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = zeroChromeStyleSet }
+
+mkCompCtx :: InputState -> UIContext CompElem msg
+mkCompCtx input = emptyUIContext controlRect input compTheme noOpTextMeasurer
+
+-- | A bare focusable leaf, standing in for "some unmodified control" inside
+-- a composite -- the point of 'withinComposite' is that this needs no
+-- changes of its own to compose correctly.
+leaf :: CompElem -> UI CompElem msg ()
+leaf eid = control eid ([] :: [Attr CompElem Probe msg ()]) (pure ())
 
 spec :: Spec
 spec = describe "Blink.Controls" $ do
@@ -721,15 +828,15 @@ spec = describe "Blink.Controls" $ do
 
       it "receives focus when nothing else is focused" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (action noAttrs) [] []
-        contextFocus (resultContext result) `shouldBe` Just TestControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
       it "does not take focus from another element" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (otherThenThis noAttrs) [] []
-        contextFocus (resultContext result) `shouldBe` Just OtherControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
       it "receives focus when clicked" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (otherThenThis noAttrs) [] [ClickAt pt]
-        contextFocus (resultContext result) `shouldBe` Just TestControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
       it "does not steal focus when the mouse is released on it after dragging from another element" $ do
         -- 'applyFocus' alone never acquires capture (that's 'setHot'/
@@ -740,13 +847,13 @@ spec = describe "Blink.Controls" $ do
         let composedOther = setHot OtherControl >> applyFocus OtherControl noAttrs >> action noAttrs
         result <- runInteractions controlRect (mkCtxFor noInput) composedOther []
           [MouseDown pt, MouseUp pt]
-        contextFocus (resultContext result) `shouldBe` Just OtherControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
       it "retains focus on the previously focused element when a drag releases elsewhere" $ do
         let composedOther = setHot OtherControl >> applyFocus OtherControl noAttrs >> action noAttrs
         result <- runInteractions controlRect (mkCtxFor noInput) composedOther
           [ClickAt pt] [MouseDown pt, MouseUp pt]
-        contextFocus (resultContext result) `shouldBe` Just OtherControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
       it "notifies the caller when focus is gained" $ do
         result <- runInteractions controlRect (mkCtxFor noInput)
@@ -778,12 +885,12 @@ spec = describe "Blink.Controls" $ do
 
       it "clears focus when Tab is pressed while focused" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (action noAttrs) [ClickAt pt] [Tab]
-        contextFocus (resultContext result) `shouldBe` Nothing
+        contextFocus (resultContext result) `shouldBe` FocusNothing
 
       it "passes focus to the previous tab stop when Shift+Tab is pressed" $ do
         let composed = applyFocus OtherControl ([] :: [Attr TestElement Probe Probe ()]) >> action noAttrs
         result <- runInteractions controlRect (mkCtxFor noInput) composed [ClickAt pt] [ShiftTab]
-        contextFocus (resultContext result) `shouldBe` Just OtherControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
       it "registers itself as the previous tab stop by default" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (action noAttrs) [] []
@@ -799,6 +906,11 @@ spec = describe "Blink.Controls" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) composed [] []
         contextPrevTabStop (resultContext result) `shouldBe` Just TestControl
 
+      it "does not auto-claim focus when excluded from tab order, even with nothing else focused" $ do
+        result <- runInteractions controlRect (mkCtxFor noInput)
+          (action ([tabStop False] :: [Attr TestElement Probe Probe ()])) [] []
+        contextFocus (resultContext result) `shouldBe` FocusNothing
+
       it "keeps focus auto-claimed this frame instead of immediately clearing it on the same Tab press" $ do
         -- Regression: wraparound after Tab runs past the last control clears
         -- focus with nothing left this frame to auto-claim it. The *next*
@@ -806,12 +918,12 @@ spec = describe "Blink.Controls" $ do
         -- is focused) and keep it — not immediately lose it again just
         -- because Tab is the very key that's pressed this same frame.
         result <- runInteractions controlRect (mkCtxFor noInput) (action noAttrs) [] [Tab]
-        contextFocus (resultContext result) `shouldBe` Just TestControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
       it "does not consume Tab or lose focus when disabled while focused" $ do
         focused <- runInteractions controlRect (mkCtxFor noInput) (action noAttrs) [] [ClickAt pt]
         result <- runInteractions controlRect (resultContext focused) (disableWhen True (action noAttrs)) [] [Tab]
-        contextFocus (resultContext result) `shouldBe` Just TestControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
     describe "focusOnClick (FocusTarget)" $ do
       let attrs = [focusOnClick (FocusTarget OtherControl)] :: [Attr TestElement Probe Probe ()]
@@ -819,11 +931,11 @@ spec = describe "Blink.Controls" $ do
 
       it "does not auto-claim focus when nothing is focused" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (applyFocus TestControl attrs) [] []
-        contextFocus (resultContext result) `shouldBe` Nothing
+        contextFocus (resultContext result) `shouldBe` FocusNothing
 
       it "gives focus to the target when clicked, not to itself" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (applyFocus TestControl attrs) [] [ClickAt pt]
-        contextFocus (resultContext result) `shouldBe` Just OtherControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
     describe "focusOnClick (NoFocus)" $ do
       let attrs = [focusOnClick NoFocus] :: [Attr TestElement Probe Probe ()]
@@ -831,16 +943,16 @@ spec = describe "Blink.Controls" $ do
 
       it "does not auto-claim focus when nothing is focused" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (applyFocus TestControl attrs) [] []
-        contextFocus (resultContext result) `shouldBe` Nothing
+        contextFocus (resultContext result) `shouldBe` FocusNothing
 
       it "does not take focus when clicked" $ do
         result <- runInteractions controlRect (mkCtxFor noInput) (applyFocus TestControl attrs) [] [ClickAt pt]
-        contextFocus (resultContext result) `shouldBe` Nothing
+        contextFocus (resultContext result) `shouldBe` FocusNothing
 
       it "still retains focus if it already holds it" $ do
         focused <- runInteractions controlRect (mkCtxFor noInput) (applyFocus TestControl ([] :: [Attr TestElement Probe Probe ()])) [] [ClickAt pt]
         result <- runInteractions controlRect (resultContext focused) (applyFocus TestControl attrs) [] []
-        contextFocus (resultContext result) `shouldBe` Just TestControl
+        contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
   describe "measureChrome" $ do
     it "sums margin, border, and padding on each axis" $ do
@@ -882,18 +994,87 @@ spec = describe "Blink.Controls" $ do
     it "composes mouse-over, focus, tab navigation, and chrome for a single interactive element" $ do
       result <- runInteractions controlRect (mkCtxFor noInput)
         (control TestControl ([] :: [Attr TestElement Probe Probe ()]) (pure ())) [] [ClickAt pt]
-      contextFocus (resultContext result) `shouldBe` Just TestControl
+      contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
       resultDraws result `shouldContain` [FillRect bgRect testColour]
 
     it "clicking moves focus onto a different element instead of itself" $ do
       let attrs = [focusOnClick (FocusTarget OtherControl)] :: [Attr TestElement Probe Probe ()]
       result <- runInteractions controlRect (mkCtxFor noInput)
         (control TestControl attrs (pure ())) [] [ClickAt pt]
-      contextFocus (resultContext result) `shouldBe` Just OtherControl
+      contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
     it "runs content within the padded content rectangle" $ do
       ctx' <- snd <$> runUI (control TestControl ([] :: [Attr TestElement Probe Probe ()]) (fillRect testColour)) (mkCtxFor noInput)
       getDrawCommands ctx' `shouldContain` [FillRect contentRect testColour]
+
+  describe "withinComposite" $ do
+    -- Standalone usage has no focus decision of its own to hand down (that's
+    -- what 'Blink.Controls.compositeControl' adds), so it just passes its own
+    -- current ambient focus straight through, unmodified.
+    let wc eid inner = getFocus >>= \f -> withinComposite eid f inner
+
+    it "a composite is considered focused when its first child auto-claims focus" $ do
+      let render = wc ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] []
+      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 0))
+
+    it "a composite retains its focused child across renders" $ do
+      let render = wc ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
+      -- Frame 1: nothing focused, RowElem 0 auto-claims. Frame 2 (Tab):
+      -- RowElem 0 gives up focus and RowElem 1 -- rendered second -- takes
+      -- it. RowElem 0 renders first on every subsequent frame, so retaining
+      -- RowElem 1 instead of reverting to it is the actual thing under test.
+      result <- runInteractions controlRect (mkCompCtx noInput) render [Wait 1, Tab] []
+      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 1))
+
+    forM_ [1, 2, 3] $ \n ->
+      it ("an empty composite keeps holding focus after " <> show n <> " idle frame(s)") $ do
+        let render = wc ListElem (pure ())
+        result <- runInteractions controlRect (mkCompCtx noInput) render [] (replicate n (Wait 1))
+        contextFocus (resultContext result) `shouldBe` FocusComposite ListElem FocusNothing
+
+    it "an empty composite claims focus" $ do
+      -- Even an empty composite claims the "nothing is focused" opportunity
+      -- purely by rendering first, the same way an ordinary focusable
+      -- control would -- so a plain control positioned after it must not
+      -- treat that as an invitation to auto-claim in its place.
+      let render = wc ListElem (pure ()) >> leaf AfterElem
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] []
+      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem FocusNothing
+
+    it "a composite is considered focused whenever a nested composite inside it is focused" $ do
+      let render = wc ListElem $ do
+            wc GroupElem (leaf (SubRowElem 0) >> leaf (SubRowElem 1))
+            leaf (RowElem 1)
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] []
+      let chain = contextFocus (resultContext result)
+      chain `shouldBe` FocusComposite ListElem (FocusComposite GroupElem (FocusSingle (SubRowElem 0)))
+      focusContains ListElem chain `shouldBe` True
+      focusContains GroupElem chain `shouldBe` True
+      focusContains (SubRowElem 0) chain `shouldBe` True
+      focusContains (RowElem 1) chain `shouldBe` False
+      focusContains (SubRowElem 1) chain `shouldBe` False
+
+    it "a composite does not steal focus already held by an unrelated element" $ do
+      let render = leaf SiblingElem >> wc ListElem (leaf (RowElem 0))
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] [Wait 1, Wait 1]
+      contextFocus (resultContext result) `shouldBe` FocusSingle SiblingElem
+
+    it "Shift-Tab from a composite's first child wraps to its last child" $ do
+      let render = wc ListElem (leaf (RowElem 0) >> leaf (RowElem 1))
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] [Wait 1, ShiftTab]
+      contextFocus (resultContext result) `shouldBe` FocusComposite ListElem (FocusSingle (RowElem 1))
+
+    it "a child correctly sees itself as no longer focused on the frame its composite releases it" $ do
+      let focusedStyle = testStyle { styleBackground = RGBA 0 0 1 1 }
+          rowTheme = compTheme
+            { themeElementStyles = Map.fromList
+                [(RowElem 0, zeroChromeStyleSet { styleSetFocused = focusedStyle })] }
+          rowCtx = emptyUIContext controlRect noInput rowTheme noOpTextMeasurer :: UIContext CompElem ()
+          styledLeaf eid = control eid ([] :: [Attr CompElem Probe () ()]) (fillRect =<< (styleBackground <$> getStyle eid))
+          render = wc ListElem (styledLeaf (RowElem 0))
+      result <- runInteractions controlRect rowCtx render [] [Wait 1, Tab]
+      resultDraws result `shouldNotContain` [FillRect controlRect (RGBA 0 0 1 1)]
 
   describe "isKeyPressed" $ do
     -- isKeyPressed is a bare query primitive with no click-handling of its
@@ -987,7 +1168,7 @@ spec = describe "Blink.Controls" $ do
     it "still takes focus via the underlying control even when not activated by a key" $ do
       result <- runInteractions controlRect (mkCtxFor noInput)
         (activatable TestControl ([] :: [Attr TestElement Probe Probe ()]) [KeyReturn] (pure ())) [] [ClickAt pt]
-      contextFocus (resultContext result) `shouldBe` Just TestControl
+      contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
   describe "label" $ do
     it "draws the given text in the resolved style's colour and alignment" $ do
@@ -1000,7 +1181,7 @@ spec = describe "Blink.Controls" $ do
 
     it "does not take focus by default, unlike every other control here" $ do
       ctx' <- snd <$> runUI (label TestControl [text "Hello"]) (mkCtxFor noInput :: UIContext TestElement ())
-      contextFocus ctx' `shouldBe` Nothing
+      contextFocus ctx' `shouldBe` FocusNothing
 
     it "does not register itself as the previous tab stop by default" $ do
       ctx' <- snd <$> runUI (label TestControl [text "Hello"]) (mkCtxFor noInput :: UIContext TestElement ())
@@ -1009,7 +1190,7 @@ spec = describe "Blink.Controls" $ do
     it "clicking moves focus onto a different element instead of itself" $ do
       let attrs = [text "Caption", focusOnClick (FocusTarget OtherControl)]
       result <- runInteractions controlRect (mkCtxFor noInput) (label TestControl attrs) [] [ClickAt (Point 50 50)]
-      contextFocus (resultContext result) `shouldBe` Just OtherControl
+      contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
     it "can still be made reachable by Tab when explicitly requested" $ do
       ctx' <- snd <$> runUI (label TestControl [text "Hello", tabStop True]) (mkCtxFor noInput :: UIContext TestElement ())
@@ -1018,7 +1199,7 @@ spec = describe "Blink.Controls" $ do
     it "can still be made focusable by a direct click when explicitly requested" $ do
       result <- runInteractions controlRect (mkCtxFor noInput)
         (label TestControl [text "Hello", focusOnClick FocusSelf]) [] [ClickAt (Point 50 50)]
-      contextFocus (resultContext result) `shouldBe` Just TestControl
+      contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
   describe "progressBar" $ do
     let run v ctx = snd <$> runUI (progressBar TestControl [progress (Progress v)]) ctx
@@ -1215,11 +1396,71 @@ spec = describe "Blink.Controls" $ do
     describe "focus" $ do
       it "gives focus to the checkbox itself (not the glyph or label) when the label is clicked" $ do
         result <- runInteractions checkboxRect (mkCheckboxCtx noInput) (checkboxAction False) [] [ClickAt labelPoint]
-        contextFocus (resultContext result) `shouldBe` Just CheckboxBox
+        contextFocus (resultContext result) `shouldBe` FocusSingle CheckboxBox
 
       it "gives focus to the checkbox itself when the glyph is clicked" $ do
         result <- runInteractions checkboxRect (mkCheckboxCtx noInput) (checkboxAction False) [] [ClickAt glyphPoint]
-        contextFocus (resultContext result) `shouldBe` Just CheckboxBox
+        contextFocus (resultContext result) `shouldBe` FocusSingle CheckboxBox
+
+  describe "radioButton" $ do
+    let radioAction isPicked = radioButton id [text "Ship to home", picked isPicked, onPick (post ())]
+
+    controlBehaviourSpec checkboxRect mkRadioCtx RadioBox RadioGlyph labelPoint (radioAction False)
+
+    describe "pick behaviour" $ do
+      it "dispatches when clicked while unpicked" $ do
+        result <- runInteractions checkboxRect (mkRadioCtx noInput) (radioAction False) [] [ClickAt labelPoint]
+        resultMessages result `shouldBe` [()]
+
+      it "still dispatches when clicked while already picked -- a radio button never un-picks itself" $ do
+        result <- runInteractions checkboxRect (mkRadioCtx noInput) (radioAction True) [] [ClickAt labelPoint]
+        resultMessages result `shouldBe` [()]
+
+      it "dispatches when clicked directly on the glyph, not just the label" $ do
+        result <- runInteractions checkboxRect (mkRadioCtx noInput) (radioAction False) [] [ClickAt glyphPoint]
+        resultMessages result `shouldBe` [()]
+
+      it "dispatches when Enter is pressed while focused" $ do
+        result <- runInteractions checkboxRect (mkRadioCtx noInput) (radioAction False)
+          [ClickAt labelPoint] [PressKey KeyReturn []]
+        resultMessages result `shouldBe` [()]
+
+      it "dispatches when Space is pressed while focused" $ do
+        result <- runInteractions checkboxRect (mkRadioCtx noInput) (radioAction False)
+          [ClickAt labelPoint] [PressKey KeySpace []]
+        resultMessages result `shouldBe` [()]
+
+      it "does not dispatch when clicked outside the radio button" $ do
+        result <- runInteractions checkboxRect (mkRadioCtx noInput) (radioAction False) [] [ClickAt (Point 200 200)]
+        resultMessages result `shouldBe` []
+
+    describe "disabled" $ do
+      it "does not dispatch when clicked while disabled" $ do
+        result <- runInteractions checkboxRect (mkRadioCtx noInput)
+          (disableWhen True (radioAction False)) [] [ClickAt labelPoint]
+        resultMessages result `shouldBe` []
+
+    describe "rendering" $ do
+      it "draws a filled mark when picked" $ do
+        ctx' <- runRadioButton True (mkRadioCtx noInput)
+        drawnTexts ctx' `shouldContain` ["●"]
+
+      it "draws an unfilled mark when unpicked" $ do
+        ctx' <- runRadioButton False (mkRadioCtx noInput)
+        drawnTexts ctx' `shouldContain` ["○"]
+
+      it "draws the label text" $ do
+        ctx' <- runRadioButton False (mkRadioCtx noInput)
+        drawnTexts ctx' `shouldContain` ["Ship to home"]
+
+    describe "focus" $ do
+      it "gives focus to the radio button itself (not the glyph or label) when the label is clicked" $ do
+        result <- runInteractions checkboxRect (mkRadioCtx noInput) (radioAction False) [] [ClickAt labelPoint]
+        contextFocus (resultContext result) `shouldBe` FocusSingle RadioBox
+
+      it "gives focus to the radio button itself when the glyph is clicked" $ do
+        result <- runInteractions checkboxRect (mkRadioCtx noInput) (radioAction False) [] [ClickAt glyphPoint]
+        contextFocus (resultContext result) `shouldBe` FocusSingle RadioBox
 
   describe "textInputControl" $ do
     let textAction v = textInputControl TestControl [text v, onInput (postWith id)]
@@ -1813,281 +2054,235 @@ spec = describe "Blink.Controls" $ do
       ctx' <- runVirtualContent 0 (-20) 10
       [c | c@(FillRect _ _) <- getDrawCommands ctx'] `shouldSatisfy` ((<= 10) . length)
 
-  describe "selector" $ do
-    let renderItem :: Int -> Bool -> (String, Text) -> UI Int String ()
-        renderItem _eid isSelected (_val, lbl) =
-          drawText testColour AlignLeft ((if isSelected then "SEL:" else "UNSEL:") <> lbl)
+  let runItemsLayout attrs = fmap (settle . snd) . runUI (itemsLayout attrs)
+      runSelectionControl attrs = fmap (settle . snd) . runUI (selectionControl id attrs)
 
-        runSelector :: String -> UIContext Int String -> IO (UIContext Int String)
-        runSelector sel = fmap (settle . snd) . runUI (selector id [items radioItems, selected sel, onSelect (postWith id)] renderItem)
+  describe "itemsLayout" $ do
+    let run      = runItemsLayout [items itemLabels, itemTemplate itemsRenderItem]
+        runEmpty = runItemsLayout [itemTemplate itemsRenderItem]
 
-        selectorAction sel = selector id [items radioItems, selected sel, onSelect (postWith id)] renderItem
-        -- item 0 (a) = Point 50 15, item 1 (b) = Point 50 45, item 2 (c) = Point 50 75
-        itemPoint :: Int -> Point
-        itemPoint idx = Point 50 (15 + 30 * fromIntegral idx)
+    describe "items" $ do
+      itemOrderingSpec run (mkListCtx noInput) itemLabels
+      emptyItemsSpec runEmpty (mkListCtx noInput)
+
+    noChromeSpec run (mkListCtx noInput)
+
+    describe "orientation / itemsPanel" $ do
+      it "arranges items in a vertical stack by default" $ do
+        ctx' <- runItemsLayout [items itemLabels, itemTemplate boundsRenderItem] (mkListCtx noInput)
+        let coords = map (read . T.unpack) (drawnTexts ctx') :: [(Double, Double)]
+        map fst coords `shouldSatisfy` \xs -> all (== head xs) xs
+        map snd coords `shouldSatisfy` \ys -> and (zipWith (<) ys (tail ys))
+
+      it "arranges items in a horizontal row with orientation Horizontal" $ do
+        ctx' <- runItemsLayout
+          [items itemLabels, orientation Horizontal, itemTemplate boundsRenderItem]
+          (mkListCtx noInput)
+        let coords = map (read . T.unpack) (drawnTexts ctx') :: [(Double, Double)]
+        map snd coords `shouldSatisfy` \ys -> all (== head ys) ys
+        map fst coords `shouldSatisfy` \xs -> and (zipWith (<) xs (tail xs))
+
+      it "still stacks vertically when itemsPanel changes spacing" $ do
+        ctx' <- runItemsLayout
+          [items itemLabels, itemsPanel (defaultBoxConfig { boxSpacing = 2 }), itemTemplate boundsRenderItem]
+          (mkListCtx noInput)
+        let coords = map (read . T.unpack) (drawnTexts ctx') :: [(Double, Double)]
+        map fst coords `shouldSatisfy` \xs -> all (== head xs) xs
+        map snd coords `shouldSatisfy` \ys -> and (zipWith (<) ys (tail ys))
+
+  describe "compositeControl" $ do
+    -- Built directly on 'withinComposite' -- see that suite for the
+    -- underlying focus mechanics. These tests only check that
+    -- 'compositeControl' actually wires it (plus mouse-over and chrome) in,
+    -- not that it works, which 'withinComposite' already covers.
+    let compAttrs :: [Attr CompElem Probe msg (CompositeControlConfig CompElem msg Int)]
+        compAttrs = [items ([0, 1] :: [Int]), itemTemplate (\idx _ -> (Layout Fill Fill TopLeft, leaf (RowElem idx)))]
+        render    = compositeControl ListElem compAttrs
+
+    describe "background and border" $
+      backgroundAndBorderSpec controlRect (compositeControl TestControl ([] :: [Attr TestElement Probe () (CompositeControlConfig TestElement () Int)]))
+
+    it "a composite claims focus for itself, atomically -- not into a specific child" $ do
+      result <- runInteractions controlRect (mkCompCtx noInput) render [] []
+      contextFocus (resultContext result) `shouldBe` FocusSingle ListElem
+
+    it "with tabStop off, the composite never claims focus itself, and a child does instead" $ do
+      let render' = compositeControl ListElem (tabStop False : compAttrs)
+      result <- runInteractions controlRect (mkCompCtx noInput) render' [] []
+      contextFocus (resultContext result) `shouldBe` FocusSingle (RowElem 0)
+
+    it "Tab from a focused composite moves past it entirely, not into its own children" $ do
+      let withAfter = render >> leaf AfterElem
+      result <- runInteractions controlRect (mkCompCtx noInput) withAfter [Wait 1, Tab] []
+      contextFocus (resultContext result) `shouldBe` FocusSingle AfterElem
+
+    it "a composite does not steal focus already held by an unrelated element" $ do
+      let withSibling = leaf SiblingElem >> render
+      result <- runInteractions controlRect (mkCompCtx noInput) withSibling [] [Wait 1, Wait 1]
+      contextFocus (resultContext result) `shouldBe` FocusSingle SiblingElem
+
+    it "disabling a composite disables the items inside it too" $ do
+      result <- runInteractions controlRect (mkCompCtx noInput) (disableWhen True render) [] [ClickAt (Point 50 45)]
+      focusContains (RowElem 0) (contextFocus (resultContext result)) `shouldBe` False
+
+    describe "an idle composite (no eligible children)" $ do
+      let emptyAttrs :: [Attr CompElem Probe msg (CompositeControlConfig CompElem msg Int)]
+          emptyAttrs = [itemTemplate (\idx _ -> (Layout Fill Fill TopLeft, leaf (RowElem idx)))]
+          renderEmpty = compositeControl ListElem emptyAttrs
+
+      it "an empty composite claims focus" $ do
+        result <- runInteractions controlRect (mkCompCtx noInput) renderEmpty [] []
+        contextFocus (resultContext result) `shouldBe` FocusSingle ListElem
+
+      it "Tab from an idle composite gives up focus entirely" $ do
+        result <- runInteractions controlRect (mkCompCtx noInput) renderEmpty [] [Wait 1, Tab]
+        contextFocus (resultContext result) `shouldBe` FocusNothing
+
+      it "Shift-Tab from an idle composite returns to whatever was focused before it" $ do
+        let withSibling = leaf SiblingElem >> renderEmpty
+        result <- runInteractions controlRect (mkCompCtx noInput) withSibling [] [Wait 1, Tab, Wait 1, ShiftTab]
+        contextFocus (resultContext result) `shouldBe` FocusSingle SiblingElem
+
+  describe "selectionControl" $ do
+    let run      = runSelectionControl [items itemLabels, itemContainer selectionRenderItem, onSelect dispatchActivated]
+        runEmpty = runSelectionControl [itemContainer selectionRenderItem, onSelect dispatchActivated]
+
+    describe "items" $ do
+      itemOrderingSpec run (mkListCtx noInput) (map ("UNSEL:" <>) itemLabels)
+      emptyItemsSpec runEmpty (mkListCtx noInput)
+
+    noChromeSpec run (mkListCtx noInput)
 
     describe "selection" $ do
-      it "dispatches the value of a clicked item" $ do
-        result <- runInteractions radioGroupRect (mkRadioGroupCtx noInput) (selectorAction "a") [] [ClickAt (itemPoint 1)]
-        resultMessages result `shouldBe` ["b"]
+      it "defaults to nothing selected" $ do
+        ctx' <- run (mkListCtx noInput)
+        drawnTexts ctx' `shouldBe` map ("UNSEL:" <>) itemLabels
 
-      it "dispatches the value when Enter is pressed while an item is focused" $ do
-        result <- runInteractions radioGroupRect (mkRadioGroupCtx noInput) (selectorAction "a")
-          [ClickAt (itemPoint 1)] [PressKey KeyReturn []]
-        resultMessages result `shouldBe` ["b"]
+      it "marks the item matching 'selected' as Selected" $ do
+        ctx' <- runSelectionControl
+          [items itemLabels, selected "Beta", itemContainer selectionRenderItem, onSelect dispatchActivated]
+          (mkListCtx noInput)
+        drawnTexts ctx' `shouldBe` ["UNSEL:Alpha", "SEL:Beta", "UNSEL:Gamma"]
 
-      it "does not dispatch when clicked while disabled" $ do
-        result <- runInteractions radioGroupRect (mkRadioGroupCtx noInput)
-          (disableWhen True (selectorAction "a")) [] [ClickAt (itemPoint 1)]
-        length (resultMessages result) `shouldBe` 0
+      it "marks the item at 'selectedIndex' as Selected regardless of value" $ do
+        ctx' <- runSelectionControl
+          [items itemLabels, selectedIndex 2, itemContainer selectionRenderItem, onSelect dispatchActivated]
+          (mkListCtx noInput)
+        drawnTexts ctx' `shouldBe` ["UNSEL:Alpha", "UNSEL:Beta", "SEL:Gamma"]
+
+    describe "click detection" $ do
+      it "fires Activated with the clicked item's index and value" $ do
+        result <- runInteractions listRect (mkListCtx noInput)
+          (selectionControl id [items itemLabels, itemContainer selectionRenderItem, onSelect dispatchActivated])
+          [] [ClickAt (Point 50 45)]
+        resultMessages result `shouldBe` [(1, "Beta")]
 
       it "does not dispatch when there is no interaction" $ do
-        ctx' <- runSelector "b" (mkRadioGroupCtx noInput)
+        ctx' <- run (mkListCtx noInput)
         dispatchCount ctx' `shouldBe` 0
 
-    describe "keyboard navigation" $ do
-      let nav focusIdx k = do
-            result <- runInteractions radioGroupRect (mkRadioGroupCtx noInput) (selectorAction "a")
-              [ClickAt (itemPoint focusIdx)] [PressKey k []]
-            pure $ contextFocus (resultContext result)
-
-      it "moves focus to the next item when Down is pressed" $ do
-        result <- nav 0 KeyDown
-        result `shouldBe` Just 1
-
-      it "moves focus to the previous item when Up is pressed" $ do
-        result <- nav 1 KeyUp
-        result `shouldBe` Just 0
-
-      it "does not move focus when disabled" $ do
-        focused <- runInteractions radioGroupRect (mkRadioGroupCtx noInput) (selectorAction "a") [] [ClickAt (itemPoint 0)]
-        result <- runInteractions radioGroupRect (resultContext focused)
-          (disableWhen True (selectorAction "a")) [] [PressKey KeyDown []]
-        contextFocus (resultContext result) `shouldBe` Just 0
-
-    describe "rendering" $ do
-      it "passes isSelected=True for the selected item" $ do
-        ctx' <- runSelector "b" (mkRadioGroupCtx noInput)
-        drawnTexts ctx' `shouldContain` ["SEL:Beta"]
-
-      it "passes isSelected=False for other items" $ do
-        ctx' <- runSelector "b" (mkRadioGroupCtx noInput)
-        drawnTexts ctx' `shouldContain` ["UNSEL:Alpha"]
-        drawnTexts ctx' `shouldContain` ["UNSEL:Gamma"]
-
-    describe "defaults" $ do
-      it "defaults to an empty list when no items are given" $ do
-        ctx' <- fmap (settle . snd) $ runUI (selector id [onSelect (postWith id)] renderItem) (mkRadioGroupCtx noInput)
-        drawnTexts ctx' `shouldBe` []
-
-      it "defaults to nothing selected" $ do
-        ctx' <- fmap (settle . snd) $ runUI (selector id [items radioItems, onSelect (postWith id)] renderItem) (mkRadioGroupCtx noInput)
-        drawnTexts ctx' `shouldNotContain` ["SEL:Alpha"]
-        drawnTexts ctx' `shouldNotContain` ["SEL:Beta"]
-        drawnTexts ctx' `shouldNotContain` ["SEL:Gamma"]
-
-    describe "lifecycle events" $
-      it "notifies the caller when any item gains focus" $ do
-        let attrs = [items radioItems, selected "a", onFocusGained (post "gained")]
-        ctx' <- fmap (settle . snd) $ runUI (selector id attrs renderItem) (mkRadioGroupCtx noInput)
-        getMessages ctx' `shouldBe` ["gained"]
+      it "does not dispatch when clicked while disabled" $ do
+        result <- runInteractions listRect (mkListCtx noInput)
+          (disableWhen True (selectionControl id [items itemLabels, itemContainer selectionRenderItem, onSelect dispatchActivated]))
+          [] [ClickAt (Point 50 45)]
+        resultMessages result `shouldBe` []
 
   describe "radioGroup" $ do
-    let radioGroupAction sel = radioGroup id [items radioItems, selected sel, onSelect (postWith id)]
-        -- item 0 (a) = Point 50 15, item 1 (b) = Point 50 45, item 2 (c) = Point 50 75
-        itemPoint :: Int -> Point
-        itemPoint idx = Point 50 (15 + 30 * fromIntegral idx)
+    let baseAttrs = [items itemLabels, itemLabel id, onSelect dispatchRGActivated]
+        render    = radioGroup id baseAttrs
+        run       = runRadioGroup baseAttrs
+        marks     = filter (`elem` ["●", "○"]) . drawnTexts
+
+    describe "items" $
+      it "renders each item's label, in order" $ do
+        ctx' <- run (mkRadioGroupCtx noInput)
+        filter (`notElem` ["●", "○"]) (drawnTexts ctx') `shouldBe` itemLabels
 
     describe "selection" $ do
-      it "dispatches the value of a clicked item" $ do
-        result <- runInteractions radioGroupRect (mkRadioGroupCtx noInput) (radioGroupAction "a") [] [ClickAt (itemPoint 1)]
-        resultMessages result `shouldBe` ["b"]
+      it "defaults to nothing selected" $ do
+        ctx' <- run (mkRadioGroupCtx noInput)
+        marks ctx' `shouldBe` ["○", "○", "○"]
 
-      it "dispatches the correct value when the last item is clicked" $ do
-        result <- runInteractions radioGroupRect (mkRadioGroupCtx noInput) (radioGroupAction "a") [] [ClickAt (itemPoint 2)]
-        resultMessages result `shouldBe` ["c"]
+      it "marks the item matching 'selected' as picked" $ do
+        ctx' <- runRadioGroup (selected "Beta" : baseAttrs) (mkRadioGroupCtx noInput)
+        marks ctx' `shouldBe` ["○", "●", "○"]
 
-      it "dispatches the value when Enter is pressed while an item is focused" $ do
-        result <- runInteractions radioGroupRect (mkRadioGroupCtx noInput) (radioGroupAction "a")
-          [ClickAt (itemPoint 1)] [PressKey KeyReturn []]
-        resultMessages result `shouldBe` ["b"]
+      it "marks the item at 'selectedIndex' as picked regardless of value" $ do
+        ctx' <- runRadioGroup (selectedIndex 2 : baseAttrs) (mkRadioGroupCtx noInput)
+        marks ctx' `shouldBe` ["○", "○", "●"]
 
-      it "dispatches the value when Space is pressed while an item is focused" $ do
-        result <- runInteractions radioGroupRect (mkRadioGroupCtx noInput) (radioGroupAction "a")
-          [ClickAt (itemPoint 2)] [PressKey KeySpace []]
-        resultMessages result `shouldBe` ["c"]
-
-      it "does not dispatch when no item is focused and a key is pressed" $ do
-        result <- runInteractions radioGroupRect (mkRadioGroupCtx noInput)
-          (withOther 99 (radioGroupAction "a")) [] [PressKey KeyReturn []]
-        length (resultMessages result) `shouldBe` 0
-
-      it "does not dispatch when there is no interaction" $ do
-        ctx' <- runRadioGroup "b" (mkRadioGroupCtx noInput)
-        dispatchCount ctx' `shouldBe` 0
-
-    describe "keyboard navigation" $ do
-      let nav focusIdx k = do
-            result <- runInteractions radioGroupRect (mkRadioGroupCtx noInput) (radioGroupAction "a")
-              [ClickAt (itemPoint focusIdx)] [PressKey k []]
-            pure $ contextFocus (resultContext result)
-
-      it "moves focus to the next item when Down is pressed" $ do
-        result <- nav 0 KeyDown
-        result `shouldBe` Just 1
-
-      it "moves focus to the previous item when Up is pressed" $ do
-        result <- nav 1 KeyUp
-        result `shouldBe` Just 0
-
-      it "stays on the last item when Down is pressed at the end" $ do
-        result <- nav 2 KeyDown
-        result `shouldBe` Just 2
-
-      it "stays on the first item when Up is pressed at the beginning" $ do
-        result <- nav 0 KeyUp
-        result `shouldBe` Just 0
-
-      it "does not move focus when disabled" $ do
-        focused <- runInteractions radioGroupRect (mkRadioGroupCtx noInput) (radioGroupAction "a") [] [ClickAt (itemPoint 0)]
-        result <- runInteractions radioGroupRect (resultContext focused)
-          (disableWhen True (radioGroupAction "a")) [] [PressKey KeyDown []]
-        contextFocus (resultContext result) `shouldBe` Just 0
-
-      it "handles arrow keys on the frame focus is gained by click" $ do
-        -- The click's release frame is the same frame focus is gained on,
-        -- and the arrow key must be processed within that same frame — a
-        -- combination the Interaction DSL's one-event-per-frame vocabulary
-        -- can't express, so this is driven directly.
-        let action = radioGroupAction "a"
-            pressFrame   = mouseAt (itemPoint 0) True []
-            releaseFrame = (mouseAt (itemPoint 0) False []) { inputKeyEvents = [KeyEvent KeyDown []] }
-        (_, pressCtx) <- runUI action (advance radioGroupRect pressFrame (mkRadioGroupCtx noInput))
-        (_, ctx') <- runUI action (advance radioGroupRect releaseFrame pressCtx)
-        contextFocus (settle ctx') `shouldBe` Just 1
-
-    describe "rendering" $ do
-      it "shows the selected mark on the selected item" $ do
-        ctx' <- runRadioGroup "b" (mkRadioGroupCtx noInput)
-        drawnTexts ctx' `shouldContain` ["● Beta"]
-
-      it "shows the unselected mark on other items" $ do
-        ctx' <- runRadioGroup "b" (mkRadioGroupCtx noInput)
-        drawnTexts ctx' `shouldContain` ["○ Alpha"]
-        drawnTexts ctx' `shouldContain` ["○ Gamma"]
-
-      it "displays all labels regardless of selection" $ do
-        ctx' <- runRadioGroup "a" (mkRadioGroupCtx noInput)
-        length (drawnTexts ctx') `shouldBe` 3
-
-  describe "listBox" $ do
-    let listBoxAction sel = listBox id [items listBoxItems, selected sel, itemHeight listBoxItemHeight, onSelect (postWith id)] listBoxRenderItem
-        -- unscrolled item N spans y = [20N, 20N+20); centre point:
-        itemPoint :: Int -> Point
-        itemPoint idx = Point 50 (20 * fromIntegral idx + 10)
-
-    describe "selection" $ do
-      it "dispatches the value of a clicked item" $ do
-        result <- runInteractions listBoxRect (mkListBoxCtx noInput) (listBoxAction 0) [] [ClickAt (itemPoint 1)]
-        resultMessages result `shouldBe` [1]
-
-      it "dispatches the value when Enter is pressed while an item is focused" $ do
-        result <- runInteractions listBoxRect (mkListBoxCtx noInput) (listBoxAction 0)
-          [ClickAt (itemPoint 1)] [PressKey KeyReturn []]
-        resultMessages result `shouldBe` [1]
+    describe "click detection" $ do
+      it "fires Activated with the clicked item's index and value" $ do
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) render [] [ClickAt (Point 50 45)]
+        resultMessages result `shouldBe` [(1, "Beta")]
 
       it "does not dispatch when clicked while disabled" $ do
-        result <- runInteractions listBoxRect (mkListBoxCtx noInput) (disableWhen True (listBoxAction 0)) [] [ClickAt (itemPoint 1)]
-        length (resultMessages result) `shouldBe` 0
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) (disableWhen True render) [] [ClickAt (Point 50 45)]
+        resultMessages result `shouldBe` []
 
-      it "does not dispatch when there is no interaction" $ do
-        ctx' <- runListBox 0 (mkListBoxCtx noInput)
-        dispatchCount ctx' `shouldBe` 0
+    describe "focus" $ do
+      it "claims focus for the group as a whole, atomically -- not into a specific item" $ do
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) render [] []
+        contextFocus (resultContext result) `shouldBe` FocusSingle RadioGroup
+
+      it "Tab from a focused group moves past it entirely, not into its items" $ do
+        let withAfter = render >> withBounds otherRect (minimalControl (RadioItem 99 RadioBox))
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) withAfter [Wait 1, Tab] []
+        contextFocus (resultContext result) `shouldBe` FocusSingle (RadioItem 99 RadioBox)
+
+      it "with tabStop off, items become individually Tab-reachable instead" $ do
+        let render' = radioGroup id (tabStop False : baseAttrs)
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) render' [] []
+        contextFocus (resultContext result) `shouldBe` FocusSingle (RadioItem 0 RadioBox)
+
+      it "Shift-Tab after clicking an item returns to the element before the group, not the group itself" $ do
+        let withSibling = withOther (RadioItem 99 RadioBox) render
+        clicked <- runInteractions listRect (mkRadioGroupCtx noInput) withSibling [] [ClickAt (Point 50 45)]
+        result <- runInteractions listRect (resultContext clicked) withSibling [] [ShiftTab]
+        contextFocus (resultContext result) `shouldBe` FocusSingle (RadioItem 99 RadioBox)
+
+      it "clicking an item leaves only the group focused, not the item's own box too" $ do
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) render [] [ClickAt (Point 50 45)]
+        let resultFocus = contextFocus (resultContext result)
+        focusContains RadioGroup resultFocus `shouldBe` True
+        focusContains (RadioItem 1 RadioBox) resultFocus `shouldBe` False
 
     describe "keyboard navigation" $ do
-      it "moves focus to the next item when Down is pressed" $ do
-        result <- runInteractions listBoxRect (mkListBoxCtx noInput) (listBoxAction 0)
-          [ClickAt (itemPoint 0)] [PressKey KeyDown []]
-        contextFocus (resultContext result) `shouldBe` Just (ListBoxItem 1)
+      it "Down selects the first item when nothing is selected yet" $ do
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) render [] [PressKey KeyDown []]
+        resultMessages result `shouldBe` [(0, "Alpha")]
 
-      it "moves focus to the previous item when Up is pressed" $ do
-        result <- runInteractions listBoxRect (mkListBoxCtx noInput) (listBoxAction 0)
-          [ClickAt (itemPoint 1)] [PressKey KeyUp []]
-        contextFocus (resultContext result) `shouldBe` Just (ListBoxItem 0)
+      it "Up also selects the first item when nothing is selected yet" $ do
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) render [] [PressKey KeyUp []]
+        resultMessages result `shouldBe` [(0, "Alpha")]
 
-      it "does not move focus when disabled" $ do
-        focused <- runInteractions listBoxRect (mkListBoxCtx noInput) (listBoxAction 0) [] [ClickAt (itemPoint 0)]
-        result <- runInteractions listBoxRect (resultContext focused) (disableWhen True (listBoxAction 0)) [] [PressKey KeyDown []]
-        contextFocus (resultContext result) `shouldBe` Just (ListBoxItem 0)
+      it "Down moves the selection to the next item" $ do
+        let render' = radioGroup id (selectedIndex 0 : baseAttrs)
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) render' [] [PressKey KeyDown []]
+        resultMessages result `shouldBe` [(1, "Beta")]
 
-    describe "scroll-to-current" $ do
-      it "scrolls down when the current item moves past the bottom of the window" $ do
-        -- Item 2 (y 40-60) is the last visible row; moving to item 3 (y
-        -- 60-80) requires scrolling so its bottom (80) reaches the viewport
-        -- bottom: newScroll = 80 - 60 = 20px, as a fraction of the 60px of
-        -- scrollable range (120px content - 60px viewport) = 1/3.
-        result <- runInteractions listBoxRect (mkListBoxCtx noInput) (listBoxAction 0)
-          [ClickAt (itemPoint 2)] [PressKey KeyDown []]
-        contextFocus (resultContext result) `shouldBe` Just (ListBoxItem 3)
-        contextScrollPosition (ListBoxScroll ScrollTrack) (resultContext result) `shouldBe` 20 / 60
+      it "Up moves the selection to the previous item" $ do
+        let render' = radioGroup id (selectedIndex 2 : baseAttrs)
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) render' [] [PressKey KeyUp []]
+        resultMessages result `shouldBe` [(1, "Beta")]
 
-      it "scrolls up when the current item moves above the top of the window" $ do
-        -- Scrolled so item 1 (y 20-40) is the first visible row; moving to
-        -- item 0 (y 0-20) requires scrolling back to the top. The seed step
-        -- is composed with the real widget action (not a bare emitUi) so
-        -- focus is re-affirmed the same frame the scroll seed is queued.
-        focused <- runInteractions listBoxRect (mkListBoxCtx noInput) (listBoxAction 0) [] [ClickAt (itemPoint 1)]
-        seeded <- runInteractions listBoxRect (resultContext focused)
-          (listBoxAction 0 >> emitUi (ScrollTo (ListBoxScroll ScrollTrack) (20 / 60))) [] []
-        result <- runInteractions listBoxRect (resultContext seeded) (listBoxAction 0) [] [PressKey KeyUp []]
-        contextFocus (resultContext result) `shouldBe` Just (ListBoxItem 0)
-        contextScrollPosition (ListBoxScroll ScrollTrack) (resultContext result) `shouldBe` 0
+      it "Down clamps at the last item instead of wrapping" $ do
+        let render' = radioGroup id (selectedIndex 2 : baseAttrs)
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) render' [] [PressKey KeyDown []]
+        resultMessages result `shouldBe` [(2, "Gamma")]
 
-      it "does not change scroll when the new current item is already visible" $ do
-        result <- runInteractions listBoxRect (mkListBoxCtx noInput) (listBoxAction 0)
-          [ClickAt (itemPoint 0)] [PressKey KeyDown []]
-        contextScrollPosition (ListBoxScroll ScrollTrack) (resultContext result) `shouldBe` 0
+      it "Up clamps at the first item instead of wrapping" $ do
+        let render' = radioGroup id (selectedIndex 0 : baseAttrs)
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) render' [] [PressKey KeyUp []]
+        resultMessages result `shouldBe` [(0, "Alpha")]
 
-    describe "rendering" $ do
-      it "passes isSelected=True for the selected item" $ do
-        ctx' <- runListBox 1 (mkListBoxCtx noInput)
-        drawnTexts ctx' `shouldContain` ["SEL:Item1"]
+      it "does not respond to arrow keys while unfocused" $ do
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) (withOther (RadioItem 99 RadioBox) render) [] [PressKey KeyDown []]
+        resultMessages result `shouldBe` []
 
-      it "passes isSelected=False for other visible items" $ do
-        ctx' <- runListBox 1 (mkListBoxCtx noInput)
-        drawnTexts ctx' `shouldContain` ["UNSEL:Item0"]
-        drawnTexts ctx' `shouldContain` ["UNSEL:Item2"]
-
-      it "only renders the items within the visible window" $ do
-        ctx' <- runListBox 0 (mkListBoxCtx noInput)
-        drawnTexts ctx' `shouldContain` ["SEL:Item0"]
-        drawnTexts ctx' `shouldContain` ["UNSEL:Item1"]
-        drawnTexts ctx' `shouldContain` ["UNSEL:Item2"]
-        drawnTexts ctx' `shouldNotContain` ["UNSEL:Item3"]
-        drawnTexts ctx' `shouldNotContain` ["UNSEL:Item4"]
-        drawnTexts ctx' `shouldNotContain` ["UNSEL:Item5"]
-
-      it "renders items scrolled into view instead of the top of the list" $ do
-        seeded <- seedEffect listBoxRect (mkListBoxCtx noInput) (ScrollTo (ListBoxScroll ScrollTrack) (20 / 60))
-        ctx' <- runListBox 0 seeded
-        drawnTexts ctx' `shouldContain` ["UNSEL:Item3"]
-        drawnTexts ctx' `shouldNotContain` ["UNSEL:Item0"]
-
-    describe "defaults" $ do
-      it "renders nothing when no items are given" $ do
-        -- The scrollbar (its decr/incr buttons draw "▲"/"▼") is unaffected
-        -- by the item list being empty; only item markers are checked here.
-        ctx' <- fmap (settle . snd) $ runUI (listBox id [itemHeight listBoxItemHeight, onSelect (postWith id)] listBoxRenderItem) (mkListBoxCtx noInput)
-        [t | t <- drawnTexts ctx', t /= "▲", t /= "▼"] `shouldBe` []
-
-      it "defaults to nothing selected" $ do
-        ctx' <- fmap (settle . snd) $ runUI (listBox id [items listBoxItems, itemHeight listBoxItemHeight, onSelect (postWith id)] listBoxRenderItem) (mkListBoxCtx noInput)
-        drawnTexts ctx' `shouldNotContain` ["SEL:Item0"]
-
-      it "defaults to a 20px item height" $ do
-        let marker _eid _isSelected (i, _) = fillRect (RGBA (fromIntegral (i :: Int)) 0 0 1)
-        ctx' <- fmap (settle . snd) $ runUI (listBox id [items listBoxItems, onSelect (postWith id)] marker) (mkListBoxCtx noInput)
-        getDrawCommands ctx' `shouldContain` [FillRect (Rectangle 0 20 84 20) (RGBA 1 0 0 1)]
+      it "does not respond to arrow keys while disabled" $ do
+        result <- runInteractions listRect (mkRadioGroupCtx noInput) (disableWhen True render) [] [PressKey KeyDown []]
+        resultMessages result `shouldBe` []
 
   describe "tab order across a real composite and a disabled sibling (integration)" $ do
     -- Mirrors the app's actual structure that regressed: two plain buttons,
@@ -2109,17 +2304,17 @@ spec = describe "Blink.Controls" $ do
 
     it "auto-claims the first focusable element with nothing focused and no Tab pressed" $ do
       result <- runInteractions controlRect initialCtx render [] []
-      contextFocus (resultContext result) `shouldBe` Just TIButton1
+      contextFocus (resultContext result) `shouldBe` FocusSingle TIButton1
 
     it "advances button -> button -> checkbox box -> (disabled skipped) -> wraps to the first button" $ do
       -- One discrete Tab press per 'runInteractions' call, exactly like a
       -- real key press-and-release, not a held-key repeat.
       r0 <- runInteractions controlRect initialCtx render [] []
       r1 <- runInteractions controlRect (resultContext r0) render [] [Tab]
-      contextFocus (resultContext r1) `shouldBe` Just TIButton2
+      contextFocus (resultContext r1) `shouldBe` FocusSingle TIButton2
       r2 <- runInteractions controlRect (resultContext r1) render [] [Tab]
-      contextFocus (resultContext r2) `shouldBe` Just (TICheckbox CheckboxBox)
+      contextFocus (resultContext r2) `shouldBe` FocusSingle (TICheckbox CheckboxBox)
       r3 <- runInteractions controlRect (resultContext r2) render [] [Tab]
-      contextFocus (resultContext r3) `shouldBe` Nothing
+      contextFocus (resultContext r3) `shouldBe` FocusNothing
       r4 <- runInteractions controlRect (resultContext r3) render [] [Tab]
-      contextFocus (resultContext r4) `shouldBe` Just TIButton1
+      contextFocus (resultContext r4) `shouldBe` FocusSingle TIButton1

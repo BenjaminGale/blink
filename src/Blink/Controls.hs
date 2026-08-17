@@ -1,9 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {- |
 Module: Blink.Controls
 
-Ready-made interactive controls — 'button', 'checkbox', 'textInputControl',
-'slider', 'scrollBar', 'viewport', 'selector', 'radioGroup', 'listBox' — and
+Ready-made interactive controls — 'button', 'checkbox', 'radioButton',
+'textInputControl', 'slider', 'scrollBar', 'viewport', 'radioGroup' — and
 the 'label'\/'progressBar' display-only ones, all built from the primitives
 in "Blink.UI".
 
@@ -31,10 +34,6 @@ data Elem = NotifyMe CheckboxPart
 
 checkbox NotifyMe [checked (notifyMe model), text "Notify me by email", onToggle NotifyMeChanged]
 @
-
-'selector'\/'radioGroup'\/'listBox' take the same kind of function keyed on
-item index (or, for 'listBox', on its own part type) instead, since the
-number of items isn't known until the attrs (specifically 'items') are read.
 
 = Attributes
 
@@ -98,11 +97,12 @@ instantiates. 'onFocusGained' \/ 'onFocusLost' \/ 'onMouseEnter' \/
 'control' — the standard entry point for an interactive element — combines
 mouse-over ('applyMouseOver'), focus and Tab\/Shift-Tab navigation
 ('applyFocus'), and style-driven chrome ('renderChrome'). An element takes
-focus automatically when nothing else holds it, retains it on click, and is
-included in Tab order unless 'tabStop' is set to 'False'. 'focusOnClick'
-overrides what a click does to focus — 'FocusTarget' redirects it elsewhere
-(used by a caption to focus the input beside it instead of itself), and
-'NoFocus' makes clicking a no-op for focus.
+focus automatically when nothing else holds it and retains it on click, but
+only while 'tabStop' is 'True' — 'tabStop' 'False' removes it from Tab order
+entirely, including this auto-claim. 'focusOnClick' overrides what a click
+does to focus — 'FocusTarget' redirects it elsewhere (used by a caption to
+focus the input beside it instead of itself), and 'NoFocus' makes clicking a
+no-op for focus.
 
 = Building composites
 
@@ -111,6 +111,28 @@ overrides what a click does to focus — 'FocusTarget' redirects it elsewhere
 'checkbox' are made from, exported for anyone assembling a custom control
 with the same shape. 'thumbRect' \/ 'mouseToTrackPos' are the drag-track
 geometry 'slider' and 'scrollBar' share.
+
+= Items and selection
+
+'itemsLayout' is a primitive building block, not a control: it has no
+element id and draws no chrome, the same way 'virtualContent' doesn't — it
+just renders a list of plain data values via a caller-supplied template,
+stacked horizontally or vertically. It exists to be composed inside real
+controls.
+
+'selectionControl' is such a composite: it layers a single selected item
+over 'itemsLayout', resolving 'items' and a 'SelectedItem' choice into a
+per-item 'SelectionState', handing each item to the caller's
+'itemContainer' template, and detecting clicks on items so it can report
+which one was activated via 'onSelect'. It "is" a control in the sense
+this module uses the word — it has an id (one per item, via its tagging
+function) and behaviour (click detection) — but still draws no chrome of
+its own; that stays the parent's decision, same as 'itemsLayout'.
+
+Neither control owns interactive focus over its items — a caller that
+wants keyboard navigation or a fully interactive item builds it into its
+own template using its own element ids, the same way any composed
+'Blink.UI.UI' content does.
 -}
 module Blink.Controls
   ( Attr
@@ -198,23 +220,45 @@ module Blink.Controls
   , contentSize
   , viewport
   , virtualContent
-  , SelectorEvent (Selected)
-  , SelectorConfig
-  , onSelect
+  , HasItemsConfig (..)
+  , HasItemsPanelConfig (..)
   , items
+  , itemsPanel
+  , ItemTemplate
+  , CompositeControlConfig
+  , itemTemplate
+  , itemsLayout
+  , CompositeEvent
+  , compositeControl
+  , SelectionState (..)
+  , SelectedItem (..)
+  , SelectionItemTemplate
+  , SelectionEvent (..)
+  , SelectionConfig
+  , HasSelectionConfig (..)
+  , itemContainer
   , selected
-  , itemHeight
-  , selector
+  , selectedIndex
+  , onSelect
+  , selectionControl
+  , RadioPart (..)
+  , RadioEvent (Picked)
+  , RadioConfig
+  , onPick
+  , renderRadioGlyph
+  , picked
+  , radioButton
+  , RadioGroupPart (..)
+  , RadioGroupConfig
+  , itemLabel
   , radioGroup
-  , ListBoxPart (..)
-  , listBox
   ) where
 
 import Control.Monad (forM_, guard, when)
 import Data.Foldable (asum)
 import Data.Functor (($>))
-import Data.List (find, foldl')
-import Data.Maybe (fromMaybe, isJust, isNothing)
+import Data.List (find, findIndex, foldl')
+import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Void (Void)
@@ -266,6 +310,12 @@ data ControlConfig e = ControlConfig
 
 defaultControlConfig :: ControlConfig e
 defaultControlConfig = ControlConfig { ccTabStop = True, ccFocusOnClick = FocusSelf }
+
+-- | Whether a control is eligible to claim focus purely by rendering first
+-- while nothing else holds it: opted into keyboard focus at all ('tabStop')
+-- and configured to take focus itself on click ('focusOnClick').
+autoClaimsFocus :: Eq e => ControlConfig e -> Bool
+autoClaimsFocus cc = ccTabStop cc && ccFocusOnClick cc == FocusSelf
 
 -- | One entry in a control's attrs list — either a reaction to an event
 -- ('onEvent' and the combinators built on it), a change to the control's own
@@ -386,7 +436,9 @@ onMouseExit reaction = onEvent $ \ev -> case matchControl ev of
   Just MouseExited -> reaction MouseExited
   _                -> []
 
--- | Whether Tab\/Shift-Tab cycles focus onto this control. Defaults to
+-- | Whether this control participates in keyboard focus at all: Tab\/
+-- Shift-Tab cycling onto it, and auto-claiming focus by rendering first
+-- while nothing else holds it. 'False' excludes it from both. Defaults to
 -- 'True' for interactive controls; 'label' defaults it to 'False' (see
 -- 'focusOnClick' too).
 tabStop :: Bool -> Attr e ev msg cfg
@@ -503,17 +555,14 @@ applyFocus eid attrs = do
 
     -- Takes focus on a click, hands it to a target, or leaves it, per 'focusOnClick'.
     applyFocusRules = whenEnabled $ do
-      currentFocus <- getFocus
-      isHit        <- isMouseOver eid
-      released     <- isButtonReleased
-      captured     <- getCapturedElement
-      let nothingIsFocused = isNothing currentFocus
-          isRetainingFocus = currentFocus == Just eid
-          isDragRelease    = released && isJust captured && captured /= Just eid
-          wasClicked       = isHit && released && not isDragRelease
-          autoClaim        = case ccFocusOnClick cc of
-            FocusSelf -> nothingIsFocused && not isDragRelease
-            _         -> False
+      nothingIsFocused <- isNothingFocused <$> getFocus
+      isRetainingFocus <- isFocused eid
+      isHit            <- isMouseOver eid
+      released         <- isButtonReleased
+      captured         <- getCapturedElement
+      let isDragRelease = released && isJust captured && captured /= Just eid
+          wasClicked     = isHit && released && not isDragRelease
+          autoClaim      = autoClaimsFocus cc && nothingIsFocused && not isDragRelease
       if isRetainingFocus || autoClaim
         then setFocus eid
         else when (wasClicked && not isDragRelease) $ case ccFocusOnClick cc of
@@ -1454,7 +1503,7 @@ data ViewportPart
   | ViewportV ScrollBarPart -- ^ A part of the vertical scrollbar.
   deriving (Eq, Ord, Show)
 
--- | The pixel width of a scrollbar strip used by 'viewport' and 'listBox'.
+-- | The pixel width of a scrollbar strip used by 'viewport'.
 -- Exported so callers that compose a viewport inside their own layout can
 -- account for the strip in their geometry without hard-coding the value.
 scrollRegionBarSize :: Double
@@ -1481,10 +1530,6 @@ contentSize sz = configAny $ \cfg -> cfg { viewportConfigContentSize = sz }
 -- interaction works naturally because translated bounds are in window
 -- coordinates; the clip region hides the rest.
 --
--- For large, uniform item collections where building the whole content
--- every frame would be wasteful, or where scrolling needs to be driven by
--- keyboard selection, use 'listBox' instead — it manages its own scroll
--- state directly rather than wrapping content in a viewport.
 viewport :: Ord e => (ViewportPart -> e) -> [Attr e Void msg ViewportConfig] -> UI e msg () -> UI e msg ()
 viewport mkId attrs content = do
   outer <- getBounds
@@ -1527,11 +1572,11 @@ viewport mkId attrs content = do
 --
 -- Renders one extra item beyond what's fully visible to cover a partially
 -- clipped final row. Does not draw a scrollbar or manage scroll state
--- itself — pair with 'scrollBar' and 'getScrollState' (see 'listBox').
+-- itself — pair with 'scrollBar' and 'getScrollState'.
 --
 -- @rowHeight@ is clamped to a minimum of @1@ before use, so a caller passing
--- zero or a negative height (e.g. a miscalculated 'itemHeight') can't turn
--- the division below into an infinite or wildly oversized render loop.
+-- zero or a negative height can't turn the division below into an infinite
+-- or wildly oversized render loop.
 virtualContent
   :: Double                -- ^ current scroll position, in pixels
   -> Double                -- ^ height of one item, in pixels
@@ -1549,214 +1594,483 @@ virtualContent scrollPos rowHeight0 itemCount renderItem = do
         itemRect = vp { rectY = rectY vp + fromIntegral j * rowHeight - subOffset, rectHeight = rowHeight }
     in when (i >= 0 && i < itemCount) $ withBounds itemRect (renderItem i)
 
--- | Events reported by 'selector' and 'radioGroup': 'Selected' with the
--- activated item's value, or a lifecycle event via @SelectorControl@ (see
--- 'ControlEvent') — each item is its own focusable 'control', so
--- gaining\/losing focus is a per-item concern, reported the same way for
--- every item through the one attrs list every item shares.
-data SelectorEvent a = Selected a | SelectorControl ControlEvent
+-- Shared: items and panel -------------------------------------------------
+
+-- | Lets 'items' work across every config with a plain data-item list --
+-- currently the configs behind 'itemsLayout', 'compositeControl', and
+-- 'selectionControl'.
+class HasItemsConfig cfg a where
+  setItems :: [a] -> cfg -> cfg
+
+-- | Sets the raw data items, one per element, in order. Defaults to @[]@.
+items :: HasItemsConfig cfg a => [a] -> Attr e ev msg cfg
+items xs = configAny (setItems xs)
+
+-- | Lets 'itemsPanel' work across every config with a box layout -- see
+-- 'Blink.Layout.BoxConfig'. Combined with 'orientation' (to
+-- choose 'Blink.Layout.vBox' vs 'Blink.Layout.hBox'), this is the whole of
+-- how items are arranged; per-item sizing is a separate, per-item concern
+-- -- see 'ItemTemplate'.
+class HasItemsPanelConfig cfg where
+  setItemsPanel :: BoxConfig -> cfg -> cfg
+
+-- | Sets spacing\/margin\/alignment\/fill-cross for the item arrangement.
+-- Defaults to 'Blink.Layout.defaultBoxConfig'.
+itemsPanel :: HasItemsPanelConfig cfg => BoxConfig -> Attr e ev msg cfg
+itemsPanel p = configAny (setItemsPanel p)
+
+-- ItemsLayout ---------------------------------------------------------
+
+-- | Renders one item of an 'itemsLayout'\/'compositeControl', given its
+-- index and value, and the 'Layout' it should occupy -- e.g. a fixed
+-- main-axis size for a uniform row height, or 'Fill' to share space equally
+-- with the other items. 'itemsPanel'\/'orientation' still govern the
+-- overall arrangement and the cross axis (stretched to 'Fill' when
+-- @'Blink.Layout.boxFillCross' = 'True'@, the default).
+type ItemTemplate e msg a = Int -> a -> (Layout, UI e msg ())
+
+-- | Configuration for 'itemsLayout' and 'compositeControl', set via
+-- 'items', 'itemTemplate', 'itemsPanel', and 'orientation'. Defaults to no
+-- items, a blank template, and a vertical stack.
+data CompositeControlConfig e msg a = CompositeControlConfig
+  { compositeControlConfigItems       :: [a]
+  , compositeControlConfigTemplate    :: ItemTemplate e msg a
+  , compositeControlConfigOrientation :: Orientation
+  , compositeControlConfigBoxConfig   :: BoxConfig
+  }
+
+defaultCompositeControlConfig :: CompositeControlConfig e msg a
+defaultCompositeControlConfig = CompositeControlConfig
+  { compositeControlConfigItems       = []
+  , compositeControlConfigTemplate    = \_ _ -> (Layout Fill Fill TopLeft, pure ())
+  , compositeControlConfigOrientation = Vertical
+  , compositeControlConfigBoxConfig   = defaultBoxConfig
+  }
+
+instance HasItemsConfig (CompositeControlConfig e msg a) a where
+  setItems xs cfg = cfg { compositeControlConfigItems = xs }
+
+instance HasItemsPanelConfig (CompositeControlConfig e msg a) where
+  setItemsPanel p cfg = cfg { compositeControlConfigBoxConfig = p }
+
+instance HasOrientationConfig (CompositeControlConfig e msg a) where
+  setOrientation o cfg = cfg { compositeControlConfigOrientation = o }
+
+-- | Sets how each data item is rendered -- the DataTemplate. Defaults to
+-- rendering nothing.
+itemTemplate :: ItemTemplate e msg a -> Attr e ev msg (CompositeControlConfig e msg a)
+itemTemplate f = configAny $ \cfg -> cfg { compositeControlConfigTemplate = f }
+
+-- | Arranges 'items' via 'itemTemplate', stacked according to
+-- 'orientation' and 'itemsPanel'. Shared by 'itemsLayout' and
+-- 'compositeControl'.
+renderCompositeItems :: CompositeControlConfig e msg a -> UI e msg ()
+renderCompositeItems cfg = arrange (compositeControlConfigBoxConfig cfg)
+  [ compositeControlConfigTemplate cfg idx item
+  | (idx, item) <- zip [0 ..] (compositeControlConfigItems cfg)
+  ]
+  where
+    arrange = case compositeControlConfigOrientation cfg of
+      Horizontal -> hBox
+      Vertical   -> vBox
+
+-- | Renders each item of 'items' via 'itemTemplate', stacked according to
+-- 'orientation' and 'itemsPanel'. A primitive, not a
+-- control -- see the module header.
+--
+-- @
+-- itemsLayout
+--   [ items [Small, Medium, Large]
+--   , itemTemplate $ \\_ sz -> (Layout Fill Fill TopLeft, drawText black AlignLeft (describe sz))
+--   ]
+-- @
+itemsLayout :: [Attr e Void msg (CompositeControlConfig e msg a)] -> UI e msg ()
+itemsLayout attrs = renderCompositeItems (configure defaultCompositeControlConfig attrs)
+
+-- | Events reported by 'compositeControl': a lifecycle event via
+-- @CompositeControlEvent@ (see 'ControlEvent'). A composite has no domain
+-- events of its own beyond the generic ones -- item-specific behaviour
+-- (like the 'SelectionEvent' from 'selectionControl') is layered on top.
+newtype CompositeEvent = CompositeControlEvent ControlEvent
   deriving (Eq, Show)
 
-instance HasControlEvent (SelectorEvent a) where
-  liftControl = SelectorControl
-  matchControl (SelectorControl ce) = Just ce
-  matchControl _                    = Nothing
+instance HasControlEvent CompositeEvent where
+  liftControl = CompositeControlEvent
+  matchControl (CompositeControlEvent ce) = Just ce
 
--- | Runs a reaction with the activated item's value on every 'Selected'.
-onSelect :: (a -> [Out e msg]) -> Attr e (SelectorEvent a) msg cfg
+-- | What a composite exposes to 'withinComposite' for this frame: ordinarily
+-- just its actual @focus@, but a bare focus on its own id
+-- (@'FocusSingle' compositeId@) when it held focus a moment ago and now
+-- holds none -- Tab just released it. That placeholder stops a child from
+-- mistaking the release for a fresh "nothing is focused" claim opportunity;
+-- see 'withinComposite' for how it's resolved afterwards.
+compositeFocusToExpose :: Eq e => e -> Bool -> Focus e -> Focus e
+compositeFocusToExpose compositeId heldFocusBefore focus
+  | heldFocusBefore && isNothingFocused focus = FocusSingle compositeId
+  | otherwise                                 = focus
+
+-- | The entry point for composite controls (radio groups, lists, trees):
+-- an 'itemsLayout' with an element id, so it gets normal mouse-over and
+-- style-driven chrome, plus Tab\/Shift-Tab navigation as a single unit --
+-- Tab enters and leaves the whole composite, not its individual items.
+--
+-- With @tabStop@ off, the composite itself is never a focus target: its
+-- items, if individually focusable, are reachable by Tab like ordinary
+-- siblings instead, and the composite shows no focus ring of its own.
+--
+-- A press on an item that's itself a real control (its own click\/focus
+-- handling) always activates that item, never the composite around it; the
+-- composite only picks up a press that lands outside every item.
+compositeControl :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg (CompositeControlConfig e msg a)] -> UI e msg ()
+compositeControl eid attrs = do
+  heldFocusBefore <- isFocused eid
+  applyFocus eid attrs
+  focus <- getFocus
+  let content = renderCompositeItems (configure defaultCompositeControlConfig attrs)
+  renderChrome eid $
+    if autoClaimsFocus (controlConfig attrs)
+      then withinComposite eid (compositeFocusToExpose eid heldFocusBefore focus) content
+      else content
+  applyMouseOver eid attrs
+
+-- SelectionControl -------------------------------------------------------
+
+-- | Whether an item is currently the selected one.
+data SelectionState = Selected | Unselected
+  deriving (Eq, Show)
+
+-- | Which item, if any, is selected -- by value, by position, or none. Set
+-- via 'selected' or 'selectedIndex'.
+data SelectedItem a = None | Item a | ItemAtIndex Int
+  deriving (Eq, Show)
+
+-- | Renders one item of a 'selectionControl': its element id (used only
+-- for click detection -- items never take focus), current 'SelectionState',
+-- and value -- returning the 'Layout' it should occupy, same as
+-- 'ItemTemplate'.
+type SelectionItemTemplate e msg a = e -> SelectionState -> a -> (Layout, UI e msg ())
+
+-- | Fired when a click lands on an item, carrying its index and value.
+data SelectionEvent a = Activated Int a
+  deriving (Eq, Show)
+
+-- | Runs a reaction with the activated item's index and value on every
+-- 'Activated'.
+onSelect :: (Int -> a -> [Out e msg]) -> Attr e (SelectionEvent a) msg cfg
 onSelect reaction = onEvent $ \ev -> case ev of
-  Selected v -> reaction v
-  _          -> []
+  Activated idx val -> reaction idx val
 
--- | Configuration for 'selector'\/'radioGroup'\/'listBox', set via 'items',
--- 'selected', and (for 'listBox' only) 'itemHeight'. Defaults to no items,
--- nothing selected, and a 20px item height.
-data SelectorConfig a = SelectorConfig
-  { selectorConfigItems      :: [(a, Text)]
-  , selectorConfigSelected   :: Maybe a
-  , selectorConfigItemHeight :: Double
+-- | Configuration for 'selectionControl', set via 'items', 'itemsPanel',
+-- 'orientation', 'itemContainer', and
+-- 'selected'\/'selectedIndex'. Defaults to no items, nothing selected, a
+-- blank template, and a vertical stack.
+data SelectionConfig e msg a = SelectionConfig
+  { selectionConfigItems       :: [a]
+  , selectionConfigSelection   :: SelectedItem a
+  , selectionConfigTemplate    :: SelectionItemTemplate e msg a
+  , selectionConfigOrientation :: Orientation
+  , selectionConfigBoxConfig   :: BoxConfig
   }
 
-defaultSelectorConfig :: SelectorConfig a
-defaultSelectorConfig = SelectorConfig
-  { selectorConfigItems      = []
-  , selectorConfigSelected   = Nothing
-  , selectorConfigItemHeight = 20
+defaultSelectionConfig :: SelectionConfig e msg a
+defaultSelectionConfig = SelectionConfig
+  { selectionConfigItems       = []
+  , selectionConfigSelection   = None
+  , selectionConfigTemplate    = \_ _ _ -> (Layout Fill Fill TopLeft, pure ())
+  , selectionConfigOrientation = Vertical
+  , selectionConfigBoxConfig   = defaultBoxConfig
   }
 
--- | Sets the @(value, label)@ pairs a 'selector'\/'radioGroup'\/'listBox'
--- lists, one per item in order. Defaults to @[]@.
-items :: [(a, Text)] -> Attr e ev msg (SelectorConfig a)
-items xs = configAny $ \cfg -> cfg { selectorConfigItems = xs }
+instance HasItemsConfig (SelectionConfig e msg a) a where
+  setItems xs cfg = cfg { selectionConfigItems = xs }
 
--- | Sets which item's value is currently selected. Defaults to
--- 'Nothing' — no item selected, so every item's @isSelected@ is 'False'.
-selected :: a -> Attr e ev msg (SelectorConfig a)
-selected v = configAny $ \cfg -> cfg { selectorConfigSelected = Just v }
+instance HasItemsPanelConfig (SelectionConfig e msg a) where
+  setItemsPanel p cfg = cfg { selectionConfigBoxConfig = p }
 
--- | Sets the height of one row, in pixels. Only meaningful for 'listBox'
--- ('selector'\/'radioGroup' size each item from its own content instead).
--- Defaults to @20@.
-itemHeight :: Double -> Attr e ev msg (SelectorConfig a)
-itemHeight h = configAny $ \cfg -> cfg { selectorConfigItemHeight = h }
+instance HasOrientationConfig (SelectionConfig e msg a) where
+  setOrientation o cfg = cfg { selectionConfigOrientation = o }
 
--- | 'True' when @eid@ may handle an arrow-key navigation press this frame:
--- either it already held focus going into this pass, or it was clicked this
--- frame. Comparing against a focus snapshot taken before any item in the
--- pass ran — rather than re-reading focus per item — keeps at most one item
--- per frame handling the key, even though a same-frame 'setFocus' from an
--- earlier item in the same pass is otherwise visible to a later item's
--- 'isFocused' straight away. Shared by 'selector' and 'listBox'.
-mayHandleArrowKeys :: Eq e => Maybe e -> Bool -> e -> Bool
-mayHandleArrowKeys initialFocus clicked eid = initialFocus == Just eid || clicked
+-- | Configuration that tracks a 'SelectedItem' choice, set via 'selected'\/
+-- 'selectedIndex'. Shared by 'SelectionConfig' and 'RadioGroupConfig', the
+-- same pattern as 'HasItemsConfig'.
+class HasSelectionConfig cfg a | cfg -> a where
+  setSelection :: SelectedItem a -> cfg -> cfg
 
--- | A vertical list of items, each activated by click, Enter, or Space, with
--- arrow-key navigation between items, set via 'items' and 'selected'. Fires
--- 'Selected' with the new value when a different item is activated.
--- @renderItem eid isSelected item@ draws each item's content; 'selector'
--- itself owns the selection comparison, activation, and Up\/Down
--- navigation. Multiple selectors on screen each bind to their own
--- application-state field; no shared state is required. See 'radioGroup'
--- for the radio-mark rendering built on top of this. Each item is a
--- 'control' internally, so it gets its own hover, focus, and tab-stop;
--- 'selector' layers Up\/Down navigation and the shared selection value on
--- top.
---
--- The same @attrs@ list is consulted for every item; 'fire' runs its
--- handlers in the order given regardless of which item was activated
--- ("client" handlers — attrs the caller wrote — see exactly one 'Selected'
--- event per activated frame). Arrow-key navigation is "internal" to
--- 'selector' and runs after that 'fire' call, so a client's 'onSelect'
--- handler always observes the pre-navigation state.
+instance HasSelectionConfig (SelectionConfig e msg a) a where
+  setSelection s cfg = cfg { selectionConfigSelection = s }
+
+-- | Sets how each item is rendered, given its element id, 'SelectionState',
+-- and value -- see 'SelectionItemTemplate'. Defaults to rendering nothing.
+itemContainer :: SelectionItemTemplate e msg a -> Attr e ev msg (SelectionConfig e msg a)
+itemContainer f = configAny $ \cfg -> cfg { selectionConfigTemplate = f }
+
+-- | Selects by value: an item is 'Selected' when it equals @v@. Defaults
+-- to 'None'.
+selected :: HasSelectionConfig cfg a => a -> Attr e ev msg cfg
+selected v = configAny (setSelection (Item v))
+
+-- | Selects by position: the item at index @i@ is 'Selected'. Defaults to
+-- 'None'.
+selectedIndex :: HasSelectionConfig cfg a => Int -> Attr e ev msg cfg
+selectedIndex i = configAny (setSelection (ItemAtIndex i))
+
+-- | Renders 'items' via 'itemContainer', each resolved against 'selected'
+-- \/'selectedIndex' into a 'SelectionState', arranged by
+-- 'orientation'\/'itemsPanel' (built on 'itemsLayout').
+-- Detects a click on any item -- no focus, no keyboard navigation -- and
+-- fires 'Activated' with that item's index and value via 'onSelect';
+-- changing the selection is the caller's own responsibility, by feeding a
+-- new 'selected'\/'selectedIndex' back in from its reaction. Draws no
+-- chrome of its own -- see the module header.
 --
 -- @
--- data Element = ... | SizeItem Int
+-- data Element = SizeItem Int
 --
--- selector SizeItem
---   [items [(Small, "Small"), (Medium, "Medium"), (Large, "Large")], selected (size model), onSelect SizeChanged] $
---   \\eid isSelected (_, lbl) -> do
---     style <- getStyle eid
---     drawText (styleTextColour style) AlignLeft (if isSelected then "> " <> lbl else lbl)
+-- selectionControl SizeItem
+--   [ items [Small, Medium, Large]
+--   , selected (currentSize model)
+--   , onSelect (\\_ sz -> post (SetSize sz))
+--   , itemContainer $ \\_ st sz ->
+--       ( Layout Fill Fill TopLeft
+--       , drawText black AlignLeft ((if st == Selected then "> " else "") \<\> describe sz)
+--       )
+--   ]
 -- @
-selector :: (Ord e, Eq a)
-         => (Int -> e)                              -- ^ maps item index to an element ID
-         -> [Attr e (SelectorEvent a) msg (SelectorConfig a)]
-         -> (e -> Bool -> (a, Text) -> UI e msg ()) -- ^ @eid isSelected item@
-         -> UI e msg ()
-selector mkId attrs renderItem = do
-  let cfg      = configure defaultSelectorConfig attrs
-      itemList = selectorConfigItems cfg
-      sel      = selectorConfigSelected cfg
-      lastIdx  = length itemList - 1
-  initialFocus <- getFocus
-  vBox defaultBoxConfig (zipWith (mkItem initialFocus sel lastIdx) [0 ..] itemList)
-  where
-    mkItem initialFocus sel lastIdx idx item@(val, _) =
-      let eid = mkId idx
-      in ( Layout Fill Fill TopLeft
-         , do
-             clicked   <- isClickedOver eid
-             activated <- activatable eid attrs [KeyReturn, KeySpace] (renderItem eid (sel == Just val) item)
-             when activated $ fire attrs [Selected val]
-             whenEnabled $ when (mayHandleArrowKeys initialFocus clicked eid) $ do
-               upPressed   <- isKeyPressed eid KeyUp
-               downPressed <- isKeyPressed eid KeyDown
-               when upPressed   $ setFocus (mkId (max 0 (idx - 1)))
-               when downPressed $ setFocus (mkId (min lastIdx (idx + 1)))
-         )
+selectionControl
+  :: (Ord e, Eq a)
+  => (Int -> e)
+  -> [Attr e (SelectionEvent a) msg (SelectionConfig e msg a)]
+  -> UI e msg ()
+selectionControl mkId attrs = do
+  let cfg      = configure defaultSelectionConfig attrs
+      itemList = selectionConfigItems cfg
+      sel      = selectionConfigSelection cfg
+      stateAt idx val = case sel of
+        None          -> Unselected
+        Item v        -> if v == val then Selected else Unselected
+        ItemAtIndex i -> if i == idx then Selected else Unselected
 
--- | A group of mutually exclusive options, rendered as a radio mark and
--- label per item, set via 'items' and 'selected'. A thin wrapper over
--- 'selector' supplying the radio-mark rendering; see 'selector' for the
--- selection, activation, navigation, and attribute-handling behaviour.
-radioGroup :: (Ord e, Eq a)
-           => (Int -> e)  -- ^ maps item index to an element ID
-           -> [Attr e (SelectorEvent a) msg (SelectorConfig a)]
-           -> UI e msg ()
-radioGroup mkId attrs =
-  selector mkId attrs $ \eid isSelected (_, lbl) -> do
-    style <- getStyle eid
-    drawText (styleTextColour style) AlignLeft $
-      (if isSelected then "● " else "○ ") <> lbl
+  itemsLayout
+    [ items itemList
+    , orientation (selectionConfigOrientation cfg)
+    , itemsPanel (selectionConfigBoxConfig cfg)
+    , itemTemplate $ \idx val ->
+        let eid               = mkId idx
+            (layout, content) = selectionConfigTemplate cfg eid (stateAt idx val) val
+            wrapped = do
+              clicked <- isClickedOver eid
+              when clicked $ fire attrs [Activated idx val]
+              content
+        in (layout, wrapped)
+    ]
 
--- | Sub-parts of a 'listBox': individual items, and the scrollbar's own
--- parts, tagged together so both can be addressed through one composite
--- element ID.
-data ListBoxPart
-  = ListBoxItem Int
-  | ListBoxScroll ScrollBarPart
+-- RadioButton --------------------------------------------------------------
+
+-- | Sub-parts of a 'radioButton', used as the inner tag when building the
+-- control's element IDs via a tagging function:
+--
+-- @
+-- data Element = ... | ShipToHome RadioPart
+-- radioButton ShipToHome [text "Ship to home", picked (dest model == Home), onPick (post DestHome)]
+-- @
+data RadioPart
+  = RadioBox   -- ^ The radio button as a whole: chrome, hit region, focus, activation.
+  | RadioGlyph -- ^ The selected-mark glyph.
+  | RadioLabel -- ^ The label beside it -- an ordinary 'label'.
   deriving (Eq, Ord, Show)
 
--- | A vertically scrolling list of items, one selected, with keyboard
--- navigation between them, set via 'items', 'selected', and 'itemHeight' —
--- the composite of 'selector'-style navigation, 'scrollBar', and
--- 'virtualContent', wired together so that only the currently-visible
--- items are ever rendered. Moving the current item off the visible window
--- with the arrow keys scrolls it back into view.
+-- | Events reported by 'radioButton': 'Picked' when activated, or a
+-- lifecycle event via @RadioControl@ (see 'ControlEvent'). Unlike
+-- 'checkbox's 'Toggled', 'Picked' carries no state -- a radio button only
+-- ever picks itself, never un-picks; activating one that's already picked
+-- still fires it, to the same effect.
+data RadioEvent = Picked | RadioControl ControlEvent
+  deriving (Eq, Show)
+
+instance HasControlEvent RadioEvent where
+  liftControl = RadioControl
+  matchControl (RadioControl ce) = Just ce
+  matchControl _                 = Nothing
+
+-- | Runs a reaction on every 'Picked'.
+onPick :: (() -> [Out e msg]) -> Attr e RadioEvent msg cfg
+onPick reaction = onEvent $ \ev -> case ev of
+  Picked -> reaction ()
+  _      -> []
+
+-- | Draws a radio-button glyph, centred in the current bounds, in the
+-- resolved style's text colour: a filled mark when @isPicked@, an unfilled
+-- one otherwise. A bare rendering action with no interactive behaviour of
+-- its own -- reusable by anything that wants to look like a radio glyph
+-- without taking on the activation behaviour of 'radioButton'.
+renderRadioGlyph :: Ord e => e -> Bool -> UI e msg ()
+renderRadioGlyph eid isPicked = do
+  style <- getStyle eid
+  drawText (styleTextColour style) AlignCenter (if isPicked then "●" else "○")
+
+-- | Configuration for 'radioButton', set via 'picked' and 'text'. Defaults
+-- to unpicked with an empty label.
+data RadioConfig = RadioConfig
+  { radioConfigPicked :: Bool
+  , radioConfigText   :: Text
+  }
+
+defaultRadioConfig :: RadioConfig
+defaultRadioConfig = RadioConfig { radioConfigPicked = False, radioConfigText = "" }
+
+instance HasTextConfig RadioConfig where
+  setText t cfg = cfg { radioConfigText = t }
+
+-- | Sets whether the radio button is picked. Defaults to 'False'.
+picked :: Bool -> Attr e ev msg RadioConfig
+picked b = configAny $ \cfg -> cfg { radioConfigPicked = b }
+
+-- | Attrs shared by a radio button's glyph and label sub-parts: neither is a
+-- tab stop, and clicking either redirects focus to the radio button itself.
+-- Mirrors 'checkboxSubPartAttrs'.
+radioSubPartAttrs :: e -> [Attr e LabelEvent msg cfg]
+radioSubPartAttrs boxId = [tabStop False, focusOnClick (FocusTarget boxId)]
+
+-- | A single radio button with an adjacent label, as one unit, set via
+-- 'picked' and 'text' -- the glyph and label are purely visual sub-parts,
+-- same as 'checkbox'. Fires 'Picked' when activated by a click anywhere in
+-- its hit region, or by Enter or Space while focused -- always, regardless
+-- of the current 'picked' state: a radio button only ever picks itself, and
+-- relies on its caller to un-pick whichever sibling was picked before (see
+-- 'radioGroup', which does exactly that for a bound list of items).
 --
--- As with 'selector', the /current/ item (keyboard focus, tracked here) is
--- distinct from the /selected/ item (application state, via 'selected'\/
--- 'onSelect'): arrow keys move the current item without emitting; Enter,
--- Space, or a click activates it and emits 'Selected'.
-listBox :: (Ord e, Eq a)
-        => (ListBoxPart -> e)                       -- ^ maps list-box parts to element IDs
-        -> [Attr e (SelectorEvent a) msg (SelectorConfig a)]
-        -> (e -> Bool -> (a, Text) -> UI e msg ())  -- ^ @eid isSelected item@
-        -> UI e msg ()
-listBox mkId attrs renderItem = do
-  initialFocus <- getFocus
-  hBox defaultBoxConfig
-    [ (Layout Fill Fill TopLeft, itemsArea initialFocus)
-    , (Layout (Exactly scrollRegionBarSize) Fill TopLeft, scrollBarArea)
-    ]
+-- @
+-- radioButton ShipToHome [text "Ship to home", picked (dest model == Home), onPick (post DestHome)]
+-- @
+radioButton :: Ord e => (RadioPart -> e) -> [Attr e RadioEvent msg RadioConfig] -> UI e msg ()
+radioButton mkId attrs = do
+  let cfg      = configure defaultRadioConfig attrs
+      isPicked = radioConfigPicked cfg
+  activated <- activatable (mkId RadioBox) attrs [KeyReturn, KeySpace] (draw isPicked (radioConfigText cfg))
+  when activated $ fire attrs [Picked]
   where
-    cfg       = configure defaultSelectorConfig attrs
-    itemList  = selectorConfigItems cfg
-    sel       = selectorConfigSelected cfg
-    rowHeight = selectorConfigItemHeight cfg
-    itemCount = length itemList
-    lastIdx   = itemCount - 1
-    contentH  = fromIntegral itemCount * rowHeight
-    trackId   = mkId (ListBoxScroll ScrollTrack)
+    glyphId  = mkId RadioGlyph
+    subAttrs = radioSubPartAttrs (mkId RadioBox)
+    draw isPicked txt =
+      hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
+        [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, control glyphId subAttrs (renderRadioGlyph glyphId isPicked))
+        , (Layout Fill Fill MiddleLeft, label (mkId RadioLabel) (text txt : subAttrs))
+        ]
 
-    -- scrollBar persists position as a [0, 1] fraction (same convention as
-    -- every other scroll-state consumer in this module); virtualContent and
-    -- the scroll-to-current math below both work in pixels, so the
-    -- fraction is converted on the way in and out.
-    itemsArea initialFocus = do
-      vp <- getBounds
-      let vpH       = rectHeight vp
-          maxScroll = max 0 (contentH - vpH)
-      frac <- getScrollState trackId
-      let scrollPx = frac * maxScroll
-      virtualContent scrollPx rowHeight itemCount (mkItem initialFocus vpH maxScroll scrollPx)
+-- RadioGroup -----------------------------------------------------------------
 
-    mkItem initialFocus vpH maxScroll scrollPx idx = do
-      let item@(val, _) = itemList !! idx
-          eid            = mkId (ListBoxItem idx)
-      clicked   <- isClickedOver eid
-      activated <- activatable eid attrs [KeyReturn, KeySpace] (renderItem eid (sel == Just val) item)
-      when activated $ fire attrs [Selected val]
-      whenEnabled $ when (mayHandleArrowKeys initialFocus clicked eid) $ do
-        upPressed   <- isKeyPressed eid KeyUp
-        downPressed <- isKeyPressed eid KeyDown
-        when upPressed   $ scrollToCurrent vpH maxScroll scrollPx (max 0 (idx - 1))
-        when downPressed $ scrollToCurrent vpH maxScroll scrollPx (min lastIdx (idx + 1))
+-- | Sub-parts of a 'radioGroup': the group as a whole, and each item's own
+-- 'RadioPart', by index.
+data RadioGroupPart
+  = RadioGroup
+  | RadioItem Int RadioPart
+  deriving (Eq, Ord, Show)
 
-    scrollToCurrent vpH maxScroll scrollPx newIdx = do
-      setFocus (mkId (ListBoxItem newIdx))
-      let itemTop    = fromIntegral newIdx * rowHeight
-          itemBottom = itemTop + rowHeight
-          newScrollPx
-            | itemTop < scrollPx          = itemTop
-            | itemBottom > scrollPx + vpH = itemBottom - vpH
-            | otherwise                   = scrollPx
-          clampedPx = max 0 (min maxScroll newScrollPx)
-          newFrac   = if maxScroll > 0 then clampedPx / maxScroll else 0
-      when (clampedPx /= scrollPx) $ emitUi (ScrollTo trackId newFrac)
+radioGroupComposite :: Ord e => e -> [Attr e CompositeEvent msg (CompositeControlConfig e msg a)] -> UI e msg ()
+radioGroupComposite = compositeControl
 
-    scrollBarArea = do
-      vp <- getBounds
-      let vpH   = rectHeight vp
-          ratio = if contentH > 0 then max 0 (min 1 (vpH / contentH)) else 1
-      scrollBar (mkId . ListBoxScroll) [orientation Vertical, thumbRatio ratio]
+-- | Configuration for 'radioGroup', set via 'items', 'itemLabel', and
+-- 'selected'\/'selectedIndex'. Defaults to no items, nothing selected, and
+-- an empty label.
+data RadioGroupConfig a = RadioGroupConfig
+  { radioGroupConfigItems       :: [a]
+  , radioGroupConfigSelection   :: SelectedItem a
+  , radioGroupConfigLabel       :: a -> Text
+  , radioGroupConfigOrientation :: Orientation
+  , radioGroupConfigBoxConfig   :: BoxConfig
+  }
+
+defaultRadioGroupConfig :: RadioGroupConfig a
+defaultRadioGroupConfig = RadioGroupConfig
+  { radioGroupConfigItems       = []
+  , radioGroupConfigSelection   = None
+  , radioGroupConfigLabel       = const ""
+  , radioGroupConfigOrientation = Vertical
+  , radioGroupConfigBoxConfig   = defaultBoxConfig
+  }
+
+instance HasItemsConfig (RadioGroupConfig a) a where
+  setItems xs cfg = cfg { radioGroupConfigItems = xs }
+
+instance HasItemsPanelConfig (RadioGroupConfig a) where
+  setItemsPanel p cfg = cfg { radioGroupConfigBoxConfig = p }
+
+instance HasOrientationConfig (RadioGroupConfig a) where
+  setOrientation o cfg = cfg { radioGroupConfigOrientation = o }
+
+instance HasSelectionConfig (RadioGroupConfig a) a where
+  setSelection s cfg = cfg { radioGroupConfigSelection = s }
+
+-- | Sets the label drawn beside each item's mark, given its value. Defaults
+-- to @const \"\"@.
+itemLabel :: (a -> Text) -> Attr e ev msg (RadioGroupConfig a)
+itemLabel f = configAny $ \cfg -> cfg { radioGroupConfigLabel = f }
+
+-- | A group of mutually exclusive options, set via 'items', 'itemLabel',
+-- and 'selected'\/'selectedIndex' -- one real 'radioButton' per item. The
+-- whole group is one atomic Tab stop, and while it holds focus, Up\/Down
+-- (or Left\/Right under 'Horizontal' 'orientation') moves the selection to
+-- the adjacent item, clamped at the ends. Fires 'Activated' via 'onSelect'.
+--
+-- @
+-- data Element = ... | SizeGroup RadioGroupPart
+--
+-- radioGroup SizeGroup
+--   [ items [Small, Medium, Large]
+--   , itemLabel describe
+--   , selected (size model)
+--   , onSelect (\\_ sz -> post (SizeChanged sz))
+--   ]
+-- @
+radioGroup
+  :: (Ord e, Eq a)
+  => (RadioGroupPart -> e)
+  -> [Attr e (SelectionEvent a) msg (RadioGroupConfig a)]
+  -> UI e msg ()
+radioGroup mkId attrs = do
+  let cfg      = configure defaultRadioGroupConfig attrs
+      itemList = radioGroupConfigItems cfg
+      sel      = radioGroupConfigSelection cfg
+      n        = length itemList
+      selfId   = mkId RadioGroup
+      isPickedAt idx val = case sel of
+        None          -> False
+        Item v        -> v == val
+        ItemAtIndex i -> i == idx
+      currentIdx = case sel of
+        None          -> Nothing
+        Item v        -> findIndex (== v) itemList
+        ItemAtIndex i -> if i >= 0 && i < n then Just i else Nothing
+      groupIsTabStop = ccTabStop (controlConfig attrs)
+
+  radioGroupComposite selfId
+    ( Shared (const (controlConfig attrs))
+    : [ items itemList
+      , orientation (radioGroupConfigOrientation cfg)
+      , itemsPanel (radioGroupConfigBoxConfig cfg)
+      , itemTemplate $ \idx val ->
+          ( Layout Fill Fill TopLeft
+          , radioButton (\part -> mkId (RadioItem idx part))
+              [ picked (isPickedAt idx val)
+              , text (radioGroupConfigLabel cfg val)
+              , tabStop (not groupIsTabStop)
+              , focusOnClick (if groupIsTabStop then FocusTarget selfId else FocusSelf)
+              , onPick (translate attrs (Activated idx val))
+              ]
+          )
+      ]
+    )
+
+  whenEnabled $ when (n > 0) $ do
+    let (prevKey, nextKey) = case radioGroupConfigOrientation cfg of
+          Vertical   -> (KeyUp, KeyDown)
+          Horizontal -> (KeyLeft, KeyRight)
+        move d = let newIdx = case currentIdx of
+                       Just i  -> max 0 (min (n - 1) (i + d))
+                       Nothing -> 0
+                 in fire attrs [Activated newIdx (itemList !! newIdx)]
+    prevPressed <- isKeyPressed selfId prevKey
+    nextPressed <- isKeyPressed selfId nextKey
+    when prevPressed $ move (-1)
+    when nextPressed $ move 1
+

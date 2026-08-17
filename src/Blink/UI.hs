@@ -121,9 +121,23 @@ the mouse is within the /current bounds/, without reference to any element ID.
 
 = Focus and keyboard navigation
 
-At most one element holds keyboard focus at a time, tracked in the focus state.
+Focus is tracked as a 'Focus' chain, not a single flat element: a plain
+control holds a bare 'FocusSingle', but a composite (a list, a tree —
+anything with sub-items) can be focused with no child chosen yet
+('FocusComposite' with a 'FocusNothing' tail) or with a specific child
+current ('FocusComposite' wrapping that child's own 'Focus'), nested to
+arbitrary depth for composites of composites. 'withinComposite' is where
+composites actually build and consume these chains.
 
-  * 'isFocused' \/ 'setFocus' \/ 'clearFocus' — query and update focus.
+  * 'isFocused' — non-exclusive, the way 'Blink.Controls.isMouseOver' already is for
+    geometric nesting (CSS's @:focus-within@, generalised to also cover plain
+    exact-match for free): 'True' for every id along the current chain, not
+    just the terminal one. A leaf control checking its own id behaves exactly
+    as it always has; an ancestor composite now correctly sees 'True' for its
+    own id whenever focus is anywhere inside it.
+  * 'setFocus' \/ 'clearFocus' — set or clear focus for a single element, as
+    a bare 'FocusSingle'\/'FocusNothing'. 'withinComposite' is where a
+    composite writes its own 'FocusComposite' shape instead.
   * 'consumeKey' — remove a key event from the frame's queue so that it is not
     handled by multiple controls in the same frame.
 
@@ -243,11 +257,15 @@ module Blink.UI
   , contextButtonDown
   , contextButtonReleased
     -- * Focus and keyboard navigation
+  , Focus (..)
+  , isNothingFocused
+  , focusContains
   , getFocus
   , isFocused
   , setFocus
   , setFocusWhen
   , clearFocus
+  , withinComposite
   , consumeKey
   , getPreviousTabStop
   , setPreviousTabStop
@@ -321,11 +339,11 @@ data UiEffect e
   = ScrollTo e Double
     -- ^ Sets the scroll position to an absolute value, clamped to @[0, 1]@
     -- by 'applyUiEffects' when the effect is applied. Every caller
-    -- ('Blink.Controls.scrollBar', 'Blink.Controls.viewport',
-    -- 'Blink.Controls.listBox', 'Blink.Controls.textInputControl') already
-    -- passes a value in the @[0, 1]@ convention documented on 'ScrollState';
-    -- 'Blink.Controls.textInputControl' converts to and from pixels locally
-    -- since its selection\/cursor math is naturally pixel-based.
+    -- ('Blink.Controls.scrollBar', 'Blink.Controls.textInputControl')
+    -- already passes a value in the @[0, 1]@ convention documented on
+    -- 'ScrollState'; 'Blink.Controls.textInputControl' converts to and from
+    -- pixels locally since its selection\/cursor math is naturally
+    -- pixel-based.
   | ScrollBy e Double
     -- ^ Adjusts the scroll position by a delta, clamped to @[0, 1]@ — this
     -- constructor is only ever used in the normalised @[0, 1]@ convention.
@@ -343,11 +361,44 @@ data Out e msg
   | OutUi (UiEffect e)
   deriving (Eq, Show)
 
+-- | The shape of the tree-wide focus value. A plain, non-composite-aware
+-- control only ever produces\/consumes 'FocusNothing' or 'FocusSingle' — the
+-- same two-state model this replaced. A composite (a list, a tree — anything
+-- with sub-items) additionally uses 'FocusComposite' to combine its own id
+-- with whatever focus its children currently hold, nested to arbitrary depth
+-- for composites of composites; see 'withinComposite' for how composites
+-- build and consume these chains, and 'isFocused' for how an id is matched
+-- against one.
+--
+-- 'FocusSingle' eid and @'FocusComposite' eid 'FocusNothing'@ are
+-- semantically identical for everything this type is used for — kept as
+-- separate constructors for now as a stylistic distinction ("never has
+-- children" vs. "has none right now").
+data Focus e
+  = FocusNothing
+    -- ^ Nothing is focused anywhere in the tree.
+  | FocusSingle e
+    -- ^ A plain element holds focus, with no composite wrapping it.
+  | FocusComposite e (Focus e)
+    -- ^ A composite holds focus; the wrapped 'Focus' is whatever its
+    -- children currently hold ('FocusNothing' if none has been chosen yet).
+  deriving (Eq, Show)
+
+-- | 'True' when no element anywhere is focused — the top-level
+-- 'FocusNothing' case, not merely "no child chosen yet" (a composite that
+-- has claimed itself with @'FocusComposite' compositeId 'FocusNothing'@ is
+-- not "nothing focused"). Pattern-matches directly rather than requiring
+-- @Eq e@, so it's usable wherever a plain 'Bool' guard is more convenient
+-- than matching on 'Focus' by hand.
+isNothingFocused :: Focus e -> Bool
+isNothingFocused FocusNothing = True
+isNothingFocused _            = False
+
 -- | Tracks which element holds keyboard focus and whether it was visited
 -- during the current frame's render pass.
 data FocusState e = FocusState
-  { focusedElement   :: Maybe e
-    -- ^ The element that currently holds focus, or 'Nothing' if no element is focused.
+  { focusedElement   :: Focus e
+    -- ^ The current focus chain; 'FocusNothing' if nothing is focused.
   , focusedThisFrame :: Bool
     -- ^ 'True' if the focused element was encountered during this frame's render pass.
     -- Used to clear stale focus when a focused element is no longer present in the UI.
@@ -380,6 +431,12 @@ data InteractionState e = InteractionState
     -- ^ Which element holds keyboard focus, and whether it's still present this frame.
   , ixnPrevTabStop     :: Maybe e
     -- ^ The element visited just before the currently focused one, for Shift-Tab.
+  , ixnCompositePrevTabStop :: Map.Map e e
+    -- ^ Per-composite equivalent of 'ixnPrevTabStop', keyed by composite id:
+    -- the last child registered as a tab stop while that composite last ran.
+    -- Keeps Tab\/Shift-Tab wraparound within one composite's children scoped
+    -- to that composite instead of reaching into the surrounding tree via
+    -- the single app-wide 'ixnPrevTabStop' slot. See 'withinComposite'.
   , ixnButtonDown      :: Bool
     -- ^ 'True' when the left button is currently held (Pressed or Down state).
   , ixnButtonReleased  :: Bool
@@ -477,11 +534,12 @@ instance Monad (UI e msg) where
 
 emptyInteractionState :: InteractionState e
 emptyInteractionState = InteractionState
-  { ixnCaptured       = Nothing
-  , ixnFocus          = FocusState { focusedElement = Nothing, focusedThisFrame = False }
-  , ixnPrevTabStop    = Nothing
-  , ixnButtonDown     = False
-  , ixnButtonReleased = False
+  { ixnCaptured             = Nothing
+  , ixnFocus                = FocusState { focusedElement = FocusNothing, focusedThisFrame = False }
+  , ixnPrevTabStop          = Nothing
+  , ixnCompositePrevTabStop = Map.empty
+  , ixnButtonDown           = False
+  , ixnButtonReleased       = False
   }
 
 emptyFrameOutputs :: FrameOutputs e msg
@@ -779,36 +837,158 @@ wasMouseOverLastFrame eid = gets $ \ctx -> Set.member eid (elmMouseOverPrev (ctx
 isAnyMouseOver :: UI e msg Bool
 isAnyMouseOver = gets (not . Set.null . outMouseOverThisFrame . ctxOutputs)
 
--- | The element that currently holds keyboard focus, or 'Nothing' if none does.
-getFocus :: UI e msg (Maybe e)
+-- | The current tree-wide focus chain; 'FocusNothing' if nothing is focused.
+getFocus :: UI e msg (Focus e)
 getFocus = gets contextFocus
 
--- | The element that currently holds keyboard focus, or 'Nothing', read
--- directly from a 'UIContext' outside the 'UI' monad.
-contextFocus :: UIContext e msg -> Maybe e
+-- | The current tree-wide focus chain, read directly from a 'UIContext'
+-- outside the 'UI' monad.
+contextFocus :: UIContext e msg -> Focus e
 contextFocus = focusedElement . ixnFocus . ctxInteraction
 
--- | 'True' when the given element holds keyboard focus.
-isFocused :: Eq e => e -> UI e msg Bool
-isFocused eid = (== Just eid) <$> getFocus
+-- | 'True' when the given element id appears anywhere along a 'Focus'
+-- chain — not just as the terminal (innermost) element. The terminal
+-- element is always part of its own chain, so a leaf control checking its
+-- own id is unaffected by this; an ancestor composite additionally matches
+-- for its own id whenever focus is anywhere inside it. Pure, so it can be
+-- tested directly against hand-built 'Focus' values; 'isFocused' is this
+-- applied to the current tree-wide focus.
+focusContains :: Eq e => e -> Focus e -> Bool
+focusContains _ FocusNothing            = False
+focusContains x (FocusSingle e)         = x == e
+focusContains x (FocusComposite e rest) = x == e || focusContains x rest
 
--- | Transfers keyboard focus to the given element. Takes effect immediately
--- — like 'registerMouseOver' and mouse capture, not like the deferred
--- scroll\/selection writes — because a control's own focus decision (take
--- it when nothing else has it, hand off on Tab) is only correct if the next
--- sibling in the same tree walk can see it happened.
-setFocus :: e -> UI e msg ()
+-- | 'True' when the given element id appears anywhere along the current
+-- focus chain — see 'focusContains'.
+isFocused :: Eq e => e -> UI e msg Bool
+isFocused eid = focusContains eid <$> getFocus
+
+-- | Transfers keyboard focus to the given element. If it already holds
+-- focus, its existing focus (including any 'FocusComposite' structure) is
+-- retained rather than replaced; otherwise it takes focus fresh, as a bare
+-- 'FocusSingle'. Takes effect immediately — like 'registerMouseOver' and
+-- mouse capture, not like the deferred scroll\/selection writes — because a
+-- control's own focus decision (take it when nothing else has it, hand off
+-- on Tab) is only correct if the next sibling in the same tree walk can see
+-- it happened.
+setFocus :: Eq e => e -> UI e msg ()
 setFocus eid = modifyIxn $ \ixn ->
-  ixn { ixnFocus = FocusState { focusedElement = Just eid, focusedThisFrame = True } }
+  let current = focusedElement (ixnFocus ixn)
+      retained = case current of
+        FocusSingle e'      | e' == eid -> current
+        FocusComposite e' _ | e' == eid -> current
+        _                                -> FocusSingle eid
+  in ixn { ixnFocus = FocusState { focusedElement = retained, focusedThisFrame = True } }
 
 -- | Transfers keyboard focus to the given element when the condition is
 -- 'True'.
-setFocusWhen :: Bool -> e -> UI e msg ()
+setFocusWhen :: Eq e => Bool -> e -> UI e msg ()
 setFocusWhen b eid = when b (setFocus eid)
 
 -- | Removes keyboard focus from all elements. Immediate, like 'setFocus'.
 clearFocus :: UI e msg ()
-clearFocus = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { focusedElement = Nothing } }
+clearFocus = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { focusedElement = FocusNothing } }
+
+-- | Marks a sub-tree as belonging to a composite element (a list, a tree —
+-- anything with sub-items) for focus purposes, the way
+-- 'Blink.Controls.isMouseOver' generalises to geometric nesting.
+-- Non-exclusive: true for every id along the current chain, not just the
+-- terminal one, so an ancestor composite
+-- correctly sees itself as focused whenever focus is anywhere inside it —
+-- see 'isFocused'.
+--
+-- Takes the focus value to expose as an explicit argument (@exposed@)
+-- rather than reading the tree-wide ambient focus itself, so a caller that
+-- has already settled this frame's focus can hand that value down (or
+-- substitute a placeholder) instead of having it re-derived here. A
+-- standalone caller with no such value of its own just passes its current
+-- 'getFocus' straight through.
+--
+-- Asks one question of @exposed@: is this composite's own id at the front
+-- of it, is nothing focused at all, or does something else entirely
+-- already hold it?
+--
+--   * Own id at the front (@'FocusComposite' compositeId childFocus@):
+--     strips the tag, exposing @childFocus@ to @inner@ unwrapped — children
+--     compare against exactly the value they'd recognise standalone.
+--   * Nothing focused (@'FocusNothing'@): passes it through unchanged —
+--     children are free to auto-claim via their own ordinary logic, exactly
+--     as they would standalone.
+--   * Anything else — a bare @'FocusSingle' compositeId@ (this composite
+--     itself is the exact focus target, no child chosen), an unrelated
+--     element, or a different composite's own chain: @inner@ runs against
+--     that value completely unmodified, and the result is left exactly as
+--     it was: no wrap, no overwrite. (Passing 'FocusNothing' here instead
+--     would tell every descendant "nothing is focused," letting one of
+--     them auto-claim and steal focus that already legitimately belongs to
+--     this composite itself, or to something outside it, purely because
+--     this composite happened to render later in the same pass.)
+--
+-- In the first two cases, once @inner@ finishes, whatever focus resulted is
+-- re-wrapped as @'FocusComposite' compositeId after@ — unconditionally,
+-- even when @after@ is 'FocusNothing'. This re-affirms "composite focused,
+-- no child chosen" every frame the composite renders, the same way a plain
+-- focused control's own focus rules re-affirm its focus every frame it
+-- renders — without this, that state would silently decay to 'FocusNothing'
+-- one frame later, since nothing else reaffirms it.
+--
+-- A per-composite previous-tab-stop is substituted for the real one while
+-- @inner@ runs, so Tab\/Shift-Tab wraps within this composite's own children.
+--
+-- Composes for arbitrary nesting: a composite inside another composite's
+-- @withinComposite@ only ever strips\/re-wraps its own outermost tag, and
+-- does the same expose\/render\/re-wrap step around its own children.
+withinComposite :: Ord e => e -> Focus e -> UI e msg a -> UI e msg a
+withinComposite compositeId exposed (UI f) = UI $ \ctx ->
+  case exposed of
+    FocusComposite cid childFocus | cid == compositeId -> claim ctx childFocus
+    FocusNothing                                        -> claim ctx FocusNothing
+    _                                                    -> passthrough ctx
+  where
+    -- Substitutes @exposed@ for the ambient focus while @inner@ runs, same
+    -- as 'claim' does. If @exposed@ comes back untouched, the real
+    -- pre-substitution focus is restored instead (so a placeholder that
+    -- blocked a claim doesn't linger). Otherwise something inside @inner@ --
+    -- necessarily one of this composite's own children, since nothing else
+    -- runs meanwhile -- claimed focus for itself, so the result is wrapped
+    -- as belonging to this composite, the same as 'claim' would.
+    passthrough ctx = do
+      let ixn0  = ctxInteraction ctx
+          real  = focusedElement (ixnFocus ixn0)
+          ctxIn = ctx { ctxInteraction = ixn0 { ixnFocus = (ixnFocus ixn0) { focusedElement = exposed } } }
+      (a, ctx'') <- f ctxIn
+      let ixn''  = ctxInteraction ctx''
+          after  = focusedElement (ixnFocus ixn'')
+          final
+            | after == exposed = real
+            | otherwise         = FocusComposite compositeId after
+          ixn''' = ixn'' { ixnFocus = (ixnFocus ixn'') { focusedElement = final } }
+      pure (a, ctx'' { ctxInteraction = ixn''' })
+
+    claim ctx exposedFocus = do
+      let ixn0       = ctxInteraction ctx
+          realPrev   = ixnPrevTabStop ixn0
+          scopedPrev = Map.lookup compositeId (ixnCompositePrevTabStop ixn0)
+          ixnIn      = ixn0
+            { ixnFocus       = (ixnFocus ixn0) { focusedElement = exposedFocus }
+            , ixnPrevTabStop = scopedPrev
+            }
+      (a, ctx'') <- f (ctx { ctxInteraction = ixnIn })
+      let ixn''      = ctxInteraction ctx''
+          scoped     = case ixnPrevTabStop ixn'' of
+            Just v  -> Map.insert compositeId v (ixnCompositePrevTabStop ixn'')
+            Nothing -> Map.delete compositeId (ixnCompositePrevTabStop ixn'')
+          flowedPrev = if ixnPrevTabStop ixn'' == scopedPrev then realPrev else ixnPrevTabStop ixn''
+          after      = focusedElement (ixnFocus ixn'')
+          ixn'''     = ixn''
+            { ixnCompositePrevTabStop = scoped
+            , ixnPrevTabStop          = flowedPrev
+            , ixnFocus                = FocusState
+                { focusedElement   = FocusComposite compositeId after
+                , focusedThisFrame = True
+                }
+            }
+      pure (a, ctx'' { ctxInteraction = ixn''' })
 
 -- | Advances a 'FocusState' to the next frame: carries focus forward if it
 -- was explicitly set this frame, otherwise clears it. Used by 'nextInteractionFrame'.
@@ -816,7 +996,7 @@ nextFocusFrame :: FocusState e -> FocusState e
 nextFocusFrame fs = FocusState
   { focusedElement   = if focusedThisFrame fs
                        then focusedElement fs
-                       else Nothing
+                       else FocusNothing
   , focusedThisFrame = False
   }
 
