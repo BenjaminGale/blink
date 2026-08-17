@@ -1,0 +1,207 @@
+# Ideas
+
+Running list of feature ideas and improvements for Blink. Not a roadmap or a
+commitment — just a place to capture things before they're forgotten.
+
+Entries are grouped by category. Add new categories as needed; add new
+entries to the top of their category's list.
+
+## Format
+
+```
+### Title
+Depends on: Other idea title (optional, only if this idea builds on another)
+
+Description — what it is, why it'd help, or what it'd take.
+```
+
+---
+
+## Controls
+
+### Enabled attribute
+Individual controls should have an `enabled` attribute. A disabled control
+would be visually distinct, ignore clicks and
+other input, and be skipped when the keyboard moves focus between controls.
+Right now this behaviour only exists for whole composites (e.g. a group of
+controls disabled together) — this idea is about giving a single control the
+same ability on its own.
+
+This needs to apply to every kind of control, not just simple ones — a
+button needs the attribute, but so does a composite control, so that any
+control in the library can be disabled individually regardless of what it's
+made of.
+
+### Disable-aware panel control
+Building on the `enabled` attribute above: a higher-level panel control that,
+when disabled, automatically disables its content — every child control
+nested inside it — rather than requiring each child to be disabled
+individually. This would make it easy to disable a whole section of a UI
+(e.g. a form) in one place.
+
+### Shrink the public disabling API
+Depends on: Enabled attribute, Disable-aware panel control
+
+Once individual controls carry an `enabled` attribute and a disable-aware
+panel control exists to disable whole sections at once, `disableWhen` may no
+longer need to be part of the public API — those two facilities could cover
+the cases it exists for today. This is speculative until that design settles
+and we can see whether anything still needs `disableWhen` directly.
+
+### Default and cancel buttons
+Buttons only support their label text today — there's no way to mark a
+button as the one that responds to Enter or Escape when nothing else has
+focus (the way dialogs conventionally have a default "OK" button and a
+cancel "Cancel" button).
+
+This needs a notion of scope, since only one default and one cancel button
+can be active at a time — presumably per top-level view or per modal — and
+that concept doesn't exist anywhere in the control library yet. It would
+also need some visual indication that a button fired via keypress rather
+than a click, since buttons don't currently distinguish the two for styling
+purposes.
+
+### Richer borders
+Borders today are a single flat-coloured stroke per side, with no texture.
+Two extensions come up:
+
+- 9-slice (9-patch) borders, so a border can be drawn from a bitmap with
+  fixed corners and stretchable edges instead of a flat colour.
+- Box-drawing character borders for terminal-style rendering, plus a
+  bordered container that reserves space for a header label mid-border (a
+  titled group box).
+
+### Standard glyph set
+Some controls draw special characters for their marks — a checkbox's tick,
+a radio button's dot — chosen ad hoc wherever that control is implemented.
+The library could instead provide a standard, overridable set of glyphs for
+this kind of thing, so every control drawing this style of mark draws from
+the same consistent set rather than each picking its own.
+
+### Generic control content
+Controls that show text (buttons, checkboxes, labels, ...) can currently
+only take plain text as their content. There's an idea to generalize this
+so a control's content can be either plain text or arbitrary composed UI —
+allowing, for example, a button with an icon next to its label — without
+needing a separate icon-plus-label variant of the API for every control.
+This is the same idea as WPF's content model or JavaFX's `Labeled` control:
+one content slot that accepts either text or an arbitrary child, rather than
+a bespoke text-only field per control.
+
+### Intrinsic control sizing
+A control's on-screen size currently comes entirely from the layout slot
+it's placed in, not from its own content — there's no general "size = margin
++ border + padding + content" calculation a control can opt into. This
+matters most once controls can hold richer content (see above): text needs
+to be measured to size a control around it, and non-text content needs its
+own measurement approach entirely.
+
+## Styling
+
+### Control classes
+Every control should belong to a class for its kind (e.g. all buttons share
+the "Button" class), so the library can ship sensible default styling for
+each kind of control without a theme having to style every element
+individually. This is a prerequisite for style classes below — user-defined
+classes only make sense once controls already have a notion of "what kind of
+thing am I" to attach to.
+
+### Style classes
+Depends on: Control classes
+
+Beyond the built-in per-kind styling above, there's no way for a theme to
+apply a shared, user-defined style to a set of controls by class — reusing
+one look across several elements means repeating that style for each one
+individually. A style attribute, settable per control instance, would let a
+theme define a style once and apply it wherever it's needed, overriding the
+control's class-level default.
+
+This gives three levels a control's style can come from, in order of
+precedence: a style attribute set directly on that control instance, its
+control class's default, and — for elements that aren't controls and so have
+no class to fall back on — an explicit style keyed to that specific element.
+
+### Built-in default styles per control
+Depends on: Control classes
+
+Once every control has a class to hang a default style off, the library
+itself should ship a sensible default style for each one, so a theme that
+sets nothing still gets a coherent, usable look out of the box rather than
+unstyled controls. Today getting anything to look right requires a theme to
+style every control explicitly.
+
+### Pseudo styles for control sub-structures
+Depends on: Control classes
+
+A control class styles a control as a whole, but composite controls are
+made of several visually distinct parts — a checkbox has a container, a box,
+and a label, each of which may need its own default look. This extends the
+control class idea downward: instead of a control only exposing one class to
+style, it would expose a class per named sub-part, so a theme can target
+"the box inside a checkbox" the same way it can already target "a checkbox."
+
+## Geometry
+
+### Stronger geometry types
+Points, sizes, and rectangles are currently plain records with no protection
+against mixing up their components — e.g. accidentally using a size's width
+where a point's x was meant. Wrapping them in stronger, distinct types was
+raised as a way to catch that kind of mistake at compile time. Worth
+revisiting once it's clear which of these values actually get passed around
+interchangeably enough in practice to cause real bugs.
+
+### Non-negative insets
+Insets support a uniform convenience constructor but not a zero one, and
+nothing stops a caller from constructing a negative inset, which would
+invert a rectangle rather than raising an error. Needs a decision on whether
+applying an inset to a rectangle should clamp the result, or whether insets
+should be constrained to non-negative values when they're constructed.
+
+## Architecture
+
+### `scrollIntoView`
+No such function currently exists. The idea is a helper that, given a
+scrollable container and where a target region sits within its content,
+computes and emits the minimal scroll needed to bring that region into
+view — for use by keyboard navigation inside scrollable containers (list
+boxes, viewports) so that moving focus or selection off-screen scrolls to
+follow it.
+
+### Row edit mode for composite controls
+A composite control's rows can already render arbitrary content, including
+real interactive controls (an inline text field for rename, a checkbox, a
+delete button) — but there's no navigation/edit distinction: arrow keys
+would need to move a "current" row without touching real keyboard focus,
+and an explicit action (Enter, double-click) would switch that row into an
+edit mode where focus can then legitimately move onto a control inside it.
+This is the same two-layer model as JavaFX's cell model (a cell renders
+itself in a plain, non-editing state until an explicit edit trigger swaps in
+a live editing control for that cell) — plain navigation by default, an
+explicit step in and out of editing.
+
+Open questions: what triggers entry/exit, whether edit mode applies per-row
+or to the whole list at once, and how it interacts with selection (editing
+and selecting are different actions on the same row).
+
+### General-purpose control activation handlers
+Controls currently hard-code their own activation logic (a fixed
+click-or-key-list check). The alternative raised is an attribute a control
+could be given, holding an ordered list of condition/action pairs, either
+running the first match or every match. Open questions: handler order,
+whether a handler can consume an input event so later handlers don't also
+see it, and how that interacts with hit-testing bubbling from child to
+parent.
+
+## Misc
+
+### Animated text cursor
+The text input's cursor is currently drawn static; it should blink, but
+only while the field is focused. This should be straightforward — the
+animation-frame machinery it needs already exists and is used by the
+indeterminate progress bar.
+
+### Mouse cursor shape
+There's currently no way for a control to request a specific mouse cursor
+icon (e.g. an I-beam over text input, a resize cursor over a splitter).
+This would need a per-frame "requested cursor" output, similar to the
+existing animation-request output, for the backend to apply.
