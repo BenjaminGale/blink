@@ -1725,10 +1725,11 @@ compositeControl :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg (Composit
 compositeControl eid attrs = do
   heldFocusBefore <- isFocused eid
   applyFocus eid attrs
-  focus <- getFocus
+  focus    <- getFocus
+  disabled <- isDisabled
   let content = renderCompositeItems (configure defaultCompositeControlConfig attrs)
   renderChrome eid $
-    if autoClaimsFocus (controlConfig attrs)
+    if autoClaimsFocus (controlConfig attrs) && not disabled
       then withinComposite eid (compositeFocusToExpose eid heldFocusBefore focus) content
       else content
   applyMouseOver eid attrs

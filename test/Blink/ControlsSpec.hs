@@ -325,7 +325,7 @@ scrollBarRect = Rectangle 0 0 20 200
 data ViewportElem = VPPart ViewportPart | VPChild
   deriving (Eq, Ord, Show)
 
-data TIElem = TIButton1 | TIButton2 | TICheckbox CheckboxPart | TIDisabledButton
+data TIElem = TIButton1 | TIButton2 | TICheckbox CheckboxPart | TIDisabledButton | TIDisabledGroup RadioGroupPart
   deriving (Eq, Ord, Show)
 
 vpTheme :: Theme ViewportElem
@@ -2317,4 +2317,36 @@ spec = describe "Blink.Controls" $ do
       r3 <- runInteractions controlRect (resultContext r2) render [] [Tab]
       contextFocus (resultContext r3) `shouldBe` FocusNothing
       r4 <- runInteractions controlRect (resultContext r3) render [] [Tab]
+      contextFocus (resultContext r4) `shouldBe` FocusSingle TIButton1
+
+  describe "tab order across a real composite and a disabled composite sibling (integration)" $ do
+    -- Mirrors the app's actual structure that regressed: two plain buttons,
+    -- a real checkbox, then a disabled radioGroup (a composite control, not
+    -- a plain control) as the last element with nothing enabled after it.
+    let tiTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = checkboxStyleSet } :: Theme TIElem
+
+        render :: UI TIElem (Int, Text) ()
+        render = do
+          button TIButton1 [text "One"]
+          button TIButton2 [text "Two"]
+          checkbox TICheckbox [text "Check", checked False]
+          disableWhen True $
+            radioGroup TIDisabledGroup
+              [items (["Small", "Medium", "Large"] :: [Text]), itemLabel id]
+
+        initialCtx = emptyUIContext controlRect noInput tiTheme noOpTextMeasurer :: UIContext TIElem (Int, Text)
+
+    it "does not leave focus claimed by the disabled composite after Tab moves past it" $ do
+      r0 <- runInteractions controlRect initialCtx render [] []
+      r1 <- runInteractions controlRect (resultContext r0) render [] [Tab]
+      r2 <- runInteractions controlRect (resultContext r1) render [] [Tab]
+      contextFocus (resultContext r2) `shouldBe` FocusSingle (TICheckbox CheckboxBox)
+      r3 <- runInteractions controlRect (resultContext r2) render [] [Tab]
+      -- The disabled composite must never end up holding focus, even in
+      -- the vacuous "composite focused, no child chosen" shape.
+      contextFocus (resultContext r3) `shouldNotBe` FocusComposite (TIDisabledGroup RadioGroup) FocusNothing
+      contextFocus (resultContext r3) `shouldBe` FocusNothing
+      -- And a later idle frame must be able to reclaim it -- proving focus
+      -- wasn't silently trapped on the disabled composite.
+      r4 <- runInteractions controlRect (resultContext r3) render [] [Wait 1]
       contextFocus (resultContext r4) `shouldBe` FocusSingle TIButton1
