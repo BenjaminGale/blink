@@ -1039,23 +1039,23 @@ disableWhen False action = action
 draw :: DrawCommand -> UI e msg ()
 draw cmd = modifyOut $ \out -> out { outDrawCommands = cmd : outDrawCommands out }
 
+-- | Builds a 'DrawCommand' from the current bounds and queues it.
+drawAt :: (Rectangle -> DrawCommand) -> UI e msg ()
+drawAt mkCmd = do
+  r <- getBounds
+  draw (mkCmd r)
+
 -- | Fills the current bounds with a solid colour.
 fillRect :: Colour -> UI e msg ()
-fillRect colour = do
-  r <- getBounds
-  draw $ FillRect r colour
+fillRect colour = drawAt (\r -> FillRect r colour)
 
 -- | Strokes the border of the current bounds with the given colour and per-side widths.
 strokeRect :: Colour -> BorderEdges -> UI e msg ()
-strokeRect colour edges = do
-  r <- getBounds
-  draw $ StrokeBorder r colour edges
+strokeRect colour edges = drawAt (\r -> StrokeBorder r colour edges)
 
 -- | Renders text within the current bounds using the given colour and alignment.
 drawText :: Colour -> TextAlign -> Text -> UI e msg ()
-drawText colour align text = do
-  r <- getBounds
-  draw $ DrawText r text colour align
+drawText colour align text = drawAt (\r -> DrawText r text colour align)
 
 -- | Wraps a sub-tree in a clip region matching the current bounds. Draw
 -- commands produced by the sub-tree that fall outside the region are discarded,
