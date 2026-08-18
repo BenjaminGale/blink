@@ -960,9 +960,9 @@ resolveKeyboardSelection hasFocus keyEvts len (anchor, active)
   | plainRight = let p = if hasSel then selHi else min len (active + 1) in (p, p)
   | otherwise  = (anchor, active)
   where
-    hasSel     = anchor /= active
-    selLo      = min anchor active
-    selHi      = max anchor active
+    hasSel     = selectionHasExtent (Selection anchor active)
+    selLo      = selectionLow (Selection anchor active)
+    selHi      = selectionHigh (Selection anchor active)
     pressed k withShift = hasFocus && any (\e -> key e == k && (Shift `elem` modifiers e) == withShift) keyEvts
     shiftLeft  = pressed KeyLeft  True
     shiftRight = pressed KeyRight True
@@ -989,9 +989,9 @@ applyEdit inputFilterFn currentValue input (anchor, active)
     backspace = any (\e -> key e == KeyBackspace) keyEvts
     typed     = inputFilterFn (foldl' (<>) T.empty (inputTypedText input))
     hasTyped  = not (T.null typed)
-    hasSel    = anchor /= active
-    selLo     = min anchor active
-    selHi     = max anchor active
+    hasSel    = selectionHasExtent (Selection anchor active)
+    selLo     = selectionLow (Selection anchor active)
+    selHi     = selectionHigh (Selection anchor active)
     (newText, newCursor)
       | hasSel && backspace =
           (T.take selLo currentValue <> T.drop selHi currentValue, selLo)
@@ -1072,8 +1072,8 @@ drawTextInputContent style bounds displayValue hasFocus enabled ox (anchor, acti
           (rectHeight bounds)
     withBounds cursorRect $ fillRect (styleTextColour style)
   where
-    drawLo = min anchor active
-    drawHi = max anchor active
+    drawLo = selectionLow (Selection anchor active)
+    drawHi = selectionHigh (Selection anchor active)
 
 -- | Events reported by 'textInputControl': 'Edited' with the new value
 -- whenever a keystroke changes it, 'Submitted' when Enter is pressed while
