@@ -19,6 +19,23 @@ Description — what it is, why it'd help, or what it'd take.
 
 ## Controls
 
+### Wrapping label
+Depends on: Self-sizing layout via an Element type
+
+A label control that wraps text across multiple lines to fit whatever width
+it's given, rather than clipping or overflowing:
+
+- Wraps to available width instead of clipping or overflowing
+- Self-sizes its height from the wrapped line count, rather than requiring
+  a caller-supplied height
+- Per-line text alignment (left/center/right), consistent with the
+  existing single-line `label`
+- Optional max-line cap with ellipsis truncation on the last visible line
+- Same style/theme resolution as the existing `label`, so it's a drop-in
+  upgrade rather than a separate visual system
+- Re-wraps automatically on resize, since wrap width comes from ambient
+  layout bounds each frame rather than being cached
+
 ### Enabled attribute
 Individual controls should have an `enabled` attribute. A disabled control
 would be visually distinct, ignore clicks and
