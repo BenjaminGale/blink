@@ -221,6 +221,7 @@ module Blink.UI
   , getSelections
   , getSelection
   , contextSelections
+  , contextSelection
   , selectionLow
   , selectionHigh
   , selectionHasExtent
@@ -646,6 +647,11 @@ contextSelections eid ctx = Map.findWithDefault [] eid (elmSelections (ctxElemen
 -- | The first selection for the given element, or 'Nothing'.
 getSelection :: Ord e => e -> UI e msg (Maybe Selection)
 getSelection eid = listToMaybe <$> getSelections eid
+
+-- | The first selection for the given element, or 'Nothing', read directly
+-- from a 'UIContext' outside the 'UI' monad.
+contextSelection :: Ord e => e -> UIContext e msg -> Maybe Selection
+contextSelection eid = listToMaybe . contextSelections eid
 
 -- Internal: writes a scroll position directly into the context, bypassing
 -- the deferred-effect queue. Clamps to @[0, 1]@ so this is the single point
