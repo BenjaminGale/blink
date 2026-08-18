@@ -732,17 +732,17 @@ data ProgressValue
 
 -- | Configuration for 'progressBar', set via 'bandSpeed' and 'progress'.
 data ProgressBarConfig = ProgressBarConfig
-  { configBandSpeed     :: Double
-  , progressBarConfigValue :: ProgressValue
+  { progressBarConfigBandSpeed :: Double
+  , progressBarConfigValue     :: ProgressValue
   }
 
 defaultProgressBarConfig :: ProgressBarConfig
-defaultProgressBarConfig = ProgressBarConfig { configBandSpeed = 0.5, progressBarConfigValue = Progress 0 }
+defaultProgressBarConfig = ProgressBarConfig { progressBarConfigBandSpeed = 0.5, progressBarConfigValue = Progress 0 }
 
 -- | How fast the band sweeps across an 'Indeterminate' bar, in bar-widths
 -- per second. Defaults to 0.5.
 bandSpeed :: Double -> Attr e ev msg ProgressBarConfig
-bandSpeed v = configAny $ \cfg -> cfg { configBandSpeed = v }
+bandSpeed v = configAny $ \cfg -> cfg { progressBarConfigBandSpeed = v }
 
 -- | Sets the bar to 'Progress' (determinate) or 'Indeterminate'. Defaults
 -- to @'Progress' 0@.
@@ -770,7 +770,7 @@ progressBar eid attrs = do
         r       <- getBounds
         style   <- getStyle eid
         elapsed <- getAnimElapsed
-        let speed = configBandSpeed cfg
+        let speed = progressBarConfigBandSpeed cfg
             t     = realToFrac elapsed * speed
             phase = t - fromIntegral (floor t :: Int)
             bandW = rectWidth r * 0.3
@@ -1096,15 +1096,15 @@ onSubmit reaction = onEvent $ \ev -> case ev of
 -- | Configuration for 'textInputControl', set via 'inputFilter',
 -- 'displayFilter', and 'text' (the field's current value). Defaults to @\"\"@.
 data TextInputConfig = TextInputConfig
-  { configInputFilter    :: Text -> Text
-  , configDisplayFilter  :: Text -> Text
-  , textInputConfigValue :: Text
+  { textInputConfigInputFilter   :: Text -> Text
+  , textInputConfigDisplayFilter :: Text -> Text
+  , textInputConfigValue         :: Text
   }
 
 defaultTextInputConfig :: TextInputConfig
 defaultTextInputConfig = TextInputConfig
-  { configInputFilter    = id
-  , configDisplayFilter  = id
+  { textInputConfigInputFilter    = id
+  , textInputConfigDisplayFilter  = id
   , textInputConfigValue = ""
   }
 
@@ -1118,7 +1118,7 @@ instance HasTextConfig TextInputConfig where
 -- control's — do it in an 'onInput' handler and pass the already-formatted
 -- value back in on the next frame. Defaults to 'id'.
 inputFilter :: (Text -> Text) -> Attr e ev msg TextInputConfig
-inputFilter f = configAny $ \cfg -> cfg { configInputFilter = f }
+inputFilter f = configAny $ \cfg -> cfg { textInputConfigInputFilter = f }
 
 -- | Applied to the value everywhere it is measured or drawn — the rendered
 -- text, and every character-offset calculation used for cursor placement,
@@ -1128,7 +1128,7 @@ inputFilter f = configAny $ \cfg -> cfg { configInputFilter = f }
 -- underlying value edited by 'inputFilter'\/'onInput' is never affected by
 -- it. Defaults to 'id'.
 displayFilter :: (Text -> Text) -> Attr e ev msg TextInputConfig
-displayFilter f = configAny $ \cfg -> cfg { configDisplayFilter = f }
+displayFilter f = configAny $ \cfg -> cfg { textInputConfigDisplayFilter = f }
 
 -- | A single-line text entry field. Supports click-to-place cursor, drag
 -- selection, Shift+arrow extension, and selection-aware editing. Long text
@@ -1158,7 +1158,7 @@ textInputControl eid attrs = do
     sel      <- getSelection eid
     frac     <- getScrollState eid
 
-    let displayValue = configDisplayFilter cfg currentValue
+    let displayValue = textInputConfigDisplayFilter cfg currentValue
         w           = rectWidth bounds
         defPos        = T.length currentValue
         anchorInit    = maybe defPos selectionAnchor sel
@@ -1182,7 +1182,7 @@ textInputControl eid attrs = do
           resolveKeyboardSelection hasFocus (inputKeyEvents input) (T.length currentValue) (anchorAfterMouse, activeAfterMouse)
 
         ((anchorFinal, activeFinal), edited)
-          | enabled   = applyEdit (configInputFilter cfg) currentValue input (anchorAfterKeys, activeAfterKeys)
+          | enabled   = applyEdit (textInputConfigInputFilter cfg) currentValue input (anchorAfterKeys, activeAfterKeys)
           | otherwise = ((anchorAfterKeys, activeAfterKeys), Nothing)
 
         submitted = enabled && any (\e -> key e == KeyReturn) (inputKeyEvents input)
@@ -1297,16 +1297,16 @@ onChange reaction = onEvent $ \ev -> case ev of
 -- | Configuration for 'slider', set via 'arrowStep', 'thumbRatio',
 -- 'orientation', and 'value'. Defaults to a horizontal slider at 0.
 data SliderConfig = SliderConfig
-  { configArrowStep         :: Double
-  , configThumbRatio        :: Maybe Double
+  { sliderConfigArrowStep   :: Double
+  , sliderConfigThumbRatio  :: Maybe Double
   , sliderConfigOrientation :: Orientation
   , sliderConfigValue       :: Double
   }
 
 defaultSliderConfig :: SliderConfig
 defaultSliderConfig = SliderConfig
-  { configArrowStep         = 0.05
-  , configThumbRatio        = Nothing
+  { sliderConfigArrowStep   = 0.05
+  , sliderConfigThumbRatio  = Nothing
   , sliderConfigOrientation = Horizontal
   , sliderConfigValue       = 0
   }
@@ -1314,7 +1314,7 @@ defaultSliderConfig = SliderConfig
 -- | The amount an arrow-key press (Left\/Right for 'Horizontal', Up\/Down
 -- for 'Vertical') changes the value by. Defaults to @0.05@.
 arrowStep :: Double -> Attr e ev msg SliderConfig
-arrowStep v = configAny $ \cfg -> cfg { configArrowStep = v }
+arrowStep v = configAny $ \cfg -> cfg { sliderConfigArrowStep = v }
 
 -- | Implemented by any control's own config type that carries a thumb
 -- ratio, letting 'thumbRatio' work uniformly across them (same pattern as
@@ -1330,7 +1330,7 @@ thumbRatio :: HasThumbRatioConfig cfg => Double -> Attr e ev msg cfg
 thumbRatio v = configAny (setThumbRatio v)
 
 instance HasThumbRatioConfig SliderConfig where
-  setThumbRatio v cfg = cfg { configThumbRatio = Just v }
+  setThumbRatio v cfg = cfg { sliderConfigThumbRatio = Just v }
 
 -- | Implemented by any control's own config type that carries an
 -- orientation, letting 'orientation' work uniformly across them (same
@@ -1361,13 +1361,13 @@ slider mkId attrs = do
       cfg     = configure defaultSliderConfig attrs
       ori     = sliderConfigOrientation cfg
       clamped = clampUnit (sliderConfigValue cfg)
-      step    = configArrowStep cfg
+      step    = sliderConfigArrowStep cfg
   contentRect <- trackContentRect trackId
   let (crossSz, mainSz) = case ori of
         Horizontal -> (rectHeight contentRect, rectWidth contentRect)
         Vertical   -> (rectWidth contentRect,  rectHeight contentRect)
       autoRatio = if mainSz > 0 then crossSz / mainSz else 0
-      ratio     = clampUnit (fromMaybe autoRatio (configThumbRatio cfg))
+      ratio     = clampUnit (fromMaybe autoRatio (sliderConfigThumbRatio cfg))
       thumbR    = thumbRect ori clamped ratio contentRect
   control trackId attrs $
     withBounds thumbR $ renderChrome thumbId $ pure ()
