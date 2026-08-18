@@ -111,7 +111,8 @@ import Blink.Rendering (DrawCommand, TextMeasurer (..))
 import Blink.Style (Theme)
 import Blink.UI
   ( UI, UIContext
-  , AnimationState (..)
+  , AnimationState (animElapsed)
+  , mkAnimationState
   , emptyUIContext, nextFrameContext
   , runUI, getDrawCommands, getMessages
   , contextAnimation, contextRequiresAnimation
@@ -223,7 +224,7 @@ data AppRefs e msg s = AppRefs
 buildCtx :: Ord e => App e msg s -> Rectangle -> InputState -> Float -> Bool -> s -> UIContext e msg -> UIContext e msg
 buildCtx app winRect inputState delta isAnimTick state prevCtx =
   let elapsed   = animElapsed (contextAnimation prevCtx) + delta
-      animState = AnimationState { animDelta = delta, animElapsed = elapsed, animIsTick = isAnimTick }
+      animState = mkAnimationState delta elapsed isAnimTick
   in nextFrameContext winRect inputState (theme app state) animState prevCtx
 
 runFrame

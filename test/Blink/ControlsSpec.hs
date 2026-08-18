@@ -1314,7 +1314,7 @@ spec = describe "Blink.Controls" $ do
 
     describe "Indeterminate" $ do
       let elapsedCtx = nextFrameContext controlRect noInput testTheme
-                         (AnimationState { animDelta = 0, animElapsed = 1, animIsTick = False })
+                         (mkAnimationState 0 1 False)
                          (mkCtxFor noInput :: UIContext TestElement ())
 
       it "sweeps the band using the default band speed (0.5)" $ do

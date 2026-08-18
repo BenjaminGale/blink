@@ -284,7 +284,8 @@ module Blink.UI
   , disableWhen
   , whenEnabled
     -- * Animation
-  , AnimationState (..)
+  , AnimationState (animDelta, animElapsed, animIsTick)
+  , mkAnimationState
   , requiresAnimation
   , withAnimationFrame
   , getAnimDelta
@@ -316,6 +317,16 @@ data AnimationState = AnimationState
   , animIsTick  :: Bool
     -- ^ 'True' when this frame was triggered by the animation ticker rather
     -- than a platform input event.
+  }
+
+-- | Constructs an 'AnimationState', clamping the delta to 100 ms so the
+-- bound documented on 'animDelta' holds regardless of caller — the
+-- constructor itself isn't exported, so this is the only way to build one.
+mkAnimationState :: Float -> Float -> Bool -> AnimationState
+mkAnimationState delta elapsed isTick = AnimationState
+  { animDelta   = min 0.1 delta
+  , animElapsed = elapsed
+  , animIsTick  = isTick
   }
 
 -- | Per-instance scroll position in @[0, 1]@.
@@ -559,7 +570,7 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxTheme           = thm
   , ctxDisabled        = False
   , ctxInteractionClip = Nothing
-  , ctxAnimation       = AnimationState { animDelta = 0, animElapsed = 0, animIsTick = False }
+  , ctxAnimation       = mkAnimationState 0 0 False
   , ctxTextMeasure     = measurer
   , ctxInteraction     = emptyInteractionState { ixnButtonDown = inputLeftButtonDown input }
   , ctxElements        = ElementState

@@ -579,7 +579,7 @@ spec = describe "Blink.UI" $ do
         styleBackground (styleSetNormal ss) `shouldBe` styleBackground (styleSetNormal emptyStyleSet)
 
   describe "animation" $ do
-    let animState isTick = AnimationState { animDelta = 0.016, animElapsed = 1.5, animIsTick = isTick }
+    let animState isTick = mkAnimationState 0.016 1.5 isTick
         seedWith :: Bool -> UIContext () Int
         seedWith isTick = nextFrameContext testBounds noInput emptyTheme (animState isTick)
                             (emptyUIContext testBounds noInput emptyTheme noOpTextMeasurer)
