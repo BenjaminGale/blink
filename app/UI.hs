@@ -220,7 +220,7 @@ footer s (winW, winH) = do
   mouseW'  <- labelWidth mouseText
   buttonW' <- labelWidth buttonText
   hoverW'  <- labelWidth hoverText
-  renderChrome StatusBar $
+  styledElement StatusBar $
     hBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 4, boxAlignment = Center })
       [ (Layout winW'    Fill MiddleLeft, caption winText)
       , (Layout mouseW'  Fill MiddleLeft, caption mouseText)

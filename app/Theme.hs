@@ -15,7 +15,7 @@
 --     removing it. This is what keeps a control's measured chrome — and
 --     therefore its on-screen size — identical across states; toggling
 --     'styleBorderColour' to 'Nothing' changes the insets 'measureChrome'
---     \/ 'renderChrome' report for that state alone, which is what causes a
+--     \/ 'styledElement' report for that state alone, which is what causes a
 --     control to visibly resize (\"jump\") the instant it's hovered,
 --     focused, or disabled. Buttons are the one control whose *background*
 --     also flips to a bold accent fill on press — they are a primary
@@ -125,7 +125,7 @@ controlPadding :: Insets
 controlPadding = uniform 6
 
 -- | An invisible border colour (zero alpha). 'measureChrome' \/
--- 'renderChrome' only skip a border's *space* when 'styleBorderColour' is
+-- 'styledElement' only skip a border's *space* when 'styleBorderColour' is
 -- 'Nothing' — a state that sets it to 'Nothing' while its siblings set it
 -- to @Just@ reserves *less* space than they do, so a control resizes the
 -- instant it enters that state (e.g. gaining focus, or going disabled).

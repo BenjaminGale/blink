@@ -42,7 +42,7 @@ import Blink.Controls
   , onFocusLost
   , onMouseEnter
   , onMouseExit
-  , renderChrome
+  , styledElement
   , tabStop
   , whenFocused
   , button
@@ -1026,8 +1026,8 @@ spec = describe "Blink.Controls" $ do
       ((Exactly dw, Exactly dh), _) <- runUI (measureChrome TestControl) ctx
       (dw, dh) `shouldBe` (32, 32)
 
-  describe "renderChrome" $ do
-    let run ctx = snd <$> runUI (renderChrome TestControl (pure ())) ctx
+  describe "styledElement" $ do
+    let run ctx = snd <$> runUI (styledElement TestControl (pure ())) ctx
 
     it "does not draw a background in the margin area" $ do
       ctx' <- run (mkCtxFor noInput :: UIContext TestElement ())

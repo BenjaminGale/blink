@@ -96,7 +96,7 @@ instantiates. 'onFocusGained' \/ 'onFocusLost' \/ 'onMouseEnter' \/
 
 'control' — the standard entry point for an interactive element — combines
 mouse-over ('applyMouseOver'), focus and Tab\/Shift-Tab navigation
-('applyFocus'), and style-driven chrome ('renderChrome'). An element takes
+('applyFocus'), and style-driven chrome ('styledElement'). An element takes
 focus automatically when nothing else holds it and retains it on click, but
 only while 'tabStop' is 'True' — 'tabStop' 'False' removes it from Tab order
 entirely, including this auto-claim. 'focusOnClick' overrides what a click
@@ -161,7 +161,7 @@ module Blink.Controls
   , isMouseOver
   , isPressed
   , getStyle
-  , renderChrome
+  , styledElement
   , measureChrome
   , applyMouseOver
   , applyFocus
@@ -615,11 +615,14 @@ measureChrome eid = do
       dh = topInset m  + bottomInset m  + topInset be + bottomInset be + topInset p  + bottomInset p
   pure (Exactly dw, Exactly dh)
 
--- | Draws a control's background and border from the resolved style, then
--- runs @content@ clipped to the remaining space inside the padding. The
--- shared rendering half of every control built on 'control'.
-renderChrome :: Ord e => e -> UI e msg () -> UI e msg ()
-renderChrome eid content = do
+-- | Draws an element's background and border from the resolved style, then
+-- runs @content@ clipped to the remaining space inside the padding. This is
+-- Blink's base visual node: identity plus style-driven chrome, with no
+-- opinion on interactivity. 'control' builds on it by adding mouse-over and
+-- focus handling on top; a non-interactive element (e.g. a display-only
+-- indicator like 'progressBar') can call it directly instead.
+styledElement :: Ord e => e -> UI e msg () -> UI e msg ()
+styledElement eid content = do
   style <- getStyle eid
   r     <- getBounds
   let bg          = insetRect (styleMargin style) r
@@ -641,7 +644,7 @@ control :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg cfg] -> UI e msg (
 control eid attrs content = do
   applyMouseOver eid attrs
   applyFocus eid attrs
-  renderChrome eid content
+  styledElement eid content
 
 -- | 'True' when the element holds focus and a key event for @k@ is present
 -- in the current frame's input queue.
@@ -758,7 +761,7 @@ progressBar :: Ord e => e -> [Attr e Void msg ProgressBarConfig] -> UI e msg ()
 progressBar eid attrs = do
   let cfg = configure defaultProgressBarConfig attrs
   case progressBarConfigValue cfg of
-    Progress progressValue -> renderChrome eid $ do
+    Progress progressValue -> styledElement eid $ do
       style <- getStyle eid
       r     <- getBounds
       let clamped   = max 0 (min 1 progressValue)
@@ -766,7 +769,7 @@ progressBar eid attrs = do
       withBounds fillRect' $ fillRect (styleTextColour style)
     Indeterminate -> do
       requiresAnimation
-      renderChrome eid $ do
+      styledElement eid $ do
         r       <- getBounds
         style   <- getStyle eid
         elapsed <- getAnimElapsed
@@ -1374,7 +1377,7 @@ slider mkId attrs = do
       ratio     = clampUnit (fromMaybe autoRatio (sliderConfigThumbRatio cfg))
       thumbR    = thumbRect ori clamped ratio contentRect
   control trackId attrs $
-    withBounds thumbR $ renderChrome thumbId $ pure ()
+    withBounds thumbR $ styledElement thumbId $ pure ()
   newPos <- dragToTrackPos trackId ori ratio contentRect
   let (decrKey, incrKey) = case ori of
         Horizontal -> (KeyLeft,  KeyRight)
@@ -1731,7 +1734,7 @@ compositeControl eid attrs = do
   applyFocus eid attrs
   focus <- getFocus
   let content = renderCompositeItems (configure defaultCompositeControlConfig attrs)
-  renderChrome eid $
+  styledElement eid $
     if autoClaimsFocus (controlConfig attrs)
       then withinComposite eid (compositeFocusToExpose eid heldFocusBefore focus) content
       else content
