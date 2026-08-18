@@ -257,7 +257,7 @@ module Blink.Controls
 import Control.Monad (forM_, guard, when)
 import Data.Foldable (asum)
 import Data.Functor (($>))
-import Data.List (find, findIndex, foldl')
+import Data.List (find, foldl')
 import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -1750,6 +1750,15 @@ data SelectionState = Selected | Unselected
 data SelectedItem a = None | Item a | ItemAtIndex Int
   deriving (Eq, Show)
 
+-- | Whether @sel@ picks the item at @idx@\/@val@ -- the shared question
+-- behind 'selectionControl' and 'radioGroup' resolving their own
+-- 'SelectedItem' choice against each item as it's rendered.
+matchesSelection :: Eq a => SelectedItem a -> Int -> a -> Bool
+matchesSelection sel idx val = case sel of
+  None          -> False
+  Item v        -> v == val
+  ItemAtIndex i -> i == idx
+
 -- | Renders one item of a 'selectionControl': its element id (used only
 -- for click detection -- items never take focus), current 'SelectionState',
 -- and value -- returning the 'Layout' it should occupy, same as
@@ -1851,10 +1860,7 @@ selectionControl mkId attrs = do
   let cfg      = configure defaultSelectionConfig attrs
       itemList = selectionConfigItems cfg
       sel      = selectionConfigSelection cfg
-      stateAt idx val = case sel of
-        None          -> Unselected
-        Item v        -> if v == val then Selected else Unselected
-        ItemAtIndex i -> if i == idx then Selected else Unselected
+      stateAt idx val = if matchesSelection sel idx val then Selected else Unselected
 
   itemsLayout
     [ items itemList
@@ -2029,14 +2035,8 @@ radioGroup mkId attrs = do
       sel      = radioGroupConfigSelection cfg
       n        = length itemList
       selfId   = mkId RadioGroup
-      isPickedAt idx val = case sel of
-        None          -> False
-        Item v        -> v == val
-        ItemAtIndex i -> i == idx
-      currentIdx = case sel of
-        None          -> Nothing
-        Item v        -> findIndex (== v) itemList
-        ItemAtIndex i -> if i >= 0 && i < n then Just i else Nothing
+      isPickedAt = matchesSelection sel
+      currentIdx = fst <$> find (uncurry (matchesSelection sel)) (zip [0 ..] itemList)
       groupIsTabStop = ccTabStop (controlConfig attrs)
 
   radioGroupComposite selfId
