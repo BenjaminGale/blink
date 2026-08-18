@@ -963,10 +963,11 @@ resolveKeyboardSelection hasFocus keyEvts len (anchor, active)
     hasSel     = anchor /= active
     selLo      = min anchor active
     selHi      = max anchor active
-    shiftLeft  = hasFocus && any (\e -> key e == KeyLeft  && Shift `elem`    modifiers e) keyEvts
-    shiftRight = hasFocus && any (\e -> key e == KeyRight && Shift `elem`    modifiers e) keyEvts
-    plainLeft  = hasFocus && any (\e -> key e == KeyLeft  && Shift `notElem` modifiers e) keyEvts
-    plainRight = hasFocus && any (\e -> key e == KeyRight && Shift `notElem` modifiers e) keyEvts
+    pressed k withShift = hasFocus && any (\e -> key e == k && (Shift `elem` modifiers e) == withShift) keyEvts
+    shiftLeft  = pressed KeyLeft  True
+    shiftRight = pressed KeyRight True
+    plainLeft  = pressed KeyLeft  False
+    plainRight = pressed KeyRight False
 
 -- | Backspace and typed text edit the value, selection-aware; returns the
 -- new value alongside the new cursor position when the text actually
