@@ -508,13 +508,13 @@ getStyle eid = do
         ]
   pure $ fromMaybe (styleSetNormal styles) (asum candidates)
 
--- | Registers the element as moused over and as hot (for drag continuation)
--- when the mouse is within its bounds, and fires 'onMouseEnter'\/'onMouseExit'
--- by comparing against last frame's result. Purely geometric plus a disabled
--- check — no exclusion for a different element's drag being in progress,
--- since geometric hover has no shared slot for one element's drag to
--- contend over. 'setHot' still guards its own capture acquisition
--- independently, so a drag can't be stolen.
+-- | Registers the element as moused over and acquires capture (for drag
+-- continuation) when the mouse is within its bounds, and fires
+-- 'onMouseEnter'\/'onMouseExit' by comparing against last frame's result.
+-- Purely geometric plus a disabled check — no exclusion for a different
+-- element's drag being in progress, since geometric hover has no shared slot
+-- for one element's drag to contend over. 'acquireCapture' still guards its
+-- own capture acquisition independently, so a drag can't be stolen.
 applyMouseOver :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg cfg] -> UI e msg ()
 applyMouseOver eid attrs = do
   wasOver  <- wasMouseOverLastFrame eid
@@ -523,7 +523,7 @@ applyMouseOver eid attrs = do
   let isOver = not disabled && hit
   when isOver $ do
     registerMouseOver eid
-    setHot eid
+    acquireCapture eid
   fire attrs $ concat
     [ [liftControl MouseEntered | not wasOver && isOver]
     , [liftControl MouseExited  | wasOver && not isOver]

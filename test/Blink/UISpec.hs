@@ -276,12 +276,12 @@ spec = describe "Blink.UI" $ do
 
   describe "nextFrameContext capture" $ do
     it "carries existing capture forward on continued ButtonDown frames" $ do
-      (_, ctx1) <- runWith mouseOnCenterDown (setHot ())
+      (_, ctx1) <- runWith mouseOnCenterDown (acquireCapture ())
       let ctx2 = advance mouseOnCenterDown ctx1
       contextCaptured ctx2 `shouldBe` Just ()
 
     it "clears capture on a fresh press even if capture was stale" $ do
-      (_, ctx1) <- runWith mouseOnCenterDown (setHot ())  -- Pressed: capture acquired
+      (_, ctx1) <- runWith mouseOnCenterDown (acquireCapture ())  -- Pressed: capture acquired
       let ctx2 = advance mouseOnCenter ctx1               -- Released: capture kept through this frame
           ctx3 = advance mouseOnCenterDown ctx2           -- fresh Pressed again
       contextCaptured ctx3 `shouldBe` Nothing
@@ -292,12 +292,12 @@ spec = describe "Blink.UI" $ do
       contextCaptured ctx `shouldBe` Nothing
 
     it "carries capture through the release frame so focus logic can inspect it" $ do
-      (_, ctx1) <- runWith mouseOnCenterDown (setHot ())
+      (_, ctx1) <- runWith mouseOnCenterDown (acquireCapture ())
       let ctx2 = advance mouseOnCenter ctx1
       contextCaptured ctx2 `shouldBe` Just ()
 
     it "clears capture once the button is fully up" $ do
-      (_, ctx1) <- runWith mouseOnCenterDown (setHot ())
+      (_, ctx1) <- runWith mouseOnCenterDown (acquireCapture ())
       let ctx2 = advance mouseOnCenter ctx1  -- Released: capture kept through this frame
           ctx3 = advance mouseOnCenter ctx2  -- fully idle frame: capture cleared
       contextCaptured ctx3 `shouldBe` Nothing
@@ -342,33 +342,33 @@ spec = describe "Blink.UI" $ do
       -- Acquire real capture on a down frame, then check it's retained
       -- through the following release frame — a genuinely realistic
       -- "captured but button now up" scenario.
-      (_, ctx1) <- runWith mouseOnCenterDown (setHot ())
+      (_, ctx1) <- runWith mouseOnCenterDown (acquireCapture ())
       let ctx2 = advance mouseOnCenter ctx1
       (dragging, _) <- runUI (isDragging ()) ctx2
       dragging `shouldBe` True
 
     it "isDragging is False when a different element holds capture" $ do
-      (_, ctx) <- runUI (setHot ElemB)
+      (_, ctx) <- runUI (acquireCapture ElemB)
                     (emptyUIContext testBounds mouseOnCenterDown twoElemTheme noOpTextMeasurer)
       (dragging, _) <- runUI (isDragging ElemA) ctx
       dragging `shouldBe` False
 
-  describe "setHot" $ do
+  describe "acquireCapture" $ do
     it "acquires capture when the button is down and nothing is captured" $ do
-      (_, ctx) <- runWith buttonDown (setHot ())
+      (_, ctx) <- runWith buttonDown (acquireCapture ())
       contextCaptured ctx `shouldBe` Just ()
 
     it "does not acquire capture when another element already holds it" $ do
-      (_, ctx') <- runUI (setHot ElemB >> setHot ElemA)
+      (_, ctx') <- runUI (acquireCapture ElemB >> acquireCapture ElemA)
                      (emptyUIContext testBounds buttonDown twoElemTheme noOpTextMeasurer)
       contextCaptured ctx' `shouldBe` Just ElemB
 
     it "does nothing when the button is not down" $ do
-      (_, ctx) <- run0 (setHot ())
+      (_, ctx) <- run0 (acquireCapture ())
       contextCaptured ctx `shouldBe` Nothing
 
     it "makes the element dragging once capture is acquired" $ do
-      (dragging, _) <- runWith buttonDown (setHot () >> isDragging ())
+      (dragging, _) <- runWith buttonDown (acquireCapture () >> isDragging ())
       dragging `shouldBe` True
 
   describe "focus" $ do
@@ -519,7 +519,7 @@ spec = describe "Blink.UI" $ do
       result `shouldBe` True
 
     it "is False when an element holds capture" $ do
-      (_, ctx) <- runWith buttonDown (setHot ())
+      (_, ctx) <- runWith buttonDown (acquireCapture ())
       (result, _) <- runUI isMouseFree ctx
       result `shouldBe` False
 

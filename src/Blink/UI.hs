@@ -245,7 +245,7 @@ module Blink.UI
   , contextInput
   , getMousePos
   , isRegionHit
-  , setHot
+  , acquireCapture
   , registerMouseOver
   , wasMouseOverLastFrame
   , isAnyMouseOver
@@ -794,7 +794,7 @@ contextButtonReleased = ixnButtonReleased . ctxInteraction
 -- plain click. Cleared as soon as the button was not down last frame — both
 -- when it is fully up and on a fresh press — so a new press never inherits a
 -- stale capture from a previous drag\/click cycle.
--- Acquisition — setting capture in the first place — happens in 'setHot'.
+-- Acquisition — setting capture in the first place — happens in 'acquireCapture'.
 nextCapture :: Bool -> Bool -> Maybe e -> Maybe e
 nextCapture prevDown _currDown existing
   | prevDown  = existing
@@ -819,10 +819,10 @@ contextCaptured = ixnCaptured . ctxInteraction
 
 -- | Acquires mouse capture for the element if the left button is currently
 -- down and nothing is captured yet, making this the first point of capture
--- for that press — the "hot" control a drag holds onto once the cursor
--- leaves the element that started it.
-setHot :: e -> UI e msg ()
-setHot eid = modifyIxn $ \ixn ->
+-- for that press — the control a drag holds onto once the cursor leaves the
+-- element that started it.
+acquireCapture :: e -> UI e msg ()
+acquireCapture eid = modifyIxn $ \ixn ->
   if ixnButtonDown ixn && isNothing (ixnCaptured ixn)
   then ixn { ixnCaptured = Just eid }
   else ixn

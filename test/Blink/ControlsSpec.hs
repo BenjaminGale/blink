@@ -901,18 +901,18 @@ spec = describe "Blink.Controls" $ do
         contextFocus (resultContext result) `shouldBe` FocusSingle TestControl
 
       it "does not steal focus when the mouse is released on it after dragging from another element" $ do
-        -- 'applyFocus' alone never acquires capture (that's 'setHot'/
+        -- 'applyFocus' alone never acquires capture (that's 'acquireCapture'/
         -- 'applyMouseOver's job at the 'control' layer) — composed here so
         -- 'isDragRelease' has a real captured element to read. OtherControl
         -- auto-claims focus for real just by rendering first (nothing else
         -- is focused), no explicit click needed.
-        let composedOther = setHot OtherControl >> applyFocus OtherControl noAttrs >> action noAttrs
+        let composedOther = acquireCapture OtherControl >> applyFocus OtherControl noAttrs >> action noAttrs
         result <- runInteractions controlRect (mkCtxFor noInput) composedOther []
           [MouseDown pt, MouseUp pt]
         contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
 
       it "retains focus on the previously focused element when a drag releases elsewhere" $ do
-        let composedOther = setHot OtherControl >> applyFocus OtherControl noAttrs >> action noAttrs
+        let composedOther = acquireCapture OtherControl >> applyFocus OtherControl noAttrs >> action noAttrs
         result <- runInteractions controlRect (mkCtxFor noInput) composedOther
           [ClickAt pt] [MouseDown pt, MouseUp pt]
         contextFocus (resultContext result) `shouldBe` FocusSingle OtherControl
