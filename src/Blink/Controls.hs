@@ -883,6 +883,19 @@ checked b = configAny $ \cfg -> cfg { checkboxConfigChecked = b }
 glyphLabelSubPartAttrs :: e -> [Attr e LabelEvent msg cfg]
 glyphLabelSubPartAttrs boxId = [tabStop False, focusOnClick (FocusTarget boxId)]
 
+-- | The glyph-plus-label layout shared by 'checkbox' and 'radioButton': a
+-- 20x20 glyph box on the left, its label filling the rest, both wired up
+-- via 'glyphLabelSubPartAttrs' so a click on either redirects focus to
+-- @boxId@.
+glyphWithLabel :: Ord e => e -> e -> e -> UI e msg () -> Text -> UI e msg ()
+glyphWithLabel boxId glyphId labelId glyphContent txt =
+  hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
+    [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, control glyphId subAttrs glyphContent)
+    , (Layout Fill Fill MiddleLeft, label labelId (text txt : subAttrs))
+    ]
+  where
+    subAttrs = glyphLabelSubPartAttrs boxId
+
 -- | A togglable checkbox with an adjacent label, as one unit, set via
 -- 'checked' and 'text': the glyph and label are purely visual sub-parts
 -- (each moused-over and styled on its own bounds, neither a tab stop, a
@@ -902,13 +915,9 @@ checkbox mkId attrs = do
   activated <- activatable (mkId CheckboxBox) attrs [KeyReturn, KeySpace] (draw isChecked (checkboxConfigText cfg))
   when activated $ fire attrs [Toggled (not isChecked)]
   where
-    glyphId  = mkId CheckboxGlyph
-    subAttrs = glyphLabelSubPartAttrs (mkId CheckboxBox)
+    glyphId = mkId CheckboxGlyph
     draw isChecked txt =
-      hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
-        [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, control glyphId subAttrs (renderCheckboxGlyph glyphId isChecked))
-        , (Layout Fill Fill MiddleLeft, label (mkId CheckboxLabel) (text txt : subAttrs))
-        ]
+      glyphWithLabel (mkId CheckboxBox) glyphId (mkId CheckboxLabel) (renderCheckboxGlyph glyphId isChecked) txt
 
 -- | Click sets both selection ends at the clicked character; dragging
 -- extends only the active end, keeping the anchor from before the drag
@@ -1922,7 +1931,6 @@ instance HasTextConfig RadioConfig where
 picked :: Bool -> Attr e ev msg RadioConfig
 picked b = configAny $ \cfg -> cfg { radioConfigPicked = b }
 
-
 -- | A single radio button with an adjacent label, as one unit, set via
 -- 'picked' and 'text' -- the glyph and label are purely visual sub-parts,
 -- same as 'checkbox'. Fires 'Picked' when activated by a click anywhere in
@@ -1941,13 +1949,9 @@ radioButton mkId attrs = do
   activated <- activatable (mkId RadioBox) attrs [KeyReturn, KeySpace] (draw isPicked (radioConfigText cfg))
   when activated $ fire attrs [Picked]
   where
-    glyphId  = mkId RadioGlyph
-    subAttrs = glyphLabelSubPartAttrs (mkId RadioBox)
+    glyphId = mkId RadioGlyph
     draw isPicked txt =
-      hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
-        [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, control glyphId subAttrs (renderRadioGlyph glyphId isPicked))
-        , (Layout Fill Fill MiddleLeft, label (mkId RadioLabel) (text txt : subAttrs))
-        ]
+      glyphWithLabel (mkId RadioBox) glyphId (mkId RadioLabel) (renderRadioGlyph glyphId isPicked) txt
 
 -- RadioGroup -----------------------------------------------------------------
 
