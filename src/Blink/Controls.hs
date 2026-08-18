@@ -877,14 +877,11 @@ instance HasTextConfig CheckboxConfig where
 checked :: Bool -> Attr e ev msg CheckboxConfig
 checked b = configAny $ \cfg -> cfg { checkboxConfigChecked = b }
 
--- | Attrs shared by a checkbox's glyph and label sub-parts: neither is a tab
--- stop, and clicking either redirects focus to the checkbox itself.
--- Committing to 'LabelEvent' here (rather than leaving it polymorphic) is
--- what lets 'checkbox' use the same value at both the glyph's 'control' call
--- and the label's 'label' call without either site leaving its event type
--- ambiguous.
-checkboxSubPartAttrs :: e -> [Attr e LabelEvent msg cfg]
-checkboxSubPartAttrs boxId = [tabStop False, focusOnClick (FocusTarget boxId)]
+-- | Attrs shared by a checkbox\/radio button's glyph and label sub-parts:
+-- neither is a tab stop, and clicking either redirects focus to the box
+-- itself.
+glyphLabelSubPartAttrs :: e -> [Attr e LabelEvent msg cfg]
+glyphLabelSubPartAttrs boxId = [tabStop False, focusOnClick (FocusTarget boxId)]
 
 -- | A togglable checkbox with an adjacent label, as one unit, set via
 -- 'checked' and 'text': the glyph and label are purely visual sub-parts
@@ -906,7 +903,7 @@ checkbox mkId attrs = do
   when activated $ fire attrs [Toggled (not isChecked)]
   where
     glyphId  = mkId CheckboxGlyph
-    subAttrs = checkboxSubPartAttrs (mkId CheckboxBox)
+    subAttrs = glyphLabelSubPartAttrs (mkId CheckboxBox)
     draw isChecked txt =
       hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
         [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, control glyphId subAttrs (renderCheckboxGlyph glyphId isChecked))
@@ -1925,11 +1922,6 @@ instance HasTextConfig RadioConfig where
 picked :: Bool -> Attr e ev msg RadioConfig
 picked b = configAny $ \cfg -> cfg { radioConfigPicked = b }
 
--- | Attrs shared by a radio button's glyph and label sub-parts: neither is a
--- tab stop, and clicking either redirects focus to the radio button itself.
--- Mirrors 'checkboxSubPartAttrs'.
-radioSubPartAttrs :: e -> [Attr e LabelEvent msg cfg]
-radioSubPartAttrs boxId = [tabStop False, focusOnClick (FocusTarget boxId)]
 
 -- | A single radio button with an adjacent label, as one unit, set via
 -- 'picked' and 'text' -- the glyph and label are purely visual sub-parts,
@@ -1950,7 +1942,7 @@ radioButton mkId attrs = do
   when activated $ fire attrs [Picked]
   where
     glyphId  = mkId RadioGlyph
-    subAttrs = radioSubPartAttrs (mkId RadioBox)
+    subAttrs = glyphLabelSubPartAttrs (mkId RadioBox)
     draw isPicked txt =
       hBox (defaultBoxConfig { boxSpacing = 4, boxFillCross = False })
         [ (Layout (Exactly 20) (Exactly 20) MiddleLeft, control glyphId subAttrs (renderRadioGlyph glyphId isPicked))
