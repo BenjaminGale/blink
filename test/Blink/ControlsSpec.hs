@@ -851,7 +851,7 @@ spec = describe "Blink.Controls" $ do
 
     it "acquires hot capture when hit and the button is down" $ do
       (_, ctx) <- runUI (applyMouseOver TestControl noProbeAttrs) (mkCtxFor (mouseAt (Point 50 50) True []))
-      contextCaptured ctx `shouldBe` Just TestControl
+      contextCaptured ctx `shouldBe` MouseCapturedBy TestControl
 
     it "does not register mouse-over, or fire enter, when disabled" $ do
       (_, ctx) <- runUI (disableWhen True (applyMouseOver TestControl [captureAttrs]))

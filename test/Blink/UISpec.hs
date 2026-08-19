@@ -278,29 +278,29 @@ spec = describe "Blink.UI" $ do
     it "carries existing capture forward on continued ButtonDown frames" $ do
       (_, ctx1) <- runWith mouseOnCenterDown (acquireCapture ())
       let ctx2 = advance mouseOnCenterDown ctx1
-      contextCaptured ctx2 `shouldBe` Just ()
+      contextCaptured ctx2 `shouldBe` MouseCapturedBy ()
 
     it "clears capture on a fresh press even if capture was stale" $ do
       (_, ctx1) <- runWith mouseOnCenterDown (acquireCapture ())  -- Pressed: capture acquired
       let ctx2 = advance mouseOnCenter ctx1               -- Released: capture kept through this frame
           ctx3 = advance mouseOnCenterDown ctx2           -- fresh Pressed again
-      contextCaptured ctx3 `shouldBe` Nothing
+      contextCaptured ctx3 `shouldBe` MouseNotCaptured
 
     it "clears capture on a fresh press (no capture existed)" $ do
       ctx0 <- freshCtx
       let ctx = advance buttonDown ctx0
-      contextCaptured ctx `shouldBe` Nothing
+      contextCaptured ctx `shouldBe` MouseNotCaptured
 
     it "carries capture through the release frame so focus logic can inspect it" $ do
       (_, ctx1) <- runWith mouseOnCenterDown (acquireCapture ())
       let ctx2 = advance mouseOnCenter ctx1
-      contextCaptured ctx2 `shouldBe` Just ()
+      contextCaptured ctx2 `shouldBe` MouseCapturedBy ()
 
     it "clears capture once the button is fully up" $ do
       (_, ctx1) <- runWith mouseOnCenterDown (acquireCapture ())
       let ctx2 = advance mouseOnCenter ctx1  -- Released: capture kept through this frame
           ctx3 = advance mouseOnCenter ctx2  -- fully idle frame: capture cleared
-      contextCaptured ctx3 `shouldBe` Nothing
+      contextCaptured ctx3 `shouldBe` MouseNotCaptured
 
   describe "button interaction" $ do
     context "when advancing to the next frame" $ do
@@ -356,16 +356,16 @@ spec = describe "Blink.UI" $ do
   describe "acquireCapture" $ do
     it "acquires capture when the button is down and nothing is captured" $ do
       (_, ctx) <- runWith buttonDown (acquireCapture ())
-      contextCaptured ctx `shouldBe` Just ()
+      contextCaptured ctx `shouldBe` MouseCapturedBy ()
 
     it "does not acquire capture when another element already holds it" $ do
       (_, ctx') <- runUI (acquireCapture ElemB >> acquireCapture ElemA)
                      (emptyUIContext testBounds buttonDown twoElemTheme noOpTextMeasurer)
-      contextCaptured ctx' `shouldBe` Just ElemB
+      contextCaptured ctx' `shouldBe` MouseCapturedBy ElemB
 
     it "does nothing when the button is not down" $ do
       (_, ctx) <- run0 (acquireCapture ())
-      contextCaptured ctx `shouldBe` Nothing
+      contextCaptured ctx `shouldBe` MouseNotCaptured
 
     it "makes the element dragging once capture is acquired" $ do
       (dragging, _) <- runWith buttonDown (acquireCapture () >> isDragging ())

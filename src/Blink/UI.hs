@@ -253,6 +253,7 @@ module Blink.UI
   , isButtonReleased
   , isDragging
   , isMouseFree
+  , MouseCapture (..)
   , getCapturedElement
   , contextCaptured
   , contextButtonDown
@@ -295,7 +296,7 @@ module Blink.UI
 
 import Control.Monad (when, unless)
 import Data.List (foldl')
-import Data.Maybe (isNothing, listToMaybe)
+import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -416,22 +417,46 @@ data FocusState e = FocusState
     -- Used to clear stale focus when a focused element is no longer present in the UI.
   }
 
--- | The left mouse button's state for the current frame. 'ButtonReleased'
--- lasts for exactly one frame — the frame the button goes from held to up —
--- so that a control can tell "the button just came up" (fire a click) apart
--- from "the button has been up for a while" ('ButtonUp'). The frame after a
--- release, state falls back to 'ButtonUp' even though the raw held/not-held
--- reading hasn't changed since the release frame.
-data ButtonState
+-- | Which element, if any, holds mouse capture during a drag. A control
+-- acquires capture on press so that it keeps receiving drag input even once
+-- the cursor leaves its bounds; see 'acquireCapture'.
+data MouseCapture e
+  = MouseNotCaptured
+  | MouseCapturedBy e
+  deriving (Eq, Show)
+
+-- | The left mouse button's state for the current frame, together with
+-- which element (if any) holds mouse capture. 'ButtonReleased' lasts for
+-- exactly one frame — the frame the button goes from held to up — so that a
+-- control can tell "the button just came up" (fire a click) apart from "the
+-- button has been up for a while" ('ButtonUp'). The frame after a release,
+-- state falls back to 'ButtonUp' even though the raw held/not-held reading
+-- hasn't changed since the release frame.
+--
+-- Capture can only be held while the button is down, or through the single
+-- frame it's released on — never while 'ButtonUp' — which is why it lives
+-- inside 'ButtonDown' and 'ButtonReleased' rather than as a separate field:
+-- a captured element while the button has been up for a while is not a
+-- state that should be representable.
+data ButtonState e
   = ButtonUp
-    -- ^ Not held, and didn't just come up this frame.
-  | ButtonDown
+    -- ^ Not held, and didn't just come up this frame. Never carries capture.
+  | ButtonDown (MouseCapture e)
     -- ^ Held, whether this is the first frame of the press or a later one —
     -- nothing distinguishes those two for controls, which only ever care
     -- whether the button is currently held.
-  | ButtonReleased
-    -- ^ Came up this frame, having been held the frame before.
+  | ButtonReleased (MouseCapture e)
+    -- ^ Came up this frame, having been held the frame before. Still
+    -- carries whatever captured the press, so a control can distinguish a
+    -- drag-release from a plain click.
   deriving (Eq, Show)
+
+-- | The capture carried by a 'ButtonState', or 'MouseNotCaptured' when the
+-- button is up.
+captureOf :: ButtonState e -> MouseCapture e
+captureOf ButtonUp             = MouseNotCaptured
+captureOf (ButtonDown cap)     = cap
+captureOf (ButtonReleased cap) = cap
 
 -- | Per-frame interactive targeting state: which element the mouse is over,
 -- which holds capture during a drag, which has keyboard focus, and which was
@@ -441,9 +466,7 @@ data ButtonState
 -- for click detection. Capture is held through the release frame so that
 -- drag-release can be distinguished from a plain click.
 data InteractionState e = InteractionState
-  { ixnCaptured        :: Maybe e
-    -- ^ The element holding mouse capture during a drag, if any. See 'nextCapture'.
-  , ixnFocus           :: FocusState e
+  { ixnFocus           :: FocusState e
     -- ^ Which element holds keyboard focus, and whether it's still present this frame.
   , ixnPrevTabStop     :: Maybe e
     -- ^ The element visited just before the currently focused one, for Shift-Tab.
@@ -453,8 +476,9 @@ data InteractionState e = InteractionState
     -- Keeps Tab\/Shift-Tab wraparound within one composite's children scoped
     -- to that composite instead of reaching into the surrounding tree via
     -- the single app-wide 'ixnPrevTabStop' slot. See 'withinComposite'.
-  , ixnButton          :: ButtonState
-    -- ^ The left mouse button's state this frame. See 'ButtonState'.
+  , ixnButton          :: ButtonState e
+    -- ^ The left mouse button's state this frame, and which element (if
+    -- any) holds mouse capture. See 'ButtonState'.
   }
 
 -- | Cross-frame per-element presentation state. Persists unchanged across
@@ -548,8 +572,7 @@ instance Monad (UI e msg) where
 
 emptyInteractionState :: InteractionState e
 emptyInteractionState = InteractionState
-  { ixnCaptured             = Nothing
-  , ixnFocus                = FocusState { focusedElement = FocusNothing, focusedThisFrame = False }
+  { ixnFocus                = FocusState { focusedElement = FocusNothing, focusedThisFrame = False }
   , ixnPrevTabStop          = Nothing
   , ixnCompositePrevTabStop = Map.empty
   , ixnButton               = ButtonUp
@@ -574,7 +597,7 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxAnimation       = mkAnimationState 0 0 False
   , ctxTextMeasure     = measurer
   , ctxInteraction     = emptyInteractionState
-      { ixnButton = if inputLeftButtonDown input then ButtonDown else ButtonUp }
+      { ixnButton = if inputLeftButtonDown input then ButtonDown MouseNotCaptured else ButtonUp }
   , ctxElements        = ElementState
       { elmScrollStates  = Map.empty
       , elmSelections    = Map.empty
@@ -611,23 +634,32 @@ nextFrameContext bounds input thm anim ctx0 = ctx
   where
     ctx = applyUiEffects (getUiEffects ctx0) ctx0
 
--- | Advances 'InteractionState' to the next frame: derives 'ButtonState' from
--- the previous and current raw down values, advances capture, and carries
--- focus forward only if it was visited this frame. The previous tab stop is
--- preserved for Shift-Tab navigation.
+-- | Advances 'InteractionState' to the next frame: derives 'ButtonState' (and
+-- carries capture along with it) from the previous and current raw down
+-- values, and carries focus forward only if it was visited this frame. The
+-- previous tab stop is preserved for Shift-Tab navigation.
 nextInteractionFrame :: Bool -> Bool -> InteractionState e -> InteractionState e
 nextInteractionFrame prevDown currDown ixn = ixn
-  { ixnButton   = nextButtonState prevDown currDown
-  , ixnCaptured = nextCapture prevDown currDown (ixnCaptured ixn)
-  , ixnFocus    = nextFocusFrame (ixnFocus ixn)
+  { ixnButton = nextButtonState prevDown currDown (captureOf (ixnButton ixn))
+  , ixnFocus  = nextFocusFrame (ixnFocus ixn)
   }
 
 -- | Derives this frame's 'ButtonState' from the raw held/not-held reading on
--- the previous and current frame.
-nextButtonState :: Bool -> Bool -> ButtonState
-nextButtonState _        True  = ButtonDown
-nextButtonState True     False = ButtonReleased
-nextButtonState False    False = ButtonUp
+-- the previous and current frame, carrying capture forward while the button
+-- is held or on its release frame, and dropping it as soon as the button was
+-- not down last frame — both when it is fully up and on a fresh press — so a
+-- new press never inherits a stale capture from a previous drag\/click
+-- cycle. Acquisition — setting capture in the first place — happens in
+-- 'acquireCapture'.
+nextButtonState :: Bool -> Bool -> MouseCapture e -> ButtonState e
+nextButtonState prevDown currDown existingCapture
+  | currDown  = ButtonDown carriedCapture
+  | prevDown  = ButtonReleased carriedCapture
+  | otherwise = ButtonUp
+  where
+    carriedCapture
+      | prevDown  = existingCapture
+      | otherwise = MouseNotCaptured
 
 gets :: (UIContext e msg -> a) -> UI e msg a
 gets f = UI $ \ctx -> pure (f ctx, ctx)
@@ -785,7 +817,9 @@ isButtonDown = gets contextButtonDown
 -- | 'True' when the left button is currently held, read directly from a
 -- 'UIContext' outside the 'UI' monad.
 contextButtonDown :: UIContext e msg -> Bool
-contextButtonDown = (== ButtonDown) . ixnButton . ctxInteraction
+contextButtonDown ctx = case ixnButton (ctxInteraction ctx) of
+  ButtonDown _ -> True
+  _            -> False
 
 -- | 'True' on the one frame the left button transitions from held to up.
 isButtonReleased :: UI e msg Bool
@@ -794,46 +828,34 @@ isButtonReleased = gets contextButtonReleased
 -- | 'True' on the one frame the left button transitions from held to up,
 -- read directly from a 'UIContext' outside the 'UI' monad.
 contextButtonReleased :: UIContext e msg -> Bool
-contextButtonReleased = (== ButtonReleased) . ixnButton . ctxInteraction
-
--- | Derives the next frame's captured element from the button transition.
--- Capture is held while the button is down and through the release frame so
--- that a control's focus handling can distinguish a drag release from a
--- plain click. Cleared as soon as the button was not down last frame — both
--- when it is fully up and on a fresh press — so a new press never inherits a
--- stale capture from a previous drag\/click cycle.
--- Acquisition — setting capture in the first place — happens in 'acquireCapture'.
-nextCapture :: Bool -> Bool -> Maybe e -> Maybe e
-nextCapture prevDown _currDown existing
-  | prevDown  = existing
-  | otherwise = Nothing
+contextButtonReleased ctx = case ixnButton (ctxInteraction ctx) of
+  ButtonReleased _ -> True
+  _                -> False
 
 -- | 'True' on every frame that the given element is being dragged — from the
 -- initial press through to release.
 isDragging :: Eq e => e -> UI e msg Bool
-isDragging eid = (== Just eid) <$> gets (ixnCaptured . ctxInteraction)
+isDragging eid = (== MouseCapturedBy eid) <$> gets contextCaptured
 
--- | The element that currently holds mouse capture, or 'Nothing' when no drag
--- is in progress. Exported for control authors that need to inspect capture
--- state directly, e.g. when implementing focus-on-click without using
--- 'Blink.Controls.control'.
-getCapturedElement :: UI e msg (Maybe e)
+-- | Which element currently holds mouse capture, if any. Exported for
+-- control authors that need to inspect capture state directly, e.g. when
+-- implementing focus-on-click without using 'Blink.Controls.control'.
+getCapturedElement :: UI e msg (MouseCapture e)
 getCapturedElement = gets contextCaptured
 
--- | The element that currently holds mouse capture, or 'Nothing', read
--- directly from a 'UIContext' outside the 'UI' monad.
-contextCaptured :: UIContext e msg -> Maybe e
-contextCaptured = ixnCaptured . ctxInteraction
+-- | Which element currently holds mouse capture, if any, read directly from
+-- a 'UIContext' outside the 'UI' monad.
+contextCaptured :: UIContext e msg -> MouseCapture e
+contextCaptured = captureOf . ixnButton . ctxInteraction
 
 -- | Acquires mouse capture for the element if the left button is currently
 -- down and nothing is captured yet, making this the first point of capture
 -- for that press — the control a drag holds onto once the cursor leaves the
 -- element that started it.
 acquireCapture :: e -> UI e msg ()
-acquireCapture eid = modifyIxn $ \ixn ->
-  if ixnButton ixn == ButtonDown && isNothing (ixnCaptured ixn)
-  then ixn { ixnCaptured = Just eid }
-  else ixn
+acquireCapture eid = modifyIxn $ \ixn -> case ixnButton ixn of
+  ButtonDown MouseNotCaptured -> ixn { ixnButton = ButtonDown (MouseCapturedBy eid) }
+  _                           -> ixn
 
 -- | Records that the element was hit by the mouse this frame — typically
 -- called after a geometric hit test such as 'isRegionHit' succeeds. Building
@@ -1205,7 +1227,10 @@ whenEnabled ui = do
 -- respond to hover: @free || dragging@ allows hover when the mouse is
 -- uncontested or when this element itself owns the capture.
 isMouseFree :: UI e msg Bool
-isMouseFree = isNothing <$> gets (ixnCaptured . ctxInteraction)
+isMouseFree = isNotCaptured <$> gets contextCaptured
+  where
+    isNotCaptured MouseNotCaptured = True
+    isNotCaptured (MouseCapturedBy _) = False
 
 -- | Signals that animation should continue running. Call unconditionally on
 -- every frame from any component that needs animation, including frames not

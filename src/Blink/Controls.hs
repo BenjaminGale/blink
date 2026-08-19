@@ -258,7 +258,7 @@ import Control.Monad (forM_, guard, when)
 import Data.Foldable (asum)
 import Data.Functor (($>))
 import Data.List (find, foldl')
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Void (Void)
@@ -560,7 +560,9 @@ applyFocus eid attrs = do
       isHit            <- isMouseOver eid
       released         <- isButtonReleased
       captured         <- getCapturedElement
-      let isDragRelease = released && isJust captured && captured /= Just eid
+      let isDragRelease = released && case captured of
+            MouseCapturedBy c -> c /= eid
+            MouseNotCaptured  -> False
           wasClicked     = isHit && released && not isDragRelease
           autoClaim      = autoClaimsFocus cc && nothingIsFocused && not isDragRelease
       if isRetainingFocus || autoClaim
