@@ -416,26 +416,30 @@ data FocusState e = FocusState
     -- Used to clear stale focus when a focused element is no longer present in the UI.
   }
 
+-- | The left mouse button's state for the current frame. 'ButtonReleased'
+-- lasts for exactly one frame — the frame the button goes from held to up —
+-- so that a control can tell "the button just came up" (fire a click) apart
+-- from "the button has been up for a while" ('ButtonUp'). The frame after a
+-- release, state falls back to 'ButtonUp' even though the raw held/not-held
+-- reading hasn't changed since the release frame.
+data ButtonState
+  = ButtonUp
+    -- ^ Not held, and didn't just come up this frame.
+  | ButtonDown
+    -- ^ Held, whether this is the first frame of the press or a later one —
+    -- nothing distinguishes those two for controls, which only ever care
+    -- whether the button is currently held.
+  | ButtonReleased
+    -- ^ Came up this frame, having been held the frame before.
+  deriving (Eq, Show)
+
 -- | Per-frame interactive targeting state: which element the mouse is over,
 -- which holds capture during a drag, which has keyboard focus, and which was
 -- the most recent tab stop. Reset and carried forward by 'nextFrameContext'.
 --
--- 'ixnButtonDown'\/'ixnButtonReleased' are derived by 'nextInteractionFrame'
--- from the previous and current raw button-down values. Four states arise
--- from the two-frame comparison:
---
--- @
--- prev  curr  ixnButtonDown  ixnButtonReleased  meaning
--- ----  ----  -------------  -----------------  -------
--- F     F     False          False              Up       — not held, no event
--- F     T     True           False              Pressed  — went down this frame
--- T     T     True           False              Down     — held, no event
--- T     F     False          True               Released — went up this frame
--- @
---
--- Controls read 'ixnButtonDown' for press state and 'ixnButtonReleased' for
--- click detection. Capture is held through Released so that drag-release can be
--- distinguished from a plain click.
+-- Controls read 'contextButtonDown' for press state and 'contextButtonReleased'
+-- for click detection. Capture is held through the release frame so that
+-- drag-release can be distinguished from a plain click.
 data InteractionState e = InteractionState
   { ixnCaptured        :: Maybe e
     -- ^ The element holding mouse capture during a drag, if any. See 'nextCapture'.
@@ -449,10 +453,8 @@ data InteractionState e = InteractionState
     -- Keeps Tab\/Shift-Tab wraparound within one composite's children scoped
     -- to that composite instead of reaching into the surrounding tree via
     -- the single app-wide 'ixnPrevTabStop' slot. See 'withinComposite'.
-  , ixnButtonDown      :: Bool
-    -- ^ 'True' when the left button is currently held (Pressed or Down state).
-  , ixnButtonReleased  :: Bool
-    -- ^ 'True' on the one frame the left button transitions from held to up.
+  , ixnButton          :: ButtonState
+    -- ^ The left mouse button's state this frame. See 'ButtonState'.
   }
 
 -- | Cross-frame per-element presentation state. Persists unchanged across
@@ -550,8 +552,7 @@ emptyInteractionState = InteractionState
   , ixnFocus                = FocusState { focusedElement = FocusNothing, focusedThisFrame = False }
   , ixnPrevTabStop          = Nothing
   , ixnCompositePrevTabStop = Map.empty
-  , ixnButtonDown           = False
-  , ixnButtonReleased       = False
+  , ixnButton               = ButtonUp
   }
 
 emptyFrameOutputs :: FrameOutputs e msg
@@ -572,7 +573,8 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxInteractionClip = Nothing
   , ctxAnimation       = mkAnimationState 0 0 False
   , ctxTextMeasure     = measurer
-  , ctxInteraction     = emptyInteractionState { ixnButtonDown = inputLeftButtonDown input }
+  , ctxInteraction     = emptyInteractionState
+      { ixnButton = if inputLeftButtonDown input then ButtonDown else ButtonUp }
   , ctxElements        = ElementState
       { elmScrollStates  = Map.empty
       , elmSelections    = Map.empty
@@ -609,17 +611,23 @@ nextFrameContext bounds input thm anim ctx0 = ctx
   where
     ctx = applyUiEffects (getUiEffects ctx0) ctx0
 
--- | Advances 'InteractionState' to the next frame: derives button transition
--- state from the previous and current raw down values, advances capture,
--- and carries focus forward only if it was visited this frame. The previous
--- tab stop is preserved for Shift-Tab navigation.
+-- | Advances 'InteractionState' to the next frame: derives 'ButtonState' from
+-- the previous and current raw down values, advances capture, and carries
+-- focus forward only if it was visited this frame. The previous tab stop is
+-- preserved for Shift-Tab navigation.
 nextInteractionFrame :: Bool -> Bool -> InteractionState e -> InteractionState e
 nextInteractionFrame prevDown currDown ixn = ixn
-  { ixnButtonDown     = currDown
-  , ixnButtonReleased = prevDown && not currDown
-  , ixnCaptured       = nextCapture prevDown currDown (ixnCaptured ixn)
-  , ixnFocus          = nextFocusFrame (ixnFocus ixn)
+  { ixnButton   = nextButtonState prevDown currDown
+  , ixnCaptured = nextCapture prevDown currDown (ixnCaptured ixn)
+  , ixnFocus    = nextFocusFrame (ixnFocus ixn)
   }
+
+-- | Derives this frame's 'ButtonState' from the raw held/not-held reading on
+-- the previous and current frame.
+nextButtonState :: Bool -> Bool -> ButtonState
+nextButtonState _        True  = ButtonDown
+nextButtonState True     False = ButtonReleased
+nextButtonState False    False = ButtonUp
 
 gets :: (UIContext e msg -> a) -> UI e msg a
 gets f = UI $ \ctx -> pure (f ctx, ctx)
@@ -770,14 +778,14 @@ getStyleSet eid = do
   t <- getTheme
   return $ Map.findWithDefault (themeDefaultStyle t) eid (themeElementStyles t)
 
--- | 'True' when the left button is currently held (Pressed or Down state).
+-- | 'True' when the left button is currently held.
 isButtonDown :: UI e msg Bool
 isButtonDown = gets contextButtonDown
 
 -- | 'True' when the left button is currently held, read directly from a
 -- 'UIContext' outside the 'UI' monad.
 contextButtonDown :: UIContext e msg -> Bool
-contextButtonDown = ixnButtonDown . ctxInteraction
+contextButtonDown = (== ButtonDown) . ixnButton . ctxInteraction
 
 -- | 'True' on the one frame the left button transitions from held to up.
 isButtonReleased :: UI e msg Bool
@@ -786,7 +794,7 @@ isButtonReleased = gets contextButtonReleased
 -- | 'True' on the one frame the left button transitions from held to up,
 -- read directly from a 'UIContext' outside the 'UI' monad.
 contextButtonReleased :: UIContext e msg -> Bool
-contextButtonReleased = ixnButtonReleased . ctxInteraction
+contextButtonReleased = (== ButtonReleased) . ixnButton . ctxInteraction
 
 -- | Derives the next frame's captured element from the button transition.
 -- Capture is held while the button is down and through the release frame so
@@ -823,7 +831,7 @@ contextCaptured = ixnCaptured . ctxInteraction
 -- element that started it.
 acquireCapture :: e -> UI e msg ()
 acquireCapture eid = modifyIxn $ \ixn ->
-  if ixnButtonDown ixn && isNothing (ixnCaptured ixn)
+  if ixnButton ixn == ButtonDown && isNothing (ixnCaptured ixn)
   then ixn { ixnCaptured = Just eid }
   else ixn
 
