@@ -557,17 +557,13 @@ applyFocus eid attrs = do
     applyFocusRules = whenEnabled $ do
       nothingIsFocused <- isNothingFocused <$> getFocus
       isRetainingFocus <- isFocused eid
-      isHit            <- isMouseOver eid
-      released         <- isButtonReleased
-      captured         <- getCapturedElement
-      let isDragRelease = released && case captured of
-            MouseCapturedBy c -> c /= eid
-            MouseNotCaptured  -> False
-          wasClicked     = isHit && released && not isDragRelease
-          autoClaim      = autoClaimsFocus cc && nothingIsFocused && not isDragRelease
+      capturedByMe     <- isDragging eid
+      uncontested      <- (|| capturedByMe) <$> isMouseFree
+      wasClicked       <- isClickedOver eid
+      let autoClaim = autoClaimsFocus cc && nothingIsFocused && uncontested
       if isRetainingFocus || autoClaim
         then setFocus eid
-        else when (wasClicked && not isDragRelease) $ case ccFocusOnClick cc of
+        else when wasClicked $ case ccFocusOnClick cc of
           FocusSelf     -> setFocus eid
           FocusTarget t -> setFocus t
           NoFocus       -> pure ()
@@ -660,22 +656,16 @@ isKeyPressed eid k = do
 whenFocused :: Eq e => e -> UI e msg () -> UI e msg ()
 whenFocused eid action = isFocused eid >>= \f -> when f action
 
--- | 'True' when the element is a valid click target this frame: not
--- disabled, eligible for mouse-over (mouse free, or this element itself
--- holds capture), geometrically hit, and the button was just released.
--- Mirrors 'applyMouseOver's own gating, so a click can't activate a control
--- while a different control is mid-drag. Not exported: 'isMouseOver' is a
--- geometric, on-demand hit test with no registration state of its own, so
--- this is assembled fresh here from the primitives above rather than
--- queried as a single stored value.
+-- | 'True' when the button was just released over the element, the element
+-- is enabled, and no other element holds mouse capture.
 isClickedOver :: Ord e => e -> UI e msg Bool
 isClickedOver eid = do
-  disabled <- isDisabled
-  free     <- isMouseFree
-  dragging <- isDragging eid
-  hit      <- isMouseOver eid
-  released <- isButtonReleased
-  pure (not disabled && (free || dragging) && hit && released)
+  disabled     <- isDisabled
+  capturedByMe <- isDragging eid
+  uncontested  <- (|| capturedByMe) <$> isMouseFree
+  hit          <- isMouseOver eid
+  released     <- isButtonReleased
+  pure (not disabled && uncontested && hit && released)
 
 -- | 'True' when the element was clicked, or one of @keys@ was pressed while
 -- it held focus, and it is not disabled.
