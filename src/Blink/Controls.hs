@@ -1697,17 +1697,6 @@ instance HasControlEvent CompositeEvent where
   liftControl = CompositeControlEvent
   matchControl (CompositeControlEvent ce) = Just ce
 
--- | What a composite exposes to 'withinComposite' for this frame: ordinarily
--- just its actual @focus@, but a bare focus on its own id
--- (@'FocusSingle' compositeId@) when it held focus a moment ago and now
--- holds none -- Tab just released it. That placeholder stops a child from
--- mistaking the release for a fresh "nothing is focused" claim opportunity;
--- see 'withinComposite' for how it's resolved afterwards.
-compositeFocusToExpose :: Eq e => e -> Bool -> Focus e -> Focus e
-compositeFocusToExpose compositeId heldFocusBefore focus
-  | heldFocusBefore && isNothingFocused focus = FocusSingle compositeId
-  | otherwise                                 = focus
-
 -- | The entry point for composite controls (radio groups, lists, trees):
 -- an 'itemsLayout' with an element id, so it gets normal mouse-over and
 -- style-driven chrome, plus Tab\/Shift-Tab navigation as a single unit --
@@ -1720,15 +1709,21 @@ compositeFocusToExpose compositeId heldFocusBefore focus
 -- A press on an item that's itself a real control (its own click\/focus
 -- handling) always activates that item, never the composite around it; the
 -- composite only picks up a press that lands outside every item.
+--
+-- @heldFocusBefore@ (captured before 'applyFocus' runs, so it reflects
+-- whether the composite held focus a moment ago) is threaded into
+-- 'withFocusScope' as its @blockFreshClaim@ argument: if this same
+-- 'applyFocus' call just gave up focus via Tab, ambient reads empty for that
+-- reason alone, and without the override an item would read it as "nothing
+-- is focused" and immediately reclaim it right back.
 compositeControl :: (Ord e, HasControlEvent ev) => e -> [Attr e ev msg (CompositeControlConfig e msg a)] -> UI e msg ()
 compositeControl eid attrs = do
   heldFocusBefore <- isFocused eid
   applyFocus eid attrs
-  focus <- getFocus
   let content = renderCompositeItems (configure defaultCompositeControlConfig attrs)
   styledElement eid $
     if autoClaimsFocus (controlConfig attrs)
-      then withinComposite eid (compositeFocusToExpose eid heldFocusBefore focus) content
+      then withFocusScope eid heldFocusBefore content
       else content
   applyMouseOver eid attrs
 

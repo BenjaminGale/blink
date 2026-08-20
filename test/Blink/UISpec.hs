@@ -372,9 +372,9 @@ spec = describe "Blink.UI" $ do
       dragging `shouldBe` True
 
   describe "focus" $ do
-    it "getFocus returns FocusNothing initially" $ do
+    it "getFocus returns Nothing initially" $ do
       (f, _) <- run0 getFocus
-      f `shouldBe` FocusNothing
+      f `shouldBe` Nothing
 
     it "isFocused returns True after setFocus" $ do
       (b, _) <- run0 (setFocus () >> isFocused ())
@@ -386,21 +386,21 @@ spec = describe "Blink.UI" $ do
 
     it "clearFocus removes the focused element" $ do
       (f, _) <- run0 (setFocus () >> clearFocus >> getFocus)
-      f `shouldBe` FocusNothing
+      f `shouldBe` Nothing
 
     it "setFocusWhen does nothing when the condition is False" $ do
       (f, _) <- run0 (setFocusWhen False () >> getFocus)
-      f `shouldBe` FocusNothing
+      f `shouldBe` Nothing
 
     it "setFocusWhen sets focus when the condition is True" $ do
       (f, _) <- run0 (setFocusWhen True () >> getFocus)
-      f `shouldBe` FocusSingle ()
+      f `shouldBe` Just ()
 
     it "nextFrameContext carries focus forward when the element was visited this frame" $ do
       (_, ctx) <- run0 (setFocus ())
       let ctx' = advance noInput ctx
       (f, _) <- runUI getFocus ctx'
-      f `shouldBe` FocusSingle ()
+      f `shouldBe` Just ()
 
     it "nextFrameContext clears focus when the element was not visited this frame" $ do
       (_, ctx0) <- run0 (setFocus ())
@@ -408,38 +408,7 @@ spec = describe "Blink.UI" $ do
       (_, ctx2) <- runUI (pure ()) ctx1
       let ctx3 = advance noInput ctx2
       (f, _) <- runUI getFocus ctx3
-      f `shouldBe` FocusNothing
-
-  -- 'focusContains' is pure, so these are hand-built 'Focus' values checked
-  -- directly against it -- no UI monad, no context plumbing.
-  describe "focusContains" $ do
-    it "is False for every id under FocusNothing" $ do
-      focusContains ElemA FocusNothing `shouldBe` False
-      focusContains ElemB FocusNothing `shouldBe` False
-
-    it "is True only for the exact id under a bare FocusSingle" $ do
-      focusContains ElemA (FocusSingle ElemA) `shouldBe` True
-      focusContains ElemB (FocusSingle ElemA) `shouldBe` False
-
-    it "is True for both the composite id and its current child" $ do
-      let chain = FocusComposite ElemA (FocusSingle ElemB)
-      focusContains ElemA chain `shouldBe` True
-      focusContains ElemB chain `shouldBe` True
-
-    it "is True for a composite id alone when it has claimed itself with no child" $ do
-      let chain = FocusComposite ElemA FocusNothing
-      focusContains ElemA chain `shouldBe` True
-      focusContains ElemB chain `shouldBe` False
-
-    it "is True for every ancestor and the terminal element, nested two levels deep" $ do
-      let chain = FocusComposite ElemA (FocusComposite ElemB (FocusSingle ElemA))
-      focusContains ElemA chain `shouldBe` True
-      focusContains ElemB chain `shouldBe` True
-
-    it "is True for every ancestor and the terminal element, nested three levels deep" $ do
-      let chain = FocusComposite ElemA (FocusComposite ElemB (FocusComposite ElemA (FocusSingle ElemB)))
-      focusContains ElemA chain `shouldBe` True
-      focusContains ElemB chain `shouldBe` True
+      f `shouldBe` Nothing
 
   describe "drawing" $ do
     it "fillRect emits a FillRect command for the current bounds" $ do
