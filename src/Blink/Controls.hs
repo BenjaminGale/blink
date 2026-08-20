@@ -481,14 +481,23 @@ isMouseOver eid = do
   r  <- getBounds
   withBounds (insetRect (styleMargin (styleSetNormal ss)) r) isRegionHit
 
--- | 'True' when the element is hovered (per geometric 'isMouseOver') and the
--- left button is held down, and the element is not disabled.
+-- | 'True' when the element is hovered (per geometric 'isMouseOver'), the
+-- left button is held down, the element is not disabled, and no other
+-- element holds mouse capture. That last check matters because hover itself
+-- is non-exclusive (any number of elements can be "over" at once, see
+-- 'applyMouseOver') but a pressed look implies this element is the one
+-- actually being interacted with -- without it, dragging a scrollbar (or
+-- anything else that acquires capture) across an unrelated button would
+-- make that button flash its pressed style purely because the cursor
+-- crossed it while the button was held down for the drag.
 isPressed :: Ord e => e -> UI e msg Bool
 isPressed eid = do
-  disabled <- isDisabled
-  hit      <- isMouseOver eid
-  down     <- isButtonDown
-  pure (not disabled && hit && down)
+  disabled     <- isDisabled
+  hit          <- isMouseOver eid
+  down         <- isButtonDown
+  capturedByMe <- isDragging eid
+  uncontested  <- (|| capturedByMe) <$> isMouseFree
+  pure (not disabled && hit && down && uncontested)
 
 -- | Resolves the active 'Style' for an element given its current interaction
 -- state, using geometric 'isMouseOver'\/'isPressed' to determine hover and

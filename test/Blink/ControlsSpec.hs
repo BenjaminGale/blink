@@ -828,6 +828,14 @@ spec = describe "Blink.Controls" $ do
       (result, _) <- runUI (isPressed TestControl) (ctxWith (mouseAt (Point 50 50) False []))
       result `shouldBe` False
 
+    it "isPressed is False when another element holds mouse capture (e.g. a drag in progress elsewhere)" $ do
+      (result, _) <- runUI (acquireCapture OtherControl >> isPressed TestControl) (ctxWith (mouseAt (Point 50 50) True []))
+      result `shouldBe` False
+
+    it "isPressed is True when the control itself holds mouse capture" $ do
+      (result, _) <- runUI (acquireCapture TestControl >> isPressed TestControl) (ctxWith (mouseAt (Point 50 50) True []))
+      result `shouldBe` True
+
   describe "applyMouseOver" $ do
     it "fires MouseEntered the first frame the mouse is over" $ do
       (_, ctx) <- runUI (applyMouseOver TestControl [captureAttrs]) (mkCtxFor (mouseAt (Point 50 50) False []))
