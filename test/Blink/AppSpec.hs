@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.AppSpec (spec) where
 
+import Control.Monad (when)
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Test.Hspec
@@ -173,6 +175,24 @@ captureApp = App
 mouseInput :: Bool -> FrameInput
 mouseInput down = normalInput { mouseButtonDown = down }
 
+-- A measurer that counts how many times a text size was requested, so a
+-- test can observe how many times a frame's view actually ran.
+countingMeasurer :: IORef Int -> TextMeasurer
+countingMeasurer ref = noOpTextMeasurer
+  { tmTextSize = \_ -> modifyIORef' ref (+1) >> pure (Size 0 0) }
+
+-- Measures text every render (making render count observable via
+-- 'countingMeasurer') and emits a message only when @emits@ is True.
+viewCountApp :: Bool -> App () () ()
+viewCountApp emits = App
+  { startUp        = pure ()
+  , theme          = const (emptyTheme testStyleSet)
+  , view           = \_ -> do
+      _ <- measureText "x"
+      when emits (emit ())
+  , update         = \_ -> pure ()
+  }
+
 spec :: Spec
 spec = do
   describe "App integration" $ do
@@ -266,3 +286,16 @@ spec = do
         _      <- stepFrame handle (mouseInput True)
         result <- stepFrame handle (mouseInput False)
         drawnTexts result `shouldContain` ["dragging"]
+
+    describe "second pass is skipped when nothing was queued" $ do
+      it "runs the view once when a frame emits nothing" $ do
+        ref    <- newIORef 0
+        handle <- configureEventDriven (viewCountApp False) (pure ()) (countingMeasurer ref)
+        _      <- stepFrame handle normalInput
+        readIORef ref `shouldReturn` 1
+
+      it "runs the view twice when a frame emits a message" $ do
+        ref    <- newIORef 0
+        handle <- configureEventDriven (viewCountApp True) (pure ()) (countingMeasurer ref)
+        _      <- stepFrame handle normalInput
+        readIORef ref `shouldReturn` 2

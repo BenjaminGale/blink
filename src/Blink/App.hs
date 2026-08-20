@@ -114,7 +114,7 @@ import Blink.UI
   , AnimationState (animElapsed)
   , mkAnimationState
   , emptyUIContext, nextFrameContext, rerenderContext
-  , runUI, getDrawCommands, getMessages
+  , runUI, getDrawCommands, getMessages, getUiEffects
   , contextAnimation, contextRequiresAnimation
   )
 import Blink.Update (Update, runUpdate)
@@ -259,11 +259,19 @@ doStepContinuous app refs input = do
 doStepEventDriven :: Ord e => App e msg s -> AppRefs e msg s -> IO () -> FrameInput -> IO (FrameResult s)
 doStepEventDriven app refs notify input = do
   (firstPassCtx, state') <- runFrame app refs input
-  let winRect    = rectFromSize (windowSize input)
-      inputState = toInputState input
-      freshCtx   = rerenderContext winRect (clearKeyEvents inputState)
-                     (theme app state') (contextAnimation firstPassCtx) firstPassCtx
-  ((), renderedCtx) <- runUI (view app state') freshCtx
+  renderedCtx <-
+    if null (getMessages firstPassCtx) && null (getUiEffects firstPassCtx)
+      -- Nothing was queued, so nothing about the app or UI state changed —
+      -- a second pass would run the same view against the same state and
+      -- input and produce byte-identical output. Reuse the first pass's
+      -- context and draws instead of paying for a pointless re-render.
+      then pure firstPassCtx
+      else do
+        let winRect    = rectFromSize (windowSize input)
+            inputState = toInputState input
+            freshCtx   = rerenderContext winRect (clearKeyEvents inputState)
+                           (theme app state') (contextAnimation firstPassCtx) firstPassCtx
+        snd <$> runUI (view app state') freshCtx
   writeIORef (refsCtx refs) renderedCtx
   wasActive <- readIORef (refsAnimActive refs)
   let nowActive = contextRequiresAnimation renderedCtx
