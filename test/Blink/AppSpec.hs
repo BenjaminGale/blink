@@ -154,6 +154,25 @@ deltaApp = App
   , update         = modify
   }
 
+-- Acquires mouse capture unconditionally (standing in for a control that
+-- captured on an earlier press, e.g. a drag) and draws whether it still
+-- holds capture this frame, including the single frame the button comes up
+-- on — the frame 'isDragging' is meant to still read 'True' for, so a
+-- control can tell a drag-release apart from the button simply being up.
+captureApp :: App () () ()
+captureApp = App
+  { startUp        = pure ()
+  , theme          = const (emptyTheme testStyleSet)
+  , view           = \_ -> do
+      acquireCapture ()
+      dragging <- isDragging ()
+      drawText (RGBA 0 0 0 1) AlignLeft (if dragging then "dragging" else "idle")
+  , update         = \_ -> pure ()
+  }
+
+mouseInput :: Bool -> FrameInput
+mouseInput down = normalInput { mouseButtonDown = down }
+
 spec :: Spec
 spec = do
   describe "App integration" $ do
@@ -234,3 +253,16 @@ spec = do
         handle <- configureContinuous deltaApp nullMeasurer
         result <- stepFrame handle normalInput
         resultState result `shouldBe` 0.0
+
+    describe "capture across the render passes" $ do
+      it "continuous mode's single pass still shows capture on the release frame" $ do
+        handle <- configureContinuous captureApp nullMeasurer
+        _      <- stepFrame handle (mouseInput True)
+        result <- stepFrame handle (mouseInput False)
+        drawnTexts result `shouldContain` ["dragging"]
+
+      it "event-driven mode's second pass still shows capture on the release frame" $ do
+        handle <- configureEventDriven captureApp (pure ()) nullMeasurer
+        _      <- stepFrame handle (mouseInput True)
+        result <- stepFrame handle (mouseInput False)
+        drawnTexts result `shouldContain` ["dragging"]

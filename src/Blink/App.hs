@@ -113,7 +113,7 @@ import Blink.UI
   ( UI, UIContext
   , AnimationState (animElapsed)
   , mkAnimationState
-  , emptyUIContext, nextFrameContext
+  , emptyUIContext, nextFrameContext, rerenderContext
   , runUI, getDrawCommands, getMessages
   , contextAnimation, contextRequiresAnimation
   )
@@ -261,7 +261,7 @@ doStepEventDriven app refs notify input = do
   (firstPassCtx, state') <- runFrame app refs input
   let winRect    = rectFromSize (windowSize input)
       inputState = toInputState input
-      freshCtx   = nextFrameContext winRect (clearKeyEvents inputState)
+      freshCtx   = rerenderContext winRect (clearKeyEvents inputState)
                      (theme app state') (contextAnimation firstPassCtx) firstPassCtx
   ((), renderedCtx) <- runUI (view app state') freshCtx
   writeIORef (refsCtx refs) renderedCtx

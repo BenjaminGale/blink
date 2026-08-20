@@ -201,6 +201,7 @@ module Blink.UI
     -- * The render loop
   , emptyUIContext
   , nextFrameContext
+  , rerenderContext
   , getDrawCommands
   , getMessages
   , getUiEffects
@@ -627,6 +628,27 @@ nextFrameContext bounds input thm anim ctx0 = ctx
       (inputLeftButtonDown (ctxInput ctx))
       (inputLeftButtonDown input)
       (ctxInteraction ctx)
+  , ctxElements    = (ctxElements ctx)
+      { elmMouseOverPrev = outMouseOverThisFrame (ctxOutputs ctx) }
+  , ctxOutputs     = emptyFrameOutputs
+  }
+  where
+    ctx = applyUiEffects (getUiEffects ctx0) ctx0
+
+-- | Rebuilds the context to re-render the current frame rather than advance
+-- to a new one: refreshes bounds\/theme\/animation, applies queued
+-- 'UiEffect's, and resets per-frame outputs, like 'nextFrameContext'. Leaves
+-- @ixnButton@ as-is rather than re-deriving it from input, since the caller
+-- is re-rendering the same frame, not moving to the next one; deriving it
+-- again would compare the frame's input against itself.
+rerenderContext :: Ord e => Rectangle -> InputState -> Theme e -> AnimationState -> UIContext e msg -> UIContext e msg
+rerenderContext bounds input thm anim ctx0 = ctx
+  { ctxBounds      = bounds
+  , ctxInput       = input
+  , ctxTheme       = thm
+  , ctxAnimation   = anim
+  , ctxInteraction = (ctxInteraction ctx)
+      { ixnFocus = nextFocusFrame (ixnFocus (ctxInteraction ctx)) }
   , ctxElements    = (ctxElements ctx)
       { elmMouseOverPrev = outMouseOverThisFrame (ctxOutputs ctx) }
   , ctxOutputs     = emptyFrameOutputs
