@@ -608,17 +608,8 @@ emptyUIContext bounds input thm measurer = UIContext
 -- 'wasMouseOverLastFrame' reflects this frame once it, in turn, becomes
 -- "last frame".
 nextFrameContext :: Ord e => Rectangle -> InputState -> Theme e -> AnimationState -> UIContext e msg -> UIContext e msg
-nextFrameContext bounds input thm anim ctx0 = ctx
-  { ctxBounds      = bounds
-  , ctxInput       = input
-  , ctxTheme       = thm
-  , ctxAnimation   = anim
-  , ctxButton      = nextButtonState wasDown isDown (captureOf (ctxButton ctx))
-  , ctxFocus       = nextFocusTrackerFrame (ctxFocus ctx)
-  , ctxElements    = (ctxElements ctx)
-      { elmMouseOverPrev = outMouseOverThisFrame (ctxOutputs ctx) }
-  , ctxOutputs     = emptyFrameOutputs
-  }
+nextFrameContext bounds input thm anim ctx0 =
+  (finishFrame bounds input thm anim ctx) { ctxButton = nextButtonState wasDown isDown (captureOf (ctxButton ctx)) }
   where
     ctx     = applyUiEffects (getUiEffects ctx0) ctx0
     wasDown = inputLeftButtonDown (ctxInput ctx)
@@ -631,7 +622,16 @@ nextFrameContext bounds input thm anim ctx0 = ctx
 -- is re-rendering the same frame, not moving to the next one; deriving it
 -- again would compare the frame's input against itself.
 rerenderContext :: Ord e => Rectangle -> InputState -> Theme e -> AnimationState -> UIContext e msg -> UIContext e msg
-rerenderContext bounds input thm anim ctx0 = ctx
+rerenderContext bounds input thm anim ctx0 = finishFrame bounds input thm anim ctx
+  where
+    ctx = applyUiEffects (getUiEffects ctx0) ctx0
+
+-- | Given a context that already has any queued 'UiEffect's applied,
+-- refreshes bounds\/theme\/animation, advances focus to the next frame,
+-- snapshots the current hover set into @elmMouseOverPrev@, and resets
+-- per-frame outputs. Leaves @ctxButton@ unchanged.
+finishFrame :: Rectangle -> InputState -> Theme e -> AnimationState -> UIContext e msg -> UIContext e msg
+finishFrame bounds input thm anim ctx = ctx
   { ctxBounds      = bounds
   , ctxInput       = input
   , ctxTheme       = thm
@@ -641,8 +641,6 @@ rerenderContext bounds input thm anim ctx0 = ctx
       { elmMouseOverPrev = outMouseOverThisFrame (ctxOutputs ctx) }
   , ctxOutputs     = emptyFrameOutputs
   }
-  where
-    ctx = applyUiEffects (getUiEffects ctx0) ctx0
 
 -- | Whether moving from @prevDown@ to @currDown@ leaves the button held,
 -- just-released, or up, and whether @existingCapture@ carries forward:
