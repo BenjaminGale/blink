@@ -481,23 +481,36 @@ isMouseOver eid = do
   r  <- getBounds
   withBounds (insetRect (styleMargin (styleSetNormal ss)) r) isRegionHit
 
--- | 'True' when the element is hovered (per geometric 'isMouseOver'), the
--- left button is held down, the element is not disabled, and no other
--- element holds mouse capture. That last check matters because hover itself
--- is non-exclusive (any number of elements can be "over" at once, see
--- 'applyMouseOver') but a pressed look implies this element is the one
--- actually being interacted with -- without it, dragging a scrollbar (or
--- anything else that acquires capture) across an unrelated button would
--- make that button flash its pressed style purely because the cursor
--- crossed it while the button was held down for the drag.
+-- | 'True' when nothing else holds mouse capture, or this element itself
+-- does (a drag in progress on this element doesn't count as contention).
+isMouseFreeFor :: Eq e => e -> UI e msg Bool
+isMouseFreeFor eid = do
+  capturedByMe <- isDragging eid
+  (|| capturedByMe) <$> isMouseFree
+
+-- | 'True' when the element is hovered (per geometric 'isMouseOver'),
+-- enabled, and the mouse isn't contested by another element's drag. That
+-- last check matters because hover itself is non-exclusive (any number of
+-- elements can be "over" at once, see 'applyMouseOver') but a pressed look
+-- or a click both imply this element is the one actually being interacted
+-- with -- without it, dragging a scrollbar (or anything else that acquires
+-- capture) across an unrelated button would make that button flash its
+-- pressed style, or register a click, purely because the cursor crossed it
+-- while the button was held down for the drag.
+isMouseTarget :: Ord e => e -> UI e msg Bool
+isMouseTarget eid = do
+  disabled    <- isDisabled
+  hit         <- isMouseOver eid
+  uncontested <- isMouseFreeFor eid
+  pure (not disabled && hit && uncontested)
+
+-- | 'True' when the element is hovered, enabled, not contested by another
+-- element's drag, and the left button is currently held down.
 isPressed :: Ord e => e -> UI e msg Bool
 isPressed eid = do
-  disabled     <- isDisabled
-  hit          <- isMouseOver eid
-  down         <- isButtonDown
-  capturedByMe <- isDragging eid
-  uncontested  <- (|| capturedByMe) <$> isMouseFree
-  pure (not disabled && hit && down && uncontested)
+  isTarget <- isMouseTarget eid
+  down     <- isButtonDown
+  pure (isTarget && down)
 
 -- | Resolves the active 'Style' for an element given its current interaction
 -- state, using geometric 'isMouseOver'\/'isPressed' to determine hover and
@@ -601,13 +614,6 @@ applyFocus eid attrs = do
           consumeKey KeyTab
       when (ccTabStop cc) $ setPreviousTabStop eid
 
--- | 'True' when nothing else holds mouse capture, or this element itself
--- does (a drag in progress on this element doesn't count as contention).
-isMouseFreeFor :: Eq e => e -> UI e msg Bool
-isMouseFreeFor eid = do
-  capturedByMe <- isDragging eid
-  (|| capturedByMe) <$> isMouseFree
-
 -- | 'True' when this element should take focus with nothing having asked
 -- for it: it opts into auto-claiming (per 'autoClaimsFocus'), nothing else
 -- is currently focused, and the mouse isn't contested by another element's
@@ -688,11 +694,9 @@ whenFocused eid action = isFocused eid >>= \f -> when f action
 -- is enabled, and no other element holds mouse capture.
 isClickedOver :: Ord e => e -> UI e msg Bool
 isClickedOver eid = do
-  disabled    <- isDisabled
-  uncontested <- isMouseFreeFor eid
-  hit         <- isMouseOver eid
-  released    <- isButtonReleased
-  pure (not disabled && uncontested && hit && released)
+  isTarget <- isMouseTarget eid
+  released <- isButtonReleased
+  pure (isTarget && released)
 
 -- | 'True' when the element was clicked, or one of @keys@ was pressed while
 -- it held focus, and it is not disabled.
