@@ -564,18 +564,12 @@ applyFocus eid attrs = do
 
     -- Takes focus on a click, hands it to a target, or leaves it, per 'focusOnClick'.
     applyFocusRules = whenEnabled $ do
-      nothingIsFocused <- isNothingFocused <$> getFocus
       isRetainingFocus <- isFocused eid
-      capturedByMe     <- isDragging eid
-      uncontested      <- (|| capturedByMe) <$> isMouseFree
+      autoClaim        <- canAutoClaim eid cc
       wasClicked       <- isClickedOver eid
-      let autoClaim = autoClaimsFocus cc && nothingIsFocused && uncontested
       if isRetainingFocus || autoClaim
         then setFocus eid
-        else when wasClicked $ case ccFocusOnClick cc of
-          FocusSelf     -> setFocus eid
-          FocusTarget t -> setFocus t
-          NoFocus       -> pure ()
+        else when wasClicked $ applyFocusOnClick eid cc
 
     -- Handles Tab and Shift-Tab and registers the element as a tab stop,
     -- subject to 'tabStop'. An element with @tabStop False@ still gives up
@@ -606,6 +600,31 @@ applyFocus eid attrs = do
           setFocus prev
           consumeKey KeyTab
       when (ccTabStop cc) $ setPreviousTabStop eid
+
+-- | 'True' when nothing else holds mouse capture, or this element itself
+-- does (a drag in progress on this element doesn't count as contention).
+isMouseFreeFor :: Eq e => e -> UI e msg Bool
+isMouseFreeFor eid = do
+  capturedByMe <- isDragging eid
+  (|| capturedByMe) <$> isMouseFree
+
+-- | 'True' when this element should take focus with nothing having asked
+-- for it: it opts into auto-claiming (per 'autoClaimsFocus'), nothing else
+-- is currently focused, and the mouse isn't contested by another element's
+-- drag.
+canAutoClaim :: Ord e => e -> ControlConfig e -> UI e msg Bool
+canAutoClaim eid cc = do
+  nothingIsFocused <- isNothingFocused <$> getFocus
+  uncontested      <- isMouseFreeFor eid
+  pure (autoClaimsFocus cc && nothingIsFocused && uncontested)
+
+-- | Applies 'ccFocusOnClick' on a click: takes focus itself, redirects it
+-- to a target, or does nothing.
+applyFocusOnClick :: Ord e => e -> ControlConfig e -> UI e msg ()
+applyFocusOnClick eid cc = case ccFocusOnClick cc of
+  FocusSelf     -> setFocus eid
+  FocusTarget t -> setFocus t
+  NoFocus       -> pure ()
 
 -- | The extra width\/height a control's margin, border, and padding add
 -- around its content, from the resolved style. Added to a control's own
@@ -669,11 +688,10 @@ whenFocused eid action = isFocused eid >>= \f -> when f action
 -- is enabled, and no other element holds mouse capture.
 isClickedOver :: Ord e => e -> UI e msg Bool
 isClickedOver eid = do
-  disabled     <- isDisabled
-  capturedByMe <- isDragging eid
-  uncontested  <- (|| capturedByMe) <$> isMouseFree
-  hit          <- isMouseOver eid
-  released     <- isButtonReleased
+  disabled    <- isDisabled
+  uncontested <- isMouseFreeFor eid
+  hit         <- isMouseOver eid
+  released    <- isButtonReleased
   pure (not disabled && uncontested && hit && released)
 
 -- | 'True' when the element was clicked, or one of @keys@ was pressed while
