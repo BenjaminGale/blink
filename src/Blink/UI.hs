@@ -1020,36 +1020,61 @@ withFocusScope :: Ord e => e -> Bool -> UI e msg a -> UI e msg a
 withFocusScope scopeId blockFreshClaim (UI f) = UI $ \ctx ->
   if ctxDisabled ctx
     then f ctx
-    else case focusedElement (ftAmbient (ctxFocus ctx)) of
-      Just cid | cid == scopeId      -> claim ctx
-      Nothing  | not blockFreshClaim -> claim ctx
-      Nothing                        -> blocked ctx (Just scopeId)
-      real                            -> blocked ctx real
+    else case scopeMode scopeId blockFreshClaim (contextFocus ctx) of
+      Claim         -> runClaimed ctx
+      Blocked blockValue -> runBlocked ctx blockValue
   where
-    claim ctx = do
-      let ft0       = ctxFocus ctx
-          enclosing = ftAmbient ft0
-          child0    = Map.findWithDefault emptyFocusState scopeId (ftScopes ft0)
-      (a, ctx') <- f (ctx { ctxFocus = ft0 { ftAmbient = child0 } })
-      let ft'    = ctxFocus ctx'
-          child' = (ftAmbient ft') { focusedThisFrame = True }
-      pure (a, ctx' { ctxFocus = ft'
-        { ftAmbient = enclosing { focusedElement = Just scopeId, focusedThisFrame = True }
-        , ftScopes  = Map.insert scopeId child' (ftScopes ft')
-        } })
+    -- The claiming scope's descendants run against its own persisted
+    -- 'FocusState' (or a fresh one), and whatever they end up with is
+    -- folded back under this id, with the enclosing scope reaffirmed as
+    -- pointing here.
+    runClaimed ctx = do
+      let enclosing = ftAmbient (ctxFocus ctx)
+          child0    = Map.findWithDefault emptyFocusState scopeId (ftScopes (ctxFocus ctx))
+      (a, ctx', after) <- runWithAmbient child0 ctx
+      pure (a, foldBackAsClaim enclosing after ctx')
 
-    blocked ctx blockValue = do
-      let ft0  = ctxFocus ctx
-          real = ftAmbient ft0
-      (a, ctx') <- f (ctx { ctxFocus = ft0 { ftAmbient = real { focusedElement = blockValue } } })
-      let ft'   = ctxFocus ctx'
-          after = ftAmbient ft'
+    -- The blocked scope's descendants run against a value nothing inside
+    -- recognises as itself, so nothing reads as an invitation to
+    -- auto-claim. If nothing claims anyway, the real ambient is restored
+    -- untouched; if something claims explicitly despite the block, it's
+    -- folded back exactly as 'runClaimed' would.
+    runBlocked ctx blockValue = do
+      let real = ftAmbient (ctxFocus ctx)
+      (a, ctx', after) <- runWithAmbient (real { focusedElement = blockValue }) ctx
       if focusedElement after == blockValue
-        then pure (a, ctx' { ctxFocus = ft' { ftAmbient = real } })
-        else pure (a, ctx' { ctxFocus = ft'
-               { ftAmbient = real { focusedElement = Just scopeId, focusedThisFrame = True }
-               , ftScopes  = Map.insert scopeId (after { focusedThisFrame = True }) (ftScopes ft')
-               } })
+        then pure (a, ctx' { ctxFocus = (ctxFocus ctx') { ftAmbient = real } })
+        else pure (a, foldBackAsClaim real after ctx')
+
+    -- Swaps the ambient 'FocusState' for @ambient@ while @f@ runs, and
+    -- reports what it became by the time @f@ finishes, alongside the
+    -- resulting context.
+    runWithAmbient ambient ctx = do
+      (a, ctx') <- f (ctx { ctxFocus = (ctxFocus ctx) { ftAmbient = ambient } })
+      pure (a, ctx', ftAmbient (ctxFocus ctx'))
+
+    -- Records @after@ as this scope's own persisted state, and points
+    -- @base@ (the value to restore around this scope) at this scope's id —
+    -- the write-back shared by a claim and a blocked-but-claimed-anyway
+    -- resolution alike.
+    foldBackAsClaim base after ctx' = ctx'
+      { ctxFocus = (ctxFocus ctx')
+          { ftAmbient = base { focusedElement = Just scopeId, focusedThisFrame = True }
+          , ftScopes  = Map.insert scopeId (after { focusedThisFrame = True }) (ftScopes (ctxFocus ctx'))
+          } }
+
+-- | Which of the two policies documented on 'withFocusScope' applies this
+-- frame: 'Claim' if the scope is (or is free to become) the live focus
+-- target, 'Blocked' with the ambient value descendants should see
+-- otherwise.
+data ScopeMode e = Claim | Blocked (Maybe e)
+
+scopeMode :: Eq e => e -> Bool -> Maybe e -> ScopeMode e
+scopeMode scopeId blockFreshClaim currentAmbient = case currentAmbient of
+  Just cid | cid == scopeId      -> Claim
+  Nothing  | not blockFreshClaim -> Claim
+  Nothing                        -> Blocked (Just scopeId)
+  real                           -> Blocked real
 
 -- | Advances a 'FocusState' to the next frame: carries it forward if it was
 -- reaffirmed this frame, otherwise clears it back to @emptyFocusState@.
