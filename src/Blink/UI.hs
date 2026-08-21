@@ -123,7 +123,7 @@ the mouse is within the /current bounds/, without reference to any element ID.
 
 Focus is tracked per scope, not as a single flat element: root owns one
 'FocusState', and every composite (a list, a tree — anything with
-sub-items) owns its own, persisted in @ixnFocusScopes@ — a @Map e
+sub-items) owns its own, persisted in @ftScopes@ — a @Map e
 'FocusState'@, keyed by scope id the same way @elmScrollStates@ is keyed by
 element id. 'withFocusScope' is where a composite swaps the ambient scope
 for its own while its children render, and folds the result back.
@@ -377,7 +377,7 @@ data Out e msg
 -- Shift-Tab), and whether this scope's claim was reaffirmed during the
 -- current frame's render pass. Root and every composite (a list, a tree —
 -- anything with sub-items, see 'withFocusScope') each own one of these; a
--- composite's own is persisted in @ixnFocusScopes@ between frames, the same
+-- composite's own is persisted in @ftScopes@ between frames, the same
 -- way scroll and selection state persist per element.
 data FocusState e = FocusState
   { focusedElement   :: Maybe e
@@ -444,25 +444,33 @@ captureOf ButtonUp             = MouseNotCaptured
 captureOf (ButtonDown cap)     = cap
 captureOf (ButtonReleased cap) = cap
 
--- | Per-frame interactive targeting state: which element the mouse is over,
--- which holds capture during a drag, which has keyboard focus, and which was
--- the most recent tab stop. Reset and carried forward by 'nextFrameContext'.
---
--- Controls read 'contextButtonDown' for press state and 'contextButtonReleased'
--- for click detection. Capture is held through the release frame so that
--- drag-release can be distinguished from a plain click.
-data InteractionState e = InteractionState
-  { ixnFocus       :: FocusState e
+-- | Per-frame keyboard-focus targeting state: which element has focus, and
+-- which was the most recent tab stop. Reset and carried forward by
+-- 'nextFrameContext'. Independent of mouse\/capture state ('ButtonState') —
+-- the two track unrelated input devices and advance to the next frame on
+-- their own schedules ('nextFocusTrackerFrame' vs. 'nextButtonState').
+data FocusTracker e = FocusTracker
+  { ftAmbient :: FocusState e
     -- ^ The *currently ambient* scope's own focus state — root's, unless a
     -- 'withFocusScope' call further up the stack has swapped it for a
     -- composite's own.
-  , ixnFocusScopes :: Map.Map e (FocusState e)
+  , ftScopes  :: Map.Map e (FocusState e)
     -- ^ Every composite's own persisted 'FocusState', flat, keyed directly
     -- by scope id regardless of nesting depth — the same shape as
     -- 'elmScrollStates'. See 'withFocusScope'.
-  , ixnButton      :: ButtonState e
-    -- ^ The left mouse button's state this frame, and which element (if
-    -- any) holds mouse capture. See 'ButtonState'.
+  }
+
+-- | The empty 'FocusTracker' — nothing focused anywhere, no composite scopes
+-- recorded yet.
+emptyFocusTracker :: FocusTracker e
+emptyFocusTracker = FocusTracker { ftAmbient = emptyFocusState, ftScopes = Map.empty }
+
+-- | Advances a 'FocusTracker' to the next frame by applying 'nextFocusFrame'
+-- to the ambient scope and every persisted composite scope.
+nextFocusTrackerFrame :: FocusTracker e -> FocusTracker e
+nextFocusTrackerFrame ft = ft
+  { ftAmbient = nextFocusFrame (ftAmbient ft)
+  , ftScopes  = Map.map nextFocusFrame (ftScopes ft)
   }
 
 -- | Cross-frame per-element presentation state. Persists unchanged across
@@ -517,7 +525,13 @@ data UIContext e msg = UIContext
   , ctxTextMeasure     :: TextMeasurer
     -- ^ Text measurement service supplied at configure time. Controls call
     -- 'charOffset' and 'charAtOffset' rather than accessing this directly.
-  , ctxInteraction     :: InteractionState e
+  , ctxFocus           :: FocusTracker e
+    -- ^ Keyboard-focus targeting state. See 'FocusTracker'.
+  , ctxButton          :: ButtonState e
+    -- ^ The left mouse button's state this frame, and which element (if
+    -- any) holds mouse capture. See 'ButtonState'. Independent of
+    -- 'ctxFocus' — the two advance to the next frame on their own
+    -- schedules; see 'nextFrameContext'.
   , ctxElements        :: ElementState e
   , ctxOutputs         :: FrameOutputs e msg
   }
@@ -554,13 +568,6 @@ instance Monad (UI e msg) where
     (a, ctx') <- x ctx
     runUI (f a) ctx'
 
-emptyInteractionState :: InteractionState e
-emptyInteractionState = InteractionState
-  { ixnFocus       = emptyFocusState
-  , ixnFocusScopes = Map.empty
-  , ixnButton      = ButtonUp
-  }
-
 emptyFrameOutputs :: FrameOutputs e msg
 emptyFrameOutputs = FrameOutputs
   { outDrawCommands       = []
@@ -579,8 +586,8 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxInteractionClip = Nothing
   , ctxAnimation       = mkAnimationState 0 0 False
   , ctxTextMeasure     = measurer
-  , ctxInteraction     = emptyInteractionState
-      { ixnButton = if inputLeftButtonDown input then ButtonDown MouseNotCaptured else ButtonUp }
+  , ctxFocus           = emptyFocusTracker
+  , ctxButton          = if inputLeftButtonDown input then ButtonDown MouseNotCaptured else ButtonUp
   , ctxElements        = ElementState
       { elmScrollStates  = Map.empty
       , elmSelections    = Map.empty
@@ -606,10 +613,11 @@ nextFrameContext bounds input thm anim ctx0 = ctx
   , ctxInput       = input
   , ctxTheme       = thm
   , ctxAnimation   = anim
-  , ctxInteraction = nextInteractionFrame
+  , ctxButton      = nextButtonState
       (inputLeftButtonDown (ctxInput ctx))
       (inputLeftButtonDown input)
-      (ctxInteraction ctx)
+      (captureOf (ctxButton ctx))
+  , ctxFocus       = nextFocusTrackerFrame (ctxFocus ctx)
   , ctxElements    = (ctxElements ctx)
       { elmMouseOverPrev = outMouseOverThisFrame (ctxOutputs ctx) }
   , ctxOutputs     = emptyFrameOutputs
@@ -620,7 +628,7 @@ nextFrameContext bounds input thm anim ctx0 = ctx
 -- | Rebuilds the context to re-render the current frame rather than advance
 -- to a new one: refreshes bounds\/theme\/animation, applies queued
 -- 'UiEffect's, and resets per-frame outputs, like 'nextFrameContext'. Leaves
--- @ixnButton@ as-is rather than re-deriving it from input, since the caller
+-- @ctxButton@ as-is rather than re-deriving it from input, since the caller
 -- is re-rendering the same frame, not moving to the next one; deriving it
 -- again would compare the frame's input against itself.
 rerenderContext :: Ord e => Rectangle -> InputState -> Theme e -> AnimationState -> UIContext e msg -> UIContext e msg
@@ -629,27 +637,13 @@ rerenderContext bounds input thm anim ctx0 = ctx
   , ctxInput       = input
   , ctxTheme       = thm
   , ctxAnimation   = anim
-  , ctxInteraction = (ctxInteraction ctx)
-      { ixnFocus       = nextFocusFrame (ixnFocus (ctxInteraction ctx))
-      , ixnFocusScopes = Map.map nextFocusFrame (ixnFocusScopes (ctxInteraction ctx))
-      }
+  , ctxFocus       = nextFocusTrackerFrame (ctxFocus ctx)
   , ctxElements    = (ctxElements ctx)
       { elmMouseOverPrev = outMouseOverThisFrame (ctxOutputs ctx) }
   , ctxOutputs     = emptyFrameOutputs
   }
   where
     ctx = applyUiEffects (getUiEffects ctx0) ctx0
-
--- | Advances 'InteractionState' to the next frame: derives 'ButtonState' (and
--- carries capture along with it) from the previous and current raw down
--- values, and carries focus forward only if it was visited this frame. The
--- previous tab stop is preserved for Shift-Tab navigation.
-nextInteractionFrame :: Bool -> Bool -> InteractionState e -> InteractionState e
-nextInteractionFrame prevDown currDown ixn = ixn
-  { ixnButton      = nextButtonState prevDown currDown (captureOf (ixnButton ixn))
-  , ixnFocus       = nextFocusFrame (ixnFocus ixn)
-  , ixnFocusScopes = Map.map nextFocusFrame (ixnFocusScopes ixn)
-  }
 
 -- | Derives this frame's 'ButtonState' from the raw held/not-held reading on
 -- the previous and current frame, carrying capture forward while the button
@@ -674,8 +668,17 @@ gets f = UI $ \ctx -> pure (f ctx, ctx)
 modify :: (UIContext e msg -> UIContext e msg) -> UI e msg ()
 modify f = UI $ \ctx -> pure ((), f ctx)
 
-modifyIxn :: (InteractionState e -> InteractionState e) -> UI e msg ()
-modifyIxn f = modify $ \ctx -> ctx { ctxInteraction = f (ctxInteraction ctx) }
+-- | Modifies the currently ambient scope's own 'FocusState'. Internal to
+-- keyboard-focus primitives ('setFocus', 'clearFocus', 'setPreviousTabStop')
+-- — never touches mouse\/capture state, which goes through 'modifyButton'
+-- instead.
+modifyFocusState :: (FocusState e -> FocusState e) -> UI e msg ()
+modifyFocusState f = modify $ \ctx -> ctx { ctxFocus = (ctxFocus ctx) { ftAmbient = f (ftAmbient (ctxFocus ctx)) } }
+
+-- | Modifies the current frame's 'ButtonState'. Internal to mouse\/capture
+-- primitives ('acquireCapture') — never touches focus state.
+modifyButton :: (ButtonState e -> ButtonState e) -> UI e msg ()
+modifyButton f = modify $ \ctx -> ctx { ctxButton = f (ctxButton ctx) }
 
 modifyOut :: (FrameOutputs e msg -> FrameOutputs e msg) -> UI e msg ()
 modifyOut f = modify $ \ctx -> ctx { ctxOutputs = f (ctxOutputs ctx) }
@@ -796,13 +799,13 @@ getPreviousTabStop = gets contextPrevTabStop
 -- | The element that was the most recent tab stop before the current one,
 -- read directly from a 'UIContext' outside the 'UI' monad.
 contextPrevTabStop :: UIContext e msg -> Maybe e
-contextPrevTabStop = previousTabStop . ixnFocus . ctxInteraction
+contextPrevTabStop = previousTabStop . ftAmbient . ctxFocus
 
 -- | Records the current element as the previous tab stop, scoped to the
 -- currently ambient scope. Called automatically by 'Blink.Controls.control';
 -- call manually when building custom focusable controls.
 setPreviousTabStop :: e -> UI e msg ()
-setPreviousTabStop eid = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { previousTabStop = Just eid } }
+setPreviousTabStop eid = modifyFocusState $ \fs -> fs { previousTabStop = Just eid }
 
 getTheme :: UI e msg (Theme e)
 getTheme = gets contextTheme
@@ -827,7 +830,7 @@ isButtonDown = gets contextButtonDown
 -- | 'True' when the left button is currently held, read directly from a
 -- 'UIContext' outside the 'UI' monad.
 contextButtonDown :: UIContext e msg -> Bool
-contextButtonDown ctx = case ixnButton (ctxInteraction ctx) of
+contextButtonDown ctx = case ctxButton ctx of
   ButtonDown _ -> True
   _            -> False
 
@@ -838,7 +841,7 @@ isButtonReleased = gets contextButtonReleased
 -- | 'True' on the one frame the left button transitions from held to up,
 -- read directly from a 'UIContext' outside the 'UI' monad.
 contextButtonReleased :: UIContext e msg -> Bool
-contextButtonReleased ctx = case ixnButton (ctxInteraction ctx) of
+contextButtonReleased ctx = case ctxButton ctx of
   ButtonReleased _ -> True
   _                -> False
 
@@ -856,16 +859,16 @@ getCapturedElement = gets contextCaptured
 -- | Which element currently holds mouse capture, if any, read directly from
 -- a 'UIContext' outside the 'UI' monad.
 contextCaptured :: UIContext e msg -> MouseCapture e
-contextCaptured = captureOf . ixnButton . ctxInteraction
+contextCaptured = captureOf . ctxButton
 
 -- | Acquires mouse capture for the element if the left button is currently
 -- down and nothing is captured yet, making this the first point of capture
 -- for that press — the control a drag holds onto once the cursor leaves the
 -- element that started it.
 acquireCapture :: e -> UI e msg ()
-acquireCapture eid = modifyIxn $ \ixn -> case ixnButton ixn of
-  ButtonDown MouseNotCaptured -> ixn { ixnButton = ButtonDown (MouseCapturedBy eid) }
-  _                           -> ixn
+acquireCapture eid = modifyButton $ \btn -> case btn of
+  ButtonDown MouseNotCaptured -> ButtonDown (MouseCapturedBy eid)
+  _                           -> btn
 
 -- | Records that the element was hit by the mouse this frame — typically
 -- called after a geometric hit test such as 'isRegionHit' succeeds. Building
@@ -902,11 +905,11 @@ getFocus = gets contextFocus
 -- | The currently ambient scope's focused element, read directly from a
 -- 'UIContext' outside the 'UI' monad.
 contextFocus :: UIContext e msg -> Maybe e
-contextFocus = focusedElement . ixnFocus . ctxInteraction
+contextFocus = focusedElement . ftAmbient . ctxFocus
 
 -- | The full root-to-leaf focus chain, read directly from a 'UIContext'
 -- outside the 'UI' monad by following each scope's own focused element into
--- @ixnFocusScopes@ until it bottoms out. No production code needs this —
+-- @ftScopes@ until it bottoms out. No production code needs this —
 -- every real check is the single-hop 'contextFocus'\/'isFocused' at
 -- whichever scope is ambient at the time — but it's useful for tests and
 -- debugging tools that want to see the whole nested claim at once.
@@ -916,13 +919,13 @@ contextFocus = focusedElement . ixnFocus . ctxInteraction
 -- click redirect focus onto any id, including an
 -- enclosing composite's own — 'Blink.Controls.radioGroup' does exactly this
 -- so that clicking an item leaves the group itself focused, not the item —
--- which writes that id into its own scope entry in @ixnFocusScopes@. That's
+-- which writes that id into its own scope entry in @ftScopes@. That's
 -- harmless for the single-hop checks every real caller uses, but would
 -- otherwise send this walk into an infinite loop.
 contextFocusChain :: Ord e => UIContext e msg -> [e]
 contextFocusChain ctx = go Set.empty (contextFocus ctx)
   where
-    scopes = ixnFocusScopes (ctxInteraction ctx)
+    scopes = ftScopes (ctxFocus ctx)
     go _    Nothing  = []
     go seen (Just x)
       | x `Set.member` seen = []
@@ -944,8 +947,7 @@ isFocused eid = (== Just eid) <$> getFocus
 -- on Tab) is only correct if the next sibling in the same tree walk can see
 -- it happened.
 setFocus :: e -> UI e msg ()
-setFocus eid = modifyIxn $ \ixn ->
-  ixn { ixnFocus = (ixnFocus ixn) { focusedElement = Just eid, focusedThisFrame = True } }
+setFocus eid = modifyFocusState $ \fs -> fs { focusedElement = Just eid, focusedThisFrame = True }
 
 -- | Transfers keyboard focus to the given element when the condition is
 -- 'True'.
@@ -955,7 +957,7 @@ setFocusWhen b eid = when b (setFocus eid)
 -- | Removes keyboard focus from the currently ambient scope. Immediate,
 -- like 'setFocus'.
 clearFocus :: UI e msg ()
-clearFocus = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { focusedElement = Nothing } }
+clearFocus = modifyFocusState $ \fs -> fs { focusedElement = Nothing }
 
 -- | Marks a sub-tree as belonging to a composite focus scope (a list, a
 -- tree — anything with sub-items), addressed by its own globally-unique id.
@@ -965,10 +967,10 @@ clearFocus = modifyIxn $ \ixn -> ixn { ixnFocus = (ixnFocus ixn) { focusedElemen
 --   * It is (ambient's focused element is already this id), or nothing is
 --     focused anywhere so it's free to become the target on this pass:
 --     descendants run against this scope's own persisted 'FocusState' —
---     looked up from @ixnFocusScopes@, defaulting to @emptyFocusState@ the
+--     looked up from @ftScopes@, defaulting to @emptyFocusState@ the
 --     first time — so they can auto-claim or resume exactly as if they were
 --     standalone. Whatever they end up with is folded back into
---     @ixnFocusScopes@ under this id, and the enclosing scope's own
+--     @ftScopes@ under this id, and the enclosing scope's own
 --     focused element is (re)affirmed as pointing at this id — every frame
 --     it claims, even when nothing inside ends up focused, the same way a
 --     plain focused control reaffirms itself every frame it renders.
@@ -1021,40 +1023,40 @@ withFocusScope :: Ord e => e -> Bool -> UI e msg a -> UI e msg a
 withFocusScope scopeId blockFreshClaim (UI f) = UI $ \ctx ->
   if ctxDisabled ctx
     then f ctx
-    else case focusedElement (ixnFocus (ctxInteraction ctx)) of
+    else case focusedElement (ftAmbient (ctxFocus ctx)) of
       Just cid | cid == scopeId      -> claim ctx
       Nothing  | not blockFreshClaim -> claim ctx
       Nothing                        -> blocked ctx (Just scopeId)
       real                            -> blocked ctx real
   where
     claim ctx = do
-      let ixn0      = ctxInteraction ctx
-          enclosing = ixnFocus ixn0
-          child0    = Map.findWithDefault emptyFocusState scopeId (ixnFocusScopes ixn0)
-      (a, ctx') <- f (ctx { ctxInteraction = ixn0 { ixnFocus = child0 } })
-      let ixn'   = ctxInteraction ctx'
-          child' = (ixnFocus ixn') { focusedThisFrame = True }
-      pure (a, ctx' { ctxInteraction = ixn'
-        { ixnFocus       = enclosing { focusedElement = Just scopeId, focusedThisFrame = True }
-        , ixnFocusScopes = Map.insert scopeId child' (ixnFocusScopes ixn')
+      let ft0       = ctxFocus ctx
+          enclosing = ftAmbient ft0
+          child0    = Map.findWithDefault emptyFocusState scopeId (ftScopes ft0)
+      (a, ctx') <- f (ctx { ctxFocus = ft0 { ftAmbient = child0 } })
+      let ft'    = ctxFocus ctx'
+          child' = (ftAmbient ft') { focusedThisFrame = True }
+      pure (a, ctx' { ctxFocus = ft'
+        { ftAmbient = enclosing { focusedElement = Just scopeId, focusedThisFrame = True }
+        , ftScopes  = Map.insert scopeId child' (ftScopes ft')
         } })
 
     blocked ctx blockValue = do
-      let ixn0  = ctxInteraction ctx
-          real  = ixnFocus ixn0
-      (a, ctx') <- f (ctx { ctxInteraction = ixn0 { ixnFocus = real { focusedElement = blockValue } } })
-      let ixn'  = ctxInteraction ctx'
-          after = ixnFocus ixn'
+      let ft0  = ctxFocus ctx
+          real = ftAmbient ft0
+      (a, ctx') <- f (ctx { ctxFocus = ft0 { ftAmbient = real { focusedElement = blockValue } } })
+      let ft'   = ctxFocus ctx'
+          after = ftAmbient ft'
       if focusedElement after == blockValue
-        then pure (a, ctx' { ctxInteraction = ixn' { ixnFocus = real } })
-        else pure (a, ctx' { ctxInteraction = ixn'
-               { ixnFocus       = real { focusedElement = Just scopeId, focusedThisFrame = True }
-               , ixnFocusScopes = Map.insert scopeId (after { focusedThisFrame = True }) (ixnFocusScopes ixn')
+        then pure (a, ctx' { ctxFocus = ft' { ftAmbient = real } })
+        else pure (a, ctx' { ctxFocus = ft'
+               { ftAmbient = real { focusedElement = Just scopeId, focusedThisFrame = True }
+               , ftScopes  = Map.insert scopeId (after { focusedThisFrame = True }) (ftScopes ft')
                } })
 
 -- | Advances a 'FocusState' to the next frame: carries it forward if it was
 -- reaffirmed this frame, otherwise clears it back to @emptyFocusState@.
--- Applied to the root scope and every entry in @ixnFocusScopes@ — a scope
+-- Applied to the root scope and every entry in @ftScopes@ — a scope
 -- that stops being reaffirmed (its composite removed from the tree, or its
 -- specific focused child gone while the composite itself still renders)
 -- expires independently, the same way root-level focus already did.
