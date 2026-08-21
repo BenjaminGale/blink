@@ -446,9 +446,10 @@ captureOf (ButtonReleased cap) = cap
 
 -- | Per-frame keyboard-focus targeting state: which element has focus, and
 -- which was the most recent tab stop. Reset and carried forward by
--- 'nextFrameContext'. Independent of mouse\/capture state ('ButtonState') —
--- the two track unrelated input devices and advance to the next frame on
--- their own schedules ('nextFocusTrackerFrame' vs. 'nextButtonState').
+-- 'nextFrameContext'. Unlike mouse\/capture state, focus also advances on a
+-- re-render of the same frame (see 'rerenderContext'), since a scope that
+-- goes unclaimed on a re-render should expire even though the button
+-- reading hasn't changed.
 data FocusTracker e = FocusTracker
   { ftAmbient :: FocusState e
     -- ^ The *currently ambient* scope's own focus state — root's, unless a
@@ -529,9 +530,8 @@ data UIContext e msg = UIContext
     -- ^ Keyboard-focus targeting state. See 'FocusTracker'.
   , ctxButton          :: ButtonState e
     -- ^ The left mouse button's state this frame, and which element (if
-    -- any) holds mouse capture. See 'ButtonState'. Independent of
-    -- 'ctxFocus' — the two advance to the next frame on their own
-    -- schedules; see 'nextFrameContext'.
+    -- any) holds mouse capture. See 'ButtonState'. Unlike focus, this does
+    -- not change on a re-render of the same frame — see 'rerenderContext'.
   , ctxElements        :: ElementState e
   , ctxOutputs         :: FrameOutputs e msg
   }
@@ -587,7 +587,7 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxAnimation       = mkAnimationState 0 0 False
   , ctxTextMeasure     = measurer
   , ctxFocus           = emptyFocusTracker
-  , ctxButton          = if inputLeftButtonDown input then ButtonDown MouseNotCaptured else ButtonUp
+  , ctxButton          = nextButtonState False (inputLeftButtonDown input) MouseNotCaptured
   , ctxElements        = ElementState
       { elmScrollStates  = Map.empty
       , elmSelections    = Map.empty
@@ -613,17 +613,16 @@ nextFrameContext bounds input thm anim ctx0 = ctx
   , ctxInput       = input
   , ctxTheme       = thm
   , ctxAnimation   = anim
-  , ctxButton      = nextButtonState
-      (inputLeftButtonDown (ctxInput ctx))
-      (inputLeftButtonDown input)
-      (captureOf (ctxButton ctx))
+  , ctxButton      = nextButtonState wasDown isDown (captureOf (ctxButton ctx))
   , ctxFocus       = nextFocusTrackerFrame (ctxFocus ctx)
   , ctxElements    = (ctxElements ctx)
       { elmMouseOverPrev = outMouseOverThisFrame (ctxOutputs ctx) }
   , ctxOutputs     = emptyFrameOutputs
   }
   where
-    ctx = applyUiEffects (getUiEffects ctx0) ctx0
+    ctx     = applyUiEffects (getUiEffects ctx0) ctx0
+    wasDown = inputLeftButtonDown (ctxInput ctx)
+    isDown  = inputLeftButtonDown input
 
 -- | Rebuilds the context to re-render the current frame rather than advance
 -- to a new one: refreshes bounds\/theme\/animation, applies queued
@@ -645,13 +644,15 @@ rerenderContext bounds input thm anim ctx0 = ctx
   where
     ctx = applyUiEffects (getUiEffects ctx0) ctx0
 
--- | Derives this frame's 'ButtonState' from the raw held/not-held reading on
--- the previous and current frame, carrying capture forward while the button
--- is held or on its release frame, and dropping it as soon as the button was
--- not down last frame — both when it is fully up and on a fresh press — so a
--- new press never inherits a stale capture from a previous drag\/click
--- cycle. Acquisition — setting capture in the first place — happens in
--- 'acquireCapture'.
+-- | Whether moving from @prevDown@ to @currDown@ leaves the button held,
+-- just-released, or up, and whether @existingCapture@ carries forward:
+-- capture survives while the button stays held or on its release frame, and
+-- is dropped the moment the button was not down last frame — both when it
+-- is fully up and on a fresh press — so a new press never inherits a stale
+-- capture from a previous drag\/click cycle. Acquisition — setting capture
+-- in the first place — happens in 'acquireCapture'. A frame with no
+-- previous frame to compare against (the first frame) passes @prevDown =
+-- False@, which always yields 'ButtonUp' or an uncaptured 'ButtonDown'.
 nextButtonState :: Bool -> Bool -> MouseCapture e -> ButtonState e
 nextButtonState prevDown currDown existingCapture
   | currDown  = ButtonDown carriedCapture
@@ -668,15 +669,11 @@ gets f = UI $ \ctx -> pure (f ctx, ctx)
 modify :: (UIContext e msg -> UIContext e msg) -> UI e msg ()
 modify f = UI $ \ctx -> pure ((), f ctx)
 
--- | Modifies the currently ambient scope's own 'FocusState'. Internal to
--- keyboard-focus primitives ('setFocus', 'clearFocus', 'setPreviousTabStop')
--- — never touches mouse\/capture state, which goes through 'modifyButton'
--- instead.
+-- | Modifies the currently ambient scope's own 'FocusState'.
 modifyFocusState :: (FocusState e -> FocusState e) -> UI e msg ()
 modifyFocusState f = modify $ \ctx -> ctx { ctxFocus = (ctxFocus ctx) { ftAmbient = f (ftAmbient (ctxFocus ctx)) } }
 
--- | Modifies the current frame's 'ButtonState'. Internal to mouse\/capture
--- primitives ('acquireCapture') — never touches focus state.
+-- | Modifies the current frame's 'ButtonState'.
 modifyButton :: (ButtonState e -> ButtonState e) -> UI e msg ()
 modifyButton f = modify $ \ctx -> ctx { ctxButton = f (ctxButton ctx) }
 
