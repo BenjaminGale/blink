@@ -43,6 +43,7 @@ data Key
 -- | Keyboard modifier keys. Carried alongside a 'Key' in 'KeyEvent'.
 data Modifier
   = Shift -- ^ Shift key held during the key press.
+  | Ctrl  -- ^ Ctrl key held during the key press.
   deriving (Eq, Show)
 
 -- | A single keyboard event from the platform: a key press together with

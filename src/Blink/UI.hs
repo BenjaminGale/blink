@@ -277,6 +277,12 @@ module Blink.UI
   , contextFocus
   , contextFocusChain
   , contextPrevTabStop
+  , NavigationKeys (..)
+  , defaultNavigationKeys
+  , getNavigationKeys
+  , withNavigationKeys
+  , isFocusSuppressed
+  , withFocusSuppressed
     -- * Styles
   , getStyleSet
   , contextTheme
@@ -306,7 +312,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..), TextMeasurer (..), noOpTextMeasurer)
 import Blink.Geometry (Point, Rectangle, Size, BorderEdges, containsPoint, intersectRect)
-import Blink.Input (Key (..), KeyEvent (..), InputState (..))
+import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Mouse
   ( MouseCapture (..), ButtonState (..), captureOf, nextButtonState
   , HoverState (..), wasHit, nextHoverState
@@ -537,6 +543,13 @@ data UIContext e msg = UIContext
     -- 'charOffset' and 'charAtOffset' rather than accessing this directly.
   , ctxFocus           :: FocusTracker e
     -- ^ Keyboard-focus targeting state. See 'FocusTracker'.
+  , ctxFocusSuppressed :: Bool
+    -- ^ Like @ctxDisabled@ but focus-only: hover\/click still work, but a
+    -- control can neither auto-claim nor be reached by @ctxNavigationKeys@.
+    -- Set via 'withFocusSuppressed'.
+  , ctxNavigationKeys  :: NavigationKeys
+    -- ^ Which keys currently mean "advance"\/"retreat" focus. See
+    -- 'NavigationKeys'; set via 'withNavigationKeys'.
   , ctxMouse           :: Mouse e
     -- ^ The left mouse button's state this frame (and which element, if
     -- any, holds mouse capture), plus per-element hover state. See
@@ -596,6 +609,8 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxAnimation       = mkAnimationState 0 0 False
   , ctxTextMeasure     = measurer
   , ctxFocus           = emptyFocusTracker
+  , ctxFocusSuppressed = False
+  , ctxNavigationKeys  = defaultNavigationKeys
   , ctxMouse           = emptyMouse { mouseButton = nextButtonState False (inputLeftButtonDown input) MouseNotCaptured }
   , ctxElements        = ElementState
       { elmScrollStates  = Map.empty
@@ -800,6 +815,55 @@ contextPrevTabStop = previousTabStop . ftAmbient . ctxFocus
 -- call manually when building custom focusable controls.
 setPreviousTabStop :: e -> UI e msg ()
 setPreviousTabStop eid = modifyFocusState $ \fs -> fs { previousTabStop = Just eid }
+
+-- | The specific key\/modifier combinations that currently mean "give up
+-- focus here and let the next render claim it" ('navAdvance') or "return to
+-- whichever tab stop was previous" ('navRetreat'). Every
+-- 'Blink.Control.control' consults this instead of a hardcoded Tab\/
+-- Shift-Tab, so a container can redefine it for its own children by
+-- opening a new ambient set around them with 'withNavigationKeys'.
+data NavigationKeys = NavigationKeys
+  { navAdvance :: [(Key, [Modifier])]
+  , navRetreat :: [(Key, [Modifier])]
+  } deriving (Eq, Show)
+
+-- | Plain Tab\/Shift-Tab — what every control uses unless some enclosing
+-- container has redefined it. The root ambient default.
+defaultNavigationKeys :: NavigationKeys
+defaultNavigationKeys = NavigationKeys
+  { navAdvance = [(KeyTab, [])]
+  , navRetreat = [(KeyTab, [Shift])]
+  }
+
+-- | The navigation keys currently ambient.
+getNavigationKeys :: UI e msg NavigationKeys
+getNavigationKeys = gets ctxNavigationKeys
+
+-- | Replaces the ambient navigation keys for @action@, restoring the
+-- previous set once it completes — same save\/restore shape as
+-- 'disableWhen', except it replaces rather than only escalating: a
+-- container fully redefines what its own children treat as navigation
+-- keys, it doesn't merely add to an outer scope's set.
+withNavigationKeys :: NavigationKeys -> UI e msg a -> UI e msg a
+withNavigationKeys keys (UI f) = UI $ \ctx -> do
+  (a, ctx') <- f (ctx { ctxNavigationKeys = keys })
+  pure (a, ctx' { ctxNavigationKeys = ctxNavigationKeys ctx })
+
+-- | 'True' when the current sub-tree has been marked focus-suppressed.
+isFocusSuppressed :: UI e msg Bool
+isFocusSuppressed = gets ctxFocusSuppressed
+
+-- | Marks a sub-tree as focus-suppressed when the condition is 'True': like
+-- 'disableWhen' but focus-only — hover\/click still work, but a control
+-- can neither auto-claim focus nor be reached via @ctxNavigationKeys@. The
+-- flag is restored to its previous value once the sub-tree completes, and
+-- (like 'disableWhen') only ever escalates, never lifts an outer
+-- suppression.
+withFocusSuppressed :: Bool -> UI e msg a -> UI e msg a
+withFocusSuppressed True (UI f) = UI $ \ctx -> do
+  (a, ctx') <- f (ctx { ctxFocusSuppressed = True })
+  pure (a, ctx' { ctxFocusSuppressed = ctxFocusSuppressed ctx })
+withFocusSuppressed False action = action
 
 getTheme :: UI e msg (Theme e)
 getTheme = gets contextTheme
