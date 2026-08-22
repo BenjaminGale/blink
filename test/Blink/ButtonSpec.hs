@@ -5,11 +5,12 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Attributes (Attr, FocusOnClick (..), focusOnClick, isTabStop, text)
-import Blink.Button (ButtonConfig, ToggleButtonConfig, ToggleEvent, button, isSelected, onSelectedChanged, toggleButton)
+import Blink.Button (ButtonConfig, ToggleButtonConfig, ToggleEvent, button, isSelected, toggleButton)
 import Blink.ButtonBehaviour (buttonBehaviourSpec)
+import Blink.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.Element (ElementEvent, onFocusGained)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
-import Blink.Input (InputState (..), Key (..), KeyEvent (..))
+import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
@@ -63,10 +64,6 @@ noInput = InputState
   , inputTypedText      = []
   }
 
-down, releasedAt :: Point -> InputState
-down p       = noInput { inputMousePosition = p, inputLeftButtonDown = True }
-releasedAt p = noInput { inputMousePosition = p, inputLeftButtonDown = False }
-
 onButton :: Point
 onButton = Point 50 50
 
@@ -93,6 +90,8 @@ spec = describe "Blink.Button" $ do
     resultMessages result `shouldBe` ["gained"]
 
   describe "toggleButton" $ do
+    toggleBehaviourSpec testBounds toggleSeedCtx Ok (Point 5 5) onButton (Point 200 200) (toggleButton Ok)
+
     it "draws in its normal style while not selected" $ do
       ctx <- startToggle []
       getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "" testColour AlignCenter]
@@ -101,30 +100,10 @@ spec = describe "Blink.Button" $ do
       ctx <- startToggle [isSelected True]
       getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "" pressedColour AlignCenter]
 
-    it "fires onSelectedChanged with the flipped value when clicked" $ do
-      let attrs = [isSelected False, onSelectedChanged (\b -> [OutMsg (show b)])]
-      ctx0 <- startToggle attrs
-      ctx1 <- stepToggle attrs (down onButton) ctx0
-      ctx2 <- stepToggle attrs (releasedAt onButton) ctx1
-      getMessages ctx2 `shouldBe` [show True]
-
-    it "fires onSelectedChanged with False when clicked while selected" $ do
-      let attrs = [isSelected True, onSelectedChanged (\b -> [OutMsg (show b)])]
-      ctx0 <- startToggle attrs
-      ctx1 <- stepToggle attrs (down onButton) ctx0
-      ctx2 <- stepToggle attrs (releasedAt onButton) ctx1
-      getMessages ctx2 `shouldBe` [show False]
-
-    it "fires onSelectedChanged when activated via Enter while focused" $ do
-      let attrs = [isSelected False, onSelectedChanged (\b -> [OutMsg (show b)])]
-      ctx0 <- startToggle attrs
-      ctx1 <- stepToggle attrs (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0
-      getMessages ctx1 `shouldBe` [show True]
-
 type ToggleAttr' = Attr TestElement ToggleEvent String (ToggleButtonConfig TestElement)
 
-startToggle :: [ToggleAttr'] -> IO (UIContext TestElement String)
-startToggle attrs = snd <$> runUI (toggleButton Ok attrs) (emptyUIContext testBounds noInput toggleTestTheme noOpTextMeasurer)
+toggleSeedCtx :: UIContext TestElement String
+toggleSeedCtx = emptyUIContext testBounds noInput toggleTestTheme noOpTextMeasurer
 
-stepToggle :: [ToggleAttr'] -> InputState -> UIContext TestElement String -> IO (UIContext TestElement String)
-stepToggle attrs input ctx = snd <$> runUI (toggleButton Ok attrs) (nextFrameContext testBounds input toggleTestTheme (contextAnimation ctx) ctx)
+startToggle :: [ToggleAttr'] -> IO (UIContext TestElement String)
+startToggle attrs = snd <$> runUI (toggleButton Ok attrs) toggleSeedCtx

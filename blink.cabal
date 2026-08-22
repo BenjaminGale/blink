@@ -90,6 +90,7 @@ test-suite blink-tests
         Blink.MouseSpec
         Blink.RadioButtonSpec
         Blink.TextInputSpec
+        Blink.ToggleBehaviour
         Blink.UISpec
         Blink.UpdateSpec
     build-depends:
