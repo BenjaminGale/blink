@@ -272,6 +272,7 @@ module Blink.UI
   , requestClearFocus
   , withFocusScope
   , consumeKey
+  , withoutKeyEvents
   , getPreviousTabStop
   , setPreviousTabStop
   , contextFocus
@@ -798,6 +799,22 @@ consumeKey :: Key -> UI e msg ()
 consumeKey k = modify $ \ctx ->
   let input = ctxInput ctx
   in ctx { ctxInput = input { inputKeyEvents = filter (\e -> key e /= k) (inputKeyEvents input) } }
+
+-- | Hides the given key\/modifier combinations from 'getInput' -- and so
+-- from anything reading raw key events, e.g. 'Blink.Element.onKeyPressed'
+-- -- for the duration of @action@, restoring the real input once it
+-- completes. Unlike 'consumeKey', this doesn't affect what anyone else
+-- sees: a control that itself observes some keys as reserved navigation
+-- (e.g. Ctrl+Tab) can keep them out of its own raw reporting without
+-- removing them from the frame's key queue, so whatever consumes them for
+-- real afterward still can.
+withoutKeyEvents :: [(Key, [Modifier])] -> UI e msg a -> UI e msg a
+withoutKeyEvents keys (UI f) = UI $ \ctx ->
+  let input    = ctxInput ctx
+      filtered = input { inputKeyEvents = filter (\e -> (key e, modifiers e) `notElem` keys) (inputKeyEvents input) }
+  in do
+    (a, ctx') <- f (ctx { ctxInput = filtered })
+    pure (a, ctx' { ctxInput = input })
 
 -- | The element that was the most recent tab stop before the current one,
 -- scoped to the currently ambient scope (root, or a composite's own while

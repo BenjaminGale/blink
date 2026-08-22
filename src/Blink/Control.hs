@@ -168,7 +168,9 @@ control eid cfg attrs content = disableWhen (not (ccEnabled cc)) $ do
   midFocused <- isFocused eid
   fire attrs (focusEvents wasFocused midFocused)
   hitBounds <- marginInsetBounds eid
-  withBounds hitBounds $ element eid (attrs ++ clickFocusReaction currentScope)
+  withBounds hitBounds $
+    (if opensScope then withoutKeyEvents reservedKeys else id) $
+      element eid (attrs ++ clickFocusReaction currentScope)
   styledElement eid (withChildNavigation content)
   -- A nested container gets first claim on Ctrl+Tab\/Ctrl+Shift+Tab (it
   -- consumes the key while @content@ above is still running, before this
@@ -216,6 +218,20 @@ control eid cfg attrs content = disableWhen (not (ccEnabled cc)) $ do
     -- themselves are trapped inside that scope.
     applyScopeEscape wasFocused = advanceOrRetreat wasFocused [(KeyTab, [Ctrl])] [(KeyTab, [Ctrl, Shift])]
 
+    -- Tab\/Shift-Tab (plus the arrow keys, if 'ccArrowNavigation') --
+    -- shared between the scope's own redefined navigation keys
+    -- ('withChildNavigation') and 'reservedKeys' below.
+    tabAdvanceKeys, tabRetreatKeys :: [(Key, [Modifier])]
+    tabAdvanceKeys = (KeyTab, []) : [(k, []) | ccArrowNavigation cc, k <- [KeyRight, KeyDown]]
+    tabRetreatKeys = (KeyTab, [Shift]) : [(k, []) | ccArrowNavigation cc, k <- [KeyLeft, KeyUp]]
+
+    -- Every key this control reserves for navigation once it opens a
+    -- scope -- hidden from its own raw key reporting (see the
+    -- 'withoutKeyEvents' call above) so a child cycling through them, or
+    -- an escape via Ctrl+Tab, never also leaks through as an ordinary
+    -- 'Blink.Element.onKeyPressed' on this control itself.
+    reservedKeys = tabAdvanceKeys ++ tabRetreatKeys ++ [(KeyTab, [Ctrl]), (KeyTab, [Ctrl, Shift])]
+
     -- A click hands focus to whichever element FocusOnClick names, taking
     -- effect one frame later (see the module header). Targets whichever
     -- scope was ambient when this control itself rendered (@currentScope@,
@@ -237,7 +253,4 @@ control eid cfg attrs content = disableWhen (not (ccEnabled cc)) $ do
       | opensScope = withFocusScope eid False (withNavigationKeys scopeKeys content')
       | otherwise  = content'
       where
-        scopeKeys = NavigationKeys
-          { navAdvance = (KeyTab, []) : [(k, []) | ccArrowNavigation cc, k <- [KeyRight, KeyDown]]
-          , navRetreat = (KeyTab, [Shift]) : [(k, []) | ccArrowNavigation cc, k <- [KeyLeft, KeyUp]]
-          }
+        scopeKeys = NavigationKeys { navAdvance = tabAdvanceKeys, navRetreat = tabRetreatKeys }

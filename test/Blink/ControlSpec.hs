@@ -262,6 +262,14 @@ spec = describe "Blink.Control" $ do
       result <- runInteractions testBounds seedCtx containedTree [Wait 1, Tab] [PressKey KeyTab [Ctrl, Shift], Wait 1]
       resultMessages result `shouldBe` ["Container lost", "Sibling gained"]
 
+    it "does not leak Tab or Ctrl+Tab as raw key events to the container itself" $ do
+      let tree = control Container containedCfg (onKeyPressed (const [OutMsg ("Container key" :: String)]) : tag Container) $
+            mapM_ (\c -> control c defaultTestConfig (tag c) (pure ())) [ChildA, ChildB]
+      tabResult <- runInteractions testBounds seedCtx tree [Wait 1] [Tab]
+      resultMessages tabResult `shouldBe` ["ChildA lost", "ChildB gained"]
+      ctrlTabResult <- runInteractions testBounds seedCtx tree [Wait 1] [PressKey KeyTab [Ctrl]]
+      resultMessages ctrlTabResult `shouldNotContain` ["Container key"]
+
     it "Ctrl+Tab from a nested Contained container only escapes the nearest scope, not outer ones" $ do
       result <- runInteractions testBounds seedCtx nestedTree [Wait 1] [PressKey KeyTab [Ctrl]]
       resultMessages result `shouldBe` ["Inner lost", "OuterChildB gained"]
