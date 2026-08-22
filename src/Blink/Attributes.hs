@@ -22,6 +22,7 @@ module Blink.Attributes
   , onEvent
   , configAny
   , FocusOnClick (..)
+  , NavigationMode (..)
   , ControlConfig (..)
   , defaultControlConfig
   , autoClaimsFocus
@@ -29,6 +30,9 @@ module Blink.Attributes
   , isTabStop
   , focusOnClick
   , enabled
+  , tabNavigation
+  , ctrlTabNavigation
+  , arrowNavigation
   , HasTextConfig (..)
   , text
   ) where
@@ -50,22 +54,56 @@ data FocusOnClick e
     -- ^ Clicking the control has no effect on focus at all.
   deriving (Eq, Show)
 
+-- | How a control's children behave for one group of navigation keys (Tab\/
+-- Shift-Tab, Ctrl+Tab\/Ctrl+Shift+Tab, or the arrow keys) -- set with
+-- 'tabNavigation' \/ 'ctrlTabNavigation' \/ 'arrowNavigation'.
+data NavigationMode
+  = Continue
+    -- ^ Not a navigation container for this key group -- this control
+    -- doesn't redefine what counts as a navigation key for its children;
+    -- they see whatever's already ambient from further out (the default,
+    -- everywhere, is plain Tab\/Shift-Tab). Default for Tab\/Shift-Tab.
+  | Contained
+    -- ^ This key group becomes the (redefined) navigation keys for this
+    -- control's own children, inside a newly opened focus scope --
+    -- containment and cycling then fall out of ordinary focus behaviour
+    -- for whatever's inside, unchanged.
+  | Disabled
+    -- ^ This key group's keys never reach descendants at all -- consumed
+    -- before content renders. Default for Ctrl+Tab and the arrow keys.
+  deriving (Eq, Show)
+
 -- | Configuration shared by every control, regardless of that control's own
 -- @cfg@: whether Tab lands on it ('ccIsTabStop'), what clicking it does to
--- focus ('ccFocusOnClick'), and whether it responds to input at all
--- ('ccEnabled'). Every control's own @cfg@ carries one of these, accessed
--- uniformly via 'HasControlConfig'.
+-- focus ('ccFocusOnClick'), whether it responds to input at all
+-- ('ccEnabled'), and how its children navigate for each key group
+-- ('ccTabNavigation', 'ccCtrlTabNavigation', 'ccArrowNavigation'). Every
+-- control's own @cfg@ carries one of these, accessed uniformly via
+-- 'HasControlConfig'.
 data ControlConfig e = ControlConfig
-  { ccIsTabStop    :: Bool
-  , ccFocusOnClick :: FocusOnClick e
-  , ccEnabled      :: Bool
+  { ccIsTabStop         :: Bool
+  , ccFocusOnClick      :: FocusOnClick e
+  , ccEnabled           :: Bool
+  , ccTabNavigation     :: NavigationMode
+  , ccCtrlTabNavigation :: NavigationMode
+  , ccArrowNavigation   :: NavigationMode
   }
 
 -- | The default 'ControlConfig': an enabled tab stop that takes focus on
--- click -- what a plain interactive control wants unless it overrides one
--- or more via 'isTabStop' \/ 'focusOnClick' \/ 'enabled'.
+-- click, not a navigation container for any key group (Tab\/Shift-Tab pass
+-- through to its children unaffected; Ctrl+Tab and the arrow keys never
+-- reach them) -- what a plain interactive control wants unless it
+-- overrides one or more via 'isTabStop' \/ 'focusOnClick' \/ 'enabled' \/
+-- 'tabNavigation' \/ 'ctrlTabNavigation' \/ 'arrowNavigation'.
 defaultControlConfig :: ControlConfig e
-defaultControlConfig = ControlConfig { ccIsTabStop = True, ccFocusOnClick = FocusSelf, ccEnabled = True }
+defaultControlConfig = ControlConfig
+  { ccIsTabStop         = True
+  , ccFocusOnClick      = FocusSelf
+  , ccEnabled           = True
+  , ccTabNavigation     = Continue
+  , ccCtrlTabNavigation = Disabled
+  , ccArrowNavigation   = Disabled
+  }
 
 -- | Whether a control is eligible to claim focus purely by rendering first
 -- while nothing else holds it: opted into keyboard focus at all ('ccIsTabStop')
@@ -141,6 +179,21 @@ focusOnClick foc = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { c
 -- and focus, and is skipped by Tab\/Shift-Tab. Defaults to 'True'.
 enabled :: HasControlConfig e cfg => Bool -> Attr e ev msg cfg
 enabled b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccEnabled = b }) cfg
+
+-- | How this control's children navigate via Tab\/Shift-Tab -- see
+-- 'NavigationMode'. Defaults to 'Continue'.
+tabNavigation :: HasControlConfig e cfg => NavigationMode -> Attr e ev msg cfg
+tabNavigation m = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccTabNavigation = m }) cfg
+
+-- | How this control's children navigate via Ctrl+Tab\/Ctrl+Shift+Tab --
+-- see 'NavigationMode'. Defaults to 'Disabled'.
+ctrlTabNavigation :: HasControlConfig e cfg => NavigationMode -> Attr e ev msg cfg
+ctrlTabNavigation m = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccCtrlTabNavigation = m }) cfg
+
+-- | How this control's children navigate via the arrow keys -- see
+-- 'NavigationMode'. Defaults to 'Disabled'.
+arrowNavigation :: HasControlConfig e cfg => NavigationMode -> Attr e ev msg cfg
+arrowNavigation m = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccArrowNavigation = m }) cfg
 
 -- | Implemented by any control's own @cfg@ type to say how it carries
 -- displayed text, letting 'text' work uniformly across them (same pattern
