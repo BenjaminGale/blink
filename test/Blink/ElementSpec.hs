@@ -8,6 +8,8 @@ import Blink.Element (ElementEvent (..), element, onKeyPressed)
 import Blink.ElementBehaviour (elementBehaviourSpec)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
+import Blink.Interaction (Interaction (DragTo, Wait), InteractionResult (..), runInteractions)
+import qualified Blink.Interaction as Ixn (Interaction (MouseDown, MouseUp))
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -55,15 +57,6 @@ noInput = InputState
   , inputTypedText      = []
   }
 
-down :: Point -> InputState
-down p = noInput { inputMousePosition = p, inputLeftButtonDown = True }
-
-heldAt :: Point -> InputState
-heldAt p = noInput { inputMousePosition = p, inputLeftButtonDown = True }
-
-releasedAt :: Point -> InputState
-releasedAt p = noInput { inputMousePosition = p, inputLeftButtonDown = False }
-
 onA, offBoth, onB :: Point
 onA     = Point 10 50
 offBoth = Point 200 200
@@ -76,17 +69,14 @@ both = do
   withBounds rectA $ element ElemA [onEvent (\ev -> [OutMsg (ElemA, ev)])]
   withBounds rectB $ element ElemB [onEvent (\ev -> [OutMsg (ElemB, ev)])]
 
-startBoth :: InputState -> IO (UIContext TestElement (TestElement, ElementEvent))
-startBoth input = snd <$> runUI both (emptyUIContext testBounds input testTheme noOpTextMeasurer)
-
-runBoth :: InputState -> UIContext TestElement (TestElement, ElementEvent) -> IO (UIContext TestElement (TestElement, ElementEvent))
-runBoth input ctx = snd <$> runUI both (advance input ctx)
-
 advance :: Ord e => InputState -> UIContext e msg -> UIContext e msg
 advance input ctx = nextFrameContext testBounds input (contextTheme ctx) (contextAnimation ctx) ctx
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
+
+seedBothCtx :: UIContext TestElement (TestElement, ElementEvent)
+seedBothCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
 spec :: Spec
 spec = describe "Blink.Element" $ do
@@ -105,24 +95,20 @@ spec = describe "Blink.Element" $ do
       -- Mouse goes down over ElemA, is dragged (still held) onto ElemB, and
       -- released there. ElemA should only ever see MouseDown (it's not hit
       -- by the time the button comes up); ElemB should only ever see
-      -- MouseUp (it wasn't hit when the button went down).
-      ctx1 <- startBoth (down onA)          -- down edge, over A
-      ctx2 <- runBoth (heldAt onB) ctx1      -- held, over B
-      ctx3 <- runBoth (releasedAt onB) ctx2  -- up edge, over B
-      -- ctx1 is also the first frame the mouse is over A, so MouseEntered
-      -- fires alongside MouseDown; ctx2 is where the cursor crosses from A
-      -- to B, so both elements' hover edges fire there too.
-      getMessages ctx1 `shouldBe` [(ElemA, MouseEntered), (ElemA, MouseDown)]
-      getMessages ctx2 `shouldBe` [(ElemA, MouseExited), (ElemB, MouseEntered)]
-      getMessages ctx3 `shouldBe` [(ElemB, MouseUp)]
-      -- ElemB's messages here are exactly [MouseUp], with no Clicked --
-      -- confirming a drag begun on ElemA and released over ElemB doesn't
-      -- count as a click for ElemB.
+      -- MouseUp (it wasn't hit when the button went down) and never
+      -- Clicked -- confirming a drag begun on one element and released
+      -- over another doesn't count as a click for the second. The mouse
+      -- also crosses from A into B along the way, so both elements' hover
+      -- edges fire too.
+      result <- runInteractions testBounds seedBothCtx both []
+        [Ixn.MouseDown onA, DragTo onB, Ixn.MouseUp onB]
+      resultMessages result `shouldBe`
+        [ (ElemA, MouseEntered), (ElemA, MouseDown)
+        , (ElemA, MouseExited),  (ElemB, MouseEntered)
+        , (ElemB, MouseUp)
+        ]
 
     it "reports FocusLost for the loser and FocusGained for the winner, one frame after a focus request" $ do
-      ctx0 <- snd <$> runUI (setFocus ElemA >> requestFocus Nothing ElemB)
-                            (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
-      ctx1 <- runBoth noInput ctx0
-      ctx2 <- runBoth noInput ctx1
-      getMessages ctx1 `shouldBe` [(ElemA, FocusLost), (ElemB, FocusGained)]
-      getMessages ctx2 `shouldBe` []
+      result <- runInteractions testBounds seedBothCtx
+                  (setFocus ElemA >> requestFocus Nothing ElemB >> both) [Wait 1] []
+      resultMessages result `shouldBe` [(ElemA, FocusLost), (ElemB, FocusGained)]
