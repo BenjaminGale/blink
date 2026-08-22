@@ -263,9 +263,13 @@ module Blink.UI
   , isNothingFocused
   , getFocus
   , isFocused
+  , FocusChange (..)
+  , getFocusChange
   , setFocus
   , setFocusWhen
   , clearFocus
+  , transferFocusTo
+  , clearFocusFrom
   , withFocusScope
   , consumeKey
   , getPreviousTabStop
@@ -348,11 +352,17 @@ data Selection = Selection
   }
   deriving (Eq, Show)
 
--- | A cross-frame presentation effect: a scroll or selection change that
--- takes effect starting the next frame rather than immediately. Queued with
--- 'emitUi' and applied by 'applyUiEffects', which 'nextFrameContext' runs
--- automatically between frames. Focus is not represented here — see
--- 'setFocus' for why it changes immediately instead.
+-- | A cross-frame presentation effect: a scroll, selection, or explicit
+-- focus-transfer change that takes effect starting the next frame rather
+-- than immediately. Queued with 'emitUi' and applied by 'applyUiEffects',
+-- which 'nextFrameContext' runs automatically between frames.
+--
+-- Focus claimed\/cleared by an element acting on *itself* (auto-claim,
+-- self-clear) is not represented here — see 'setFocus' for why that changes
+-- immediately instead. 'TransferFocusTo'\/'ClearFocusFrom' are specifically
+-- for an explicit "make a different, named element focused" change, where
+-- deferring lets every affected element observe it consistently regardless
+-- of render order — see 'FocusChange'.
 data UiEffect e
   = ScrollTo e Double
     -- ^ Sets the scroll position to an absolute value, clamped to @[0, 1]@
@@ -368,6 +378,30 @@ data UiEffect e
     -- Composes with other 'ScrollBy' effects queued in the same frame for
     -- the same element rather than last-write-wins.
   | SetSelectionAt e Selection
+  | TransferFocusTo (Maybe e) e e
+    -- ^ Moves focus, within the given scope (@Nothing@ = root, @Just
+    -- scopeId@ = the composite scope with that id — see 'withFocusScope'),
+    -- from the first named element to the second, applied atomically at the
+    -- next frame boundary. See 'transferFocusTo'.
+  | ClearFocusFrom (Maybe e) e
+    -- ^ Removes focus from the given element within the given scope, with
+    -- nothing new claiming it, applied atomically at the next frame
+    -- boundary — the "clear" counterpart to 'TransferFocusTo'. See
+    -- 'clearFocusFrom'.
+  deriving (Eq, Show)
+
+-- | What happened to a scope's focus via the most recently applied
+-- 'TransferFocusTo' or 'ClearFocusFrom', recorded so any element can observe
+-- it for the one frame it's visible (see 'getFocusChange'), regardless of
+-- render order. Both constructors are fully concrete — no 'Maybe' inside
+-- either — since the caller emitting the effect already knows both
+-- endpoints; only "did anything happen at all" (the 'Maybe' wrapping this
+-- type where it's stored) is genuinely optional.
+data FocusChange e
+  = TransferredFocus e e
+    -- ^ (from, to).
+  | ClearedFocus e
+    -- ^ (from).
   deriving (Eq, Show)
 
 -- | One item from the frame's output queue: either an application message or
@@ -396,12 +430,26 @@ data FocusState e = FocusState
     -- ^ 'True' if this scope's claim was reaffirmed during this frame's
     -- render pass. Used to clear stale focus when whatever held it is no
     -- longer present in the UI.
+  , focusLastChange  :: Maybe (FocusChange e)
+    -- ^ The most recently applied 'TransferFocusTo'\/'ClearFocusFrom' for
+    -- this scope. 'Nothing' when there's no change pending observation. See
+    -- 'getFocusChange'.
+  , focusChangeFresh :: Bool
+    -- ^ 'True' for the one frame after 'focusLastChange' was set; lets
+    -- 'nextFocusFrame' tell "just set, keep it visible one more frame" apart
+    -- from "already had its frame, clear it now."
   }
 
 -- | The empty, never-focused 'FocusState' — root's initial value, and every
 -- composite's the first time it renders.
 emptyFocusState :: FocusState e
-emptyFocusState = FocusState { focusedElement = Nothing, previousTabStop = Nothing, focusedThisFrame = False }
+emptyFocusState = FocusState
+  { focusedElement   = Nothing
+  , previousTabStop  = Nothing
+  , focusedThisFrame = False
+  , focusLastChange  = Nothing
+  , focusChangeFresh = False
+  }
 
 -- | 'True' when nothing is focused in the given scope. Pattern-matches
 -- directly rather than requiring @Eq e@, so it's usable wherever a plain
@@ -897,6 +945,15 @@ contextFocusChain ctx = go Set.empty (contextFocus ctx)
 isFocused :: Eq e => e -> UI e msg Bool
 isFocused eid = (== Just eid) <$> getFocus
 
+-- | The most recent focus change ('TransferFocusTo'\/'ClearFocusFrom') still
+-- visible to the currently ambient scope, if any. Single-hop against
+-- whichever scope is ambient, exactly like 'isFocused'. A caller (see
+-- 'Blink.Element.element') compares the given element against both sides of
+-- the reported 'FocusChange' itself, rather than this function pre-deciding
+-- "gained or lost" on its behalf.
+getFocusChange :: UI e msg (Maybe (FocusChange e))
+getFocusChange = gets (focusLastChange . ftAmbient . ctxFocus)
+
 -- | Transfers keyboard focus to the given element, in the currently ambient
 -- scope. Takes effect immediately — like 'registerMouseOver' and mouse
 -- capture, not like the deferred scroll\/selection writes — because a
@@ -915,6 +972,24 @@ setFocusWhen b eid = when b (setFocus eid)
 -- like 'setFocus'.
 clearFocus :: UI e msg ()
 clearFocus = modifyFocusState $ \fs -> fs { focusedElement = Nothing }
+
+-- | Queues a 'TransferFocusTo' effect: moves focus, within the given scope
+-- (@Nothing@ = root, @Just scopeId@ = a specific composite's scope — see
+-- 'withFocusScope'), from one named element to another, taking effect at
+-- the next frame boundary. Unlike 'setFocus' (immediate, for a control's
+-- own auto-claim\/retain decision), this is for an explicit "make a
+-- different, specific element focused" transfer — a click's
+-- 'Blink.Controls.FocusTarget', or Tab\/Shift-Tab moving between two named
+-- elements — where deferring lets every affected element observe the
+-- change consistently regardless of render order (see 'getFocusChange').
+transferFocusTo :: Maybe e -> e -> e -> UI e msg ()
+transferFocusTo scopeId from to = emitUi (TransferFocusTo scopeId from to)
+
+-- | Queues a 'ClearFocusFrom' effect: removes focus from the given element
+-- within the given scope, with nothing new claiming it, taking effect at
+-- the next frame boundary — the "clear" counterpart to 'transferFocusTo'.
+clearFocusFrom :: Maybe e -> e -> UI e msg ()
+clearFocusFrom scopeId from = emitUi (ClearFocusFrom scopeId from)
 
 -- | Marks a sub-tree as belonging to a composite focus scope (a list, a
 -- tree — anything with sub-items), addressed by its own globally-unique id.
@@ -1042,10 +1117,20 @@ scopeMode scopeId blockFreshClaim currentAmbient = case currentAmbient of
 -- that stops being reaffirmed (its composite removed from the tree, or its
 -- specific focused child gone while the composite itself still renders)
 -- expires independently, the same way root-level focus already did.
+--
+-- Also advances 'focusLastChange' independently of that reset: a change
+-- just recorded this frame ('focusChangeFresh') stays visible for exactly
+-- one more frame so every element gets a chance to observe it regardless of
+-- render order, then is cleared the frame after.
 nextFocusFrame :: FocusState e -> FocusState e
-nextFocusFrame fs
-  | focusedThisFrame fs = fs { focusedThisFrame = False }
-  | otherwise            = emptyFocusState
+nextFocusFrame fs = advanced
+  { focusLastChange  = if focusChangeFresh fs then focusLastChange fs else Nothing
+  , focusChangeFresh = False
+  }
+  where
+    advanced
+      | focusedThisFrame fs = fs { focusedThisFrame = False }
+      | otherwise           = emptyFocusState
 
 -- | Runs a sub-tree within a different bounding rectangle. The previous bounds
 -- are restored when the sub-tree completes. Used by the layout system to
@@ -1182,12 +1267,32 @@ contextRequiresAnimation = outRequiresAnimation . ctxOutputs
 applyUiEffects :: Ord e => [UiEffect e] -> UIContext e msg -> UIContext e msg
 applyUiEffects effects ctx0 = foldl' step ctx0 effects
   where
-    step ctx (ScrollTo eid v)         = writeScrollState eid v ctx
-    step ctx (ScrollBy eid dv)        = writeScrollState eid (currentScroll eid ctx + dv) ctx
-    step ctx (SetSelectionAt eid sel) = writeSelection eid sel ctx
+    step ctx (ScrollTo eid v)              = writeScrollState eid v ctx
+    step ctx (ScrollBy eid dv)              = writeScrollState eid (currentScroll eid ctx + dv) ctx
+    step ctx (SetSelectionAt eid sel)       = writeSelection eid sel ctx
+    step ctx (TransferFocusTo sid from to)  = setFocusChange sid (TransferredFocus from to) (Just to) ctx
+    step ctx (ClearFocusFrom sid from)      = setFocusChange sid (ClearedFocus from) Nothing ctx
 
     currentScroll eid ctx =
       scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
+
+-- | Applies a 'TransferFocusTo'\/'ClearFocusFrom' effect to whichever scope
+-- it targets — root's 'ftAmbient' (@Nothing@) or a specific composite's
+-- entry in @ftScopes@ (@Just scopeId@) — setting the new focus holder (if
+-- any) and recording the 'FocusChange' for one frame's observation. Used
+-- only by 'applyUiEffects'.
+setFocusChange :: Ord e => Maybe e -> FocusChange e -> Maybe e -> UIContext e msg -> UIContext e msg
+setFocusChange scopeId change newFocus ctx = ctx { ctxFocus = updateScope (ctxFocus ctx) }
+  where
+    updateScope ft = case scopeId of
+      Nothing  -> ft { ftAmbient = setIt (ftAmbient ft) }
+      Just sid -> ft { ftScopes = Map.insert sid (setIt (Map.findWithDefault emptyFocusState sid (ftScopes ft))) (ftScopes ft) }
+    setIt fs = fs
+      { focusedElement   = newFocus
+      , focusedThisFrame = True
+      , focusLastChange  = Just change
+      , focusChangeFresh = True
+      }
 
 -- | 'True' when the mouse cursor is within the current bounds and within the
 -- active interaction clip region (set by 'clipToCurrent'). This is the

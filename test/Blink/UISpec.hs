@@ -18,6 +18,13 @@ data TwoElems = ElemA | ElemB deriving (Eq, Ord, Show)
 twoElemTheme :: Theme TwoElems
 twoElemTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = emptyStyleSet }
 
+-- | A scope id (@Group@) plus two elements nested inside it, for testing
+-- that a scoped focus change only affects that scope's own 'FocusState'.
+data ScopeElems = Group | ItemA | ItemB deriving (Eq, Ord, Show)
+
+scopeTheme :: Theme ScopeElems
+scopeTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = emptyStyleSet }
+
 noInput :: InputState
 noInput = InputState
   { inputMousePosition  = Point 0 0
@@ -427,6 +434,43 @@ spec = describe "Blink.UI" $ do
       let ctx3 = advance noInput ctx2
       (f, _) <- runUI getFocus ctx3
       f `shouldBe` Nothing
+
+  describe "focus change (TransferFocusTo / ClearFocusFrom)" $ do
+    it "a transfer sets the new focus and records who won and lost" $ do
+      (_, ctx0) <- runTwoElem (setFocus ElemA)
+      let ctx1 = applyUiEffects [TransferFocusTo Nothing ElemA ElemB] ctx0
+      (focus, _)  <- runUI getFocus ctx1
+      (change, _) <- runUI getFocusChange ctx1
+      focus  `shouldBe` Just ElemB
+      change `shouldBe` Just (TransferredFocus ElemA ElemB)
+
+    it "a clear removes focus and records who lost it, with no winner" $ do
+      (_, ctx0) <- runTwoElem (setFocus ElemA)
+      let ctx1 = applyUiEffects [ClearFocusFrom Nothing ElemA] ctx0
+      (focus, _)  <- runUI getFocus ctx1
+      (change, _) <- runUI getFocusChange ctx1
+      focus  `shouldBe` Nothing
+      change `shouldBe` Just (ClearedFocus ElemA)
+
+    it "the recorded change stays visible for exactly one more frame, then is cleared" $ do
+      (_, ctx0) <- runTwoElem (setFocus ElemA)
+      let ctx1 = applyUiEffects [TransferFocusTo Nothing ElemA ElemB] ctx0
+          ctx2 = advance noInput ctx1
+          ctx3 = advance noInput ctx2
+      (changeAtApply, _) <- runUI getFocusChange ctx1
+      (changeNextFrame, _) <- runUI getFocusChange ctx2
+      (changeFrameAfter, _) <- runUI getFocusChange ctx3
+      changeAtApply    `shouldBe` Just (TransferredFocus ElemA ElemB)
+      changeNextFrame  `shouldBe` Just (TransferredFocus ElemA ElemB)
+      changeFrameAfter `shouldBe` Nothing
+
+    it "a scoped transfer updates only that scope's FocusState, not root's" $ do
+      let ctx0 = emptyUIContext testBounds noInput scopeTheme noOpTextMeasurer :: UIContext ScopeElems ()
+          ctx1 = applyUiEffects [TransferFocusTo (Just Group) ItemA ItemB] ctx0
+      (insideChange, _) <- runUI (withFocusScope Group False getFocusChange) ctx1
+      (rootChange, _)   <- runUI getFocusChange ctx1
+      insideChange `shouldBe` Just (TransferredFocus ItemA ItemB)
+      rootChange   `shouldBe` Nothing
 
   describe "drawing" $ do
     it "fillRect emits a FillRect command for the current bounds" $ do
