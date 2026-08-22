@@ -72,6 +72,7 @@ test-suite blink-tests
     main-is: Main.hs
     other-modules:
         Blink.AppSpec
+        Blink.ButtonBehaviour
         Blink.ButtonSpec
         Blink.CheckboxSpec
         Blink.ControlBehaviour

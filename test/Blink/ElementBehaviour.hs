@@ -19,7 +19,7 @@ import Blink.Element
   , onFocusGained, onFocusLost
   )
 import Blink.Geometry (Point, Rectangle)
-import Blink.Input (Key (KeyReturn))
+import Blink.Input (Key (KeySpace))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.UI
 
@@ -81,16 +81,16 @@ elementBehaviourSpec bounds ctx eid inside outside render = do
   describe "keyboard" $ do
     it "raises a key event while it holds focus" $ do
       focused <- runInteractions bounds ctx (setFocus eid) [] []
-      result  <- runInteractions bounds (resultContext focused) (render tagged) [] [PressKey KeyReturn []]
+      result  <- runInteractions bounds (resultContext focused) (render tagged) [] [PressKey KeySpace []]
       resultMessages result `shouldBe` ["KeyPressed"]
 
     it "raises nothing while it doesn't hold focus" $ do
-      result <- runInteractions bounds ctx (render tagged) [] [PressKey KeyReturn []]
+      result <- runInteractions bounds ctx (render tagged) [] [PressKey KeySpace []]
       resultMessages result `shouldBe` []
 
     it "raises nothing while disabled, even while focused" $ do
       focused <- runInteractions bounds ctx (setFocus eid) [] []
-      result  <- runInteractions bounds (resultContext focused) (disableWhen True (render tagged)) [] [PressKey KeyReturn []]
+      result  <- runInteractions bounds (resultContext focused) (disableWhen True (render tagged)) [] [PressKey KeySpace []]
       resultMessages result `shouldBe` []
 
   -- Priming a focus change and observing it happen within the same

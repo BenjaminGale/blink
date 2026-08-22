@@ -4,11 +4,13 @@ module Blink.ButtonSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Attributes (Attr, FocusOnClick (..), focusOnClick, text)
+import Blink.Attributes (Attr, FocusOnClick (..), focusOnClick, isTabStop, text)
 import Blink.Button (ButtonConfig, ToggleButtonConfig, ToggleEvent, button, isSelected, onSelectedChanged, toggleButton)
-import Blink.Element (ElementEvent, onClicked)
+import Blink.ButtonBehaviour (buttonBehaviourSpec)
+import Blink.Element (ElementEvent, onFocusGained)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
+import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -70,51 +72,25 @@ onButton = Point 50 50
 
 type Attr' = Attr TestElement ElementEvent String (ButtonConfig TestElement)
 
-start :: [Attr'] -> IO (UIContext TestElement String)
-start attrs = snd <$> runUI (button Ok attrs) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
+seedCtx :: UIContext TestElement String
+seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
-step :: [Attr'] -> InputState -> UIContext TestElement String -> IO (UIContext TestElement String)
-step attrs input ctx = snd <$> runUI (button Ok attrs) (nextFrameContext testBounds input testTheme (contextAnimation ctx) ctx)
+start :: [Attr'] -> IO (UIContext TestElement String)
+start attrs = snd <$> runUI (button Ok attrs) seedCtx
 
 spec :: Spec
 spec = describe "Blink.Button" $ do
+  buttonBehaviourSpec testBounds seedCtx Ok (Point 5 5) onButton (Point 200 200) (button Ok)
+
   it "draws its text in the resolved style" $ do
     ctx <- start [text "OK"]
     getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "OK" testColour AlignCenter]
 
-  it "claims focus automatically, like any ordinary control" $ do
-    ctx <- start []
-    contextFocus ctx `shouldBe` Just Ok
-
-  it "fires onClick when clicked" $ do
-    let attrs = [onClicked (const [OutMsg ("clicked" :: String)])]
-    ctx0 <- start attrs
-    ctx1 <- step attrs (down onButton) ctx0
-    ctx2 <- step attrs (releasedAt onButton) ctx1
-    getMessages ctx2 `shouldBe` ["clicked"]
-
-  it "fires onClick when Enter is pressed while focused" $ do
-    let attrs = [onClicked (const [OutMsg ("clicked" :: String)])]
-    ctx0 <- start attrs
-    contextFocus ctx0 `shouldBe` Just Ok
-    ctx1 <- step attrs (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0
-    getMessages ctx1 `shouldBe` ["clicked"]
-
-  it "does not activate via Enter once disabled, even while still holding focus from before" $ do
-    let attrs = [onClicked (const [OutMsg ("clicked" :: String)])]
-    ctx0 <- start attrs
-    contextFocus ctx0 `shouldBe` Just Ok
-    ctx1 <- snd <$> runUI (disableWhen True (button Ok attrs))
-                          (nextFrameContext testBounds (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) testTheme (contextAnimation ctx0) ctx0)
-    getMessages ctx1 `shouldBe` []
-
   it "always takes focus on itself when clicked, even if focusOnClick is set directly via Blink.Attributes" $ do
-    let attrs = [focusOnClick (FocusTarget Other)]
-    ctx0 <- start attrs
-    ctx1 <- step attrs (down onButton) ctx0
-    ctx2 <- step attrs (releasedAt onButton) ctx1
-    ctx3 <- step attrs noInput ctx2
-    contextFocus ctx3 `shouldBe` Just Ok
+    let attrs :: [Attr']
+        attrs = [isTabStop False, focusOnClick (FocusTarget Other), onFocusGained (const [OutMsg ("gained" :: String)])]
+    result <- runInteractions testBounds seedCtx (button Ok attrs) [] [ClickAt onButton, Wait 1]
+    resultMessages result `shouldBe` ["gained"]
 
   describe "toggleButton" $ do
     it "draws in its normal style while not selected" $ do
