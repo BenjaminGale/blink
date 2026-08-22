@@ -317,7 +317,7 @@ import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..)
 import Blink.Geometry (Point, Rectangle, Size, BorderEdges, containsPoint, intersectRect)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Mouse
-  ( MouseCapture (..), ButtonState (..), captureOf, nextButtonState
+  ( MouseCapture (..), ButtonState (..), captureOf
   , HoverState (..), wasHit, nextHoverState
   , Mouse (..), emptyMouse, advanceHover, advanceButton
   )
@@ -618,7 +618,7 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxFocus           = emptyFocusTracker
   , ctxNavigationKeys  = defaultNavigationKeys
   , ctxCurrentScope    = Nothing
-  , ctxMouse           = emptyMouse { mouseButton = nextButtonState False (inputLeftButtonDown input) MouseNotCaptured }
+  , ctxMouse           = advanceButton False (inputLeftButtonDown input) emptyMouse
   , ctxElements        = ElementState
       { elmScrollStates  = Map.empty
       , elmSelections    = Map.empty
