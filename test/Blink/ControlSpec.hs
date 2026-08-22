@@ -9,7 +9,7 @@ import Blink.Attributes
   ( Attr, HasControlConfig (..), ControlConfig (..), FocusOnClick (..), defaultControlConfig
   )
 import Blink.Control (control)
-import Blink.Element (ElementEvent, onClicked, onFocusGained, onFocusLost, onMouseEntered)
+import Blink.Element (ElementEvent, onClicked, onFocusGained, onFocusLost, onKeyPressed, onMouseEntered)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform, insetRect)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -179,6 +179,20 @@ spec = describe "Blink.Control" $ do
       contextFocus ctx1 `shouldBe` Just ElemA -- not yet -- deferred
       ctx2 <- runBoth defaultTestConfig [] defaultTestConfig [] (advance noInput ctx1)
       contextFocus ctx2 `shouldBe` Just ElemB
+
+    it "does not report Tab as a key event to the control it moves focus away from" $ do
+      let attrs = [onKeyPressed (\k -> [OutMsg (show k)])]
+      ctx0 <- startBoth defaultTestConfig attrs defaultTestConfig []
+      ctx1 <- runBoth defaultTestConfig attrs defaultTestConfig []
+                     (advance (noInput { inputKeyEvents = [KeyEvent KeyTab []] }) ctx0)
+      getMessages ctx1 `shouldBe` []
+
+    it "does not report Shift-Tab as a key event to the control it moves focus away from" $ do
+      let attrs = [onKeyPressed (\k -> [OutMsg (show k)])]
+      ctx0 <- startBoth defaultTestConfig attrs defaultTestConfig []
+      ctx1 <- runBoth defaultTestConfig attrs defaultTestConfig []
+                     (advance (noInput { inputKeyEvents = [KeyEvent KeyTab [Shift]] }) ctx0)
+      getMessages ctx1 `shouldBe` []
 
   describe "chrome" $
     it "draws background via styledElement, inset by margin" $ do
