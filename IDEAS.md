@@ -19,6 +19,20 @@ Description — what it is, why it'd help, or what it'd take.
 
 ## Controls
 
+### Clamped (non-wrapping) arrow-key navigation for a future list widget
+Depends on: Scope-aware container support (implemented; see `ccTabNavigation`/`ccArrowNavigation` on `Blink.Attributes.ControlConfig`)
+
+`control`'s `Contained` arrow-key navigation always wraps (same mechanism
+as Tab), since it works purely off render order with no notion of "am I
+the first/last item" — deliberately, to avoid tracking extra state the
+core mechanism doesn't otherwise need. The old `Blink.Controls.radioGroup`
+convention was to clamp instead ("Down clamps at the last item instead of
+wrapping"). A future data-driven list\/selection widget built on top of
+`Contained` would have its own real item index to check against, so
+clamp-vs-wrap belongs there as a property of that widget's own selection
+logic, not as something the generic container mechanism needs to grow
+position-awareness to support.
+
 ### Label mnemonics
 A label could name a mnemonic key (e.g. Alt+F) that redirects focus to its
 `target` the same way clicking it already does, without requiring the label
