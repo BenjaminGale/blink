@@ -6,7 +6,7 @@ import Test.Hspec
 import Blink.Attributes (Attr, onEvent)
 import Blink.Element
   ( ElementEvent (..), element
-  , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onKeyPressed
+  , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed
   , onFocusGained, onFocusLost
   )
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
@@ -114,7 +114,7 @@ spec = describe "Blink.Element" $ do
                             (emptyUIContext testBounds (hoverAt onA) testTheme noOpTextMeasurer)
       getMessages ctx `shouldBe` []
 
-  describe "mouse button" $
+  describe "mouse button" $ do
     it "reports MouseDown for the element the press started on, and MouseUp for whichever element the release happens over" $ do
       -- Mouse goes down over ElemA, is dragged (still held) onto ElemB, and
       -- released there. ElemA should only ever see MouseDown (it's not hit
@@ -129,6 +129,14 @@ spec = describe "Blink.Element" $ do
       getMessages ctx1 `shouldBe` [(ElemA, MouseEntered), (ElemA, MouseDown)]
       getMessages ctx2 `shouldBe` [(ElemA, MouseExited), (ElemB, MouseEntered)]
       getMessages ctx3 `shouldBe` [(ElemB, MouseUp)]
+      -- ElemB's messages here are exactly [MouseUp], with no Clicked --
+      -- confirming a drag begun on ElemA and released over ElemB doesn't
+      -- count as a click for ElemB.
+
+    it "fires Clicked alongside MouseUp when the press and release complete on the same element" $ do
+      ctx1 <- startBoth (down onA)
+      ctx2 <- runBoth (releasedAt onA) ctx1
+      getMessages ctx2 `shouldBe` [(ElemA, MouseUp), (ElemA, Clicked)]
 
   describe "keyboard" $ do
     it "fires one KeyPressed per key event while the element holds focus" $ do
@@ -185,6 +193,12 @@ spec = describe "Blink.Element" $ do
       ctx2 <- snd <$> runUI (element ElemA attrs) (advance (releasedAt onA) ctx1)
       getMessages ctx1 `shouldBe` ["down"]
       getMessages ctx2 `shouldBe` ["up"]
+
+    it "onClicked reacts only when the press and release complete on the same element" $ do
+      let attrs = [onClicked (const [OutMsg ("clicked" :: String)])]
+      ctx1 <- snd <$> runUI (element ElemA attrs) (emptyUIContext testBounds (down onA) testTheme noOpTextMeasurer)
+      ctx2 <- snd <$> runUI (element ElemA attrs) (advance (releasedAt onA) ctx1)
+      getMessages ctx2 `shouldBe` ["clicked"]
 
     it "onKeyPressed reacts with the triggering KeyEvent" $ do
       let attrs = [onKeyPressed (\k -> [OutMsg k])]
