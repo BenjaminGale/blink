@@ -15,9 +15,6 @@
 -- Scope is always root for now.
 module Blink.Control
   ( control
-  , getStyle
-  , isMouseOver
-  , isPressed
   , styledElement
   ) where
 
