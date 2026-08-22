@@ -8,7 +8,7 @@ import Blink.Attributes (Attr, FocusOnClick (..), focusOnClick, text)
 import Blink.Element (ElementEvent)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..))
-import Blink.Label (LabelConfig, label)
+import Blink.Label (LabelConfig, label, target)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -87,3 +87,12 @@ spec = describe "Blink.Label" $ do
     ctx2 <- snd <$> runUI (label Caption attrs) (nextFrameContext testBounds (releasedAt onCaption) testTheme (contextAnimation ctx1) ctx1)
     ctx3 <- snd <$> runUI (label Caption attrs) (nextFrameContext testBounds noInput testTheme (contextAnimation ctx2) ctx2)
     contextFocus ctx3 `shouldBe` Nothing
+
+  it "redirects a click's focus onto the element named by target" $ do
+    let attrs = [target Target]
+    ctx0 <- start attrs
+    ctx1 <- snd <$> runUI (label Caption attrs) (nextFrameContext testBounds (down onCaption) testTheme (contextAnimation ctx0) ctx0)
+    ctx2 <- snd <$> runUI (label Caption attrs) (nextFrameContext testBounds (releasedAt onCaption) testTheme (contextAnimation ctx1) ctx1)
+    contextFocus ctx2 `shouldBe` Nothing -- not yet -- deferred
+    ctx3 <- snd <$> runUI (label Caption attrs) (nextFrameContext testBounds noInput testTheme (contextAnimation ctx2) ctx2)
+    contextFocus ctx3 `shouldBe` Just Target
