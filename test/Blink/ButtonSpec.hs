@@ -4,7 +4,8 @@ module Blink.ButtonSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Attributes (Attr, FocusOnClick (..), focusOnClick, isTabStop, text)
+import Blink.Attributes
+  (Attr, ControlConfig (..), FocusOnClick (..), HasControlConfig (..), configAny, isTabStop, text)
 import Blink.Button (ButtonConfig, ToggleButtonConfig, ToggleEvent, button, isSelected, toggleButton)
 import Blink.ButtonBehaviour (buttonBehaviourSpec)
 import Blink.ToggleBehaviour (toggleBehaviourSpec)
@@ -88,9 +89,13 @@ spec = describe "Blink.Button" $ do
     ctx <- start [text "OK"]
     getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "OK" testColour AlignCenter]
 
-  it "always takes focus on itself when clicked, even if focusOnClick is set directly via Blink.Attributes" $ do
+  it "always takes focus on itself when clicked, even if ccFocusOnClick is forced directly on its own config" $ do
     let attrs :: [Attr']
-        attrs = [isTabStop False, focusOnClick (FocusTarget Other), onFocusGained (const [OutMsg ("gained" :: String)])]
+        attrs =
+          [ isTabStop False
+          , configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccFocusOnClick = FocusTarget Other }) cfg
+          , onFocusGained (const [OutMsg ("gained" :: String)])
+          ]
     result <- runInteractions testBounds seedCtx (button Ok attrs) [] [ClickAt onButton, Wait 1]
     resultMessages result `shouldBe` ["gained"]
 

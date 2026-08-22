@@ -4,18 +4,43 @@
 -- draws styled chrome around the control's content.
 --
 -- Focus is claimed automatically when nothing else holds it (subject to
--- 'ccIsTabStop'), reaffirmed each frame while held, and given up on Tab. A
--- click (per 'FocusOnClick') or Shift-Tab can also hand focus to a
--- /different/ specific element; that takes effect the frame after it
--- happens rather than immediately, so whichever element is gaining or
--- losing focus reports it consistently regardless of render order -- see
+-- 'isTabStop'), reaffirmed each frame while held, and given up on Tab. A
+-- click or Shift-Tab can also hand focus to a /different/ specific
+-- element, per @ccFocusOnClick@ on the @cfg@ passed in -- set directly on
+-- that config by whatever builds it (there is deliberately no public attr
+-- for this: every ready-made widget fixes its own click-to-focus
+-- behaviour rather than leaving it caller-configurable). That takes
+-- effect the frame after it happens rather than immediately, so whichever
+-- element is gaining or losing focus reports it consistently regardless
+-- of render order -- see
 -- 'Blink.Element.FocusGained'\/'Blink.Element.FocusLost'. A disabled
--- control neither claims focus nor reacts to clicks or Tab.
+-- control (per 'enabled') neither claims focus nor reacts to clicks or Tab.
 --
--- Scope is always root for now.
+-- = Building a container
+--
+-- 'control' is also the direct way to build a control that manages a
+-- group of other controls as children, via 'tabNavigation' and
+-- 'arrowNavigation' -- there is no separate "container" primitive; a
+-- container is just a plain 'control' configured this way:
+--
+-- ['Flatten' (the default)] Not a navigation container: this control's own
+--     slot (if it's a tab stop) and its children all fold into the same
+--     Tab sequence as its siblings.
+-- ['Contained'] Opens a focus scope for this control's children:
+--     Tab\/Shift-Tab (and, with 'arrowNavigation', the arrow keys too)
+--     cycle within it forever. Ctrl+Tab\/Ctrl+Shift+Tab are always the way
+--     out, moving this control's own slot to the next\/previous one at
+--     the enclosing level, regardless of nesting depth.
+--
+-- Scope is otherwise always root -- only a 'Contained' control opens one.
 module Blink.Control
   ( control
   , getStyle
+  , isTabStop
+  , enabled
+  , tabNavigation
+  , arrowNavigation
+  , NavigationMode (..)
   ) where
 
 import Control.Monad (forM_, guard, unless, when)
@@ -27,7 +52,7 @@ import Data.Maybe (fromMaybe)
 import Blink.Attributes
   ( Attr, fire
   , HasControlConfig (..), ControlConfig (..), FocusOnClick (..), NavigationMode (..)
-  , autoClaimsFocus
+  , autoClaimsFocus, isTabStop, enabled, tabNavigation, arrowNavigation
   )
 import Blink.Element (ElementEvent (..), HasElementEvent (..), element, onClicked)
 import Blink.Geometry (Rectangle, insetRect, borderInsets)

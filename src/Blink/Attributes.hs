@@ -28,7 +28,6 @@ module Blink.Attributes
   , autoClaimsFocus
   , HasControlConfig (..)
   , isTabStop
-  , focusOnClick
   , enabled
   , tabNavigation
   , arrowNavigation
@@ -41,8 +40,10 @@ import Data.Text (Text)
 
 import Blink.UI
 
--- | What clicking a control does to focus, set with 'isTabStop' \/
--- 'focusOnClick'.
+-- | What clicking a control does to focus -- set directly on
+-- @ccFocusOnClick@ by whatever builds the control's own config, not a
+-- public attr (every ready-made widget fixes its own click-to-focus
+-- behaviour rather than leaving it caller-configurable).
 data FocusOnClick e
   = FocusSelf
     -- ^ The control takes focus itself (the default for interactive controls).
@@ -90,8 +91,8 @@ data ControlConfig e = ControlConfig
 -- | The default 'ControlConfig': an enabled tab stop that takes focus on
 -- click, not a navigation container ('Flatten') -- what a plain
 -- interactive control wants unless it overrides one or more via
--- 'isTabStop' \/ 'focusOnClick' \/ 'enabled' \/ 'tabNavigation' \/
--- 'arrowNavigation'.
+-- 'isTabStop' \/ 'enabled' \/ 'tabNavigation' \/ 'arrowNavigation' (or,
+-- for @ccFocusOnClick@, directly on its own config).
 defaultControlConfig :: ControlConfig e
 defaultControlConfig = ControlConfig
   { ccIsTabStop       = True
@@ -108,7 +109,7 @@ autoClaimsFocus :: Eq e => ControlConfig e -> Bool
 autoClaimsFocus cc = ccIsTabStop cc && ccFocusOnClick cc == FocusSelf
 
 -- | Implemented by any control's own @cfg@ type to say how it carries a
--- 'ControlConfig' -- lets 'isTabStop' \/ 'focusOnClick' work uniformly across
+-- 'ControlConfig' -- lets 'isTabStop' and friends work uniformly across
 -- every control's differently-shaped @cfg@, the same pattern
 -- 'Blink.Controls.HasTextConfig' already uses for 'Blink.Controls.text'.
 class HasControlConfig e cfg | cfg -> e where
@@ -118,8 +119,8 @@ class HasControlConfig e cfg | cfg -> e where
 -- | One entry in a control's attrs list — either a reaction to an event
 -- ('onEvent' and the combinators built on it) or a change to the control's
 -- own @cfg@ ('configAny' and the smart constructors built on it, including
--- 'isTabStop' \/ 'focusOnClick'). Opaque: built and consumed only through the
--- functions this module exports.
+-- 'isTabStop'). Opaque: built and consumed only through the functions this
+-- module exports.
 data Attr e ev msg cfg
   = On (ev -> [Out e msg])
   | Config (cfg -> cfg)
@@ -166,10 +167,6 @@ configAny = Config
 isTabStop :: HasControlConfig e cfg => Bool -> Attr e ev msg cfg
 isTabStop b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccIsTabStop = b }) cfg
 
--- | What clicking this control does to focus — see 'FocusOnClick'.
-focusOnClick :: HasControlConfig e cfg => FocusOnClick e -> Attr e ev msg cfg
-focusOnClick foc = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccFocusOnClick = foc }) cfg
-
 -- | Whether the control responds to input at all. A disabled control still
 -- renders (in its disabled style) but ignores hover, clicks, key presses,
 -- and focus, and is skipped by Tab\/Shift-Tab. Defaults to 'True'.
@@ -190,7 +187,7 @@ arrowNavigation b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { 
 
 -- | Implemented by any control's own @cfg@ type to say how it carries
 -- displayed text, letting 'text' work uniformly across them (same pattern
--- 'HasControlConfig' already uses for 'isTabStop' \/ 'focusOnClick').
+-- 'HasControlConfig' already uses for 'isTabStop').
 class HasTextConfig cfg where
   setText :: Text -> cfg -> cfg
 
