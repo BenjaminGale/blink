@@ -219,6 +219,34 @@ own `UI` action.
 
 ## Architecture
 
+### Split `Blink.UI` into topic modules; move control-building code under `Blink.Controls.*`
+`Blink.UI` bundles several disjoint concerns that only live together because
+they all need `UIContext`'s internals — the monad itself, mouse/button
+accessors, focus/scope handling, scroll/selection, drawing primitives,
+animation, text measurement. The size of the file is a symptom of that, not
+just a big-file smell.
+
+The idea: an internal `Blink.UI.Context` (or similar) holding `UI`/
+`UIContext`/the raw `gets`/`modify`, with topic modules (`Blink.UI.Mouse`,
+`Blink.UI.Focus`, `Blink.UI.Scroll`, `Blink.UI.Drawing`, `Blink.UI.Animation`,
+...) importing it for context access, and `Blink.UI` itself becoming a thin
+re-exporting shell — the same shape the top-level `Blink` module guide
+already has.
+
+Separately, move the control-building layer under a `Blink.Controls.*`
+namespace: today's `Blink.Element` → `Blink.Controls.Element`,
+`Blink.Attributes` → `Blink.Controls.Attributes`, `Blink.Control` →
+`Blink.Controls.Control`. Once that shared core is cleanly factored out,
+splitting the ready-made widgets one-per-module (`Blink.Controls.Button`,
+`.Checkbox`, ...) becomes more justified than it would be today, since each
+would be thin and self-contained rather than fighting over shared machinery.
+
+Treat as its own dedicated, mostly-mechanical pass (bounded but real risk —
+re-checking import cycles across the split) rather than interleaving with
+feature work. New foundation modules are being kept flat for now (e.g.
+`Blink.Control`, singular, not `Blink.Controls.Control`) to avoid a rename
+thrash before this happens.
+
 ### `scrollIntoView`
 No such function currently exists. The idea is a helper that, given a
 scrollable container and where a target region sits within its content,
