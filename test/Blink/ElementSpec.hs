@@ -151,8 +151,8 @@ spec = describe "Blink.Element" $ do
       getMessages ctx `shouldBe` []
 
   describe "focus" $ do
-    it "reports FocusLost for the loser and FocusGained for the winner, one frame after a transfer" $ do
-      ctx0 <- snd <$> runUI (setFocus ElemA >> transferFocusTo Nothing ElemA ElemB)
+    it "reports FocusLost for the loser and FocusGained for the winner, one frame after a focus request" $ do
+      ctx0 <- snd <$> runUI (setFocus ElemA >> requestFocus Nothing ElemB)
                             (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
       ctx1 <- runBoth noInput ctx0
       ctx2 <- runBoth noInput ctx1
@@ -160,7 +160,7 @@ spec = describe "Blink.Element" $ do
       getMessages ctx2 `shouldBe` []
 
     it "reports FocusLost for the cleared element, with nothing gaining it" $ do
-      ctx0 <- snd <$> runUI (setFocus ElemA >> clearFocusFrom Nothing ElemA)
+      ctx0 <- snd <$> runUI (setFocus ElemA >> requestClearFocus Nothing)
                             (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
       ctx1 <- runBoth noInput ctx0
       getMessages ctx1 `shouldBe` [(ElemA, FocusLost)]
@@ -196,7 +196,7 @@ spec = describe "Blink.Element" $ do
       let attrsA = [onFocusLost   (const [OutMsg ("A lost"   :: String)])]
           attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
           render = withBounds rectA (element ElemA attrsA) >> withBounds rectB (element ElemB attrsB)
-      ctx0 <- snd <$> runUI (setFocus ElemA >> transferFocusTo Nothing ElemA ElemB)
+      ctx0 <- snd <$> runUI (setFocus ElemA >> requestFocus Nothing ElemB)
                             (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
       ctx  <- snd <$> runUI render (advance noInput ctx0)
       getMessages ctx `shouldBe` ["A lost", "B gained"]

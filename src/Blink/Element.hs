@@ -44,22 +44,22 @@ data ElementEvent
   | KeyPressed KeyEvent
     -- ^ A key event this frame, while the element holds focus.
   | FocusGained
-    -- ^ This element was just named the winner of a
-    -- 'Blink.UI.TransferFocusTo'. 'element' only observes this -- it never
-    -- claims focus itself; auto-claim\/self-clear are a different, simpler
-    -- case handled entirely by whichever code performs them directly (see
+    -- ^ This element was just named the winner of a 'Blink.UI.Focus'
+    -- request. 'element' only observes this -- it never claims focus
+    -- itself; auto-claim\/self-clear are a different, simpler case handled
+    -- entirely by whichever code performs them directly (see
     -- 'Blink.UI.getFocusChange').
   | FocusLost
-    -- ^ This element was just named the loser of a
-    -- 'Blink.UI.TransferFocusTo', or the target of a
-    -- 'Blink.UI.ClearFocusFrom'.
+    -- ^ This element was just displaced by a 'Blink.UI.Focus' request, or
+    -- cleared by a 'Blink.UI.ClearFocus' request.
   deriving (Eq, Show)
 
 -- | Observes and reports this frame's raw interaction events for the given
 -- element (see 'ElementEvent'), firing each against the attrs list via
--- 'fire'. The lower-level primitive 'Blink.Controls.control' will eventually
--- be rebuilt on top of; for now it's independent and does not affect
--- 'Blink.Controls' at all.
+-- 'fire'. A higher-level combinator (e.g. 'Blink.Control.control') that
+-- needs to make its own decisions (e.g. "was this element just clicked")
+-- queries the same underlying "Blink.UI" primitives directly, independent
+-- of this call, rather than consuming anything back from it.
 element :: Ord e => e -> [Attr e ElementEvent msg cfg] -> UI e msg ()
 element eid attrs = do
   hoverEvs  <- hoverStep eid
@@ -129,11 +129,9 @@ focusStep :: Eq e => e -> UI e msg [ElementEvent]
 focusStep eid = do
   change <- getFocusChange
   pure $ case change of
-    Just (TransferredFocus from to)
-      | to   == eid -> [FocusGained]
-      | from == eid -> [FocusLost]
-    Just (ClearedFocus from)
-      | from == eid -> [FocusLost]
+    Just fc
+      | focusChangeTo   fc == Just eid -> [FocusGained]
+      | focusChangeFrom fc == Just eid -> [FocusLost]
     _ -> []
 
 -- | Reacts when the mouse starts being over the element. See 'MouseEntered'.
