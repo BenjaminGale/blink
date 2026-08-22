@@ -439,18 +439,18 @@ spec = describe "Blink.UI" $ do
     it "a focus request sets the new focus and records who won and lost, without being told who lost" $ do
       (_, ctx0) <- runTwoElem (setFocus ElemA)
       let ctx1 = applyUiEffects [Focus Nothing ElemB] ctx0
-      (focus, _)  <- runUI getFocus ctx1
-      (change, _) <- runUI getFocusChange ctx1
-      focus  `shouldBe` Just ElemB
-      change `shouldBe` Just (FocusChange (Just ElemA) (Just ElemB))
+      (newFocus, _) <- runUI getFocus ctx1
+      (change, _)   <- runUI getFocusChange ctx1
+      newFocus `shouldBe` Just ElemB
+      change   `shouldBe` Just (FocusChange (Just ElemA) (Just ElemB))
 
     it "a clear removes focus and records who lost it, with no winner" $ do
       (_, ctx0) <- runTwoElem (setFocus ElemA)
       let ctx1 = applyUiEffects [ClearFocus Nothing] ctx0
-      (focus, _)  <- runUI getFocus ctx1
-      (change, _) <- runUI getFocusChange ctx1
-      focus  `shouldBe` Nothing
-      change `shouldBe` Just (FocusChange (Just ElemA) Nothing)
+      (newFocus, _) <- runUI getFocus ctx1
+      (change, _)   <- runUI getFocusChange ctx1
+      newFocus `shouldBe` Nothing
+      change   `shouldBe` Just (FocusChange (Just ElemA) Nothing)
 
     it "a focus request with nothing previously focused records no loser" $ do
       ctx0 <- snd <$> runTwoElem (pure ())

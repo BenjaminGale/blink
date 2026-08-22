@@ -281,8 +281,6 @@ module Blink.UI
   , defaultNavigationKeys
   , getNavigationKeys
   , withNavigationKeys
-  , isFocusSuppressed
-  , withFocusSuppressed
     -- * Styles
   , getStyleSet
   , contextTheme
@@ -543,10 +541,6 @@ data UIContext e msg = UIContext
     -- 'charOffset' and 'charAtOffset' rather than accessing this directly.
   , ctxFocus           :: FocusTracker e
     -- ^ Keyboard-focus targeting state. See 'FocusTracker'.
-  , ctxFocusSuppressed :: Bool
-    -- ^ Like @ctxDisabled@ but focus-only: hover\/click still work, but a
-    -- control can neither auto-claim nor be reached by @ctxNavigationKeys@.
-    -- Set via 'withFocusSuppressed'.
   , ctxNavigationKeys  :: NavigationKeys
     -- ^ Which keys currently mean "advance"\/"retreat" focus. See
     -- 'NavigationKeys'; set via 'withNavigationKeys'.
@@ -609,7 +603,6 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxAnimation       = mkAnimationState 0 0 False
   , ctxTextMeasure     = measurer
   , ctxFocus           = emptyFocusTracker
-  , ctxFocusSuppressed = False
   , ctxNavigationKeys  = defaultNavigationKeys
   , ctxMouse           = emptyMouse { mouseButton = nextButtonState False (inputLeftButtonDown input) MouseNotCaptured }
   , ctxElements        = ElementState
@@ -848,22 +841,6 @@ withNavigationKeys :: NavigationKeys -> UI e msg a -> UI e msg a
 withNavigationKeys keys (UI f) = UI $ \ctx -> do
   (a, ctx') <- f (ctx { ctxNavigationKeys = keys })
   pure (a, ctx' { ctxNavigationKeys = ctxNavigationKeys ctx })
-
--- | 'True' when the current sub-tree has been marked focus-suppressed.
-isFocusSuppressed :: UI e msg Bool
-isFocusSuppressed = gets ctxFocusSuppressed
-
--- | Marks a sub-tree as focus-suppressed when the condition is 'True': like
--- 'disableWhen' but focus-only — hover\/click still work, but a control
--- can neither auto-claim focus nor be reached via @ctxNavigationKeys@. The
--- flag is restored to its previous value once the sub-tree completes, and
--- (like 'disableWhen') only ever escalates, never lifts an outer
--- suppression.
-withFocusSuppressed :: Bool -> UI e msg a -> UI e msg a
-withFocusSuppressed True (UI f) = UI $ \ctx -> do
-  (a, ctx') <- f (ctx { ctxFocusSuppressed = True })
-  pure (a, ctx' { ctxFocusSuppressed = ctxFocusSuppressed ctx })
-withFocusSuppressed False action = action
 
 getTheme :: UI e msg (Theme e)
 getTheme = gets contextTheme
