@@ -13,6 +13,8 @@ module Blink.Element
   , onMouseDown
   , onMouseUp
   , onKeyPressed
+  , onFocusGained
+  , onFocusLost
   ) where
 
 import Control.Monad (when)
@@ -23,15 +25,10 @@ import Blink.Mouse (ButtonState (..), Mouse (..))
 import Blink.UI
 
 -- | A low-level interaction event 'element' fires: a purely observed fact
--- about mouse or keyboard state relative to one element, with no
+-- about mouse, keyboard, or focus state relative to one element, with no
 -- interpretation of what it means (no click\/activation semantics, no focus
 -- claiming). Higher-level combinators (e.g. 'Blink.Controls.control') build
 -- meaningful behaviour on top of these.
---
--- No focus-gained\/-lost event yet -- that needs a cross-frame focus
--- snapshot ('Blink.UI.FocusState' only tracks the current, possibly
--- mid-frame-mutated focus) which doesn't exist yet; deferred until that
--- lands.
 data ElementEvent
   = MouseEntered
     -- ^ The mouse just started being over the element this frame.
@@ -46,6 +43,16 @@ data ElementEvent
     -- element; a higher layer decides whether that counts as a click.
   | KeyPressed KeyEvent
     -- ^ A key event this frame, while the element holds focus.
+  | FocusGained
+    -- ^ This element was just named the winner of a
+    -- 'Blink.UI.TransferFocusTo'. 'element' only observes this -- it never
+    -- claims focus itself; auto-claim\/self-clear are a different, simpler
+    -- case handled entirely by whichever code performs them directly (see
+    -- 'Blink.UI.getFocusChange').
+  | FocusLost
+    -- ^ This element was just named the loser of a
+    -- 'Blink.UI.TransferFocusTo', or the target of a
+    -- 'Blink.UI.ClearFocusFrom'.
   deriving (Eq, Show)
 
 -- | Observes and reports this frame's raw interaction events for the given
@@ -58,7 +65,8 @@ element eid attrs = do
   hoverEvs  <- hoverStep eid
   buttonEvs <- buttonStep eid
   keyEvs    <- keyStep eid
-  fire attrs (hoverEvs ++ buttonEvs ++ keyEvs)
+  focusEvs  <- focusStep eid
+  fire attrs (hoverEvs ++ buttonEvs ++ keyEvs ++ focusEvs)
 
 -- | Advances this element's hover state for the current frame (still doing
 -- the 'registerMouseOver'\/'acquireCapture' bookkeeping other elements'
@@ -110,6 +118,24 @@ keyStep eid = do
     then map KeyPressed (inputKeyEvents input)
     else []
 
+-- | Reports 'FocusGained'\/'FocusLost' from the most recent
+-- 'Blink.UI.getFocusChange' still visible to this element's scope, if this
+-- element is either side of it. Not disabled-gated, unlike the other
+-- steps -- a disabled element still observing its own focus loss is
+-- consistent with 'element' reporting facts truthfully, and the case that
+-- would otherwise need suppressing (the element removed from the tree
+-- entirely) already has no attrs list to fire against regardless.
+focusStep :: Eq e => e -> UI e msg [ElementEvent]
+focusStep eid = do
+  change <- getFocusChange
+  pure $ case change of
+    Just (TransferredFocus from to)
+      | to   == eid -> [FocusGained]
+      | from == eid -> [FocusLost]
+    Just (ClearedFocus from)
+      | from == eid -> [FocusLost]
+    _ -> []
+
 -- | Reacts when the mouse starts being over the element. See 'MouseEntered'.
 onMouseEntered :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
 onMouseEntered reaction = onEvent $ \ev -> case ev of
@@ -142,3 +168,17 @@ onKeyPressed :: (KeyEvent -> [Out e msg]) -> Attr e ElementEvent msg cfg
 onKeyPressed reaction = onEvent $ \ev -> case ev of
   KeyPressed k -> reaction k
   _            -> []
+
+-- | Reacts when the element is named the winner of a focus transfer. See
+-- 'FocusGained'.
+onFocusGained :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
+onFocusGained reaction = onEvent $ \ev -> case ev of
+  FocusGained -> reaction ()
+  _           -> []
+
+-- | Reacts when the element loses focus, whether to a transfer or a clear.
+-- See 'FocusLost'.
+onFocusLost :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
+onFocusLost reaction = onEvent $ \ev -> case ev of
+  FocusLost -> reaction ()
+  _         -> []

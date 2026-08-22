@@ -7,6 +7,7 @@ import Blink.Attributes (Attr, onEvent)
 import Blink.Element
   ( ElementEvent (..), element
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onKeyPressed
+  , onFocusGained, onFocusLost
   )
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
@@ -149,6 +150,21 @@ spec = describe "Blink.Element" $ do
       ctx <- snd <$> runUI (disableWhen True $ element ElemA capture) ctx1
       getMessages ctx `shouldBe` []
 
+  describe "focus" $ do
+    it "reports FocusLost for the loser and FocusGained for the winner, one frame after a transfer" $ do
+      ctx0 <- snd <$> runUI (setFocus ElemA >> transferFocusTo Nothing ElemA ElemB)
+                            (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
+      ctx1 <- runBoth noInput ctx0
+      ctx2 <- runBoth noInput ctx1
+      getMessages ctx1 `shouldBe` [(ElemA, FocusLost), (ElemB, FocusGained)]
+      getMessages ctx2 `shouldBe` []
+
+    it "reports FocusLost for the cleared element, with nothing gaining it" $ do
+      ctx0 <- snd <$> runUI (setFocus ElemA >> clearFocusFrom Nothing ElemA)
+                            (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
+      ctx1 <- runBoth noInput ctx0
+      getMessages ctx1 `shouldBe` [(ElemA, FocusLost)]
+
   describe "reaction helpers" $ do
     it "onMouseEntered/onMouseExited react only to their own hover edge" $ do
       let attrs =
@@ -175,3 +191,12 @@ spec = describe "Blink.Element" $ do
       ctx0 <- snd <$> runUI (setFocus ElemA) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
       ctx  <- snd <$> runUI (element ElemA attrs) (advance (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0)
       getMessages ctx `shouldBe` [KeyEvent KeyReturn []]
+
+    it "onFocusGained/onFocusLost react only to their own side of a transfer" $ do
+      let attrsA = [onFocusLost   (const [OutMsg ("A lost"   :: String)])]
+          attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
+          render = withBounds rectA (element ElemA attrsA) >> withBounds rectB (element ElemB attrsB)
+      ctx0 <- snd <$> runUI (setFocus ElemA >> transferFocusTo Nothing ElemA ElemB)
+                            (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
+      ctx  <- snd <$> runUI render (advance noInput ctx0)
+      getMessages ctx `shouldBe` ["A lost", "B gained"]
