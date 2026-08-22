@@ -3,6 +3,7 @@ module Main (main) where
 import Test.Hspec
 import qualified Blink.AppSpec as App
 import qualified Blink.ButtonSpec as Button
+import qualified Blink.CheckboxSpec as Checkbox
 import qualified Blink.ControlSpec as Control
 import qualified Blink.ControlsSpec as Controls
 import qualified Blink.ElementSpec as Element
@@ -11,6 +12,7 @@ import qualified Blink.InteractionSpec as Interaction
 import qualified Blink.LabelSpec as Label
 import qualified Blink.LayoutSpec as Layout
 import qualified Blink.MouseSpec as Mouse
+import qualified Blink.RadioButtonSpec as RadioButton
 import qualified Blink.UISpec as UI
 import qualified Blink.UpdateSpec as Update
 
@@ -26,5 +28,7 @@ main = hspec $ do
   Control.spec
   Label.spec
   Button.spec
+  Checkbox.spec
+  RadioButton.spec
   Controls.spec
   Interaction.spec

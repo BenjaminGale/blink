@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Attributes (Attr, text)
-import Blink.Button (ButtonConfig, button)
+import Blink.Button (ButtonConfig, ToggleButtonConfig, button, isSelected, onToggled, toggleButton)
 import Blink.Element (ElementEvent, onClicked)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
@@ -43,6 +43,15 @@ testStyleSet = StyleSet
 
 testTheme :: Theme TestElement
 testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = testStyleSet }
+
+pressedColour :: Colour
+pressedColour = RGBA 1 1 1 1
+
+toggleTestTheme :: Theme TestElement
+toggleTestTheme = Theme
+  { themeElementStyles = Map.empty
+  , themeDefaultStyle  = testStyleSet { styleSetPressed = testStyle { styleTextColour = pressedColour } }
+  }
 
 noInput :: InputState
 noInput = InputState
@@ -98,3 +107,40 @@ spec = describe "Blink.Button" $ do
     ctx1 <- snd <$> runUI (disableWhen True (button Ok attrs))
                           (nextFrameContext testBounds (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) testTheme (contextAnimation ctx0) ctx0)
     getMessages ctx1 `shouldBe` []
+
+  describe "toggleButton" $ do
+    it "draws in its normal style while not selected" $ do
+      ctx <- startToggle []
+      getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "" testColour AlignCenter]
+
+    it "draws in its pressed style while selected, even without being physically pressed" $ do
+      ctx <- startToggle [isSelected True]
+      getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "" pressedColour AlignCenter]
+
+    it "fires onToggled with the flipped value when clicked" $ do
+      let attrs = [isSelected False, onToggled (\b -> [OutMsg (show b)])]
+      ctx0 <- startToggle attrs
+      ctx1 <- stepToggle attrs (down onButton) ctx0
+      ctx2 <- stepToggle attrs (releasedAt onButton) ctx1
+      getMessages ctx2 `shouldBe` [show True]
+
+    it "fires onToggled with False when clicked while selected" $ do
+      let attrs = [isSelected True, onToggled (\b -> [OutMsg (show b)])]
+      ctx0 <- startToggle attrs
+      ctx1 <- stepToggle attrs (down onButton) ctx0
+      ctx2 <- stepToggle attrs (releasedAt onButton) ctx1
+      getMessages ctx2 `shouldBe` [show False]
+
+    it "fires onToggled when activated via Enter while focused" $ do
+      let attrs = [isSelected False, onToggled (\b -> [OutMsg (show b)])]
+      ctx0 <- startToggle attrs
+      ctx1 <- stepToggle attrs (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0
+      getMessages ctx1 `shouldBe` [show True]
+
+type ToggleAttr' = Attr TestElement ElementEvent String (ToggleButtonConfig TestElement String)
+
+startToggle :: [ToggleAttr'] -> IO (UIContext TestElement String)
+startToggle attrs = snd <$> runUI (toggleButton Ok attrs) (emptyUIContext testBounds noInput toggleTestTheme noOpTextMeasurer)
+
+stepToggle :: [ToggleAttr'] -> InputState -> UIContext TestElement String -> IO (UIContext TestElement String)
+stepToggle attrs input ctx = snd <$> runUI (toggleButton Ok attrs) (nextFrameContext testBounds input toggleTestTheme (contextAnimation ctx) ctx)

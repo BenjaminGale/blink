@@ -34,10 +34,12 @@ library
         Blink.App
         Blink.Attributes
         Blink.Button
+        Blink.Checkbox
         Blink.Control
         Blink.Controls
         Blink.Element
         Blink.Label
+        Blink.RadioButton
         Blink.Geometry
         Blink.Input
         Blink.Layout
@@ -70,6 +72,7 @@ test-suite blink-tests
     other-modules:
         Blink.AppSpec
         Blink.ButtonSpec
+        Blink.CheckboxSpec
         Blink.ControlSpec
         Blink.ControlsSpec
         Blink.ControlsTestSupport
@@ -81,6 +84,7 @@ test-suite blink-tests
         Blink.LabelSpec
         Blink.LayoutSpec
         Blink.MouseSpec
+        Blink.RadioButtonSpec
         Blink.UISpec
         Blink.UpdateSpec
     build-depends:
