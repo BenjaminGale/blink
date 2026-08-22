@@ -34,8 +34,6 @@ module Blink.Button
   , toggleBase
   , text
   , isTabStop
-  , focusOnClick
-  , FocusOnClick (..)
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -50,8 +48,8 @@ import Control.Monad (when)
 import Data.Text (Text)
 
 import Blink.Attributes
-  ( Attr, ControlConfig, FocusOnClick (..), HasControlConfig (..), HasTextConfig (..)
-  , configAny, defaultControlConfig, configure, fire, focusOnClick, isTabStop, text
+  ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
+  , configAny, defaultControlConfig, configure, fire, isTabStop, text
   )
 import Blink.Control (control, getStyle)
 import Blink.Element
@@ -67,14 +65,20 @@ import Blink.UI (Out, UI, drawText, getInput, getStyleSet, isDisabled, isFocused
 -- click -- when Enter is pressed while it holds focus and it isn't
 -- disabled. The shape every button-like control ('button', 'toggleButton',
 -- and any future checkbox\/radio button) is built from.
+--
+-- Always takes focus when clicked -- fixed behaviour, not a default, so
+-- unlike a plain "Blink.Control" control it can't be redirected elsewhere
+-- or turned off.
 buttonBase :: (Ord e, HasControlConfig e cfg) => e -> cfg -> [Attr e ElementEvent msg cfg] -> UI e msg () -> UI e msg ()
 buttonBase eid cfg attrs content = do
-  control eid cfg attrs content
+  control eid cfg' attrs content
   focused  <- isFocused eid
   disabled <- isDisabled
   input    <- getInput
   let pressedReturn = any (\ev -> key ev == KeyReturn) (inputKeyEvents input)
   when (not disabled && focused && pressedReturn) $ fire attrs [Clicked]
+  where
+    cfg' = setControlConfig ((controlConfig cfg) { ccFocusOnClick = FocusSelf }) cfg
 
 -- | Configuration for 'button', set via 'text'. Defaults to @\"\"@.
 data ButtonConfig e = ButtonConfig

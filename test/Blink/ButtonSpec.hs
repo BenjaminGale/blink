@@ -4,7 +4,7 @@ module Blink.ButtonSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Attributes (Attr, text)
+import Blink.Attributes (Attr, FocusOnClick (..), focusOnClick, text)
 import Blink.Button (ButtonConfig, ToggleButtonConfig, button, isSelected, onSelectedChanged, toggleButton)
 import Blink.Element (ElementEvent, onClicked)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
@@ -13,7 +13,7 @@ import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 
-data TestElement = Ok deriving (Eq, Ord, Show)
+data TestElement = Ok | Other deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -107,6 +107,14 @@ spec = describe "Blink.Button" $ do
     ctx1 <- snd <$> runUI (disableWhen True (button Ok attrs))
                           (nextFrameContext testBounds (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) testTheme (contextAnimation ctx0) ctx0)
     getMessages ctx1 `shouldBe` []
+
+  it "always takes focus on itself when clicked, even if focusOnClick is set directly via Blink.Attributes" $ do
+    let attrs = [focusOnClick (FocusTarget Other)]
+    ctx0 <- start attrs
+    ctx1 <- step attrs (down onButton) ctx0
+    ctx2 <- step attrs (releasedAt onButton) ctx1
+    ctx3 <- step attrs noInput ctx2
+    contextFocus ctx3 `shouldBe` Just Ok
 
   describe "toggleButton" $ do
     it "draws in its normal style while not selected" $ do
