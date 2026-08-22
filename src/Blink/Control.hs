@@ -4,7 +4,7 @@
 -- draws styled chrome around the control's content.
 --
 -- Focus is claimed automatically when nothing else holds it (subject to
--- 'ccTabStop'), reaffirmed each frame while held, and given up on Tab. A
+-- 'ccIsTabStop'), reaffirmed each frame while held, and given up on Tab. A
 -- click (per 'FocusOnClick') or Shift-Tab can also hand focus to a
 -- /different/ specific element; that takes effect the frame after it
 -- happens rather than immediately, so whichever element is gaining or
@@ -15,6 +15,7 @@
 -- Scope is always root for now.
 module Blink.Control
   ( control
+  , getStyle
   , styledElement
   ) where
 
@@ -142,7 +143,7 @@ control eid cfg attrs content = do
     ]
   hitBounds <- marginInsetBounds eid
   withBounds hitBounds $ element eid (attrs ++ clickFocusReaction)
-  when (ccTabStop cc) $ setPreviousTabStop eid
+  when (ccIsTabStop cc) $ setPreviousTabStop eid
   styledElement eid content
   where
     cc = controlConfig cfg

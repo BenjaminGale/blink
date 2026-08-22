@@ -25,15 +25,18 @@ module Blink.Attributes
   , defaultControlConfig
   , autoClaimsFocus
   , HasControlConfig (..)
-  , tabStop
+  , isTabStop
   , focusOnClick
+  , HasTextConfig (..)
+  , text
   ) where
 
 import Data.List (foldl')
+import Data.Text (Text)
 
 import Blink.UI
 
--- | What clicking a control does to focus, set with 'tabStop' \/
+-- | What clicking a control does to focus, set with 'isTabStop' \/
 -- 'focusOnClick'.
 data FocusOnClick e
   = FocusSelf
@@ -46,28 +49,28 @@ data FocusOnClick e
   deriving (Eq, Show)
 
 -- | Configuration shared by every control, regardless of that control's own
--- @cfg@: whether Tab lands on it ('ccTabStop') and what clicking it does to
+-- @cfg@: whether Tab lands on it ('ccIsTabStop') and what clicking it does to
 -- focus ('ccFocusOnClick'). Every control's own @cfg@ carries one of these,
 -- accessed uniformly via 'HasControlConfig'.
 data ControlConfig e = ControlConfig
-  { ccTabStop      :: Bool
+  { ccIsTabStop      :: Bool
   , ccFocusOnClick :: FocusOnClick e
   }
 
 -- | The default 'ControlConfig': a tab stop that takes focus on click --
 -- what a plain interactive control wants unless it overrides one or both
--- via 'tabStop' \/ 'focusOnClick'.
+-- via 'isTabStop' \/ 'focusOnClick'.
 defaultControlConfig :: ControlConfig e
-defaultControlConfig = ControlConfig { ccTabStop = True, ccFocusOnClick = FocusSelf }
+defaultControlConfig = ControlConfig { ccIsTabStop = True, ccFocusOnClick = FocusSelf }
 
 -- | Whether a control is eligible to claim focus purely by rendering first
--- while nothing else holds it: opted into keyboard focus at all ('ccTabStop')
+-- while nothing else holds it: opted into keyboard focus at all ('ccIsTabStop')
 -- and configured to take focus itself on click ('ccFocusOnClick').
 autoClaimsFocus :: Eq e => ControlConfig e -> Bool
-autoClaimsFocus cc = ccTabStop cc && ccFocusOnClick cc == FocusSelf
+autoClaimsFocus cc = ccIsTabStop cc && ccFocusOnClick cc == FocusSelf
 
 -- | Implemented by any control's own @cfg@ type to say how it carries a
--- 'ControlConfig' -- lets 'tabStop' \/ 'focusOnClick' work uniformly across
+-- 'ControlConfig' -- lets 'isTabStop' \/ 'focusOnClick' work uniformly across
 -- every control's differently-shaped @cfg@, the same pattern
 -- 'Blink.Controls.HasTextConfig' already uses for 'Blink.Controls.text'.
 class HasControlConfig e cfg | cfg -> e where
@@ -77,7 +80,7 @@ class HasControlConfig e cfg | cfg -> e where
 -- | One entry in a control's attrs list — either a reaction to an event
 -- ('onEvent' and the combinators built on it) or a change to the control's
 -- own @cfg@ ('configAny' and the smart constructors built on it, including
--- 'tabStop' \/ 'focusOnClick'). Opaque: built and consumed only through the
+-- 'isTabStop' \/ 'focusOnClick'). Opaque: built and consumed only through the
 -- functions this module exports.
 data Attr e ev msg cfg
   = On (ev -> [Out e msg])
@@ -114,9 +117,20 @@ configAny = Config
 -- | Whether this control participates in keyboard focus at all: Tab\/
 -- Shift-Tab cycling onto it, and auto-claiming focus by rendering first
 -- while nothing else holds it. 'False' excludes it from both.
-tabStop :: HasControlConfig e cfg => Bool -> Attr e ev msg cfg
-tabStop b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccTabStop = b }) cfg
+isTabStop :: HasControlConfig e cfg => Bool -> Attr e ev msg cfg
+isTabStop b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccIsTabStop = b }) cfg
 
 -- | What clicking this control does to focus — see 'FocusOnClick'.
 focusOnClick :: HasControlConfig e cfg => FocusOnClick e -> Attr e ev msg cfg
 focusOnClick foc = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccFocusOnClick = foc }) cfg
+
+-- | Implemented by any control's own @cfg@ type to say how it carries
+-- displayed text, letting 'text' work uniformly across them (same pattern
+-- 'HasControlConfig' already uses for 'isTabStop' \/ 'focusOnClick').
+class HasTextConfig cfg where
+  setText :: Text -> cfg -> cfg
+
+-- | Sets the text a control displays — a caption for a label or button, or
+-- the current value for a text input. Defaults to @\"\"@ when not given.
+text :: HasTextConfig cfg => Text -> Attr e ev msg cfg
+text t = configAny (setText t)

@@ -33,9 +33,11 @@ library
         Blink
         Blink.App
         Blink.Attributes
+        Blink.Button
         Blink.Control
         Blink.Controls
         Blink.Element
+        Blink.Label
         Blink.Geometry
         Blink.Input
         Blink.Layout
@@ -67,6 +69,7 @@ test-suite blink-tests
     main-is: Main.hs
     other-modules:
         Blink.AppSpec
+        Blink.ButtonSpec
         Blink.ControlSpec
         Blink.ControlsSpec
         Blink.ControlsTestSupport
@@ -75,6 +78,7 @@ test-suite blink-tests
         Blink.GeometrySpec
         Blink.Interaction
         Blink.InteractionSpec
+        Blink.LabelSpec
         Blink.LayoutSpec
         Blink.MouseSpec
         Blink.UISpec

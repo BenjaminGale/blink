@@ -20,7 +20,7 @@ data TestElement = ElemA | ElemB deriving (Eq, Ord, Show)
 
 -- | The shared config type every test control uses -- just a
 -- 'ControlConfig' wrapper, since 'control' needs a resolved @cfg@ to read
--- 'ccTabStop'\/'ccFocusOnClick' off.
+-- 'ccIsTabStop'\/'ccFocusOnClick' off.
 newtype TestConfig e = TestConfig { testControlConfig :: ControlConfig e }
 
 defaultTestConfig :: TestConfig e
@@ -115,8 +115,8 @@ spec = describe "Blink.Control" $ do
       ctx <- startBoth defaultTestConfig [] defaultTestConfig []
       contextFocus ctx `shouldNotBe` Just ElemB
 
-    it "a control with tabStop off does not auto-claim" $ do
-      let cfgA = TestConfig defaultControlConfig { ccTabStop = False }
+    it "a control with isTabStop off does not auto-claim" $ do
+      let cfgA = TestConfig defaultControlConfig { ccIsTabStop = False }
       ctx <- startBoth cfgA [] defaultTestConfig []
       contextFocus ctx `shouldBe` Just ElemB
 
@@ -146,8 +146,8 @@ spec = describe "Blink.Control" $ do
       getMessages ctx3 `shouldBe` ["A lost", "B gained"]
 
     it "FocusTarget redirects focus to the named element instead of the clicker" $ do
-      let cfgA = TestConfig defaultControlConfig { ccTabStop = False, ccFocusOnClick = FocusTarget ElemB }
-          cfgB = TestConfig defaultControlConfig { ccTabStop = False }
+      let cfgA = TestConfig defaultControlConfig { ccIsTabStop = False, ccFocusOnClick = FocusTarget ElemB }
+          cfgB = TestConfig defaultControlConfig { ccIsTabStop = False }
       ctx0 <- startBoth cfgA [] cfgB []
       contextFocus ctx0 `shouldBe` Nothing -- neither eligible to auto-claim
       ctx1 <- runBoth cfgA [] cfgB [] (advance (down onA) ctx0)
@@ -156,7 +156,7 @@ spec = describe "Blink.Control" $ do
       contextFocus ctx3 `shouldBe` Just ElemB
 
     it "NoFocus leaves focus unchanged when clicked" $ do
-      let cfgA = TestConfig defaultControlConfig { ccTabStop = False, ccFocusOnClick = NoFocus }
+      let cfgA = TestConfig defaultControlConfig { ccIsTabStop = False, ccFocusOnClick = NoFocus }
       ctx0 <- runBoth cfgA [] cfgA [] (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
       ctx1 <- runBoth cfgA [] cfgA [] (advance (down onA) ctx0)
       ctx2 <- runBoth cfgA [] cfgA [] (advance (releasedAt onA) ctx1)

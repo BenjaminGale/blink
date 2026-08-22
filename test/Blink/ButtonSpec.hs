@@ -1,0 +1,100 @@
+{-# LANGUAGE OverloadedStrings #-}
+module Blink.ButtonSpec (spec) where
+
+import qualified Data.Map.Strict as Map
+import Test.Hspec
+
+import Blink.Attributes (Attr, text)
+import Blink.Button (ButtonConfig, button)
+import Blink.Element (ElementEvent, onClicked)
+import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
+import Blink.Input (InputState (..), Key (..), KeyEvent (..))
+import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
+import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.UI
+
+data TestElement = Ok deriving (Eq, Ord, Show)
+
+testBounds :: Rectangle
+testBounds = Rectangle 0 0 100 100
+
+testColour :: Colour
+testColour = RGBA 0 0 0 1
+
+testStyle :: Style
+testStyle = Style
+  { styleBackground   = testColour
+  , styleTextColour   = testColour
+  , styleTextAlign    = AlignCenter
+  , styleMargin       = uniform 10
+  , stylePadding      = uniform 5
+  , styleBorderColour = Nothing
+  , styleBorderEdges  = noBorder
+  }
+
+testStyleSet :: StyleSet
+testStyleSet = StyleSet
+  { styleSetNormal   = testStyle
+  , styleSetHovered  = testStyle
+  , styleSetPressed  = testStyle
+  , styleSetFocused  = testStyle
+  , styleSetDisabled = testStyle
+  }
+
+testTheme :: Theme TestElement
+testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = testStyleSet }
+
+noInput :: InputState
+noInput = InputState
+  { inputMousePosition  = Point 200 200
+  , inputLeftButtonDown = False
+  , inputKeyEvents      = []
+  , inputTypedText      = []
+  }
+
+down, releasedAt :: Point -> InputState
+down p       = noInput { inputMousePosition = p, inputLeftButtonDown = True }
+releasedAt p = noInput { inputMousePosition = p, inputLeftButtonDown = False }
+
+onButton :: Point
+onButton = Point 50 50
+
+type Attr' = Attr TestElement ElementEvent String (ButtonConfig TestElement)
+
+start :: [Attr'] -> IO (UIContext TestElement String)
+start attrs = snd <$> runUI (button Ok attrs) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
+
+step :: [Attr'] -> InputState -> UIContext TestElement String -> IO (UIContext TestElement String)
+step attrs input ctx = snd <$> runUI (button Ok attrs) (nextFrameContext testBounds input testTheme (contextAnimation ctx) ctx)
+
+spec :: Spec
+spec = describe "Blink.Button" $ do
+  it "draws its text in the resolved style" $ do
+    ctx <- start [text "OK"]
+    getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "OK" testColour AlignCenter]
+
+  it "claims focus automatically, like any ordinary control" $ do
+    ctx <- start []
+    contextFocus ctx `shouldBe` Just Ok
+
+  it "fires onClick when clicked" $ do
+    let attrs = [onClicked (const [OutMsg ("clicked" :: String)])]
+    ctx0 <- start attrs
+    ctx1 <- step attrs (down onButton) ctx0
+    ctx2 <- step attrs (releasedAt onButton) ctx1
+    getMessages ctx2 `shouldBe` ["clicked"]
+
+  it "fires onClick when Enter is pressed while focused" $ do
+    let attrs = [onClicked (const [OutMsg ("clicked" :: String)])]
+    ctx0 <- start attrs
+    contextFocus ctx0 `shouldBe` Just Ok
+    ctx1 <- step attrs (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0
+    getMessages ctx1 `shouldBe` ["clicked"]
+
+  it "does not activate via Enter once disabled, even while still holding focus from before" $ do
+    let attrs = [onClicked (const [OutMsg ("clicked" :: String)])]
+    ctx0 <- start attrs
+    contextFocus ctx0 `shouldBe` Just Ok
+    ctx1 <- snd <$> runUI (disableWhen True (button Ok attrs))
+                          (nextFrameContext testBounds (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) testTheme (contextAnimation ctx0) ctx0)
+    getMessages ctx1 `shouldBe` []
