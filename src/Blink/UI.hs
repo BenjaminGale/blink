@@ -281,6 +281,7 @@ module Blink.UI
   , defaultNavigationKeys
   , getNavigationKeys
   , withNavigationKeys
+  , getCurrentScope
     -- * Styles
   , getStyleSet
   , contextTheme
@@ -544,6 +545,12 @@ data UIContext e msg = UIContext
   , ctxNavigationKeys  :: NavigationKeys
     -- ^ Which keys currently mean "advance"\/"retreat" focus. See
     -- 'NavigationKeys'; set via 'withNavigationKeys'.
+  , ctxCurrentScope    :: Maybe e
+    -- ^ The scope id currently ambient -- 'Nothing' for root, @'Just'
+    -- scopeId@ while inside that scope's own 'withFocusScope' call. Lets
+    -- an effect queued from deep inside a scope (a Shift-Tab retreat, a
+    -- click's 'Blink.Attributes.FocusTarget') address /that/ scope
+    -- instead of always root. See 'getCurrentScope'.
   , ctxMouse           :: Mouse e
     -- ^ The left mouse button's state this frame (and which element, if
     -- any, holds mouse capture), plus per-element hover state. See
@@ -604,6 +611,7 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxTextMeasure     = measurer
   , ctxFocus           = emptyFocusTracker
   , ctxNavigationKeys  = defaultNavigationKeys
+  , ctxCurrentScope    = Nothing
   , ctxMouse           = emptyMouse { mouseButton = nextButtonState False (inputLeftButtonDown input) MouseNotCaptured }
   , ctxElements        = ElementState
       { elmScrollStates  = Map.empty
@@ -808,6 +816,14 @@ contextPrevTabStop = previousTabStop . ftAmbient . ctxFocus
 -- call manually when building custom focusable controls.
 setPreviousTabStop :: e -> UI e msg ()
 setPreviousTabStop eid = modifyFocusState $ \fs -> fs { previousTabStop = Just eid }
+
+-- | The scope id currently ambient -- 'Nothing' for root, @'Just' scopeId@
+-- while inside that scope's own 'withFocusScope' call. An effect that
+-- needs to address the ambient scope specifically (e.g. 'requestFocus'
+-- for a Shift-Tab retreat) should use this rather than assuming root, so
+-- it still targets the right scope when called from inside one.
+getCurrentScope :: UI e msg (Maybe e)
+getCurrentScope = gets ctxCurrentScope
 
 -- | The specific key\/modifier combinations that currently mean "give up
 -- focus here and let the next render claim it" ('navAdvance') or "return to
@@ -1126,12 +1142,14 @@ withFocusScope scopeId blockFreshClaim (UI f) = UI $ \ctx ->
         then pure (a, ctx' { ctxFocus = (ctxFocus ctx') { ftAmbient = real } })
         else pure (a, foldBackAsClaim real after ctx')
 
-    -- Swaps the ambient 'FocusState' for @ambient@ while @f@ runs, and
-    -- reports what it became by the time @f@ finishes, alongside the
-    -- resulting context.
+    -- Swaps the ambient 'FocusState' for @ambient@, and 'ctxCurrentScope'
+    -- to this scope's own id, while @f@ runs -- restoring the previous
+    -- scope id after, so nesting reports each level's own immediate scope,
+    -- not just the outermost one. Reports what the 'FocusState' became by
+    -- the time @f@ finishes, alongside the resulting context.
     runWithAmbient ambient ctx = do
-      (a, ctx') <- f (ctx { ctxFocus = (ctxFocus ctx) { ftAmbient = ambient } })
-      pure (a, ctx', ftAmbient (ctxFocus ctx'))
+      (a, ctx') <- f (ctx { ctxFocus = (ctxFocus ctx) { ftAmbient = ambient }, ctxCurrentScope = Just scopeId })
+      pure (a, ctx' { ctxCurrentScope = ctxCurrentScope ctx }, ftAmbient (ctxFocus ctx'))
 
     -- Records @after@ as this scope's own persisted state, and points
     -- @base@ (the value to restore around this scope) at this scope's id —

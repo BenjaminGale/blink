@@ -140,11 +140,12 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
   if disabled then pure False else do
     evs      <- inputKeyEvents <$> getInput
     prevCtrl <- getPreviousTabStop
+    scopeId  <- getCurrentScope
     let advanceHit = find (\e -> (key e, modifiers e) `elem` advanceKeys) evs
         retreatHit = find (\e -> (key e, modifiers e) `elem` retreatKeys) evs
     case (wasFocused, advanceHit, retreatHit) of
       (True, Just e, _) -> clearFocus >> consumeKey (key e) $> True
-      (True, _, Just e) -> forM_ prevCtrl (requestFocus Nothing) >> consumeKey (key e) $> False
+      (True, _, Just e) -> forM_ prevCtrl (requestFocus scopeId) >> consumeKey (key e) $> False
       _                 -> pure False
 
 -- | Manages this element's keyboard focus (see the module header), reports
@@ -161,21 +162,37 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
 control :: (Ord e, HasControlConfig e cfg, HasElementEvent ev) => e -> cfg -> [Attr e ev msg cfg] -> UI e msg () -> UI e msg ()
 control eid cfg attrs content = disableWhen (not (ccEnabled cc)) $ do
   wasFocused  <- isFocused eid
+  currentScope <- getCurrentScope
   applySelfFocus
-  justEscaped <- if opensScope then applyScopeEscape wasFocused else pure False
   unless opensScope (applyNavigationKeys wasFocused)
-  nowFocused <- isFocused eid
-  fire attrs $ map liftElementEvent $ concat
-    [ [FocusGained | not wasFocused && nowFocused]
-    , [FocusLost   | wasFocused && not nowFocused]
-    ]
+  midFocused <- isFocused eid
+  fire attrs (focusEvents wasFocused midFocused)
   hitBounds <- marginInsetBounds eid
-  withBounds hitBounds $ element eid (attrs ++ clickFocusReaction)
+  withBounds hitBounds $ element eid (attrs ++ clickFocusReaction currentScope)
+  styledElement eid (withChildNavigation content)
+  -- A nested container gets first claim on Ctrl+Tab\/Ctrl+Shift+Tab (it
+  -- consumes the key while @content@ above is still running, before this
+  -- check ever sees it) -- only if nothing inside claims it does it
+  -- escape this control's own slot instead. Checked again afterward
+  -- because this can change @eid@'s own focus after @midFocused@ was
+  -- already computed, which a second, equally-real transition this same
+  -- frame deserves its own 'FocusGained'\/'FocusLost' report for.
+  when opensScope $ do
+    _ <- applyScopeEscape wasFocused
+    nowFocused <- isFocused eid
+    fire attrs (focusEvents midFocused nowFocused)
+  -- Recorded last, after this control's own retreat (if any) has already
+  -- read whatever the previous tab stop was -- otherwise a control would
+  -- see its own, just-written entry instead of the one before it.
   when (ccIsTabStop cc) $ setPreviousTabStop eid
-  styledElement eid (withChildNavigation justEscaped content)
   where
     cc = controlConfig cfg
     opensScope = ccIsTabStop cc && ccTabNavigation cc == Contained
+
+    focusEvents was now = map liftElementEvent $ concat
+      [ [FocusGained | not was && now]
+      , [FocusLost   | was && not now]
+      ]
 
     -- Immediate, not deferred: needed so that when several controls are
     -- simultaneously eligible, only the first one to render claims focus.
@@ -200,21 +217,24 @@ control eid cfg attrs content = disableWhen (not (ccEnabled cc)) $ do
     applyScopeEscape wasFocused = advanceOrRetreat wasFocused [(KeyTab, [Ctrl])] [(KeyTab, [Ctrl, Shift])]
 
     -- A click hands focus to whichever element FocusOnClick names, taking
-    -- effect one frame later (see the module header).
-    clickFocusReaction = case ccFocusOnClick cc of
-      FocusSelf     -> [onClicked (\() -> [OutUi (Focus Nothing eid)])]
-      FocusTarget t -> [onClicked (\() -> [OutUi (Focus Nothing t)])]
+    -- effect one frame later (see the module header). Targets whichever
+    -- scope was ambient when this control itself rendered (@currentScope@,
+    -- read once up front), not always root, so this still works correctly
+    -- from inside a 'Contained' container.
+    clickFocusReaction currentScope = case ccFocusOnClick cc of
+      FocusSelf     -> [onClicked (\() -> [OutUi (Focus currentScope eid)])]
+      FocusTarget t -> [onClicked (\() -> [OutUi (Focus currentScope t)])]
       NoFocus       -> []
 
     -- Opens a focus scope for @content'@ exactly when this control does
     -- (see 'opensScope'), redefining the ambient navigation keys to Tab\/
     -- Shift-Tab (plus the arrow keys, if 'ccArrowNavigation') so
     -- containment and cycling fall out of ordinary focus behaviour for
-    -- whatever's inside, unchanged. @justEscaped@ primes 'withFocusScope's
-    -- @blockFreshClaim@ so a Ctrl+Tab escape this same frame isn't
-    -- immediately undone by the scope reclaiming it.
-    withChildNavigation justEscaped content'
-      | opensScope = withFocusScope eid justEscaped (withNavigationKeys scopeKeys content')
+    -- whatever's inside, unchanged. 'applyScopeEscape' runs after this
+    -- returns (see above), never inside it, so it always targets the
+    -- enclosing level, not the scope's own internal child pointer.
+    withChildNavigation content'
+      | opensScope = withFocusScope eid False (withNavigationKeys scopeKeys content')
       | otherwise  = content'
       where
         scopeKeys = NavigationKeys
