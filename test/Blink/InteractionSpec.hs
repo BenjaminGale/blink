@@ -47,6 +47,10 @@ probe = getInput >>= emit
 tick :: UI () () ()
 tick = emit ()
 
+-- | Reports the most recent focus change still visible this frame, if any.
+probeFocusChange :: UI () (Maybe (FocusChange ())) ()
+probeFocusChange = getFocusChange >>= emit
+
 posDown :: InputState -> (Point, Bool)
 posDown i = (inputMousePosition i, inputLeftButtonDown i)
 
@@ -102,3 +106,28 @@ spec = describe "Blink.Interaction" $ do
     it "makes a deferred ScrollTo visible immediately in resultContext" $ do
       result <- runInteractions testBounds seedAt0 (emitUi (ScrollTo () 0.5)) [] []
       contextScrollPosition () (resultContext result) `shouldBe` 0.5
+
+  describe "chaining two runInteractions calls via resultContext" $ do
+    -- 'resultContext' settles (applies) its queued effects but doesn't
+    -- clear them, so a second 'runInteractions' call seeded from it
+    -- re-applies the same effect again via its own opening frame. Harmless
+    -- for an idempotent effect like ScrollTo (re-setting the same absolute
+    -- position changes nothing) -- but a focus change's "from" is
+    -- recomputed fresh at apply time, so a second application reports it
+    -- coming from wherever it already ended up, not where it actually
+    -- started.
+    it "still reports the same scroll position after being carried into a second call" $ do
+      seeded <- runInteractions testBounds seedAt0 (emitUi (ScrollTo () 0.5)) [] []
+      result <- runInteractions testBounds (resultContext seeded) tick [] []
+      contextScrollPosition () (resultContext result) `shouldBe` 0.5
+
+    it "reports a focus change as coming from nowhere when carried into a second call, even though it really came from a focused element" $ do
+      seeded  <- runInteractions testBounds seedAt0 (setFocus () >> requestClearFocus Nothing) [] []
+      chained <- runInteractions testBounds (resultContext seeded) probeFocusChange [] []
+      resultMessages chained `shouldBe` [Just (FocusChange Nothing Nothing)]
+
+    it "reports the real origin when the change is primed and observed within one continuous call instead" $ do
+      result <- runInteractions testBounds seedAt0
+                  (setFocus () >> requestClearFocus Nothing >> probeFocusChange)
+                  [Wait 1] []
+      resultMessages result `shouldBe` [Just (FocusChange (Just ()) Nothing)]

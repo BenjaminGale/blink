@@ -4,11 +4,8 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Attributes (Attr, onEvent)
-import Blink.Element
-  ( ElementEvent (..), element
-  , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed
-  , onFocusGained, onFocusLost
-  )
+import Blink.Element (ElementEvent (..), element, onKeyPressed)
+import Blink.ElementBehaviour (elementBehaviourSpec)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Rendering (Colour (..), TextAlign (..))
@@ -67,9 +64,6 @@ heldAt p = noInput { inputMousePosition = p, inputLeftButtonDown = True }
 releasedAt :: Point -> InputState
 releasedAt p = noInput { inputMousePosition = p, inputLeftButtonDown = False }
 
-hoverAt :: Point -> InputState
-hoverAt p = noInput { inputMousePosition = p }
-
 onA, offBoth, onB :: Point
 onA     = Point 10 50
 offBoth = Point 200 200
@@ -91,30 +85,22 @@ runBoth input ctx = snd <$> runUI both (advance input ctx)
 advance :: Ord e => InputState -> UIContext e msg -> UIContext e msg
 advance input ctx = nextFrameContext testBounds input (contextTheme ctx) (contextAnimation ctx) ctx
 
--- | Captures every 'ElementEvent' fired for a single element in isolation.
-capture :: [Attr TestElement ElementEvent ElementEvent ()]
-capture = [onEvent (\ev -> [OutMsg ev])]
+seedCtx :: UIContext TestElement String
+seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
 spec :: Spec
 spec = describe "Blink.Element" $ do
-  describe "hover" $ do
-    it "fires MouseEntered the first frame the mouse is over, not on later frames" $ do
-      ctx1 <- startBoth (hoverAt onA)
-      ctx2 <- runBoth (hoverAt onA) ctx1
-      getMessages ctx1 `shouldBe` [(ElemA, MouseEntered)]
-      getMessages ctx2 `shouldBe` []
+  elementBehaviourSpec testBounds seedCtx ElemA onA offBoth (element ElemA :: [Attr TestElement ElementEvent String ()] -> UI TestElement String ())
 
-    it "fires MouseExited the frame the mouse leaves after being over" $ do
-      ctx1 <- startBoth (hoverAt onA)
-      ctx2 <- runBoth (hoverAt offBoth) ctx1
-      getMessages ctx2 `shouldBe` [(ElemA, MouseExited)]
+  describe "onKeyPressed" $
+    it "reacts with the triggering KeyEvent" $ do
+      let attrs :: [Attr TestElement ElementEvent KeyEvent ()]
+          attrs = [onKeyPressed (\k -> [OutMsg k])]
+      ctx0 <- snd <$> runUI (setFocus ElemA) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
+      ctx  <- snd <$> runUI (element ElemA attrs) (advance (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0)
+      getMessages ctx `shouldBe` [KeyEvent KeyReturn []]
 
-    it "fires nothing for a disabled element, even while the mouse is over it" $ do
-      ctx <- snd <$> runUI (disableWhen True $ withBounds rectA $ element ElemA capture)
-                            (emptyUIContext testBounds (hoverAt onA) testTheme noOpTextMeasurer)
-      getMessages ctx `shouldBe` []
-
-  describe "mouse button" $ do
+  describe "cross-element interaction" $ do
     it "reports MouseDown for the element the press started on, and MouseUp for whichever element the release happens over" $ do
       -- Mouse goes down over ElemA, is dragged (still held) onto ElemB, and
       -- released there. ElemA should only ever see MouseDown (it's not hit
@@ -133,32 +119,6 @@ spec = describe "Blink.Element" $ do
       -- confirming a drag begun on ElemA and released over ElemB doesn't
       -- count as a click for ElemB.
 
-    it "fires Clicked alongside MouseUp when the press and release complete on the same element" $ do
-      ctx1 <- startBoth (down onA)
-      ctx2 <- runBoth (releasedAt onA) ctx1
-      getMessages ctx2 `shouldBe` [(ElemA, MouseUp), (ElemA, Clicked)]
-
-  describe "keyboard" $ do
-    it "fires one KeyPressed per key event while the element holds focus" $ do
-      ctx0 <- snd <$> runUI (setFocus ElemA) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
-      ctx  <- runBoth (noInput { inputKeyEvents = [KeyEvent KeyReturn [], KeyEvent KeyTab []] }) ctx0
-      getMessages ctx `shouldBe`
-        [ (ElemA, KeyPressed (KeyEvent KeyReturn []))
-        , (ElemA, KeyPressed (KeyEvent KeyTab []))
-        ]
-
-    it "fires nothing for an element that does not hold focus" $ do
-      ctx0 <- snd <$> runUI (setFocus ElemB) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
-      ctx  <- runBoth (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0
-      [ ev | (ElemA, ev) <- getMessages ctx ] `shouldBe` []
-
-    it "fires nothing for a disabled element, even while focused" $ do
-      ctx0 <- snd <$> runUI (setFocus ElemA) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
-      let ctx1 = advance (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0
-      ctx <- snd <$> runUI (disableWhen True $ element ElemA capture) ctx1
-      getMessages ctx `shouldBe` []
-
-  describe "focus" $ do
     it "reports FocusLost for the loser and FocusGained for the winner, one frame after a focus request" $ do
       ctx0 <- snd <$> runUI (setFocus ElemA >> requestFocus Nothing ElemB)
                             (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
@@ -166,56 +126,3 @@ spec = describe "Blink.Element" $ do
       ctx2 <- runBoth noInput ctx1
       getMessages ctx1 `shouldBe` [(ElemA, FocusLost), (ElemB, FocusGained)]
       getMessages ctx2 `shouldBe` []
-
-    it "reports FocusLost for the cleared element, with nothing gaining it" $ do
-      ctx0 <- snd <$> runUI (setFocus ElemA >> requestClearFocus Nothing)
-                            (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
-      ctx1 <- runBoth noInput ctx0
-      getMessages ctx1 `shouldBe` [(ElemA, FocusLost)]
-
-  describe "reaction helpers" $ do
-    it "onMouseEntered/onMouseExited react only to their own hover edge" $ do
-      let attrs :: [Attr TestElement ElementEvent String ()]
-          attrs =
-            [ onMouseEntered (const [OutMsg ("entered" :: String)])
-            , onMouseExited  (const [OutMsg "exited"])
-            ]
-      ctx1 <- snd <$> runUI (element ElemA attrs) (emptyUIContext testBounds (hoverAt onA) testTheme noOpTextMeasurer)
-      ctx2 <- snd <$> runUI (element ElemA attrs) (advance (hoverAt offBoth) ctx1)
-      getMessages ctx1 `shouldBe` ["entered"]
-      getMessages ctx2 `shouldBe` ["exited"]
-
-    it "onMouseDown/onMouseUp react only to their own button edge" $ do
-      let attrs :: [Attr TestElement ElementEvent String ()]
-          attrs =
-            [ onMouseDown (const [OutMsg ("down" :: String)])
-            , onMouseUp   (const [OutMsg "up"])
-            ]
-      ctx1 <- snd <$> runUI (element ElemA attrs) (emptyUIContext testBounds (down onA) testTheme noOpTextMeasurer)
-      ctx2 <- snd <$> runUI (element ElemA attrs) (advance (releasedAt onA) ctx1)
-      getMessages ctx1 `shouldBe` ["down"]
-      getMessages ctx2 `shouldBe` ["up"]
-
-    it "onClicked reacts only when the press and release complete on the same element" $ do
-      let attrs :: [Attr TestElement ElementEvent String ()]
-          attrs = [onClicked (const [OutMsg ("clicked" :: String)])]
-      ctx1 <- snd <$> runUI (element ElemA attrs) (emptyUIContext testBounds (down onA) testTheme noOpTextMeasurer)
-      ctx2 <- snd <$> runUI (element ElemA attrs) (advance (releasedAt onA) ctx1)
-      getMessages ctx2 `shouldBe` ["clicked"]
-
-    it "onKeyPressed reacts with the triggering KeyEvent" $ do
-      let attrs :: [Attr TestElement ElementEvent KeyEvent ()]
-          attrs = [onKeyPressed (\k -> [OutMsg k])]
-      ctx0 <- snd <$> runUI (setFocus ElemA) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
-      ctx  <- snd <$> runUI (element ElemA attrs) (advance (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0)
-      getMessages ctx `shouldBe` [KeyEvent KeyReturn []]
-
-    it "onFocusGained/onFocusLost react only to their own side of a transfer" $ do
-      let attrsA, attrsB :: [Attr TestElement ElementEvent String ()]
-          attrsA = [onFocusLost   (const [OutMsg ("A lost"   :: String)])]
-          attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
-          render = withBounds rectA (element ElemA attrsA) >> withBounds rectB (element ElemB attrsB)
-      ctx0 <- snd <$> runUI (setFocus ElemA >> requestFocus Nothing ElemB)
-                            (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
-      ctx  <- snd <$> runUI render (advance noInput ctx0)
-      getMessages ctx `shouldBe` ["A lost", "B gained"]
