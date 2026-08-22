@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-module Blink.Generators () where
+module Blink.Generators (genPointIn) where
 
 import Test.QuickCheck
 
@@ -11,6 +11,16 @@ coord = fromIntegral <$> (choose (-500, 500) :: Gen Int)
 
 dimension :: Gen Double
 dimension = fromIntegral <$> (choose (0, 500) :: Gen Int)
+
+-- | A point chosen uniformly at random anywhere within (and including the
+-- edges of) the given rectangle -- for a behaviour that should hold no
+-- matter where within a region it's exercised, rather than just at one
+-- fixed, hand-picked spot (e.g. a control whose hit area spans more than
+-- one visually distinct part, like a checkbox's glyph and caption).
+genPointIn :: Rectangle -> Gen Point
+genPointIn r = Point
+  <$> choose (rectX r, rectX r + rectWidth r)
+  <*> choose (rectY r, rectY r + rectHeight r)
 
 instance Arbitrary Point where
   arbitrary = Point <$> coord <*> coord

@@ -9,7 +9,7 @@ import Blink.Button (ButtonConfig, ToggleButtonConfig, ToggleEvent, button, isSe
 import Blink.ButtonBehaviour (buttonBehaviourSpec)
 import Blink.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.Element (ElementEvent, onFocusGained)
-import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
+import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -67,6 +67,11 @@ noInput = InputState
 onButton :: Point
 onButton = Point 50 50
 
+-- | The margin-inset hit area for a control rendered at 'testBounds' with
+-- the 10px margin every test style here uses.
+hitRect :: Rectangle
+hitRect = insetRect (uniform 10) testBounds
+
 type Attr' = Attr TestElement ElementEvent String (ButtonConfig TestElement)
 
 seedCtx :: UIContext TestElement String
@@ -77,7 +82,7 @@ start attrs = snd <$> runUI (button Ok attrs) seedCtx
 
 spec :: Spec
 spec = describe "Blink.Button" $ do
-  buttonBehaviourSpec testBounds seedCtx Ok (Point 5 5) onButton (Point 200 200) (button Ok)
+  buttonBehaviourSpec testBounds seedCtx Ok (Point 5 5) hitRect (Point 200 200) (button Ok)
 
   it "draws its text in the resolved style" $ do
     ctx <- start [text "OK"]
@@ -90,7 +95,7 @@ spec = describe "Blink.Button" $ do
     resultMessages result `shouldBe` ["gained"]
 
   describe "toggleButton" $ do
-    toggleBehaviourSpec testBounds toggleSeedCtx Ok (Point 5 5) onButton (Point 200 200) (toggleButton Ok)
+    toggleBehaviourSpec testBounds toggleSeedCtx Ok (Point 5 5) hitRect (Point 200 200) (toggleButton Ok)
 
     it "draws in its normal style while not selected" $ do
       ctx <- startToggle []

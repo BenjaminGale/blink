@@ -12,12 +12,15 @@ module Blink.ElementBehaviour
 
 import Test.Hspec
 
+import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
+
 import Blink.Attributes (Attr)
 import Blink.Element
   ( HasElementEvent
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed
   , onFocusGained, onFocusLost
   )
+import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)
 import Blink.Input (Key (KeySpace))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -42,41 +45,52 @@ tagged =
 -- | The raw-event contract: given how to render the thing under test with
 -- a given attrs list, asserts that moving the cursor, pressing keys, and
 -- changing focus raise the right raw events -- and nothing while disabled.
+-- Every check that involves a point inside the thing's hit area picks one
+-- at random from @insideRect@ on each run, rather than always the same
+-- fixed spot, so a control whose hit area spans more than one visually
+-- distinct part (e.g. a checkbox's glyph and caption) can't pass just
+-- because one particular point happens to work.
 elementBehaviourSpec
   :: (Ord e, HasElementEvent ev)
   => Rectangle                                    -- ^ bounds the thing under test renders at
   -> UIContext e String                           -- ^ starting context (theme\/measurer already set up)
   -> e                                             -- ^ element id under test
-  -> Point                                         -- ^ a point inside its bounds
+  -> Rectangle                                     -- ^ the region making up its hit area
   -> Point                                         -- ^ a point outside its bounds
   -> ([Attr e ev String cfg] -> UI e String ())    -- ^ render the thing under test with these attrs
   -> Spec
-elementBehaviourSpec bounds ctx eid inside outside render = do
+elementBehaviourSpec bounds ctx eid insideRect outside render = do
   describe "hover" $ do
-    it "raises a mouse enter event when the cursor moves into its bounds" $ do
-      result <- runInteractions bounds ctx (render tagged) [] [MoveTo inside]
-      resultMessages result `shouldBe` ["MouseEntered"]
+    it "raises a mouse enter event when the cursor moves into its bounds" $ monadicIO $ do
+      p <- pick (genPointIn insideRect)
+      result <- run (runInteractions bounds ctx (render tagged) [] [MoveTo p])
+      assert (resultMessages result == ["MouseEntered"])
 
-    it "raises a mouse exit event when the cursor moves back out" $ do
-      result <- runInteractions bounds ctx (render tagged) [MoveTo inside] [MoveTo outside]
-      resultMessages result `shouldBe` ["MouseExited"]
+    it "raises a mouse exit event when the cursor moves back out" $ monadicIO $ do
+      p <- pick (genPointIn insideRect)
+      result <- run (runInteractions bounds ctx (render tagged) [MoveTo p] [MoveTo outside])
+      assert (resultMessages result == ["MouseExited"])
 
-    it "raises nothing while disabled, even with the cursor over it" $ do
-      result <- runInteractions bounds ctx (disableWhen True (render tagged)) [] [MoveTo inside]
-      resultMessages result `shouldBe` []
+    it "raises nothing while disabled, even with the cursor over it" $ monadicIO $ do
+      p <- pick (genPointIn insideRect)
+      result <- run (runInteractions bounds ctx (disableWhen True (render tagged)) [] [MoveTo p])
+      assert (resultMessages result == [])
 
   describe "press and click" $ do
-    it "raises a press event when pressed while the cursor is over it" $ do
-      result <- runInteractions bounds ctx (render tagged) [] [MouseDown inside]
-      resultMessages result `shouldContain` ["MouseDown"]
+    it "raises a press event when pressed while the cursor is over it" $ monadicIO $ do
+      p <- pick (genPointIn insideRect)
+      result <- run (runInteractions bounds ctx (render tagged) [] [MouseDown p])
+      assert ("MouseDown" `elem` resultMessages result)
 
-    it "raises a release event when released while the cursor is over it" $ do
-      result <- runInteractions bounds ctx (render tagged) [MouseDown inside] [MouseUp inside]
-      resultMessages result `shouldContain` ["MouseUp"]
+    it "raises a release event when released while the cursor is over it" $ monadicIO $ do
+      p <- pick (genPointIn insideRect)
+      result <- run (runInteractions bounds ctx (render tagged) [MouseDown p] [MouseUp p])
+      assert ("MouseUp" `elem` resultMessages result)
 
-    it "raises a click event when pressed and released without the cursor leaving its bounds" $ do
-      result <- runInteractions bounds ctx (render tagged) [] [ClickAt inside]
-      resultMessages result `shouldContain` ["Clicked"]
+    it "raises a click event when pressed and released without the cursor leaving its bounds" $ monadicIO $ do
+      p <- pick (genPointIn insideRect)
+      result <- run (runInteractions bounds ctx (render tagged) [] [ClickAt p])
+      assert ("Clicked" `elem` resultMessages result)
 
   describe "keyboard" $ do
     it "raises a key event while it holds focus" $ do

@@ -6,7 +6,7 @@ import Test.Hspec
 
 import Blink.Attributes (Attr, text)
 import Blink.Checkbox (CheckboxConfig, ToggleEvent, checkbox, isSelected)
-import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
+import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
@@ -52,8 +52,12 @@ noInput = InputState
   , inputTypedText      = []
   }
 
-onControl :: Point
-onControl = Point 50 50
+-- | The margin-inset hit area for a control rendered at 'testBounds' with
+-- the 10px margin every test style here uses -- covers both the checkbox's
+-- glyph (x: 15-35) and caption (x: 35-85), so random points from within it
+-- exercise both halves.
+hitRect :: Rectangle
+hitRect = insetRect (uniform 10) testBounds
 
 type Attr' = Attr TestElement ToggleEvent String (CheckboxConfig TestElement)
 
@@ -65,7 +69,7 @@ start attrs = snd <$> runUI (checkbox Remember attrs) seedCtx
 
 spec :: Spec
 spec = describe "Blink.Checkbox" $ do
-  toggleBehaviourSpec testBounds seedCtx Remember (Point 5 5) onControl (Point 200 200) (checkbox Remember)
+  toggleBehaviourSpec testBounds seedCtx Remember (Point 5 5) hitRect (Point 200 200) (checkbox Remember)
 
   it "draws the unchecked glyph and its caption while not selected" $ do
     ctx <- start [text "Remember me"]

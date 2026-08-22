@@ -93,9 +93,14 @@ seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
   where
     noInput = InputState (Point 200 200) False [] []
 
+-- | The margin-inset hit area for a control rendered at 'testBounds' with
+-- the 10px margin every test style here uses.
+hitRect :: Rectangle
+hitRect = insetRect (uniform 10) testBounds
+
 spec :: Spec
 spec = describe "Blink.Control" $ do
-  controlBehaviourSpec testBounds seedCtx ElemA (Point 5 5) onA (Point 200 200) renderControl
+  controlBehaviourSpec testBounds seedCtx ElemA (Point 5 5) hitRect (Point 200 200) renderControl
 
   describe "chrome" $
     it "draws background via styledElement, inset by margin" $ do

@@ -30,12 +30,12 @@ buttonBehaviourSpec
   -> UIContext e String                          -- ^ starting context (theme\/measurer already set up)
   -> e                                             -- ^ element id under test
   -> Point                                         -- ^ a point inside its margin (not part of its hit area)
-  -> Point                                         -- ^ a point inside its margin-inset hit area
+  -> Rectangle                                     -- ^ the region making up its margin-inset hit area
   -> Point                                         -- ^ a point outside its bounds entirely
   -> ([Attr e ev String cfg] -> UI e String ())    -- ^ render the control under test with these attrs
   -> Spec
-buttonBehaviourSpec bounds ctx eid marginPoint insidePoint outsidePoint render = do
-  controlBehaviourSpec bounds ctx eid marginPoint insidePoint outsidePoint render
+buttonBehaviourSpec bounds ctx eid marginPoint insideRect outsidePoint render = do
+  controlBehaviourSpec bounds ctx eid marginPoint insideRect outsidePoint render
 
   describe "keyboard activation" $ do
     it "raises a click event when Enter is pressed while focused" $ do

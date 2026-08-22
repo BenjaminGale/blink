@@ -90,7 +90,7 @@ seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
 spec :: Spec
 spec = describe "Blink.Element" $ do
-  elementBehaviourSpec testBounds seedCtx ElemA onA offBoth (element ElemA :: [Attr TestElement ElementEvent String ()] -> UI TestElement String ())
+  elementBehaviourSpec testBounds seedCtx ElemA testBounds offBoth (element ElemA :: [Attr TestElement ElementEvent String ()] -> UI TestElement String ())
 
   describe "onKeyPressed" $
     it "reacts with the triggering KeyEvent" $ do
