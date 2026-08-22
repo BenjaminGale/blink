@@ -8,11 +8,16 @@
 module Blink.Element
   ( ElementEvent (..)
   , element
+  , onMouseEntered
+  , onMouseExited
+  , onMouseDown
+  , onMouseUp
+  , onKeyPressed
   ) where
 
 import Control.Monad (when)
 
-import Blink.Attributes (Attr, fire)
+import Blink.Attributes (Attr, fire, onEvent)
 import Blink.Input (KeyEvent (..), InputState (..))
 import Blink.Mouse (ButtonState (..), Mouse (..))
 import Blink.UI
@@ -104,3 +109,36 @@ keyStep eid = do
   pure $ if not disabled && focused
     then map KeyPressed (inputKeyEvents input)
     else []
+
+-- | Reacts when the mouse starts being over the element. See 'MouseEntered'.
+onMouseEntered :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
+onMouseEntered reaction = onEvent $ \ev -> case ev of
+  MouseEntered -> reaction ()
+  _            -> []
+
+-- | Reacts when the mouse stops being over the element. See 'MouseExited'.
+onMouseExited :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
+onMouseExited reaction = onEvent $ \ev -> case ev of
+  MouseExited -> reaction ()
+  _           -> []
+
+-- | Reacts when the mouse button goes down while the element is hit. See
+-- 'MouseDown'.
+onMouseDown :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
+onMouseDown reaction = onEvent $ \ev -> case ev of
+  MouseDown -> reaction ()
+  _         -> []
+
+-- | Reacts when the mouse button comes up while the element is hit. See
+-- 'MouseUp'.
+onMouseUp :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
+onMouseUp reaction = onEvent $ \ev -> case ev of
+  MouseUp -> reaction ()
+  _       -> []
+
+-- | Reacts to a key event while the element holds focus, with the
+-- triggering 'KeyEvent'. See 'KeyPressed'.
+onKeyPressed :: (KeyEvent -> [Out e msg]) -> Attr e ElementEvent msg cfg
+onKeyPressed reaction = onEvent $ \ev -> case ev of
+  KeyPressed k -> reaction k
+  _            -> []

@@ -4,7 +4,10 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Attributes (Attr, onEvent)
-import Blink.Element (ElementEvent (..), element)
+import Blink.Element
+  ( ElementEvent (..), element
+  , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onKeyPressed
+  )
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Rendering (Colour (..), TextAlign (..))
@@ -145,3 +148,30 @@ spec = describe "Blink.Element" $ do
       let ctx1 = advance (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0
       ctx <- snd <$> runUI (disableWhen True $ element ElemA capture) ctx1
       getMessages ctx `shouldBe` []
+
+  describe "reaction helpers" $ do
+    it "onMouseEntered/onMouseExited react only to their own hover edge" $ do
+      let attrs =
+            [ onMouseEntered (const [OutMsg ("entered" :: String)])
+            , onMouseExited  (const [OutMsg "exited"])
+            ]
+      ctx1 <- snd <$> runUI (element ElemA attrs) (emptyUIContext testBounds (hoverAt onA) testTheme noOpTextMeasurer)
+      ctx2 <- snd <$> runUI (element ElemA attrs) (advance (hoverAt offBoth) ctx1)
+      getMessages ctx1 `shouldBe` ["entered"]
+      getMessages ctx2 `shouldBe` ["exited"]
+
+    it "onMouseDown/onMouseUp react only to their own button edge" $ do
+      let attrs =
+            [ onMouseDown (const [OutMsg ("down" :: String)])
+            , onMouseUp   (const [OutMsg "up"])
+            ]
+      ctx1 <- snd <$> runUI (element ElemA attrs) (emptyUIContext testBounds (down onA) testTheme noOpTextMeasurer)
+      ctx2 <- snd <$> runUI (element ElemA attrs) (advance (releasedAt onA) ctx1)
+      getMessages ctx1 `shouldBe` ["down"]
+      getMessages ctx2 `shouldBe` ["up"]
+
+    it "onKeyPressed reacts with the triggering KeyEvent" $ do
+      let attrs = [onKeyPressed (\k -> [OutMsg k])]
+      ctx0 <- snd <$> runUI (setFocus ElemA) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
+      ctx  <- snd <$> runUI (element ElemA attrs) (advance (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0)
+      getMessages ctx `shouldBe` [KeyEvent KeyReturn []]
