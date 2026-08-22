@@ -16,7 +16,6 @@
 module Blink.Control
   ( control
   , getStyle
-  , styledElement
   ) where
 
 import Control.Monad (forM_, guard, when)

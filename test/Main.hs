@@ -12,6 +12,7 @@ import qualified Blink.InteractionSpec as Interaction
 import qualified Blink.LabelSpec as Label
 import qualified Blink.LayoutSpec as Layout
 import qualified Blink.MouseSpec as Mouse
+import qualified Blink.ProgressBarSpec as ProgressBar
 import qualified Blink.RadioButtonSpec as RadioButton
 import qualified Blink.TextInputSpec as TextInput
 import qualified Blink.UISpec as UI
@@ -30,6 +31,7 @@ main = hspec $ do
   Label.spec
   Button.spec
   Checkbox.spec
+  ProgressBar.spec
   RadioButton.spec
   TextInput.spec
   Controls.spec

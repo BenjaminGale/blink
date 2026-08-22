@@ -14,8 +14,6 @@ module Blink.TextInput
   , onInput
   , onSubmit
   , isTabStop
-  , focusOnClick
-  , FocusOnClick (..)
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -32,8 +30,8 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import Blink.Attributes
-  ( Attr, ControlConfig, FocusOnClick (..), HasControlConfig (..), HasTextConfig (..)
-  , configAny, defaultControlConfig, configure, fire, isTabStop, focusOnClick, onEvent, text
+  ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
+  , configAny, defaultControlConfig, configure, fire, isTabStop, onEvent, text
   )
 import Blink.Control (control, getStyle)
 import Blink.Element
@@ -314,5 +312,6 @@ textInput eid attrs = do
 
     drawTextInputContent style bounds displayValue enabled effectiveScrollX selFinal
   where
-    cfg          = configure defaultTextInputConfig attrs
+    cfg          = fixFocusOnClick (configure defaultTextInputConfig attrs)
+    fixFocusOnClick c = setControlConfig ((controlConfig c) { ccFocusOnClick = FocusSelf }) c
     currentValue = textInputConfigValue cfg
