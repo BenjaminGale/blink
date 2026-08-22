@@ -1622,6 +1622,19 @@ spec = describe "Blink.Controls" $ do
         result <- runInteractions controlRect (resultContext focused) (disableWhen True (textAction "hello")) [] []
         resultDraws result `shouldNotContain` [FillRect (Rectangle 15 15 1 70) testColour]
 
+      it "does not move the selection when a shift-arrow key is pressed while focused and disabled" $ do
+        focused <- runInteractions controlRect (mkTextCtx "hello" noInput) (textAction "hello") [] [ClickAt focusPt]
+        quiet   <- runInteractions controlRect (resultContext focused) (disableWhen True (textAction "hello")) [] []
+        withKey <- runInteractions controlRect (resultContext focused) (disableWhen True (textAction "hello")) [] [PressKey KeyRight [Shift]]
+        resultDraws withKey `shouldBe` resultDraws quiet
+
+      it "does not show a leftover selection highlight when disabled with no further input" $ do
+        focused  <- runInteractions controlRect (mkTextCtx "hello" noInput) (textAction "hello") [] [ClickAt focusPt]
+        extended <- runInteractions controlRect (resultContext focused) (textAction "hello") [] [PressKey KeyRight [Shift]]
+        contextSelections TestControl (resultContext extended) `shouldBe` [Selection 0 1]
+        result   <- runInteractions controlRect (resultContext extended) (disableWhen True (textAction "hello")) [] []
+        resultDraws result `shouldNotContain` [FillRect (Rectangle 15 15 0 70) (RGBA 0.3 0.5 1.0 0.4)]
+
     describe "cursor placement" $ do
       it "sets the cursor to the clicked position on mouse press" $ do
         -- noOpTextMeasurer maps every offset to 0, so any click -> position 0

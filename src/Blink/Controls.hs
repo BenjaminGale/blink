@@ -974,12 +974,12 @@ resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX s
 -- | Shift+Left\/Right extend the selection; plain Left\/Right collapse an
 -- existing selection to its near end, or step by one otherwise.
 resolveKeyboardSelection
-  :: Bool         -- ^ control has keyboard focus
+  :: Bool         -- ^ control is focused and not disabled
   -> [KeyEvent]   -- ^ this frame's key events
   -> Int          -- ^ length of the underlying value
   -> Selection    -- ^ current selection
   -> Selection
-resolveKeyboardSelection hasFocus keyEvts len sel@(Selection _ active)
+resolveKeyboardSelection enabled keyEvts len sel@(Selection _ active)
   | shiftLeft  = extendActive (\a -> max 0   (a - 1)) sel
   | shiftRight = extendActive (\a -> min len (a + 1)) sel
   | plainLeft  = cursor (if hasSel then selLo else max 0   (active - 1))
@@ -989,7 +989,7 @@ resolveKeyboardSelection hasFocus keyEvts len sel@(Selection _ active)
     hasSel     = selectionHasExtent sel
     selLo      = selectionLow sel
     selHi      = selectionHigh sel
-    pressed k withShift = hasFocus && any (\e -> key e == k && (Shift `elem` modifiers e) == withShift) keyEvts
+    pressed k withShift = enabled && any (\e -> key e == k && (Shift `elem` modifiers e) == withShift) keyEvts
     shiftLeft  = pressed KeyLeft  True
     shiftRight = pressed KeyRight True
     plainLeft  = pressed KeyLeft  False
@@ -1062,21 +1062,19 @@ scrollFraction maxPx px
 scrollPixels :: Double -> Double -> Double
 scrollPixels maxPx frac = frac * maxPx
 
--- | Draws the selection highlight (focused with a non-empty selection), the
--- text itself, and the cursor (focused and enabled), all offset by the
--- current horizontal scroll.
+-- | Draws the selection highlight and the cursor (both focused and enabled),
+-- and the text itself, all offset by the current horizontal scroll.
 drawTextInputContent
   :: Ord e
   => Style       -- ^ active style
   -> Rectangle   -- ^ control's bounds
   -> Text        -- ^ displayed value (post-@displayFilter@)
-  -> Bool        -- ^ control has keyboard focus
   -> Bool        -- ^ control is focused and not disabled
   -> Double      -- ^ current horizontal scroll offset
   -> Selection   -- ^ current selection
   -> UI e msg ()
-drawTextInputContent style bounds displayValue hasFocus enabled ox sel@(Selection _ active) = do
-  when (hasFocus && drawLo < drawHi) $ do
+drawTextInputContent style bounds displayValue enabled ox sel@(Selection _ active) = do
+  when (enabled && drawLo < drawHi) $ do
     loX <- charOffset displayValue drawLo
     hiX <- charOffset displayValue drawHi
     let selRect = Rectangle
@@ -1209,7 +1207,7 @@ textInputControl eid attrs = do
         then resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX selInit
         else pure selInit
 
-    let selAfterKeys = resolveKeyboardSelection hasFocus (inputKeyEvents input) (T.length currentValue) selAfterMouse
+    let selAfterKeys = resolveKeyboardSelection enabled (inputKeyEvents input) (T.length currentValue) selAfterMouse
 
         (selFinal, edited)
           | enabled   = applyEdit (textInputConfigInputFilter cfg) currentValue input selAfterKeys
@@ -1234,7 +1232,7 @@ textInputControl eid attrs = do
           pure newScrollX
         else pure scrollX
 
-    drawTextInputContent style bounds displayValue hasFocus enabled effectiveScrollX selFinal
+    drawTextInputContent style bounds displayValue enabled effectiveScrollX selFinal
 
 contentRectFor :: StyleSet -> Rectangle -> Rectangle
 contentRectFor ss r =
