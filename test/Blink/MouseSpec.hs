@@ -13,7 +13,7 @@ spec = do
     it "reports the button as just pressed the first frame it's held" $
       nextButtonState False True MouseNotCaptured `shouldBe` ButtonDown (MouseNotCaptured :: MouseCapture Elem)
 
-    it "never lets a new press start already captured, even if a capture value is passed in" $
+    it "never lets a new press inherit capture left over from a previous one" $
       nextButtonState False True (MouseCapturedBy ElemA) `shouldBe` ButtonDown (MouseNotCaptured :: MouseCapture Elem)
 
     it "no longer reports a fresh press once the button has been held more than one frame" $
