@@ -50,34 +50,21 @@ it's given, rather than clipping or overflowing:
 - Re-wraps automatically on resize, since wrap width comes from ambient
   layout bounds each frame rather than being cached
 
-### Enabled attribute
-Individual controls should have an `enabled` attribute. A disabled control
-would be visually distinct, ignore clicks and
-other input, and be skipped when the keyboard moves focus between controls.
-Right now this behaviour only exists for whole composites (e.g. a group of
-controls disabled together) — this idea is about giving a single control the
-same ability on its own.
-
-This needs to apply to every kind of control, not just simple ones — a
-button needs the attribute, but so does a composite control, so that any
-control in the library can be disabled individually regardless of what it's
-made of.
-
 ### Disable-aware panel control
-Building on the `enabled` attribute above: a higher-level panel control that,
-when disabled, automatically disables its content — every child control
-nested inside it — rather than requiring each child to be disabled
-individually. This would make it easy to disable a whole section of a UI
-(e.g. a form) in one place.
+Building on the `enabled` attribute every widget in the new `Blink.Control`
+stack already has: a higher-level panel control that, when disabled,
+automatically disables its content — every child control nested inside it
+— rather than requiring each child to be disabled individually. This would
+make it easy to disable a whole section of a UI (e.g. a form) in one place.
 
 ### Shrink the public disabling API
-Depends on: Enabled attribute, Disable-aware panel control
+Depends on: Disable-aware panel control
 
-Once individual controls carry an `enabled` attribute and a disable-aware
-panel control exists to disable whole sections at once, `disableWhen` may no
-longer need to be part of the public API — those two facilities could cover
-the cases it exists for today. This is speculative until that design settles
-and we can see whether anything still needs `disableWhen` directly.
+Once a disable-aware panel control exists to disable whole sections at
+once, `disableWhen` may no longer need to be part of the public API —
+individual controls' own `enabled` attribute plus that panel could cover
+the cases it exists for today. This is speculative until that design
+settles and we can see whether anything still needs `disableWhen` directly.
 
 ### Default and cancel buttons
 Buttons only support their label text today — there's no way to mark a

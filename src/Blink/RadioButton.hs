@@ -12,6 +12,7 @@ module Blink.RadioButton
   , isSelected
   , onSelectedChanged
   , isTabStop
+  , enabled
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -26,7 +27,7 @@ import Data.Text (Text)
 
 import Blink.Attributes
   ( Attr, ControlConfig, HasControlConfig (..), HasTextConfig (..)
-  , defaultControlConfig, configure, isTabStop, text
+  , defaultControlConfig, configure, enabled, isTabStop, text
   )
 import Blink.Button (HasToggleConfig (..), ToggleConfig (..), ToggleEvent (..), isSelected, onSelectedChanged, toggleBase)
 import Blink.Control (getStyle)

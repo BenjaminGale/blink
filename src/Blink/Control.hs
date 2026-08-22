@@ -131,7 +131,7 @@ canAutoClaim eid cfg = do
 -- same margin-inset hit area chrome resolution uses -- the margin itself
 -- never counts as "on" the control.
 control :: (Ord e, HasControlConfig e cfg, HasElementEvent ev) => e -> cfg -> [Attr e ev msg cfg] -> UI e msg () -> UI e msg ()
-control eid cfg attrs content = do
+control eid cfg attrs content = disableWhen (not (ccEnabled cc)) $ do
   wasFocused <- isFocused eid
   applySelfFocus
   applyTabKeys wasFocused

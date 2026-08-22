@@ -28,6 +28,7 @@ module Blink.Attributes
   , HasControlConfig (..)
   , isTabStop
   , focusOnClick
+  , enabled
   , HasTextConfig (..)
   , text
   ) where
@@ -50,19 +51,21 @@ data FocusOnClick e
   deriving (Eq, Show)
 
 -- | Configuration shared by every control, regardless of that control's own
--- @cfg@: whether Tab lands on it ('ccIsTabStop') and what clicking it does to
--- focus ('ccFocusOnClick'). Every control's own @cfg@ carries one of these,
--- accessed uniformly via 'HasControlConfig'.
+-- @cfg@: whether Tab lands on it ('ccIsTabStop'), what clicking it does to
+-- focus ('ccFocusOnClick'), and whether it responds to input at all
+-- ('ccEnabled'). Every control's own @cfg@ carries one of these, accessed
+-- uniformly via 'HasControlConfig'.
 data ControlConfig e = ControlConfig
-  { ccIsTabStop      :: Bool
+  { ccIsTabStop    :: Bool
   , ccFocusOnClick :: FocusOnClick e
+  , ccEnabled      :: Bool
   }
 
--- | The default 'ControlConfig': a tab stop that takes focus on click --
--- what a plain interactive control wants unless it overrides one or both
--- via 'isTabStop' \/ 'focusOnClick'.
+-- | The default 'ControlConfig': an enabled tab stop that takes focus on
+-- click -- what a plain interactive control wants unless it overrides one
+-- or more via 'isTabStop' \/ 'focusOnClick' \/ 'enabled'.
 defaultControlConfig :: ControlConfig e
-defaultControlConfig = ControlConfig { ccIsTabStop = True, ccFocusOnClick = FocusSelf }
+defaultControlConfig = ControlConfig { ccIsTabStop = True, ccFocusOnClick = FocusSelf, ccEnabled = True }
 
 -- | Whether a control is eligible to claim focus purely by rendering first
 -- while nothing else holds it: opted into keyboard focus at all ('ccIsTabStop')
@@ -132,6 +135,12 @@ isTabStop b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccIsTa
 -- | What clicking this control does to focus — see 'FocusOnClick'.
 focusOnClick :: HasControlConfig e cfg => FocusOnClick e -> Attr e ev msg cfg
 focusOnClick foc = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccFocusOnClick = foc }) cfg
+
+-- | Whether the control responds to input at all. A disabled control still
+-- renders (in its disabled style) but ignores hover, clicks, key presses,
+-- and focus, and is skipped by Tab\/Shift-Tab. Defaults to 'True'.
+enabled :: HasControlConfig e cfg => Bool -> Attr e ev msg cfg
+enabled b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccEnabled = b }) cfg
 
 -- | Implemented by any control's own @cfg@ type to say how it carries
 -- displayed text, letting 'text' work uniformly across them (same pattern

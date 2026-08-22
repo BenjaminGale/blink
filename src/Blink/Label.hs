@@ -7,6 +7,7 @@ module Blink.Label
   , label
   , text
   , target
+  , enabled
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -21,7 +22,7 @@ import Data.Text (Text)
 
 import Blink.Attributes
   ( Attr, ControlConfig (..), HasControlConfig (..), HasTextConfig (..)
-  , FocusOnClick (..), configAny, defaultControlConfig, configure, text
+  , FocusOnClick (..), configAny, defaultControlConfig, configure, enabled, text
   )
 import Blink.Control (control, getStyle)
 import Blink.Element

@@ -14,6 +14,7 @@ module Blink.TextInput
   , onInput
   , onSubmit
   , isTabStop
+  , enabled
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -31,7 +32,7 @@ import qualified Data.Text as T
 
 import Blink.Attributes
   ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
-  , configAny, defaultControlConfig, configure, fire, isTabStop, onEvent, text
+  , configAny, defaultControlConfig, configure, enabled, fire, isTabStop, onEvent, text
   )
 import Blink.Control (control, getStyle)
 import Blink.Element
@@ -144,7 +145,7 @@ resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX s
 -- | Shift+Left\/Right extend the selection; plain Left\/Right collapse an
 -- existing selection to its near end, or step by one otherwise.
 resolveKeyboardSelection :: Bool -> [KeyEvent] -> Int -> Selection -> Selection
-resolveKeyboardSelection enabled keyEvts len sel@(Selection _ active)
+resolveKeyboardSelection isEnabled keyEvts len sel@(Selection _ active)
   | shiftLeft  = extendActive (\a -> max 0   (a - 1)) sel
   | shiftRight = extendActive (\a -> min len (a + 1)) sel
   | plainLeft  = cursor (if hasSel then selLo else max 0   (active - 1))
@@ -154,7 +155,7 @@ resolveKeyboardSelection enabled keyEvts len sel@(Selection _ active)
     hasSel     = selectionHasExtent sel
     selLo      = selectionLow sel
     selHi      = selectionHigh sel
-    pressed k withShift = enabled && any (\e -> key e == k && (Shift `elem` modifiers e) == withShift) keyEvts
+    pressed k withShift = isEnabled && any (\e -> key e == k && (Shift `elem` modifiers e) == withShift) keyEvts
     shiftLeft  = pressed KeyLeft  True
     shiftRight = pressed KeyRight True
     plainLeft  = pressed KeyLeft  False
@@ -224,8 +225,8 @@ scrollPixels maxPx frac = frac * maxPx
 -- enabled), and the text itself, all offset by the current horizontal
 -- scroll.
 drawTextInputContent :: Ord e => Style -> Rectangle -> Text -> Bool -> Double -> Selection -> UI e msg ()
-drawTextInputContent style bounds displayValue enabled ox sel@(Selection _ active) = do
-  when (enabled && drawLo < drawHi) $ do
+drawTextInputContent style bounds displayValue isEnabled ox sel@(Selection _ active) = do
+  when (isEnabled && drawLo < drawHi) $ do
     loX <- charOffset displayValue drawLo
     hiX <- charOffset displayValue drawHi
     let selRect = Rectangle
@@ -238,7 +239,7 @@ drawTextInputContent style bounds displayValue enabled ox sel@(Selection _ activ
   let textBounds = bounds { rectX = rectX bounds - ox }
   withBounds textBounds $ drawText (styleTextColour style) AlignLeft displayValue
 
-  when enabled $ do
+  when isEnabled $ do
     curX <- charOffset displayValue active
     let cursorRect = Rectangle
           (rectX bounds + realToFrac curX - ox)
@@ -274,35 +275,35 @@ textInput eid attrs = do
         -- another element). Treat as a fresh click rather than a drag
         -- continuation so the old anchor is not inherited.
         justFocused = hasFocus && not wasFocused
-        enabled     = hasFocus && not disabled
+        isEnabled     = hasFocus && not disabled
 
     contentW <- realToFrac <$> charOffset displayValue (T.length displayValue)
     let maxScrollPx = maxScrollPixels contentW w
         scrollX     = scrollPixels maxScrollPx frac
 
     selAfterMouse <-
-      if enabled
+      if isEnabled
         then resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX selInit
         else pure selInit
 
-    let selAfterKeys = resolveKeyboardSelection enabled (inputKeyEvents input) (T.length currentValue) selAfterMouse
+    let selAfterKeys = resolveKeyboardSelection isEnabled (inputKeyEvents input) (T.length currentValue) selAfterMouse
 
         (selFinal, edited)
-          | enabled   = applyEdit (textInputConfigInputFilter cfg) currentValue input selAfterKeys
+          | isEnabled   = applyEdit (textInputConfigInputFilter cfg) currentValue input selAfterKeys
           | otherwise = (selAfterKeys, Nothing)
 
-        submitted = enabled && any (\e -> key e == KeyReturn) (inputKeyEvents input)
+        submitted = isEnabled && any (\e -> key e == KeyReturn) (inputKeyEvents input)
 
     fire attrs ([Submitted | submitted] ++ [Edited t | Just t <- [edited]])
 
-    when enabled $ emitUi (SetSelectionAt eid selFinal)
+    when isEnabled $ emitUi (SetSelectionAt eid selFinal)
 
     -- Computed locally rather than re-read via 'getScrollState': scroll
     -- writes are deferred (applied between frames), so a same-frame
     -- re-read would still see the pre-write value and the cursor would lag
     -- the auto-scroll by one frame.
     effectiveScrollX <-
-      if enabled
+      if isEnabled
         then do
           curX <- charOffset displayValue (selectionActive selFinal)
           let newScrollX = resolveScroll w scrollX (realToFrac curX)
@@ -310,7 +311,7 @@ textInput eid attrs = do
           pure newScrollX
         else pure scrollX
 
-    drawTextInputContent style bounds displayValue enabled effectiveScrollX selFinal
+    drawTextInputContent style bounds displayValue isEnabled effectiveScrollX selFinal
   where
     cfg          = fixFocusOnClick (configure defaultTextInputConfig attrs)
     fixFocusOnClick c = setControlConfig ((controlConfig c) { ccFocusOnClick = FocusSelf }) c

@@ -12,7 +12,7 @@ module Blink.ControlBehaviour
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Attributes (Attr, HasControlConfig, isTabStop)
+import Blink.Attributes (Attr, HasControlConfig, enabled, isTabStop)
 import Blink.Element (HasElementEvent)
 import Blink.ElementBehaviour (elementBehaviourSpec, tagged)
 import Blink.Generators (genPointIn)
@@ -80,6 +80,16 @@ controlBehaviourSpec bounds ctx eid marginPoint insideRect outsidePoint render =
       -- (see 'Blink.Control.control').
       result <- runInteractions bounds ctx (render tagged) [Wait 1] [Tab]
       resultMessages result `shouldBe` ["FocusLost"]
+
+  describe "enabled attribute" $ do
+    it "raises nothing when disabled via the attribute, even with nothing else focused" $ do
+      result <- runInteractions bounds ctx (render (enabled False : tagged)) [] []
+      resultMessages result `shouldBe` []
+
+    it "raises no focus gained event from a click when disabled via the attribute" $ monadicIO $ do
+      p <- pick (genPointIn insideRect)
+      result <- run (runInteractions bounds ctx (render (enabled False : isTabStop False : tagged)) [] [ClickAt p, Wait 1])
+      assert (notElem "FocusGained" (resultMessages result))
 
   describe "hit region" $ do
     it "does not raise a click event for a press and release inside its margin" $ do
