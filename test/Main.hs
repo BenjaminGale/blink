@@ -2,6 +2,7 @@ module Main (main) where
 
 import Test.Hspec
 import qualified Blink.AppSpec as App
+import qualified Blink.ControlSpec as Control
 import qualified Blink.ControlsSpec as Controls
 import qualified Blink.ElementSpec as Element
 import qualified Blink.GeometrySpec as Geometry
@@ -20,5 +21,6 @@ main = hspec $ do
   Layout.spec
   Mouse.spec
   Element.spec
+  Control.spec
   Controls.spec
   Interaction.spec
