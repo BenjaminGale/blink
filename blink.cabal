@@ -40,6 +40,7 @@ library
         Blink.Element
         Blink.Label
         Blink.RadioButton
+        Blink.TextInput
         Blink.Geometry
         Blink.Input
         Blink.Layout
@@ -85,6 +86,7 @@ test-suite blink-tests
         Blink.LayoutSpec
         Blink.MouseSpec
         Blink.RadioButtonSpec
+        Blink.TextInputSpec
         Blink.UISpec
         Blink.UpdateSpec
     build-depends:
