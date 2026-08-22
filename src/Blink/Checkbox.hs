@@ -12,7 +12,7 @@ module Blink.Checkbox
   , isSelected
   , onSelectedChanged
   , isTabStop
-  , enabled
+  , isEnabled
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -27,7 +27,7 @@ import Data.Text (Text)
 
 import Blink.Attributes
   ( Attr, ControlConfig, HasControlConfig (..), HasTextConfig (..)
-  , defaultControlConfig, configure, enabled, isTabStop, text
+  , defaultControlConfig, configure, isEnabled, isTabStop, text
   )
 import Blink.Button (HasToggleConfig (..), ToggleConfig (..), ToggleEvent (..), isSelected, onSelectedChanged, toggleBase)
 import Blink.Control (getStyle)

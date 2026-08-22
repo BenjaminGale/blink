@@ -129,7 +129,7 @@ arrowTree :: UI TestElement String ()
 arrowTree = control Container arrowCfg (tag Container) $
   mapM_ (\c -> control c defaultTestConfig (tag c) (pure ())) [ChildA, ChildB, ChildC]
   where
-    arrowCfg = TestConfig defaultControlConfig { ccTabNavigation = Contained, ccArrowNavigation = True }
+    arrowCfg = TestConfig defaultControlConfig { ccTabNavigation = Contained, ccIsArrowNavigationEnabled = True }
 
 -- | 'Outer' (Contained) holds a nested 'Inner' (also Contained, with its
 -- own children 'InnerA'\/'InnerB') plus a plain 'OuterChildB', followed by
@@ -250,7 +250,7 @@ spec = describe "Blink.Control" $ do
       result <- runInteractions testBounds seedCtx containedTree [Wait 1] [PressKey KeyDown []]
       resultMessages result `shouldBe` []
 
-    it "arrow keys also cycle within the container when arrowNavigation is enabled" $ do
+    it "arrow keys also cycle within the container when isArrowNavigationEnabled is set" $ do
       result <- runInteractions testBounds seedCtx arrowTree [Wait 1] [PressKey KeyDown []]
       resultMessages result `shouldBe` ["ChildA lost", "ChildB gained"]
 

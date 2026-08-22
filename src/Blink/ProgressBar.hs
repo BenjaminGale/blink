@@ -8,7 +8,7 @@ module Blink.ProgressBar
   , progressBar
   , progress
   , bandSpeed
-  , enabled
+  , isEnabled
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -21,7 +21,7 @@ module Blink.ProgressBar
 
 import Blink.Attributes
   ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..)
-  , configAny, defaultControlConfig, configure, enabled
+  , configAny, defaultControlConfig, configure, isEnabled
   )
 import Blink.Control (control, getStyle)
 import Blink.Element

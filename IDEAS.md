@@ -20,7 +20,7 @@ Description — what it is, why it'd help, or what it'd take.
 ## Controls
 
 ### Clamped (non-wrapping) arrow-key navigation for a future list widget
-Depends on: Scope-aware container support (implemented; see `ccTabNavigation`/`ccArrowNavigation` on `Blink.Attributes.ControlConfig`)
+Depends on: Scope-aware container support (implemented; see `ccTabNavigation`/`ccIsArrowNavigationEnabled` on `Blink.Attributes.ControlConfig`)
 
 `control`'s `Contained` arrow-key navigation always wraps (same mechanism
 as Tab), since it works purely off render order with no notion of "am I

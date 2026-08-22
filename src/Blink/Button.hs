@@ -34,7 +34,7 @@ module Blink.Button
   , toggleBase
   , text
   , isTabStop
-  , enabled
+  , isEnabled
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -50,7 +50,7 @@ import Data.Text (Text)
 
 import Blink.Attributes
   ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
-  , configAny, defaultControlConfig, configure, enabled, fire, isTabStop, onEvent, reactionsTo, text
+  , configAny, defaultControlConfig, configure, isEnabled, fire, isTabStop, onEvent, reactionsTo, text
   )
 import Blink.Control (control, getStyle)
 import Blink.Element

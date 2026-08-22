@@ -18,7 +18,7 @@ import Control.Monad (when)
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Attributes (Attr, HasControlConfig, enabled, isTabStop)
+import Blink.Attributes (Attr, HasControlConfig, isEnabled, isTabStop)
 import Blink.Element (HasElementEvent)
 import Blink.ElementBehaviour (elementBehaviourSpec, tagged)
 import Blink.Generators (genPointIn)
@@ -109,12 +109,12 @@ controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint rend
 
   describe "enabled attribute" $ do
     it "raises nothing when disabled via the attribute, even with nothing else focused" $ do
-      result <- runInteractions bounds ctx (render (enabled False : tagged)) [] []
+      result <- runInteractions bounds ctx (render (isEnabled False : tagged)) [] []
       resultMessages result `shouldBe` []
 
     it "raises no focus gained event from a click when disabled via the attribute" $ monadicIO $ do
       p <- pick (genPointIn insideRect)
-      result <- run (runInteractions bounds ctx (render (enabled False : isTabStop False : tagged)) [] [ClickAt p, Wait 1])
+      result <- run (runInteractions bounds ctx (render (isEnabled False : isTabStop False : tagged)) [] [ClickAt p, Wait 1])
       assert (notElem "FocusGained" (resultMessages result))
 
   describe "hit region" $ do

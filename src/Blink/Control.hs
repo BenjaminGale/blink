@@ -14,20 +14,20 @@
 -- element is gaining or losing focus reports it consistently regardless
 -- of render order -- see
 -- 'Blink.Element.FocusGained'\/'Blink.Element.FocusLost'. A disabled
--- control (per 'enabled') neither claims focus nor reacts to clicks or Tab.
+-- control (per 'isEnabled') neither claims focus nor reacts to clicks or Tab.
 --
 -- = Building a container
 --
 -- 'control' is also the direct way to build a control that manages a
 -- group of other controls as children, via 'tabNavigation' and
--- 'arrowNavigation' -- there is no separate "container" primitive; a
+-- 'isArrowNavigationEnabled' -- there is no separate "container" primitive; a
 -- container is just a plain 'control' configured this way:
 --
 -- ['Flatten' (the default)] Not a navigation container: this control's own
 --     slot (if it's a tab stop) and its children all fold into the same
 --     Tab sequence as its siblings.
 -- ['Contained'] Opens a focus scope for this control's children:
---     Tab\/Shift-Tab (and, with 'arrowNavigation', the arrow keys too)
+--     Tab\/Shift-Tab (and, with 'isArrowNavigationEnabled', the arrow keys too)
 --     cycle within it forever. Ctrl+Tab\/Ctrl+Shift+Tab are always the way
 --     out, moving this control's own slot to the next\/previous one at
 --     the enclosing level, regardless of nesting depth.
@@ -37,9 +37,9 @@ module Blink.Control
   ( control
   , getStyle
   , isTabStop
-  , enabled
+  , isEnabled
   , tabNavigation
-  , arrowNavigation
+  , isArrowNavigationEnabled
   , NavigationMode (..)
   ) where
 
@@ -52,7 +52,7 @@ import Data.Maybe (fromMaybe)
 import Blink.Attributes
   ( Attr, fire
   , HasControlConfig (..), ControlConfig (..), FocusOnClick (..), NavigationMode (..)
-  , autoClaimsFocus, isTabStop, enabled, tabNavigation, arrowNavigation
+  , autoClaimsFocus, isTabStop, isEnabled, tabNavigation, isArrowNavigationEnabled
   )
 import Blink.Element (ElementEvent (..), HasElementEvent (..), element, onClicked)
 import Blink.Geometry (Rectangle, insetRect, borderInsets)
@@ -181,11 +181,11 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
 --
 -- When 'ccTabNavigation' is 'Contained' (and this control is itself a tab
 -- stop -- see @withChildNavigation@), @content@ becomes a focus scope for
--- Tab\/Shift-Tab (and, if 'ccArrowNavigation', the arrow keys too);
+-- Tab\/Shift-Tab (and, if 'ccIsArrowNavigationEnabled', the arrow keys too);
 -- Ctrl+Tab\/Ctrl+Shift+Tab always escape it, moving this control's own
 -- slot to the next\/previous one at the enclosing level.
 control :: (Ord e, HasControlConfig e cfg, HasElementEvent ev) => e -> cfg -> [Attr e ev msg cfg] -> UI e msg () -> UI e msg ()
-control eid cfg attrs content = disableWhen (not (ccEnabled cc)) $ do
+control eid cfg attrs content = disableWhen (not (ccIsEnabled cc)) $ do
   wasFocused  <- isFocused eid
   currentScope <- getCurrentScope
   applySelfFocus
@@ -243,19 +243,19 @@ control eid cfg attrs content = disableWhen (not (ccEnabled cc)) $ do
     -- themselves are trapped inside that scope.
     applyScopeEscape wasFocused = advanceOrRetreat wasFocused [(KeyTab, [Ctrl])] [(KeyTab, [Ctrl, Shift])]
 
-    -- Tab\/Shift-Tab (plus the arrow keys, if 'ccArrowNavigation') --
+    -- Tab\/Shift-Tab (plus the arrow keys, if 'ccIsArrowNavigationEnabled') --
     -- shared between the scope's own redefined navigation keys
     -- ('withChildNavigation') and 'reservedKeys' below.
-    tabAdvanceKeys, tabRetreatKeys :: [(Key, [Modifier])]
-    tabAdvanceKeys = (KeyTab, []) : [(k, []) | ccArrowNavigation cc, k <- [KeyRight, KeyDown]]
-    tabRetreatKeys = (KeyTab, [Shift]) : [(k, []) | ccArrowNavigation cc, k <- [KeyLeft, KeyUp]]
+    scopeAdvanceKeys, scopeRetreatKeys :: [(Key, [Modifier])]
+    scopeAdvanceKeys = (KeyTab, []) : [(k, []) | ccIsArrowNavigationEnabled cc, k <- [KeyRight, KeyDown]]
+    scopeRetreatKeys = (KeyTab, [Shift]) : [(k, []) | ccIsArrowNavigationEnabled cc, k <- [KeyLeft, KeyUp]]
 
     -- Every key this control reserves for navigation once it opens a
     -- scope -- hidden from its own raw key reporting (see the
     -- 'withoutKeyEvents' call above) so a child cycling through them, or
     -- an escape via Ctrl+Tab, never also leaks through as an ordinary
     -- 'Blink.Element.onKeyPressed' on this control itself.
-    reservedKeys = tabAdvanceKeys ++ tabRetreatKeys ++ [(KeyTab, [Ctrl]), (KeyTab, [Ctrl, Shift])]
+    reservedKeys = scopeAdvanceKeys ++ scopeRetreatKeys ++ [(KeyTab, [Ctrl]), (KeyTab, [Ctrl, Shift])]
 
     -- A click hands focus to whichever element FocusOnClick names, taking
     -- effect one frame later (see the module header). Targets whichever
@@ -269,7 +269,7 @@ control eid cfg attrs content = disableWhen (not (ccEnabled cc)) $ do
 
     -- Opens a focus scope for @content'@ exactly when this control does
     -- (see 'opensScope'), redefining the ambient navigation keys to Tab\/
-    -- Shift-Tab (plus the arrow keys, if 'ccArrowNavigation') so
+    -- Shift-Tab (plus the arrow keys, if 'ccIsArrowNavigationEnabled') so
     -- containment and cycling fall out of ordinary focus behaviour for
     -- whatever's inside, unchanged. 'applyScopeEscape' runs after this
     -- returns (see above), never inside it, so it always targets the
@@ -278,4 +278,4 @@ control eid cfg attrs content = disableWhen (not (ccEnabled cc)) $ do
       | opensScope = withFocusScope eid False (withNavigationKeys scopeKeys content')
       | otherwise  = content'
       where
-        scopeKeys = NavigationKeys { navAdvance = tabAdvanceKeys, navRetreat = tabRetreatKeys }
+        scopeKeys = NavigationKeys { navAdvance = scopeAdvanceKeys, navRetreat = scopeRetreatKeys }

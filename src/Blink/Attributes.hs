@@ -28,9 +28,9 @@ module Blink.Attributes
   , autoClaimsFocus
   , HasControlConfig (..)
   , isTabStop
-  , enabled
+  , isEnabled
   , tabNavigation
-  , arrowNavigation
+  , isArrowNavigationEnabled
   , HasTextConfig (..)
   , text
   ) where
@@ -68,38 +68,38 @@ data NavigationMode
     -- cycle within it forever, never escaping back out that way.
     -- Ctrl+Tab\/Ctrl+Shift+Tab are the only way out, moving this control's
     -- own slot to the next\/previous one at the enclosing level -- and, if
-    -- 'ccArrowNavigation' is set, the arrow keys also cycle within the
+    -- 'ccIsArrowNavigationEnabled' is set, the arrow keys also cycle within the
     -- scope, same as Tab\/Shift-Tab.
   deriving (Eq, Show)
 
 -- | Configuration shared by every control, regardless of that control's own
 -- @cfg@: whether Tab lands on it ('ccIsTabStop'), what clicking it does to
 -- focus ('ccFocusOnClick'), whether it responds to input at all
--- ('ccEnabled'), how its children navigate via Tab ('ccTabNavigation'), and
+-- ('ccIsEnabled'), how its children navigate via Tab ('ccTabNavigation'), and
 -- (only meaningful when 'ccTabNavigation' is 'Contained') whether the
--- arrow keys also cycle within that same scope ('ccArrowNavigation').
+-- arrow keys also cycle within that same scope ('ccIsArrowNavigationEnabled').
 -- Every control's own @cfg@ carries one of these, accessed uniformly via
 -- 'HasControlConfig'.
 data ControlConfig e = ControlConfig
-  { ccIsTabStop       :: Bool
-  , ccFocusOnClick    :: FocusOnClick e
-  , ccEnabled         :: Bool
-  , ccTabNavigation   :: NavigationMode
-  , ccArrowNavigation :: Bool
+  { ccIsTabStop            :: Bool
+  , ccFocusOnClick         :: FocusOnClick e
+  , ccIsEnabled            :: Bool
+  , ccTabNavigation        :: NavigationMode
+  , ccIsArrowNavigationEnabled :: Bool
   }
 
 -- | The default 'ControlConfig': an enabled tab stop that takes focus on
 -- click, not a navigation container ('Flatten') -- what a plain
 -- interactive control wants unless it overrides one or more via
--- 'isTabStop' \/ 'enabled' \/ 'tabNavigation' \/ 'arrowNavigation' (or,
--- for @ccFocusOnClick@, directly on its own config).
+-- 'isTabStop' \/ 'isEnabled' \/ 'tabNavigation' \/ 'isArrowNavigationEnabled'
+-- (or, for @ccFocusOnClick@, directly on its own config).
 defaultControlConfig :: ControlConfig e
 defaultControlConfig = ControlConfig
-  { ccIsTabStop       = True
-  , ccFocusOnClick    = FocusSelf
-  , ccEnabled         = True
-  , ccTabNavigation   = Flatten
-  , ccArrowNavigation = False
+  { ccIsTabStop            = True
+  , ccFocusOnClick         = FocusSelf
+  , ccIsEnabled            = True
+  , ccTabNavigation        = Flatten
+  , ccIsArrowNavigationEnabled = False
   }
 
 -- | Whether a control is eligible to claim focus purely by rendering first
@@ -170,8 +170,8 @@ isTabStop b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccIsTa
 -- | Whether the control responds to input at all. A disabled control still
 -- renders (in its disabled style) but ignores hover, clicks, key presses,
 -- and focus, and is skipped by Tab\/Shift-Tab. Defaults to 'True'.
-enabled :: HasControlConfig e cfg => Bool -> Attr e ev msg cfg
-enabled b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccEnabled = b }) cfg
+isEnabled :: HasControlConfig e cfg => Bool -> Attr e ev msg cfg
+isEnabled b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccIsEnabled = b }) cfg
 
 -- | How this control's children navigate via Tab\/Shift-Tab (and, since
 -- they ride along with the same scope, Ctrl+Tab\/Ctrl+Shift+Tab) -- see
@@ -182,8 +182,8 @@ tabNavigation m = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { cc
 -- | Whether the arrow keys also cycle within this control's focus scope,
 -- the same way Tab\/Shift-Tab do. Only meaningful when 'tabNavigation' is
 -- 'Contained'. Defaults to 'False'.
-arrowNavigation :: HasControlConfig e cfg => Bool -> Attr e ev msg cfg
-arrowNavigation b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccArrowNavigation = b }) cfg
+isArrowNavigationEnabled :: HasControlConfig e cfg => Bool -> Attr e ev msg cfg
+isArrowNavigationEnabled b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccIsArrowNavigationEnabled = b }) cfg
 
 -- | Implemented by any control's own @cfg@ type to say how it carries
 -- displayed text, letting 'text' work uniformly across them (same pattern
