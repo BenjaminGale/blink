@@ -8,7 +8,7 @@ import Blink.Attributes (Attr, text)
 import Blink.Element (ElementEvent)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
-import Blink.RadioButton (RadioButtonConfig, isSelected, onToggled, radioButton)
+import Blink.RadioButton (RadioButtonConfig, isSelected, onSelectedChanged, radioButton)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -80,22 +80,22 @@ spec = describe "Blink.RadioButton" $ do
     ctx <- start [text "Option A", isSelected True]
     getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 20 70) "\9673" testColour AlignCenter]
 
-  it "fires onToggled with True when clicked while unselected" $ do
-    let attrs = [isSelected False, onToggled (\b -> [OutMsg (show b)])]
+  it "fires onSelectedChanged with True when clicked while unselected" $ do
+    let attrs = [isSelected False, onSelectedChanged (\b -> [OutMsg (show b)])]
     ctx0 <- start attrs
     ctx1 <- step attrs (down onControl) ctx0
     ctx2 <- step attrs (releasedAt onControl) ctx1
     getMessages ctx2 `shouldBe` [show True]
 
-  it "does not fire onToggled when clicked while already selected" $ do
-    let attrs = [isSelected True, onToggled (\b -> [OutMsg (show b)])]
+  it "does not fire onSelectedChanged when clicked while already selected" $ do
+    let attrs = [isSelected True, onSelectedChanged (\b -> [OutMsg (show b)])]
     ctx0 <- start attrs
     ctx1 <- step attrs (down onControl) ctx0
     ctx2 <- step attrs (releasedAt onControl) ctx1
     getMessages ctx2 `shouldBe` []
 
-  it "fires onToggled when activated via Enter while unselected and focused" $ do
-    let attrs = [isSelected False, onToggled (\b -> [OutMsg (show b)])]
+  it "fires onSelectedChanged when activated via Enter while unselected and focused" $ do
+    let attrs = [isSelected False, onSelectedChanged (\b -> [OutMsg (show b)])]
     ctx0 <- start attrs
     ctx1 <- step attrs (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0
     getMessages ctx1 `shouldBe` [show True]

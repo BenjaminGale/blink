@@ -2,12 +2,14 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | A checkbox: a glyph and a caption toggled together as one control.
+-- Built on 'toggleBase' -- see "Blink.Button" for how it and every other
+-- button-like control fit together.
 module Blink.Checkbox
   ( CheckboxConfig
   , checkbox
   , text
   , isSelected
-  , onToggled
+  , onSelectedChanged
   , isTabStop
   , focusOnClick
   , FocusOnClick (..)
@@ -27,7 +29,7 @@ import Blink.Attributes
   ( Attr, ControlConfig, FocusOnClick (..), HasControlConfig (..), HasTextConfig (..)
   , defaultControlConfig, configure, focusOnClick, isTabStop, text
   )
-import Blink.Button (HasToggleConfig (..), ToggleConfig (..), isSelected, onToggled, toggleBase)
+import Blink.Button (HasToggleConfig (..), ToggleConfig (..), isSelected, onSelectedChanged, toggleBase)
 import Blink.Control (getStyle)
 import Blink.Element
   ( ElementEvent
@@ -39,7 +41,7 @@ import Blink.Style (Style (..))
 import Blink.UI (UI, drawText, getBounds, withBounds)
 
 -- | Configuration for 'checkbox', set via 'text', 'isSelected', and
--- 'onToggled'. Defaults to no caption, not selected, and no reaction.
+-- 'onSelectedChanged'. Defaults to no caption, not selected, and no reaction.
 data CheckboxConfig e msg = CheckboxConfig
   { checkboxConfigControl :: ControlConfig e
   , checkboxConfigToggle  :: ToggleConfig e msg
@@ -49,7 +51,7 @@ data CheckboxConfig e msg = CheckboxConfig
 defaultCheckboxConfig :: CheckboxConfig e msg
 defaultCheckboxConfig = CheckboxConfig
   { checkboxConfigControl = defaultControlConfig
-  , checkboxConfigToggle  = ToggleConfig { tcSelected = False, tcOnToggled = const [] }
+  , checkboxConfigToggle  = ToggleConfig { tcSelected = False, tcOnSelectedChanged = const [] }
   , checkboxConfigText    = ""
   }
 
@@ -76,7 +78,7 @@ checkboxGlyph False = "\9744" -- BALLOT BOX
 -- 'isSelected'), beside a caption set via 'text', toggled together as one
 -- control -- clicking either the glyph or the caption activates it, the
 -- same as 'Blink.Button.toggleButton'. Flips every time it's activated;
--- see 'onToggled' for reacting to it.
+-- see 'onSelectedChanged' for reacting to it.
 checkbox :: Ord e => e -> [Attr e ElementEvent msg (CheckboxConfig e msg)] -> UI e msg ()
 checkbox eid attrs = toggleBase not eid cfg attrs $ do
   style  <- getStyle eid

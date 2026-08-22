@@ -4,6 +4,23 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | Buttons and button-like controls: activated by a click or by pressing
 -- Enter while focused.
+--
+-- = The controls in this family
+--
+-- 'button' is a plain, momentary button. 'toggleButton',
+-- 'Blink.Checkbox.checkbox', and 'Blink.RadioButton.radioButton' all track
+-- a selected\/unselected state instead: 'toggleButton' flips every time
+-- it's clicked; a checkbox does too, drawing a checkmark glyph beside its
+-- caption; a radio button can only become selected, never unselected, by
+-- being clicked -- it gives up selection when another radio button in the
+-- same group is selected instead.
+--
+-- @
+-- control  --> buttonBase --> button
+--                         --> toggleBase --> toggleButton
+--                                         --> checkbox     (see "Blink.Checkbox")
+--                                         --> radioButton  (see "Blink.RadioButton")
+-- @
 module Blink.Button
   ( ButtonConfig
   , button
@@ -12,7 +29,7 @@ module Blink.Button
   , ToggleConfig (..)
   , HasToggleConfig (..)
   , isSelected
-  , onToggled
+  , onSelectedChanged
   , buttonBase
   , toggleBase
   , text
@@ -87,19 +104,19 @@ button eid attrs = buttonBase eid cfg attrs $ do
 
 -- | The selected\/unselected state every toggle-style control (a
 -- 'toggleButton', or a checkbox\/radio button built the same way) carries,
--- set via 'isSelected' and 'onToggled'. Every such control's own @cfg@
+-- set via 'isSelected' and 'onSelectedChanged'. Every such control's own @cfg@
 -- carries one of these, accessed uniformly via 'HasToggleConfig' -- the
 -- same pattern 'HasControlConfig' already uses for 'ControlConfig'.
 data ToggleConfig e msg = ToggleConfig
   { tcSelected  :: Bool
-  , tcOnToggled :: Bool -> [Out e msg]
+  , tcOnSelectedChanged :: Bool -> [Out e msg]
   }
 
 defaultToggleConfig :: ToggleConfig e msg
-defaultToggleConfig = ToggleConfig { tcSelected = False, tcOnToggled = const [] }
+defaultToggleConfig = ToggleConfig { tcSelected = False, tcOnSelectedChanged = const [] }
 
 -- | Implemented by any toggle-style control's own @cfg@ type to say how it
--- carries a 'ToggleConfig' -- lets 'isSelected' \/ 'onToggled' work
+-- carries a 'ToggleConfig' -- lets 'isSelected' \/ 'onSelectedChanged' work
 -- uniformly across every such control's differently-shaped @cfg@.
 class HasToggleConfig e msg cfg | cfg -> e msg where
   toggleConfig    :: cfg -> ToggleConfig e msg
@@ -114,10 +131,10 @@ isSelected b = configAny $ \cfg -> setToggleConfig ((toggleConfig cfg) { tcSelec
 -- change to. Reports what /would/ change; it's up to the reaction to
 -- actually store the new value and pass it back in via 'isSelected' next
 -- frame.
-onToggled :: HasToggleConfig e msg cfg => (Bool -> [Out e msg]) -> Attr e ev msg cfg
-onToggled reaction = configAny $ \cfg -> setToggleConfig ((toggleConfig cfg) { tcOnToggled = reaction }) cfg
+onSelectedChanged :: HasToggleConfig e msg cfg => (Bool -> [Out e msg]) -> Attr e ev msg cfg
+onSelectedChanged reaction = configAny $ \cfg -> setToggleConfig ((toggleConfig cfg) { tcOnSelectedChanged = reaction }) cfg
 
--- | Runs @content@ as 'buttonBase', and additionally fires 'onToggled'
+-- | Runs @content@ as 'buttonBase', and additionally fires 'onSelectedChanged'
 -- (only) when activating the control would move its selected state
 -- (per 'isSelected') to a different value than @next@ computes from it --
 -- e.g. @not@ for a control that flips every time, or @const True@ for one
@@ -134,10 +151,10 @@ toggleBase next eid cfg attrs content = buttonBase eid cfg (attrs ++ [toggledRea
     newSelected = next (tcSelected tc)
     toggledReaction
       | newSelected == tcSelected tc = onClicked (const [])
-      | otherwise                    = onClicked (\() -> tcOnToggled tc newSelected)
+      | otherwise                    = onClicked (\() -> tcOnSelectedChanged tc newSelected)
 
 -- | Configuration for 'toggleButton', set via 'text', 'isSelected', and
--- 'onToggled'. Defaults to no text, not selected, and no reaction.
+-- 'onSelectedChanged'. Defaults to no text, not selected, and no reaction.
 data ToggleButtonConfig e msg = ToggleButtonConfig
   { toggleButtonConfigControl :: ControlConfig e
   , toggleButtonConfigToggle  :: ToggleConfig e msg
@@ -166,7 +183,7 @@ instance HasTextConfig (ToggleButtonConfig e msg) where
 -- state (see 'isSelected') instead of only ever being momentarily pressed,
 -- flipping every time it's activated. Drawn in its pressed style while
 -- selected, even without being physically pressed, unless disabled.
--- Activated the same way as 'button'; see 'onToggled' for reacting to it.
+-- Activated the same way as 'button'; see 'onSelectedChanged' for reacting to it.
 toggleButton :: Ord e => e -> [Attr e ElementEvent msg (ToggleButtonConfig e msg)] -> UI e msg ()
 toggleButton eid attrs = toggleBase not eid cfg attrs $ do
   style <- toggleStyle eid (tcSelected (toggleButtonConfigToggle cfg))

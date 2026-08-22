@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Attributes (Attr, text)
-import Blink.Button (ButtonConfig, ToggleButtonConfig, button, isSelected, onToggled, toggleButton)
+import Blink.Button (ButtonConfig, ToggleButtonConfig, button, isSelected, onSelectedChanged, toggleButton)
 import Blink.Element (ElementEvent, onClicked)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
@@ -117,22 +117,22 @@ spec = describe "Blink.Button" $ do
       ctx <- startToggle [isSelected True]
       getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "" pressedColour AlignCenter]
 
-    it "fires onToggled with the flipped value when clicked" $ do
-      let attrs = [isSelected False, onToggled (\b -> [OutMsg (show b)])]
+    it "fires onSelectedChanged with the flipped value when clicked" $ do
+      let attrs = [isSelected False, onSelectedChanged (\b -> [OutMsg (show b)])]
       ctx0 <- startToggle attrs
       ctx1 <- stepToggle attrs (down onButton) ctx0
       ctx2 <- stepToggle attrs (releasedAt onButton) ctx1
       getMessages ctx2 `shouldBe` [show True]
 
-    it "fires onToggled with False when clicked while selected" $ do
-      let attrs = [isSelected True, onToggled (\b -> [OutMsg (show b)])]
+    it "fires onSelectedChanged with False when clicked while selected" $ do
+      let attrs = [isSelected True, onSelectedChanged (\b -> [OutMsg (show b)])]
       ctx0 <- startToggle attrs
       ctx1 <- stepToggle attrs (down onButton) ctx0
       ctx2 <- stepToggle attrs (releasedAt onButton) ctx1
       getMessages ctx2 `shouldBe` [show False]
 
-    it "fires onToggled when activated via Enter while focused" $ do
-      let attrs = [isSelected False, onToggled (\b -> [OutMsg (show b)])]
+    it "fires onSelectedChanged when activated via Enter while focused" $ do
+      let attrs = [isSelected False, onSelectedChanged (\b -> [OutMsg (show b)])]
       ctx0 <- startToggle attrs
       ctx1 <- stepToggle attrs (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0
       getMessages ctx1 `shouldBe` [show True]

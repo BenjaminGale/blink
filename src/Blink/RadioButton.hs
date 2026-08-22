@@ -2,12 +2,14 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | A radio button: a glyph and a caption selected together as one control.
+-- Built on 'toggleBase' -- see "Blink.Button" for how it and every other
+-- button-like control fit together.
 module Blink.RadioButton
   ( RadioButtonConfig
   , radioButton
   , text
   , isSelected
-  , onToggled
+  , onSelectedChanged
   , isTabStop
   , focusOnClick
   , FocusOnClick (..)
@@ -27,7 +29,7 @@ import Blink.Attributes
   ( Attr, ControlConfig, FocusOnClick (..), HasControlConfig (..), HasTextConfig (..)
   , defaultControlConfig, configure, focusOnClick, isTabStop, text
   )
-import Blink.Button (HasToggleConfig (..), ToggleConfig (..), isSelected, onToggled, toggleBase)
+import Blink.Button (HasToggleConfig (..), ToggleConfig (..), isSelected, onSelectedChanged, toggleBase)
 import Blink.Control (getStyle)
 import Blink.Element
   ( ElementEvent
@@ -39,7 +41,7 @@ import Blink.Style (Style (..))
 import Blink.UI (UI, drawText, getBounds, withBounds)
 
 -- | Configuration for 'radioButton', set via 'text', 'isSelected', and
--- 'onToggled'. Defaults to no caption, not selected, and no reaction.
+-- 'onSelectedChanged'. Defaults to no caption, not selected, and no reaction.
 data RadioButtonConfig e msg = RadioButtonConfig
   { radioConfigControl :: ControlConfig e
   , radioConfigToggle  :: ToggleConfig e msg
@@ -49,7 +51,7 @@ data RadioButtonConfig e msg = RadioButtonConfig
 defaultRadioButtonConfig :: RadioButtonConfig e msg
 defaultRadioButtonConfig = RadioButtonConfig
   { radioConfigControl = defaultControlConfig
-  , radioConfigToggle  = ToggleConfig { tcSelected = False, tcOnToggled = const [] }
+  , radioConfigToggle  = ToggleConfig { tcSelected = False, tcOnSelectedChanged = const [] }
   , radioConfigText    = ""
   }
 
@@ -79,7 +81,7 @@ radioGlyph False = "\9675" -- WHITE CIRCLE
 -- or 'Blink.Checkbox.checkbox', activating it never deselects it -- only
 -- ever moves it from unselected to selected, since a radio button gives up
 -- selection by a sibling in its group being selected instead, never by
--- being clicked again itself. See 'onToggled' for reacting to it.
+-- being clicked again itself. See 'onSelectedChanged' for reacting to it.
 radioButton :: Ord e => e -> [Attr e ElementEvent msg (RadioButtonConfig e msg)] -> UI e msg ()
 radioButton eid attrs = toggleBase (const True) eid cfg attrs $ do
   style  <- getStyle eid
