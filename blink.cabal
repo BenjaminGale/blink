@@ -74,6 +74,7 @@ test-suite blink-tests
         Blink.AppSpec
         Blink.ButtonSpec
         Blink.CheckboxSpec
+        Blink.ControlBehaviour
         Blink.ControlSpec
         Blink.ControlsSpec
         Blink.ControlsTestSupport
