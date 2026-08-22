@@ -19,6 +19,20 @@ Description — what it is, why it'd help, or what it'd take.
 
 ## Controls
 
+### Label mnemonics
+A label could name a mnemonic key (e.g. Alt+F) that redirects focus to its
+`target` the same way clicking it already does, without requiring the label
+itself to hold focus. This needs a way to observe a key combination
+regardless of which element currently holds focus, and modifier keys beyond
+`Shift` (e.g. `Alt`) plus letter/digit keys, neither of which `Blink.Input`'s
+`Key`/`Modifier` types support yet.
+
+### Label ellipsis
+When a label's text is wider than its available space, truncate it and
+append an ellipsis rather than clipping or overflowing. This needs text
+measurement (to know when truncation is needed and how much text fits)
+wired into rendering, which the library doesn't do anywhere yet.
+
 ### Wrapping label
 Depends on: Self-sizing layout via an Element type
 
