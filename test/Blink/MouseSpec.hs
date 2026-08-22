@@ -10,75 +10,74 @@ data Elem = ElemA | ElemB deriving (Eq, Ord, Show)
 spec :: Spec
 spec = do
   describe "nextButtonState" $ do
-    it "goes to ButtonDown on the down edge" $
+    it "reports the button as just pressed the first frame it's held" $
       nextButtonState False True MouseNotCaptured `shouldBe` ButtonDown (MouseNotCaptured :: MouseCapture Elem)
 
-    it "carries capture into ButtonDown on the down edge" $
-      nextButtonState False True (MouseCapturedBy ElemA) `shouldBe` ButtonDown (MouseCapturedBy ElemA)
+    it "never lets a new press start already captured, even if a capture value is passed in" $
+      nextButtonState False True (MouseCapturedBy ElemA) `shouldBe` ButtonDown (MouseNotCaptured :: MouseCapture Elem)
 
-    it "goes from down to held while still held" $
+    it "no longer reports a fresh press once the button has been held more than one frame" $
       nextButtonState True True (MouseCapturedBy ElemA) `shouldBe` ButtonHeld (MouseCapturedBy ElemA)
 
-    it "goes to ButtonReleased on the up edge" $
+    it "reports the button as just released the frame it comes up" $
       nextButtonState True False (MouseCapturedBy ElemA) `shouldBe` ButtonReleased (MouseCapturedBy ElemA)
 
-    it "goes from released to up once the button has been up for a frame" $
+    it "no longer reports a release once the button has been up more than one frame" $
       nextButtonState False False MouseNotCaptured `shouldBe` (ButtonUp :: ButtonState Elem)
 
   describe "captureOf" $ do
-    it "is MouseNotCaptured for ButtonUp" $
+    it "reports no capture while the button isn't held" $
       captureOf (ButtonUp :: ButtonState Elem) `shouldBe` MouseNotCaptured
 
-    it "recovers the capture carried by ButtonDown/Held/Released" $ do
+    it "reports whichever element is holding capture while the button is pressed, held, or just released" $ do
       captureOf (ButtonDown (MouseCapturedBy ElemA)) `shouldBe` MouseCapturedBy ElemA
       captureOf (ButtonHeld (MouseCapturedBy ElemA)) `shouldBe` MouseCapturedBy ElemA
       captureOf (ButtonReleased (MouseCapturedBy ElemA)) `shouldBe` MouseCapturedBy ElemA
 
   describe "nextHoverState" $ do
-    it "goes to Entered on the enter edge" $
+    it "reports an element as just entered the first frame it's hit" $
       nextHoverState NotOver True `shouldBe` Entered
 
-    it "goes from Entered to Over while still hit" $
+    it "no longer reports a fresh entry once an element has been hit more than one frame" $
       nextHoverState Entered True `shouldBe` Over
 
-    it "goes to Exited on the exit edge" $
+    it "reports an element as just exited the frame it stops being hit" $
       nextHoverState Over False `shouldBe` Exited
 
-    it "goes from Exited to NotOver once not hit for a frame" $
+    it "no longer reports an exit once an element has been un-hit more than one frame" $
       nextHoverState Exited False `shouldBe` NotOver
 
-    it "stays NotOver when never hit" $
+    it "keeps reporting an element as not hovered while it's never hit" $
       nextHoverState NotOver False `shouldBe` NotOver
 
-    it "stays Over while continuously hit" $
+    it "keeps reporting an element as hovered while it stays hit" $
       nextHoverState Over True `shouldBe` Over
 
   describe "wasHit" $
-    it "is true only for Entered and Over" $ do
+    it "treats only a freshly-entered or continuously-hovered element as currently hit" $ do
       wasHit Entered `shouldBe` True
       wasHit Over `shouldBe` True
       wasHit NotOver `shouldBe` False
       wasHit Exited `shouldBe` False
 
   describe "advanceMouse" $ do
-    it "starts empty with no button held and nothing hovered" $ do
+    it "starts with nothing held and nothing hovered" $ do
       mouseButton (emptyMouse :: Mouse Elem) `shouldBe` ButtonUp
       mouseHoverPrev (emptyMouse :: Mouse Elem) `shouldBe` Map.empty
 
-    it "advances the button state alongside hover" $ do
+    it "advances the button and hover together in one step" $ do
       let mouse0 = emptyMouse { mouseHoverNext = Map.fromList [(ElemA, Entered)] }
           mouse1 = advanceMouse False True mouse0
       mouseButton mouse1 `shouldBe` ButtonDown MouseNotCaptured
       mouseHoverPrev mouse1 `shouldBe` Map.fromList [(ElemA, Entered)]
       mouseHoverNext mouse1 `shouldBe` Map.empty
 
-    it "drops a hover entry that wasn't touched this frame, so a stale state isn't resumed" $ do
-      -- ElemA was Over last frame (in mouseHoverPrev) but wasn't visited
-      -- this frame, so mouseHoverNext never got an entry for it. Advancing
-      -- should drop it rather than carry the stale Over forward: the next
-      -- time ElemA is visited, a fresh Map.findWithDefault NotOver lookup
-      -- (as 'Blink.Element' will do) correctly starts it from NotOver
-      -- instead of resuming as if it had been continuously hovered.
+    it "forgets an element's hover once it stops being visited, rather than resuming it as still hovered" $ do
+      -- ElemA was hovered last frame but wasn't visited this frame at all
+      -- (e.g. it stopped being rendered). Advancing should forget it rather
+      -- than carry the old hovered reading forward: the next time ElemA is
+      -- visited, it should be treated as freshly entering rather than as
+      -- having been continuously hovered the whole time.
       let mouse0 = emptyMouse
             { mouseButton    = ButtonUp
             , mouseHoverPrev = Map.fromList [(ElemA, Over)]
@@ -87,7 +86,7 @@ spec = do
           mouse1 = advanceMouse False False mouse0
       mouseHoverPrev mouse1 `shouldBe` Map.empty
 
-    it "only carries forward hover entries touched this frame" $ do
+    it "treats each element's hover independently, so one dropping out doesn't affect another still being visited" $ do
       let mouse0 = emptyMouse
             { mouseHoverPrev = Map.fromList [(ElemA, Over), (ElemB, Over)]
             , mouseHoverNext = Map.fromList [(ElemA, Over)]

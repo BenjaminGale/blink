@@ -310,6 +310,13 @@ spec = describe "Blink.UI" $ do
         (b, _) <- runUI isButtonDown ctx
         b `shouldBe` True
 
+      it "isButtonDown remains True for as long as the button stays held, not just on the first frame" $ do
+        (_, ctx1) <- runWith buttonDown (pure ())
+        let ctx2 = advance buttonDown ctx1
+            ctx3 = advance buttonDown ctx2
+        (b, _) <- runUI isButtonDown ctx3
+        b `shouldBe` True
+
       it "isButtonReleased is True on the frame the button goes up" $ do
         (_, ctx0) <- runWith buttonDown (pure ())
         let ctx = advance noInput ctx0
@@ -370,6 +377,17 @@ spec = describe "Blink.UI" $ do
     it "makes the element dragging once capture is acquired" $ do
       (dragging, _) <- runWith buttonDown (acquireCapture () >> isDragging ())
       dragging `shouldBe` True
+
+    it "still acquires capture if the press started elsewhere and the cursor moves onto the element while held" $ do
+      -- Nobody claims capture on the first frame of the press (e.g. it
+      -- started over empty space, or a different element that didn't
+      -- acquire it); the element only becomes hit once the cursor moves
+      -- onto it on a later frame, and should still be able to claim capture
+      -- then.
+      (_, ctx1) <- runWith mouseOnCenterDown (pure ())
+      let ctx2 = advance mouseOnCenterDown ctx1
+      (_, ctx3) <- runUI (acquireCapture ()) ctx2
+      contextCaptured ctx3 `shouldBe` MouseCapturedBy ()
 
   describe "focus" $ do
     it "getFocus returns Nothing initially" $ do

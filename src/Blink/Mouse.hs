@@ -13,6 +13,8 @@ module Blink.Mouse
   , nextHoverState
   , Mouse (..)
   , emptyMouse
+  , advanceHover
+  , advanceButton
   , advanceMouse
   ) where
 
@@ -60,14 +62,23 @@ captureOf (ButtonHeld cap)     = cap
 captureOf (ButtonReleased cap) = cap
 
 -- | Advances a 'ButtonState' by one frame given whether the button was held
--- last frame and is held this frame, carrying forward whatever the previous
--- state's capture was.
+-- last frame and is held this frame. Capture only carries forward from
+-- @existingCapture@ while the button stays held across the transition (or on
+-- its release frame); it's dropped the moment the button was not down last
+-- frame -- both when it's fully up and on a fresh press -- so a new press
+-- never inherits a stale capture left over from a previous drag\/click
+-- cycle. Acquisition -- setting capture in the first place -- happens
+-- elsewhere (see 'Blink.UI.acquireCapture').
 nextButtonState :: Bool -> Bool -> MouseCapture e -> ButtonState e
-nextButtonState prevDown currDown carriedCapture
+nextButtonState prevDown currDown existingCapture
   | currDown && not prevDown = ButtonDown carriedCapture
   | currDown                 = ButtonHeld carriedCapture
   | prevDown                 = ButtonReleased carriedCapture
   | otherwise                = ButtonUp
+  where
+    carriedCapture
+      | prevDown  = existingCapture
+      | otherwise = MouseNotCaptured
 
 -- | An element's hover state for the current frame. 'Entered' and 'Exited'
 -- each last for exactly one frame -- the frame the geometric hit test
@@ -123,14 +134,27 @@ emptyMouse = Mouse
   , mouseHoverNext = Map.empty
   }
 
--- | Advances a 'Mouse' to the next frame given whether the button was held
--- last frame and is held this frame: advances 'mouseButton' via
--- 'nextButtonState', and rolls 'mouseHoverNext' (this completed frame's
--- results) into 'mouseHoverPrev' for the next frame to read, starting a
--- fresh empty 'mouseHoverNext'.
-advanceMouse :: Bool -> Bool -> Mouse e -> Mouse e
-advanceMouse prevDown currDown mouse = mouse
-  { mouseButton    = nextButtonState prevDown currDown (captureOf (mouseButton mouse))
-  , mouseHoverPrev = mouseHoverNext mouse
+-- | Rolls 'mouseHoverNext' (this completed frame's results) into
+-- 'mouseHoverPrev' for the next frame to read, starting a fresh empty
+-- 'mouseHoverNext'. Leaves 'mouseButton' untouched -- used on its own when
+-- re-rendering the current frame rather than advancing to a new one (see
+-- 'Blink.UI.rerenderContext'), where the button reading shouldn't be
+-- re-derived a second time against itself.
+advanceHover :: Mouse e -> Mouse e
+advanceHover mouse = mouse
+  { mouseHoverPrev = mouseHoverNext mouse
   , mouseHoverNext = Map.empty
   }
+
+-- | Advances 'mouseButton' via 'nextButtonState', given whether the button
+-- was held last frame and is held this frame. Leaves the hover maps
+-- untouched.
+advanceButton :: Bool -> Bool -> Mouse e -> Mouse e
+advanceButton prevDown currDown mouse =
+  mouse { mouseButton = nextButtonState prevDown currDown (captureOf (mouseButton mouse)) }
+
+-- | Advances a 'Mouse' to the next frame given whether the button was held
+-- last frame and is held this frame: 'advanceHover' followed by
+-- 'advanceButton'.
+advanceMouse :: Bool -> Bool -> Mouse e -> Mouse e
+advanceMouse prevDown currDown = advanceButton prevDown currDown . advanceHover

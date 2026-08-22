@@ -256,6 +256,8 @@ module Blink.UI
   , contextCaptured
   , contextButtonDown
   , contextButtonReleased
+  , getMouse
+  , contextMouse
     -- * Focus and keyboard navigation
   , FocusState (focusedElement, previousTabStop)
   , isNothingFocused
@@ -301,6 +303,11 @@ import qualified Data.Set as Set
 import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..), TextMeasurer (..), noOpTextMeasurer)
 import Blink.Geometry (Point, Rectangle, Size, BorderEdges, containsPoint, intersectRect)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
+import Blink.Mouse
+  ( MouseCapture (..), ButtonState (..), captureOf, nextButtonState
+  , HoverState (..), wasHit, nextHoverState
+  , Mouse (..), emptyMouse, advanceHover, advanceButton
+  )
 import Blink.Style (StyleSet (..), Theme (..))
 
 -- | Per-frame animation state threaded through the 'UIContext'. Set by the
@@ -403,46 +410,9 @@ isNothingFocused :: Maybe e -> Bool
 isNothingFocused Nothing  = True
 isNothingFocused (Just _) = False
 
--- | Which element, if any, holds mouse capture during a drag. A control
--- acquires capture on press so that it keeps receiving drag input even once
--- the cursor leaves its bounds; see 'acquireCapture'.
-data MouseCapture e
-  = MouseNotCaptured
-  | MouseCapturedBy e
-  deriving (Eq, Show)
-
--- | The left mouse button's state for the current frame, together with
--- which element (if any) holds mouse capture. 'ButtonReleased' lasts for
--- exactly one frame — the frame the button goes from held to up — so that a
--- control can tell "the button just came up" (fire a click) apart from "the
--- button has been up for a while" ('ButtonUp'). The frame after a release,
--- state falls back to 'ButtonUp' even though the raw held/not-held reading
--- hasn't changed since the release frame.
---
--- Capture can only be held while the button is down, or through the single
--- frame it's released on — never while 'ButtonUp' — which is why it lives
--- inside 'ButtonDown' and 'ButtonReleased' rather than as a separate field:
--- a captured element while the button has been up for a while is not a
--- state that should be representable.
-data ButtonState e
-  = ButtonUp
-    -- ^ Not held, and didn't just come up this frame. Never carries capture.
-  | ButtonDown (MouseCapture e)
-    -- ^ Held, whether this is the first frame of the press or a later one —
-    -- nothing distinguishes those two for controls, which only ever care
-    -- whether the button is currently held.
-  | ButtonReleased (MouseCapture e)
-    -- ^ Came up this frame, having been held the frame before. Still
-    -- carries whatever captured the press, so a control can distinguish a
-    -- drag-release from a plain click.
-  deriving (Eq, Show)
-
--- | The capture carried by a 'ButtonState', or 'MouseNotCaptured' when the
--- button is up.
-captureOf :: ButtonState e -> MouseCapture e
-captureOf ButtonUp             = MouseNotCaptured
-captureOf (ButtonDown cap)     = cap
-captureOf (ButtonReleased cap) = cap
+-- 'MouseCapture', 'ButtonState', 'captureOf', 'HoverState', 'Mouse', and
+-- their transition functions live in "Blink.Mouse" -- pure, no dependency on
+-- this module's monad.
 
 -- | Per-frame keyboard-focus targeting state: which element has focus, and
 -- which was the most recent tab stop. Reset and carried forward by
@@ -479,13 +449,6 @@ nextFocusTrackerFrame ft = ft
 data ElementState e = ElementState
   { elmScrollStates   :: Map.Map e ScrollState
   , elmSelections     :: Map.Map e [Selection]
-  , elmMouseOverPrev  :: Set.Set e
-    -- ^ Elements 'registerMouseOver' was called for during the previous
-    -- frame. Snapshotted by 'nextFrameContext' from the completed frame's
-    -- @outMouseOverThisFrame@; read via 'wasMouseOverLastFrame' to derive
-    -- mouse-enter\/-exit by comparing against this frame's geometric hit
-    -- test. Tracks every element hit this frame, so more than one control
-    -- can be moused over at once.
   }
 
 -- | Outputs accumulated during a single frame: draw commands, the queued
@@ -496,10 +459,6 @@ data FrameOutputs e msg = FrameOutputs
   { outDrawCommands       :: [DrawCommand]
   , outEvents             :: [Out e msg]
   , outRequiresAnimation  :: Bool
-  , outMouseOverThisFrame :: Set.Set e
-    -- ^ Elements 'registerMouseOver' has been called for so far this frame.
-    -- Snapshotted into @elmMouseOverPrev@ by 'nextFrameContext' once the
-    -- frame completes.
   }
 
 -- | The frame context threaded through every 'UI' computation. Carries the
@@ -528,10 +487,11 @@ data UIContext e msg = UIContext
     -- 'charOffset' and 'charAtOffset' rather than accessing this directly.
   , ctxFocus           :: FocusTracker e
     -- ^ Keyboard-focus targeting state. See 'FocusTracker'.
-  , ctxButton          :: ButtonState e
-    -- ^ The left mouse button's state this frame, and which element (if
-    -- any) holds mouse capture. See 'ButtonState'. Unlike focus, this does
-    -- not change on a re-render of the same frame — see 'rerenderContext'.
+  , ctxMouse           :: Mouse e
+    -- ^ The left mouse button's state this frame (and which element, if
+    -- any, holds mouse capture), plus per-element hover state. See
+    -- 'Blink.Mouse.Mouse'. Unlike focus, the button reading does not change
+    -- on a re-render of the same frame — see 'rerenderContext'.
   , ctxElements        :: ElementState e
   , ctxOutputs         :: FrameOutputs e msg
   }
@@ -573,7 +533,6 @@ emptyFrameOutputs = FrameOutputs
   { outDrawCommands       = []
   , outEvents             = []
   , outRequiresAnimation  = False
-  , outMouseOverThisFrame = Set.empty
   }
 
 -- | Constructs the initial 'UIContext' for the first frame.
@@ -587,11 +546,10 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxAnimation       = mkAnimationState 0 0 False
   , ctxTextMeasure     = measurer
   , ctxFocus           = emptyFocusTracker
-  , ctxButton          = nextButtonState False (inputLeftButtonDown input) MouseNotCaptured
+  , ctxMouse           = emptyMouse { mouseButton = nextButtonState False (inputLeftButtonDown input) MouseNotCaptured }
   , ctxElements        = ElementState
       { elmScrollStates  = Map.empty
       , elmSelections    = Map.empty
-      , elmMouseOverPrev = Set.empty
       }
   , ctxOutputs         = emptyFrameOutputs
   }
@@ -603,24 +561,25 @@ emptyUIContext bounds input thm measurer = UIContext
 -- changes take effect starting this new frame. Then resets per-frame state
 -- (draw commands, hover element, queued messages, and the focus-visited
 -- flag) while preserving cross-frame state (focus element, scroll state,
--- selections, and tab-stop bookkeeping). Also snapshots the completed
--- frame's @outMouseOverThisFrame@ into @elmMouseOverPrev@, so
--- 'wasMouseOverLastFrame' reflects this frame once it, in turn, becomes
--- "last frame".
+-- selections, and tab-stop bookkeeping). Also advances the button state via
+-- 'advanceButton', on top of what @finishFrame@ already rolled forward for
+-- hover, so 'wasMouseOverLastFrame' reflects this frame once it, in turn,
+-- becomes "last frame".
 nextFrameContext :: Ord e => Rectangle -> InputState -> Theme e -> AnimationState -> UIContext e msg -> UIContext e msg
 nextFrameContext bounds input thm anim ctx0 =
-  (finishFrame bounds input thm anim ctx) { ctxButton = nextButtonState wasDown isDown (captureOf (ctxButton ctx)) }
+  fctx { ctxMouse = advanceButton wasDown isDown (ctxMouse fctx) }
   where
     ctx     = applyUiEffects (getUiEffects ctx0) ctx0
+    fctx    = finishFrame bounds input thm anim ctx
     wasDown = inputLeftButtonDown (ctxInput ctx)
     isDown  = inputLeftButtonDown input
 
 -- | Rebuilds the context to re-render the current frame rather than advance
 -- to a new one: refreshes bounds\/theme\/animation, applies queued
 -- 'UiEffect's, and resets per-frame outputs, like 'nextFrameContext'. Leaves
--- @ctxButton@ as-is rather than re-deriving it from input, since the caller
--- is re-rendering the same frame, not moving to the next one; deriving it
--- again would compare the frame's input against itself.
+-- the button reading as-is rather than re-deriving it from input, since the
+-- caller is re-rendering the same frame, not moving to the next one;
+-- deriving it again would compare the frame's input against itself.
 rerenderContext :: Ord e => Rectangle -> InputState -> Theme e -> AnimationState -> UIContext e msg -> UIContext e msg
 rerenderContext bounds input thm anim ctx0 = finishFrame bounds input thm anim ctx
   where
@@ -628,8 +587,8 @@ rerenderContext bounds input thm anim ctx0 = finishFrame bounds input thm anim c
 
 -- | Given a context that already has any queued 'UiEffect's applied,
 -- refreshes bounds\/theme\/animation, advances focus to the next frame,
--- snapshots the current hover set into @elmMouseOverPrev@, and resets
--- per-frame outputs. Leaves @ctxButton@ unchanged.
+-- rolls this completed frame's hover results forward via 'advanceHover', and
+-- resets per-frame outputs. Leaves the button reading unchanged.
 finishFrame :: Rectangle -> InputState -> Theme e -> AnimationState -> UIContext e msg -> UIContext e msg
 finishFrame bounds input thm anim ctx = ctx
   { ctxBounds      = bounds
@@ -637,29 +596,9 @@ finishFrame bounds input thm anim ctx = ctx
   , ctxTheme       = thm
   , ctxAnimation   = anim
   , ctxFocus       = nextFocusTrackerFrame (ctxFocus ctx)
-  , ctxElements    = (ctxElements ctx)
-      { elmMouseOverPrev = outMouseOverThisFrame (ctxOutputs ctx) }
+  , ctxMouse       = advanceHover (ctxMouse ctx)
   , ctxOutputs     = emptyFrameOutputs
   }
-
--- | Whether moving from @prevDown@ to @currDown@ leaves the button held,
--- just-released, or up, and whether @existingCapture@ carries forward:
--- capture survives while the button stays held or on its release frame, and
--- is dropped the moment the button was not down last frame — both when it
--- is fully up and on a fresh press — so a new press never inherits a stale
--- capture from a previous drag\/click cycle. Acquisition — setting capture
--- in the first place — happens in 'acquireCapture'. A frame with no
--- previous frame to compare against (the first frame) passes @prevDown =
--- False@, which always yields 'ButtonUp' or an uncaptured 'ButtonDown'.
-nextButtonState :: Bool -> Bool -> MouseCapture e -> ButtonState e
-nextButtonState prevDown currDown existingCapture
-  | currDown  = ButtonDown carriedCapture
-  | prevDown  = ButtonReleased carriedCapture
-  | otherwise = ButtonUp
-  where
-    carriedCapture
-      | prevDown  = existingCapture
-      | otherwise = MouseNotCaptured
 
 gets :: (UIContext e msg -> a) -> UI e msg a
 gets f = UI $ \ctx -> pure (f ctx, ctx)
@@ -671,12 +610,22 @@ modify f = UI $ \ctx -> pure ((), f ctx)
 modifyFocusState :: (FocusState e -> FocusState e) -> UI e msg ()
 modifyFocusState f = modify $ \ctx -> ctx { ctxFocus = (ctxFocus ctx) { ftAmbient = f (ftAmbient (ctxFocus ctx)) } }
 
--- | Modifies the current frame's 'ButtonState'.
-modifyButton :: (ButtonState e -> ButtonState e) -> UI e msg ()
-modifyButton f = modify $ \ctx -> ctx { ctxButton = f (ctxButton ctx) }
+-- | Modifies the current frame's 'Mouse'.
+modifyMouse :: (Mouse e -> Mouse e) -> UI e msg ()
+modifyMouse f = modify $ \ctx -> ctx { ctxMouse = f (ctxMouse ctx) }
 
 modifyOut :: (FrameOutputs e msg -> FrameOutputs e msg) -> UI e msg ()
 modifyOut f = modify $ \ctx -> ctx { ctxOutputs = f (ctxOutputs ctx) }
+
+-- | The current frame's 'Mouse' state: button\/capture and per-element
+-- hover.
+getMouse :: UI e msg (Mouse e)
+getMouse = gets ctxMouse
+
+-- | The current frame's 'Mouse' state, read directly from a 'UIContext'
+-- outside the 'UI' monad.
+contextMouse :: UIContext e msg -> Mouse e
+contextMouse = ctxMouse
 
 -- | The current scroll position for the given element, in @[0, 1]@. Returns
 -- @0@ when no position has been recorded yet.
@@ -818,15 +767,19 @@ getStyleSet eid = do
   t <- getTheme
   return $ Map.findWithDefault (themeDefaultStyle t) eid (themeElementStyles t)
 
--- | 'True' when the left button is currently held.
+-- | 'True' when the left button is currently held, whether this is the
+-- first frame of the press or a later one -- callers that only care whether
+-- the button is currently down, not which frame of the press this is, don't
+-- need to distinguish 'ButtonDown' from 'ButtonHeld'.
 isButtonDown :: UI e msg Bool
 isButtonDown = gets contextButtonDown
 
 -- | 'True' when the left button is currently held, read directly from a
 -- 'UIContext' outside the 'UI' monad.
 contextButtonDown :: UIContext e msg -> Bool
-contextButtonDown ctx = case ctxButton ctx of
+contextButtonDown ctx = case mouseButton (ctxMouse ctx) of
   ButtonDown _ -> True
+  ButtonHeld _ -> True
   _            -> False
 
 -- | 'True' on the one frame the left button transitions from held to up.
@@ -836,7 +789,7 @@ isButtonReleased = gets contextButtonReleased
 -- | 'True' on the one frame the left button transitions from held to up,
 -- read directly from a 'UIContext' outside the 'UI' monad.
 contextButtonReleased :: UIContext e msg -> Bool
-contextButtonReleased ctx = case ctxButton ctx of
+contextButtonReleased ctx = case mouseButton (ctxMouse ctx) of
   ButtonReleased _ -> True
   _                -> False
 
@@ -854,16 +807,21 @@ getCapturedElement = gets contextCaptured
 -- | Which element currently holds mouse capture, if any, read directly from
 -- a 'UIContext' outside the 'UI' monad.
 contextCaptured :: UIContext e msg -> MouseCapture e
-contextCaptured = captureOf . ctxButton
+contextCaptured = captureOf . mouseButton . ctxMouse
 
 -- | Acquires mouse capture for the element if the left button is currently
 -- down and nothing is captured yet, making this the first point of capture
 -- for that press — the control a drag holds onto once the cursor leaves the
--- element that started it.
+-- element that started it. Checked against both 'ButtonDown' and
+-- 'ButtonHeld' since a press that started over one element (or over nothing)
+-- can still be claimed by a different element the cursor moves onto later in
+-- the same held press, as long as nothing else has claimed it first.
 acquireCapture :: e -> UI e msg ()
-acquireCapture eid = modifyButton $ \btn -> case btn of
+acquireCapture eid = modifyMouse $ \m -> m { mouseButton = case mouseButton m of
   ButtonDown MouseNotCaptured -> ButtonDown (MouseCapturedBy eid)
-  _                           -> btn
+  ButtonHeld MouseNotCaptured -> ButtonHeld (MouseCapturedBy eid)
+  btn                         -> btn
+  }
 
 -- | Records that the element was hit by the mouse this frame — typically
 -- called after a geometric hit test such as 'isRegionHit' succeeds. Building
@@ -871,15 +829,17 @@ acquireCapture eid = modifyButton $ \btn -> case btn of
 -- the same element to detect the transition. Any number of elements can each
 -- call this in the same frame; all are remembered.
 registerMouseOver :: Ord e => e -> UI e msg ()
-registerMouseOver eid = modifyOut $ \out ->
-  out { outMouseOverThisFrame = Set.insert eid (outMouseOverThisFrame out) }
+registerMouseOver eid = modifyMouse $ \m ->
+  let prev = Map.findWithDefault NotOver eid (mouseHoverPrev m)
+  in m { mouseHoverNext = Map.insert eid (nextHoverState prev True) (mouseHoverNext m) }
 
 -- | 'True' when 'registerMouseOver' was called for the element on the
 -- previous frame. Compare against this frame's own hit test to derive
 -- mouse-enter (@not wasOver && isOver@) and mouse-exit (@wasOver && not
 -- isOver@).
 wasMouseOverLastFrame :: Ord e => e -> UI e msg Bool
-wasMouseOverLastFrame eid = gets $ \ctx -> Set.member eid (elmMouseOverPrev (ctxElements ctx))
+wasMouseOverLastFrame eid = gets $ \ctx ->
+  wasHit (Map.findWithDefault NotOver eid (mouseHoverPrev (ctxMouse ctx)))
 
 -- | 'True' when 'registerMouseOver' has been called for any element so far
 -- this frame. Reflects the whole frame's hover set only once every control
@@ -888,9 +848,11 @@ wasMouseOverLastFrame eid = gets $ \ctx -> Set.member eid (elmMouseOverPrev (ctx
 -- replaces was read at the end of a frame, for controls built with
 -- geometric hover (many elements can be "over" at once, so unlike that
 -- legacy getter there is no single element to name — only whether the set
--- is non-empty).
+-- is non-empty). Every entry in 'mouseHoverNext' was written by
+-- 'registerMouseOver', which only ever records a hit, so a non-empty map
+-- here is exactly "some element was hit this frame".
 isAnyMouseOver :: UI e msg Bool
-isAnyMouseOver = gets (not . Set.null . outMouseOverThisFrame . ctxOutputs)
+isAnyMouseOver = gets (not . Map.null . mouseHoverNext . ctxMouse)
 
 -- | The currently ambient scope's focused element, if any — root's, unless
 -- inside 'withFocusScope'.
