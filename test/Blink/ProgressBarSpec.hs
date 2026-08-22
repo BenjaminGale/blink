@@ -5,8 +5,8 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Attributes (Attr)
+import Blink.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Element (ElementEvent)
-import Blink.ElementBehaviour (elementBehaviourSpec)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, progress, progressBar)
@@ -79,7 +79,8 @@ elapsedCtx = nextFrameContext testBounds noInput testTheme (mkAnimationState 0 1
 
 spec :: Spec
 spec = describe "Blink.ProgressBar" $ do
-  elementBehaviourSpec testBounds seedCtx Bar hitRect (Point 200 200) (progressBar Bar)
+  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = True })
+    testBounds seedCtx Bar (Point 5 5) hitRect (Point 200 200) (progressBar Bar)
 
   describe "Progress" $ do
     it "fills the correct proportion of the content area at 0.5" $ do

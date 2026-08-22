@@ -5,8 +5,8 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Attributes (Attr, FocusOnClick (..), focusOnClick, text)
+import Blink.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Element (ElementEvent)
-import Blink.ElementBehaviour (elementBehaviourSpec)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -72,10 +72,8 @@ start attrs = snd <$> runUI (label Caption attrs) seedCtx
 
 spec :: Spec
 spec = describe "Blink.Label" $ do
-  -- A label never takes focus itself (see below), so 'setFocus' is used
-  -- directly to satisfy the keyboard contract's own focused-state setup
-  -- rather than relying on a click or auto-claim to get it there.
-  elementBehaviourSpec testBounds seedCtx Caption hitRect (Point 200 200) (label Caption)
+  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
+    testBounds seedCtx Caption (Point 5 5) hitRect (Point 200 200) (label Caption)
 
   it "draws its text in the resolved style" $ do
     ctx <- start [text "Hello"]

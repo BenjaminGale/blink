@@ -7,7 +7,7 @@ import Data.Char (isDigit)
 import Test.Hspec
 
 import Blink.Attributes (Attr, text)
-import Blink.ControlBehaviour (controlBehaviourSpec)
+import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -106,7 +106,7 @@ unfocused attrs = setFocus Other >> textInput Field attrs
 
 spec :: Spec
 spec = describe "Blink.TextInput" $ do
-  controlBehaviourSpec testBounds seedCtx Field (Point 5 5) hitRect (Point 200 200) (textInput Field)
+  controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx Field (Point 5 5) hitRect (Point 200 200) (textInput Field)
 
   describe "rendering" $ do
     it "displays the value without a cursor when unfocused" $ do

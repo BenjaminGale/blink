@@ -12,7 +12,7 @@ module Blink.ButtonBehaviour
 import Test.Hspec
 
 import Blink.Attributes (Attr, HasControlConfig, isTabStop)
-import Blink.ControlBehaviour (controlBehaviourSpec)
+import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Element (HasElementEvent)
 import Blink.ElementBehaviour (tagged)
 import Blink.Geometry (Point, Rectangle)
@@ -35,7 +35,7 @@ buttonBehaviourSpec
   -> ([Attr e ev String cfg] -> UI e String ())    -- ^ render the control under test with these attrs
   -> Spec
 buttonBehaviourSpec bounds ctx eid marginPoint insideRect outsidePoint render = do
-  controlBehaviourSpec bounds ctx eid marginPoint insideRect outsidePoint render
+  controlBehaviourSpec defaultControlBehaviourConfig bounds ctx eid marginPoint insideRect outsidePoint render
 
   describe "keyboard activation" $ do
     it "raises a click event when Enter is pressed while focused" $ do

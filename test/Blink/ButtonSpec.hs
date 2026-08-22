@@ -95,7 +95,7 @@ spec = describe "Blink.Button" $ do
     resultMessages result `shouldBe` ["gained"]
 
   describe "toggleButton" $ do
-    toggleBehaviourSpec testBounds toggleSeedCtx Ok (Point 5 5) hitRect (Point 200 200) (toggleButton Ok)
+    toggleBehaviourSpec not testBounds toggleSeedCtx Ok (Point 5 5) hitRect (Point 200 200) (toggleButton Ok)
 
     it "draws in its normal style while not selected" $ do
       ctx <- startToggle []

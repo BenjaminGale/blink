@@ -69,7 +69,7 @@ start attrs = snd <$> runUI (checkbox Remember attrs) seedCtx
 
 spec :: Spec
 spec = describe "Blink.Checkbox" $ do
-  toggleBehaviourSpec testBounds seedCtx Remember (Point 5 5) hitRect (Point 200 200) (checkbox Remember)
+  toggleBehaviourSpec not testBounds seedCtx Remember (Point 5 5) hitRect (Point 200 200) (checkbox Remember)
 
   it "draws the unchecked glyph and its caption while not selected" $ do
     ctx <- start [text "Remember me"]

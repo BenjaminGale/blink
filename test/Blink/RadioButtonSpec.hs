@@ -3,16 +3,14 @@ module Blink.RadioButtonSpec (spec) where
 
 import qualified Data.Map.Strict as Map
 import Test.Hspec
-import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
 import Blink.Attributes (Attr, text)
-import Blink.Generators (genPointIn)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
-import Blink.Input (InputState (..), Key (..))
-import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.RadioButton (RadioButtonConfig, ToggleEvent, isSelected, onSelectedChanged, radioButton)
+import Blink.Input (InputState (..))
+import Blink.RadioButton (RadioButtonConfig, ToggleEvent, isSelected, radioButton)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.UI
 
 data TestElement = OptionA deriving (Eq, Ord, Show)
@@ -71,6 +69,11 @@ start attrs = snd <$> runUI (radioButton OptionA attrs) seedCtx
 
 spec :: Spec
 spec = describe "Blink.RadioButton" $ do
+  -- Unlike a flipping toggle, a radio button only ever moves from
+  -- unselected to selected -- activating it while already selected leaves
+  -- it selected, so it reports nothing.
+  toggleBehaviourSpec (const True) testBounds seedCtx OptionA (Point 5 5) hitRect (Point 200 200) (radioButton OptionA)
+
   it "draws the unselected glyph and its caption while not selected" $ do
     ctx <- start [text "Option A"]
     getDrawCommands ctx `shouldContain`
@@ -81,20 +84,3 @@ spec = describe "Blink.RadioButton" $ do
   it "draws the selected glyph while selected" $ do
     ctx <- start [text "Option A", isSelected True]
     getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 20 70) "\9673" testColour AlignCenter]
-
-  it "fires onSelectedChanged with True when clicked while unselected" $ monadicIO $ do
-    let attrs = [isSelected False, onSelectedChanged (\b -> [OutMsg (show b)])]
-    p <- pick (genPointIn hitRect)
-    result <- run (runInteractions testBounds seedCtx (radioButton OptionA attrs) [] [ClickAt p])
-    assert (resultMessages result == [show True])
-
-  it "does not fire onSelectedChanged when clicked while already selected" $ monadicIO $ do
-    let attrs = [isSelected True, onSelectedChanged (\b -> [OutMsg (show b)])]
-    p <- pick (genPointIn hitRect)
-    result <- run (runInteractions testBounds seedCtx (radioButton OptionA attrs) [] [ClickAt p])
-    assert (resultMessages result == [])
-
-  it "fires onSelectedChanged when activated via Enter while unselected and focused" $ do
-    let attrs = [isSelected False, onSelectedChanged (\b -> [OutMsg (show b)])]
-    result <- runInteractions testBounds seedCtx (radioButton OptionA attrs) [Wait 1] [PressKey KeyReturn []]
-    resultMessages result `shouldBe` [show True]

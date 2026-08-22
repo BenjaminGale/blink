@@ -11,7 +11,7 @@ import Blink.Attributes
   , configure, defaultControlConfig
   )
 import Blink.Control (control)
-import Blink.ControlBehaviour (controlBehaviourSpec)
+import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Element (ElementEvent, onFocusGained, onFocusLost, onKeyPressed)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
@@ -100,7 +100,7 @@ hitRect = insetRect (uniform 10) testBounds
 
 spec :: Spec
 spec = describe "Blink.Control" $ do
-  controlBehaviourSpec testBounds seedCtx ElemA (Point 5 5) hitRect (Point 200 200) renderControl
+  controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx ElemA (Point 5 5) hitRect (Point 200 200) renderControl
 
   describe "chrome" $
     it "draws background via styledElement, inset by margin" $ do
