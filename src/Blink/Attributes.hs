@@ -31,6 +31,7 @@ module Blink.Attributes
   , isEnabled
   , tabNavigation
   , isArrowNavigationEnabled
+  , style
   , HasTextConfig (..)
   , text
   ) where
@@ -38,6 +39,7 @@ module Blink.Attributes
 import Data.List (foldl')
 import Data.Text (Text)
 
+import Blink.Style (StyleKey (..))
 import Blink.UI
 
 -- | What clicking a control does to focus -- set directly on
@@ -86,20 +88,24 @@ data ControlConfig e = ControlConfig
   , ccIsEnabled            :: Bool
   , ccTabNavigation        :: NavigationMode
   , ccIsArrowNavigationEnabled :: Bool
+  , ccStyleKey             :: StyleKey e
   }
 
 -- | The default 'ControlConfig': an enabled tab stop that takes focus on
--- click, not a navigation container ('Flatten') -- what a plain
--- interactive control wants unless it overrides one or more via
--- 'isTabStop' \/ 'isEnabled' \/ 'tabNavigation' \/ 'isArrowNavigationEnabled'
--- (or, for @ccFocusOnClick@, directly on its own config).
-defaultControlConfig :: ControlConfig e
-defaultControlConfig = ControlConfig
+-- click, not a navigation container ('Flatten'), styled via @key@ unless
+-- overridden by 'style' -- what a plain interactive control wants unless it
+-- overrides one or more via 'isTabStop' \/ 'isEnabled' \/ 'tabNavigation' \/
+-- 'isArrowNavigationEnabled' (or, for @ccFocusOnClick@, directly on its own
+-- config). @key@ is normally a 'Class' named after the control being built,
+-- e.g. @Class \"button\"@.
+defaultControlConfig :: StyleKey e -> ControlConfig e
+defaultControlConfig key = ControlConfig
   { ccIsTabStop            = True
   , ccFocusOnClick         = FocusSelf
   , ccIsEnabled            = True
   , ccTabNavigation        = Flatten
   , ccIsArrowNavigationEnabled = False
+  , ccStyleKey             = key
   }
 
 -- | Whether a control is eligible to claim focus purely by rendering first
@@ -184,6 +190,12 @@ tabNavigation m = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { cc
 -- 'Contained'. Defaults to 'False'.
 isArrowNavigationEnabled :: HasControlConfig e cfg => Bool -> Attr e ev msg cfg
 isArrowNavigationEnabled b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccIsArrowNavigationEnabled = b }) cfg
+
+-- | Which 'StyleKey' this control resolves its style from. Defaults to a
+-- 'Class' named after the control; pass 'ElementId' to theme this one
+-- instance differently, or a different 'Class' to group it with others.
+style :: HasControlConfig e cfg => StyleKey e -> Attr e ev msg cfg
+style k = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccStyleKey = k }) cfg
 
 -- | Implemented by any control's own @cfg@ type to say how it carries
 -- displayed text, letting 'text' work uniformly across them (same pattern

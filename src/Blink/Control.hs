@@ -33,14 +33,25 @@
 --     the enclosing level, regardless of nesting depth.
 --
 -- Scope is otherwise always root -- only a 'Contained' control opens one.
+--
+-- = Styling
+--
+-- A control resolves its 'Blink.Style.Style' by looking up a
+-- 'Blink.Style.StyleKey' in the active 'Blink.Style.Theme' -- normally
+-- whatever 'Blink.Style.Class' a ready-made widget (e.g. 'Blink.Button.button')
+-- defaults to, so every instance of that widget picks up the same theme
+-- entry without registering each element id individually. 'style'
+-- overrides the key a specific @control@ call resolves against, e.g. to
+-- 'Blink.Style.ElementId' for a one-off, per-instance style.
 module Blink.Control
   ( control
-  , getStyle
   , isTabStop
   , isEnabled
   , tabNavigation
   , isArrowNavigationEnabled
   , NavigationMode (..)
+  , style
+  , StyleKey (..)
   ) where
 
 import Control.Monad (forM_, guard, unless, when)
@@ -52,12 +63,12 @@ import Data.Maybe (fromMaybe)
 import Blink.Attributes
   ( Attr, fire
   , HasControlConfig (..), ControlConfig (..), FocusOnClick (..), NavigationMode (..)
-  , autoClaimsFocus, isTabStop, isEnabled, tabNavigation, isArrowNavigationEnabled
+  , autoClaimsFocus, isTabStop, isEnabled, tabNavigation, isArrowNavigationEnabled, style
   )
 import Blink.Element (ElementEvent (..), HasElementEvent (..), element, onClicked)
 import Blink.Geometry (Rectangle, insetRect, borderInsets)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
-import Blink.Style (Style (..), StyleSet (..))
+import Blink.Style (Style (..), StyleSet (..), StyleKey (..))
 import Blink.UI
 
 -- | The control-specific hit area: the current bounds inset by the
@@ -68,17 +79,17 @@ import Blink.UI
 -- Uses the element's /normal/ margin, not the margin of whichever style
 -- variant is currently active, since real themes don't vary margin by
 -- state and 'getStyle' would otherwise depend on its own result.
-marginInsetBounds :: Ord e => e -> UI e msg Rectangle
-marginInsetBounds eid = do
-  ss <- getStyleSet eid
+marginInsetBounds :: Ord e => StyleKey e -> UI e msg Rectangle
+marginInsetBounds styleKey = do
+  ss <- getStyleSet styleKey
   r  <- getBounds
   pure (insetRect (styleMargin (styleSetNormal ss)) r)
 
 -- | 'True' when the mouse is over the element's background rectangle (see
 -- @marginInsetBounds@) -- the control-specific hit area.
-isMouseOver :: Ord e => e -> UI e msg Bool
-isMouseOver eid = do
-  hitBounds <- marginInsetBounds eid
+isMouseOver :: Ord e => StyleKey e -> UI e msg Bool
+isMouseOver styleKey = do
+  hitBounds <- marginInsetBounds styleKey
   withBounds hitBounds isRegionHit
 
 -- | 'True' when nothing else holds mouse capture, or this element itself
@@ -90,31 +101,31 @@ isMouseFreeFor eid = do
 
 -- | 'True' when the element is hovered (per 'isMouseOver'), enabled, and
 -- the mouse isn't contested by another element's drag.
-isMouseTarget :: Ord e => e -> UI e msg Bool
-isMouseTarget eid = do
+isMouseTarget :: Ord e => e -> StyleKey e -> UI e msg Bool
+isMouseTarget eid styleKey = do
   disabled    <- isDisabled
-  hit         <- isMouseOver eid
+  hit         <- isMouseOver styleKey
   uncontested <- isMouseFreeFor eid
   pure (not disabled && hit && uncontested)
 
 -- | 'True' when the element is hovered, enabled, not contested by another
 -- element's drag, and the left button is currently held down.
-isPressed :: Ord e => e -> UI e msg Bool
-isPressed eid = do
-  isTarget <- isMouseTarget eid
+isPressed :: Ord e => e -> StyleKey e -> UI e msg Bool
+isPressed eid styleKey = do
+  isTarget <- isMouseTarget eid styleKey
   down     <- isButtonDown
   pure (isTarget && down)
 
 -- | Resolves the active 'Style' for an element given its current
 -- interaction state. Priority: disabled > pressed > hovered > focused >
 -- normal.
-getStyle :: Ord e => e -> UI e msg Style
-getStyle eid = do
-  styles <- getStyleSet eid
+getStyle :: Ord e => e -> StyleKey e -> UI e msg Style
+getStyle eid styleKey = do
+  styles <- getStyleSet styleKey
   isDis  <- isDisabled
-  isHov  <- isMouseOver eid
+  isHov  <- isMouseOver styleKey
   isFoc  <- isFocused eid
-  isPrs  <- isPressed eid
+  isPrs  <- isPressed eid styleKey
   let candidates =
         [ guard isDis $> styleSetDisabled styles
         , guard isPrs $> styleSetPressed  styles
@@ -124,21 +135,23 @@ getStyle eid = do
   pure $ fromMaybe (styleSetNormal styles) (asum candidates)
 
 -- | Draws an element's background and border from the resolved style, then
--- runs @content@ clipped to the remaining space inside the padding.
-styledElement :: Ord e => e -> UI e msg () -> UI e msg ()
-styledElement eid content = do
-  style <- getStyle eid
-  r     <- getBounds
-  let bg          = insetRect (styleMargin style) r
-      borderRect  = case styleBorderColour style of
-                      Just _  -> insetRect (borderInsets (styleBorderEdges style)) bg
+-- runs @content@ clipped to the remaining space inside the padding, with
+-- that same style available via 'currentStyle' so content never needs to
+-- resolve its own copy.
+styledElement :: Ord e => e -> StyleKey e -> UI e msg () -> UI e msg ()
+styledElement eid styleKey content = do
+  s <- getStyle eid styleKey
+  r <- getBounds
+  let bg          = insetRect (styleMargin s) r
+      borderRect  = case styleBorderColour s of
+                      Just _  -> insetRect (borderInsets (styleBorderEdges s)) bg
                       Nothing -> bg
-      contentRect = insetRect (stylePadding style) borderRect
-      inner       = withBounds contentRect $ clipToCurrent content
+      contentRect = insetRect (stylePadding s) borderRect
+      inner       = withBounds contentRect $ clipToCurrent (withStyle s content)
   withBounds bg $
-    withBackground (styleBackground style) $
-    case styleBorderColour style of
-      Just c  -> withBorder c (styleBorderEdges style) inner
+    withBackground (styleBackground s) $
+    case styleBorderColour s of
+      Just c  -> withBorder c (styleBorderEdges s) inner
       Nothing -> inner
 
 -- | 'True' when this element should take focus with nothing having asked
@@ -192,11 +205,11 @@ control eid cfg attrs content = disableWhen (not (ccIsEnabled cc)) $ do
   unless opensScope (applyNavigationKeys wasFocused)
   midFocused <- isFocused eid
   fire attrs (focusEvents wasFocused midFocused)
-  hitBounds <- marginInsetBounds eid
+  hitBounds <- marginInsetBounds styleKey
   withBounds hitBounds $
     (if opensScope then withoutKeyEvents reservedKeys else id) $
       element eid (attrs ++ clickFocusReaction currentScope)
-  styledElement eid (withChildNavigation content)
+  styledElement eid styleKey (withChildNavigation content)
   -- A nested container gets first claim on Ctrl+Tab\/Ctrl+Shift+Tab (it
   -- consumes the key while @content@ above is still running, before this
   -- check ever sees it) -- only if nothing inside claims it does it
@@ -214,6 +227,7 @@ control eid cfg attrs content = disableWhen (not (ccIsEnabled cc)) $ do
   when (ccIsTabStop cc) $ setPreviousTabStop eid
   where
     cc = controlConfig cfg
+    styleKey = ccStyleKey cc
     opensScope = ccIsTabStop cc && ccTabNavigation cc == Contained
 
     focusEvents was now = map liftElementEvent $ concat

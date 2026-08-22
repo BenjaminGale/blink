@@ -7,14 +7,17 @@ Theming types for Blink. Controls are styled through a three-level hierarchy:
     in a single interaction state.
   * 'StyleSet' — a bundle of five 'Style' variants, one per interaction
     state: normal, hovered, pressed, focused, and disabled.
-  * 'Theme' — maps element IDs (@e@) to 'StyleSet' values, with a
-    fallback default. Derived from application state each frame and
-    passed into the UI via the 'Blink.App.App' record.
+  * 'Theme' — maps 'StyleKey's (either a specific element's own id, or a
+    named class) to 'StyleSet' values, with a fallback default. Derived
+    from application state each frame and passed into the UI via the
+    'Blink.App.App' record.
 
 When the UI resolves the active style for a control, it looks up its
-element ID in the 'Theme' (falling back to 'themeDefaultStyle' if none
+'StyleKey' in the 'Theme' (falling back to 'themeDefaultStyle' if none
 is registered), then selects the appropriate state variant based on the
 control's current interaction state. Construct a theme with 'emptyTheme'.
+A ready-made control defaults its own key to a 'Class' named after itself
+(e.g. @Class \"button\"@), overridable per-instance via its @style@ attr.
 
 = Building a theme
 
@@ -48,7 +51,7 @@ baseStyleSet = StyleSet
 myTheme :: Theme Element
 myTheme = (emptyTheme baseStyleSet)
   { themeElementStyles = Map.fromList
-      [ (DangerButton, baseStyleSet
+      [ (ElementId DangerButton, baseStyleSet
           { styleSetNormal = baseStyle { styleBackground = RGBA 0.7 0.1 0.1 1 } })
       ]
   }
@@ -58,6 +61,7 @@ module Blink.Style
   ( -- * Types
     Style (..)
   , StyleSet (..)
+  , StyleKey (..)
   , Theme (..)
     -- * Construction
   , emptyTheme
@@ -67,12 +71,13 @@ module Blink.Style
   , uniformBorder
   ) where
 
+import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Geometry (Insets (..), BorderEdges (..), noBorder, uniformBorder)
 
 -- | Visual properties for a control in a single interaction state.
--- Resolved from the active 'StyleSet' by 'Blink.UI.getStyle'.
+-- Resolved from the active 'StyleSet' by 'Blink.UI.currentStyle'.
 data Style = Style
   { styleBackground :: Colour       -- ^ Fill colour for the background rectangle (inside the margin).
   , styleTextColour :: Colour       -- ^ Colour used for text and simple fill drawing.
@@ -84,7 +89,7 @@ data Style = Style
   }
 
 -- | The five per-state 'Style' variants for a control. The active
--- variant is selected by 'Blink.UI.getStyle'; priority order is:
+-- variant is selected by 'Blink.UI.currentStyle'; priority order is:
 -- disabled > pressed > hovered > focused > normal.
 data StyleSet = StyleSet
   { styleSetNormal :: Style   -- ^ Default appearance.
@@ -94,13 +99,25 @@ data StyleSet = StyleSet
   , styleSetDisabled :: Style -- ^ Control is inside a 'Blink.UI.disableWhen' subtree.
   }
 
--- | Maps element IDs of type @e@ to 'StyleSet' values. Construct with
--- 'emptyTheme' and populate 'themeElementStyles' for per-element overrides.
+-- | Which entry in a 'Theme' a control resolves its 'StyleSet' from --
+-- either that specific element's own id, or a named class shared by every
+-- control that resolves to it. A ready-made control (button, checkbox, ...)
+-- defaults to a 'Class' named after itself, so a theme can style every
+-- instance of that kind of control at once without registering each
+-- element id individually; passing 'ElementId', or a different 'Class', to
+-- a control's @style@ attr overrides that default.
+data StyleKey e
+  = ElementId e
+  | Class Text
+  deriving (Eq, Ord, Show)
+
+-- | Maps 'StyleKey's to 'StyleSet' values. Construct with 'emptyTheme' and
+-- populate 'themeElementStyles' for per-element or per-class overrides.
 data Theme e = Theme
-  { themeElementStyles :: Map.Map e StyleSet
-    -- ^ Per-element style overrides, keyed by element ID.
+  { themeElementStyles :: Map.Map (StyleKey e) StyleSet
+    -- ^ Per-element or per-class style overrides, keyed by 'StyleKey'.
   , themeDefaultStyle :: StyleSet
-    -- ^ Fallback used when an element ID has no entry in 'themeElementStyles'.
+    -- ^ Fallback used when a 'StyleKey' has no entry in 'themeElementStyles'.
   }
 
 -- | Creates a 'Theme' with no per-element overrides; every element

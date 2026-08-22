@@ -391,7 +391,7 @@ mkStatusBarStyle p = StyleSet
 
 mkTheme :: Palette -> Theme Element
 mkTheme p = Theme
-  { themeElementStyles = Map.fromList $
+  { themeElementStyles = Map.mapKeys ElementId . Map.fromList $
       [ (Label,                     mkLabelStyle p)
       , (StatusBar,                 mkStatusBarStyle p)
       , (ProgressBar1,              mkProgressBarStyle p)

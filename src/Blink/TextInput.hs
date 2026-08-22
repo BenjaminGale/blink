@@ -7,6 +7,7 @@
 module Blink.TextInput
   ( TextInputConfig
   , textInput
+  , textInputStyleKey
   , text
   , inputFilter
   , displayFilter
@@ -15,6 +16,8 @@ module Blink.TextInput
   , onSubmit
   , isTabStop
   , isEnabled
+  , style
+  , StyleKey (..)
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -32,9 +35,9 @@ import qualified Data.Text as T
 
 import Blink.Attributes
   ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
-  , configAny, defaultControlConfig, configure, isEnabled, fire, isTabStop, onEvent, text
+  , configAny, defaultControlConfig, configure, isEnabled, fire, isTabStop, onEvent, style, text
   )
-import Blink.Control (control, getStyle)
+import Blink.Control (control)
 import Blink.Element
   ( ElementEvent, HasElementEvent (..)
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
@@ -42,7 +45,7 @@ import Blink.Element
 import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Style (..))
+import Blink.Style (Style (..), StyleKey (..))
 import Blink.UI
 
 -- | Configuration for 'textInput', set via 'text' (the field's current
@@ -55,9 +58,14 @@ data TextInputConfig e = TextInputConfig
   , textInputConfigDisplayFilter :: Text -> Text
   }
 
+-- | The 'StyleKey' 'textInput' resolves its style from unless overridden
+-- via 'style'.
+textInputStyleKey :: StyleKey e
+textInputStyleKey = Class "textInput"
+
 defaultTextInputConfig :: TextInputConfig e
 defaultTextInputConfig = TextInputConfig
-  { textInputConfigControl       = defaultControlConfig
+  { textInputConfigControl       = defaultControlConfig textInputStyleKey
   , textInputConfigValue         = ""
   , textInputConfigInputFilter   = id
   , textInputConfigDisplayFilter = id
@@ -225,7 +233,7 @@ scrollPixels maxPx frac = frac * maxPx
 -- enabled), and the text itself, all offset by the current horizontal
 -- scroll.
 drawTextInputContent :: Ord e => Style -> Rectangle -> Text -> Bool -> Double -> Selection -> UI e msg ()
-drawTextInputContent style bounds displayValue canEdit ox sel@(Selection _ active) = do
+drawTextInputContent s bounds displayValue canEdit ox sel@(Selection _ active) = do
   when (canEdit && drawLo < drawHi) $ do
     loX <- charOffset displayValue drawLo
     hiX <- charOffset displayValue drawHi
@@ -237,7 +245,7 @@ drawTextInputContent style bounds displayValue canEdit ox sel@(Selection _ activ
     withBounds selRect $ fillRect (RGBA 0.3 0.5 1.0 0.4)
 
   let textBounds = bounds { rectX = rectX bounds - ox }
-  withBounds textBounds $ drawText (styleTextColour style) AlignLeft displayValue
+  withBounds textBounds $ drawText (styleTextColour s) AlignLeft displayValue
 
   when canEdit $ do
     curX <- charOffset displayValue active
@@ -246,7 +254,7 @@ drawTextInputContent style bounds displayValue canEdit ox sel@(Selection _ activ
           (rectY bounds)
           1
           (rectHeight bounds)
-    withBounds cursorRect $ fillRect (styleTextColour style)
+    withBounds cursorRect $ fillRect (styleTextColour s)
   where
     drawLo = selectionLow sel
     drawHi = selectionHigh sel
@@ -260,7 +268,7 @@ textInput eid attrs = do
   wasFocused   <- isFocused eid
   wasCapturing <- isDragging eid
   control eid cfg attrs $ do
-    style    <- getStyle eid
+    s        <- currentStyle
     hasFocus <- isFocused eid
     disabled <- isDisabled
     bounds   <- getBounds
@@ -311,7 +319,7 @@ textInput eid attrs = do
           pure newScrollX
         else pure scrollX
 
-    drawTextInputContent style bounds displayValue canEdit effectiveScrollX selFinal
+    drawTextInputContent s bounds displayValue canEdit effectiveScrollX selFinal
   where
     cfg          = fixFocusOnClick (configure defaultTextInputConfig attrs)
     fixFocusOnClick c = setControlConfig ((controlConfig c) { ccFocusOnClick = FocusSelf }) c

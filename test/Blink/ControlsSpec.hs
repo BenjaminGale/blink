@@ -120,7 +120,7 @@ import Blink.Geometry (Alignment (..), Orientation (..), Point (..), Rectangle (
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
 import Blink.Layout (BoxConfig (..), Layout (..), Length (..), defaultBoxConfig)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Style (..), StyleSet (..), StyleKey (..), Theme (..))
 import Blink.UI
 
 -- | Off-screen fixed location for a real "other" control, standing in for
@@ -809,7 +809,7 @@ spec = describe "Blink.Controls" $ do
           , styleSetFocused  = distinctStyle (RGBA 0 0 1 1)
           , styleSetDisabled = distinctStyle (RGBA 1 1 1 1)
           }
-        distinctTheme = testTheme { themeElementStyles = Map.fromList [(TestControl, distinctStyleSet), (OtherControl, distinctStyleSet)] }
+        distinctTheme = testTheme { themeElementStyles = Map.fromList [(ElementId TestControl, distinctStyleSet), (ElementId OtherControl, distinctStyleSet)] }
         ctxWith input = emptyUIContext controlRect input distinctTheme noOpTextMeasurer :: UIContext TestElement ()
 
     it "getStyle resolves the Hovered variant when the mouse is over the control" $ do
@@ -1139,7 +1139,7 @@ spec = describe "Blink.Controls" $ do
       let focusedStyle = testStyle { styleBackground = RGBA 0 0 1 1 }
           rowTheme = compTheme
             { themeElementStyles = Map.fromList
-                [(RowElem 0, zeroChromeStyleSet { styleSetFocused = focusedStyle })] }
+                [(ElementId (RowElem 0), zeroChromeStyleSet { styleSetFocused = focusedStyle })] }
           rowCtx = emptyUIContext controlRect noInput rowTheme noOpTextMeasurer :: UIContext CompElem ()
           styledLeaf eid = control eid ([] :: [Attr CompElem Probe () ()]) (fillRect =<< (styleBackground <$> getStyle eid))
           render = wc ListElem (styledLeaf (RowElem 0))

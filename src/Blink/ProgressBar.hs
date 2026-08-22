@@ -1,14 +1,18 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 -- | A progress indicator: a filled bar for a known 'Progress' value, or a
 -- continuously animating band while 'Indeterminate'.
 module Blink.ProgressBar
   ( ProgressBarConfig
   , ProgressValue (..)
   , progressBar
+  , progressBarStyleKey
   , progress
   , bandSpeed
   , isEnabled
+  , style
+  , StyleKey (..)
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -21,15 +25,15 @@ module Blink.ProgressBar
 
 import Blink.Attributes
   ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..)
-  , configAny, defaultControlConfig, configure, isEnabled
+  , configAny, defaultControlConfig, configure, isEnabled, style
   )
-import Blink.Control (control, getStyle)
+import Blink.Control (control)
 import Blink.Element
   ( ElementEvent
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
 import Blink.Geometry (Rectangle (..))
-import Blink.Style (Style (..))
+import Blink.Style (Style (..), StyleKey (..))
 import Blink.UI
 
 -- | The value passed to 'progressBar' via 'progress'.
@@ -48,9 +52,14 @@ data ProgressBarConfig e = ProgressBarConfig
   , progressBarConfigBandSpeed :: Double
   }
 
+-- | The 'StyleKey' 'progressBar' resolves its style from unless overridden
+-- via 'style'.
+progressBarStyleKey :: StyleKey e
+progressBarStyleKey = Class "progressBar"
+
 defaultProgressBarConfig :: ProgressBarConfig e
 defaultProgressBarConfig = ProgressBarConfig
-  { progressBarConfigControl   = defaultControlConfig
+  { progressBarConfigControl   = defaultControlConfig progressBarStyleKey
   , progressBarConfigValue     = Progress 0
   , progressBarConfigBandSpeed = 0.5
   }
@@ -77,13 +86,13 @@ bandSpeed v = configAny $ \cfg -> cfg { progressBarConfigBandSpeed = v }
 -- a default, so passing @isTabStop@ in @attrs@ has no effect on it.
 progressBar :: Ord e => e -> [Attr e ElementEvent msg (ProgressBarConfig e)] -> UI e msg ()
 progressBar eid attrs = control eid cfg attrs $ do
-  style <- getStyle eid
-  r     <- getBounds
+  s <- currentStyle
+  r <- getBounds
   case progressBarConfigValue cfg of
     Progress value -> do
       let clamped   = max 0 (min 1 value)
           fillRect' = r { rectWidth = rectWidth r * clamped }
-      withBounds fillRect' $ fillRect (styleTextColour style)
+      withBounds fillRect' $ fillRect (styleTextColour s)
     Indeterminate -> do
       requiresAnimation
       elapsed <- getAnimElapsed
@@ -92,7 +101,7 @@ progressBar eid attrs = control eid cfg attrs $ do
           phase = t - fromIntegral (floor t :: Int)
           bandW = rectWidth r * 0.3
           left  = rectX r - bandW + (rectWidth r + bandW) * phase
-      withBounds (r { rectX = left, rectWidth = bandW }) $ fillRect (styleTextColour style)
+      withBounds (r { rectX = left, rectWidth = bandW }) $ fillRect (styleTextColour s)
   where
     cfg = fixFocusBehaviour (configure defaultProgressBarConfig attrs)
     fixFocusBehaviour c = setControlConfig ((controlConfig c) { ccIsTabStop = False, ccFocusOnClick = FocusSelf }) c

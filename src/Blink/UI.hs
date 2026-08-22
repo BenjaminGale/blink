@@ -143,9 +143,10 @@ Tab and Shift-Tab navigation between controls is managed automatically by
 
 = Styles
 
-'getStyleSet' returns all style variants for an element (normal, hovered,
-pressed, focused, disabled); see 'Blink.Controls.getStyle' for how a control
-resolves the active variant from its current interaction state.
+'getStyleSet' returns all style variants for a 'Blink.Style.StyleKey'
+(normal, hovered, pressed, focused, disabled); a control resolves the
+active variant from its current interaction state and makes it available to
+its own content via 'currentStyle'.
 
 = Text measurement
 
@@ -286,6 +287,8 @@ module Blink.UI
     -- * Styles
   , getStyleSet
   , contextTheme
+  , currentStyle
+  , withStyle
     -- * Text measurement
   , charOffset
   , charAtOffset
@@ -318,7 +321,7 @@ import Blink.Mouse
   , HoverState (..), wasHit, nextHoverState
   , Mouse (..), emptyMouse, advanceHover, advanceButton
   )
-import Blink.Style (StyleSet (..), Theme (..))
+import Blink.Style (Style, StyleSet (..), StyleKey (..), Theme (..))
 
 -- | Per-frame animation state threaded through the 'UIContext'. Set by the
 -- backend at the start of each frame; read by 'withAnimationFrame' and
@@ -559,6 +562,8 @@ data UIContext e msg = UIContext
     -- on a re-render of the same frame — see 'rerenderContext'.
   , ctxElements        :: ElementState e
   , ctxOutputs         :: FrameOutputs e msg
+  , ctxStyle           :: Style
+    -- ^ Set by 'withStyle', read back via 'currentStyle'.
   }
 
 -- | The UI monad. A state-threading computation in 'IO' that reads from a
@@ -619,6 +624,7 @@ emptyUIContext bounds input thm measurer = UIContext
       , elmSelections    = Map.empty
       }
   , ctxOutputs         = emptyFrameOutputs
+  , ctxStyle           = styleSetNormal (themeDefaultStyle thm)
   }
 
 -- | Advances the context to the next frame, given the backend-supplied
@@ -665,6 +671,7 @@ finishFrame bounds input thm anim ctx = ctx
   , ctxFocus       = nextFocusTrackerFrame (ctxFocus ctx)
   , ctxMouse       = advanceHover (ctxMouse ctx)
   , ctxOutputs     = emptyFrameOutputs
+  , ctxStyle       = styleSetNormal (themeDefaultStyle thm)
   }
 
 gets :: (UIContext e msg -> a) -> UI e msg a
@@ -884,12 +891,12 @@ getTheme = gets contextTheme
 contextTheme :: UIContext e msg -> Theme e
 contextTheme = ctxTheme
 
--- | Returns all style variants for the given element. Falls back to the theme's
--- default style when no element-specific style is registered.
-getStyleSet :: Ord e => e -> UI e msg StyleSet
-getStyleSet eid = do
+-- | Returns all style variants registered for the given 'StyleKey'. Falls
+-- back to the theme's default style when nothing is registered for it.
+getStyleSet :: Ord e => StyleKey e -> UI e msg StyleSet
+getStyleSet styleKey = do
   t <- getTheme
-  return $ Map.findWithDefault (themeDefaultStyle t) eid (themeElementStyles t)
+  return $ Map.findWithDefault (themeDefaultStyle t) styleKey (themeElementStyles t)
 
 -- | 'True' when the left button is currently held, whether this is the
 -- first frame of the press or a later one -- callers that only care whether
@@ -1219,6 +1226,17 @@ withBounds :: Rectangle -> UI e msg a -> UI e msg a
 withBounds r (UI f) = UI $ \ctx -> do
   (a, ctx') <- f (ctx { ctxBounds = r })
   pure (a, ctx' { ctxBounds = ctxBounds ctx })
+
+-- | Runs a sub-tree with the given 'Style' as the one 'currentStyle' reads
+-- back. The previous style is restored once the sub-tree completes.
+withStyle :: Style -> UI e msg a -> UI e msg a
+withStyle style (UI f) = UI $ \ctx -> do
+  (a, ctx') <- f (ctx { ctxStyle = style })
+  pure (a, ctx' { ctxStyle = ctxStyle ctx })
+
+-- | The 'Style' set by the nearest enclosing 'withStyle'.
+currentStyle :: UI e msg Style
+currentStyle = gets ctxStyle
 
 -- | 'True' when the current sub-tree has been marked disabled.
 isDisabled :: UI e msg Bool

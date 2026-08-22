@@ -7,12 +7,15 @@
 module Blink.RadioButton
   ( RadioButtonConfig
   , radioButton
+  , radioButtonStyleKey
   , ToggleEvent (..)
   , text
   , isSelected
   , onSelectedChanged
   , isTabStop
   , isEnabled
+  , style
+  , StyleKey (..)
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -27,17 +30,16 @@ import Data.Text (Text)
 
 import Blink.Attributes
   ( Attr, ControlConfig, HasControlConfig (..), HasTextConfig (..)
-  , defaultControlConfig, configure, isEnabled, isTabStop, text
+  , defaultControlConfig, configure, isEnabled, isTabStop, style, text
   )
 import Blink.Button (HasToggleConfig (..), ToggleConfig (..), ToggleEvent (..), isSelected, onSelectedChanged, toggleBase)
-import Blink.Control (getStyle)
 import Blink.Element
   ( onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
 import Blink.Geometry (Rectangle (..))
 import Blink.Rendering (TextAlign (..))
-import Blink.Style (Style (..))
-import Blink.UI (UI, drawText, getBounds, withBounds)
+import Blink.Style (Style (..), StyleKey (..))
+import Blink.UI (UI, currentStyle, drawText, getBounds, withBounds)
 
 -- | Configuration for 'radioButton', set via 'text', 'isSelected', and
 -- 'onSelectedChanged'. Defaults to no caption, not selected, and no reaction.
@@ -47,9 +49,14 @@ data RadioButtonConfig e = RadioButtonConfig
   , radioConfigText    :: Text
   }
 
+-- | The 'StyleKey' 'radioButton' resolves its style from unless overridden
+-- via 'style'.
+radioButtonStyleKey :: StyleKey e
+radioButtonStyleKey = Class "radioButton"
+
 defaultRadioButtonConfig :: RadioButtonConfig e
 defaultRadioButtonConfig = RadioButtonConfig
-  { radioConfigControl = defaultControlConfig
+  { radioConfigControl = defaultControlConfig radioButtonStyleKey
   , radioConfigToggle  = ToggleConfig { tcSelected = False }
   , radioConfigText    = ""
   }
@@ -83,11 +90,11 @@ radioGlyph False = "\9675" -- WHITE CIRCLE
 -- being clicked again itself. See 'onSelectedChanged' for reacting to it.
 radioButton :: Ord e => e -> [Attr e ToggleEvent msg (RadioButtonConfig e)] -> UI e msg ()
 radioButton eid attrs = toggleBase (const True) eid cfg attrs $ do
-  style  <- getStyle eid
+  s      <- currentStyle
   bounds <- getBounds
   let glyphRect = bounds { rectWidth = glyphWidth }
       textRect  = bounds { rectX = rectX bounds + glyphWidth, rectWidth = max 0 (rectWidth bounds - glyphWidth) }
-  withBounds glyphRect $ drawText (styleTextColour style) AlignCenter (radioGlyph (tcSelected (radioConfigToggle cfg)))
-  withBounds textRect  $ drawText (styleTextColour style) (styleTextAlign style) (radioConfigText cfg)
+  withBounds glyphRect $ drawText (styleTextColour s) AlignCenter (radioGlyph (tcSelected (radioConfigToggle cfg)))
+  withBounds textRect  $ drawText (styleTextColour s) (styleTextAlign s) (radioConfigText cfg)
   where
     cfg = configure defaultRadioButtonConfig attrs

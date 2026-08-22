@@ -9,7 +9,7 @@ import Test.QuickCheck (forAll, choose)
 import Blink.Geometry (Point (..), Rectangle (..), uniform, noBorder, uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Style (..), StyleSet (..), StyleKey (..), Theme (..))
 import Blink.UI
 import Blink.Generators ()
 
@@ -601,18 +601,18 @@ spec = describe "Blink.UI" $ do
           , styleSetDisabled = emptyStyle { styleBackground = RGBA 1 1 1 1 }
           }
         styledTheme = Theme
-          { themeElementStyles = Map.singleton () distinctStyles
+          { themeElementStyles = Map.singleton (ElementId ()) distinctStyles
           , themeDefaultStyle  = emptyStyleSet
           }
         runStyled ui = runUI ui (emptyUIContext testBounds noInput styledTheme noOpTextMeasurer)
 
     describe "getStyleSet" $ do
       it "returns the element-specific style when registered" $ do
-        (ss, _) <- runStyled (getStyleSet ())
+        (ss, _) <- runStyled (getStyleSet (ElementId ()))
         styleBackground (styleSetNormal ss) `shouldBe` RGBA 0 0 0 1
 
       it "falls back to the theme default when no element-specific style is registered" $ do
-        (ss, _) <- run0 (getStyleSet ())
+        (ss, _) <- run0 (getStyleSet (ElementId ()))
         styleBackground (styleSetNormal ss) `shouldBe` styleBackground (styleSetNormal emptyStyleSet)
 
   describe "animation" $ do

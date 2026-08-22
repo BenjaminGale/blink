@@ -23,8 +23,10 @@
 module Blink.Button
   ( ButtonConfig
   , button
+  , buttonStyleKey
   , ToggleButtonConfig
   , toggleButton
+  , toggleButtonStyleKey
   , ToggleEvent (..)
   , ToggleConfig (..)
   , HasToggleConfig (..)
@@ -35,6 +37,8 @@ module Blink.Button
   , text
   , isTabStop
   , isEnabled
+  , style
+  , StyleKey (..)
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -50,16 +54,16 @@ import Data.Text (Text)
 
 import Blink.Attributes
   ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
-  , configAny, defaultControlConfig, configure, isEnabled, fire, isTabStop, onEvent, reactionsTo, text
+  , configAny, defaultControlConfig, configure, isEnabled, fire, isTabStop, onEvent, reactionsTo, style, text
   )
-import Blink.Control (control, getStyle)
+import Blink.Control (control)
 import Blink.Element
   ( ElementEvent (..), HasElementEvent (..)
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
 import Blink.Input (Key (KeyReturn), KeyEvent (..), InputState (..))
-import Blink.Style (Style (..), StyleSet (..))
-import Blink.UI (Out, UI, drawText, getInput, getStyleSet, isDisabled, isFocused)
+import Blink.Style (Style (..), StyleSet (..), StyleKey (..))
+import Blink.UI (Out, UI, currentStyle, drawText, getInput, getStyleSet, isDisabled, isFocused)
 
 -- | Runs @content@ as a normal interactive control (see 'control'), and
 -- additionally fires 'Blink.Element.Clicked' -- alongside a real mouse
@@ -87,8 +91,13 @@ data ButtonConfig e = ButtonConfig
   , buttonConfigText    :: Text
   }
 
+-- | The 'StyleKey' 'button' resolves its style from unless overridden via
+-- 'style'.
+buttonStyleKey :: StyleKey e
+buttonStyleKey = Class "button"
+
 defaultButtonConfig :: ButtonConfig e
-defaultButtonConfig = ButtonConfig { buttonConfigControl = defaultControlConfig, buttonConfigText = "" }
+defaultButtonConfig = ButtonConfig { buttonConfigControl = defaultControlConfig buttonStyleKey, buttonConfigText = "" }
 
 instance HasControlConfig e (ButtonConfig e) where
   controlConfig    = buttonConfigControl
@@ -102,8 +111,8 @@ instance HasTextConfig (ButtonConfig e) where
 -- left-click or by pressing Enter while focused.
 button :: Ord e => e -> [Attr e ElementEvent msg (ButtonConfig e)] -> UI e msg ()
 button eid attrs = buttonBase eid cfg attrs $ do
-  style <- getStyle eid
-  drawText (styleTextColour style) (styleTextAlign style) (buttonConfigText cfg)
+  s <- currentStyle
+  drawText (styleTextColour s) (styleTextAlign s) (buttonConfigText cfg)
   where
     cfg = configure defaultButtonConfig attrs
 
@@ -177,9 +186,14 @@ data ToggleButtonConfig e = ToggleButtonConfig
   , toggleButtonConfigText    :: Text
   }
 
+-- | The 'StyleKey' 'toggleButton' resolves its style from unless
+-- overridden via 'style'.
+toggleButtonStyleKey :: StyleKey e
+toggleButtonStyleKey = Class "toggleButton"
+
 defaultToggleButtonConfig :: ToggleButtonConfig e
 defaultToggleButtonConfig = ToggleButtonConfig
-  { toggleButtonConfigControl = defaultControlConfig
+  { toggleButtonConfigControl = defaultControlConfig toggleButtonStyleKey
   , toggleButtonConfigToggle  = defaultToggleConfig
   , toggleButtonConfigText    = ""
   }
@@ -202,18 +216,19 @@ instance HasTextConfig (ToggleButtonConfig e) where
 -- Activated the same way as 'button'; see 'onSelectedChanged' for reacting to it.
 toggleButton :: Ord e => e -> [Attr e ToggleEvent msg (ToggleButtonConfig e)] -> UI e msg ()
 toggleButton eid attrs = toggleBase not eid cfg attrs $ do
-  style <- toggleStyle eid (tcSelected (toggleButtonConfigToggle cfg))
-  drawText (styleTextColour style) (styleTextAlign style) (toggleButtonConfigText cfg)
+  base <- currentStyle
+  s    <- toggleStyle styleKey base (tcSelected (toggleButtonConfigToggle cfg))
+  drawText (styleTextColour s) (styleTextAlign s) (toggleButtonConfigText cfg)
   where
     cfg = configure defaultToggleButtonConfig attrs
+    styleKey = ccStyleKey (controlConfig cfg)
 
--- | The resolved style for a toggle button: its ordinary resolved style
--- (see 'getStyle'), except selected and enabled forces the pressed variant
--- regardless of hover\/focus.
-toggleStyle :: Ord e => e -> Bool -> UI e msg Style
-toggleStyle eid selected = do
+-- | The resolved style for a toggle button given its ordinary resolved
+-- @base@ style (see 'currentStyle'): selected and enabled forces the
+-- pressed variant regardless of hover\/focus.
+toggleStyle :: Ord e => StyleKey e -> Style -> Bool -> UI e msg Style
+toggleStyle styleKey base selected = do
   disabled <- isDisabled
-  base     <- getStyle eid
   if disabled || not selected
     then pure base
-    else styleSetPressed <$> getStyleSet eid
+    else styleSetPressed <$> getStyleSet styleKey

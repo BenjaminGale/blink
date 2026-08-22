@@ -5,9 +5,12 @@
 module Blink.Label
   ( LabelConfig
   , label
+  , labelStyleKey
   , text
   , target
   , isEnabled
+  , style
+  , StyleKey (..)
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -22,15 +25,15 @@ import Data.Text (Text)
 
 import Blink.Attributes
   ( Attr, ControlConfig (..), HasControlConfig (..), HasTextConfig (..)
-  , FocusOnClick (..), configAny, defaultControlConfig, configure, isEnabled, text
+  , FocusOnClick (..), configAny, defaultControlConfig, configure, isEnabled, style, text
   )
-import Blink.Control (control, getStyle)
+import Blink.Control (control)
 import Blink.Element
   ( ElementEvent (..)
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
-import Blink.Style (Style (..))
-import Blink.UI (UI, drawText)
+import Blink.Style (Style (..), StyleKey (..))
+import Blink.UI (UI, currentStyle, drawText)
 
 -- | Configuration for 'label', set via 'text' and 'target'. Defaults to no
 -- text and no target.
@@ -40,9 +43,14 @@ data LabelConfig e = LabelConfig
   , labelConfigTarget  :: Maybe e
   }
 
+-- | The 'StyleKey' 'label' resolves its style from unless overridden via
+-- 'style'.
+labelStyleKey :: StyleKey e
+labelStyleKey = Class "label"
+
 defaultLabelConfig :: LabelConfig e
 defaultLabelConfig = LabelConfig
-  { labelConfigControl = defaultControlConfig
+  { labelConfigControl = defaultControlConfig labelStyleKey
   , labelConfigText    = ""
   , labelConfigTarget  = Nothing
   }
@@ -69,8 +77,8 @@ target t = configAny $ \cfg -> cfg { labelConfigTarget = Just t }
 -- to a different, named element.
 label :: Ord e => e -> [Attr e ElementEvent msg (LabelConfig e)] -> UI e msg ()
 label eid attrs = control eid cfg attrs $ do
-  style <- getStyle eid
-  drawText (styleTextColour style) (styleTextAlign style) (labelConfigText cfg)
+  s <- currentStyle
+  drawText (styleTextColour s) (styleTextAlign s) (labelConfigText cfg)
   where
     -- Applied after resolving attrs, so a caller can't override isTabStop\/
     -- focusOnClick even by importing them directly from "Blink.Attributes"

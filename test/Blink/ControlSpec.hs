@@ -17,7 +17,7 @@ import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Style (..), StyleSet (..), StyleKey (..), Theme (..))
 import Blink.UI
 
 data TestElement
@@ -32,7 +32,7 @@ data TestElement
 newtype TestConfig e = TestConfig { testControlConfig :: ControlConfig e }
 
 defaultTestConfig :: TestConfig e
-defaultTestConfig = TestConfig defaultControlConfig
+defaultTestConfig = TestConfig (defaultControlConfig (Class "test"))
 
 instance HasControlConfig e (TestConfig e) where
   controlConfig    = testControlConfig
@@ -112,7 +112,7 @@ tag e =
   ]
 
 containedCfg :: TestConfig TestElement
-containedCfg = TestConfig defaultControlConfig { ccTabNavigation = Contained }
+containedCfg = TestConfig (defaultControlConfig (Class "test")) { ccTabNavigation = Contained }
 
 -- | 'Container' (Contained) holding 'ChildA'\/'ChildB'\/'ChildC', followed
 -- by a plain 'Sibling' -- the basic shape for testing Tab\/Shift-Tab
@@ -129,7 +129,7 @@ arrowTree :: UI TestElement String ()
 arrowTree = control Container arrowCfg (tag Container) $
   mapM_ (\c -> control c defaultTestConfig (tag c) (pure ())) [ChildA, ChildB, ChildC]
   where
-    arrowCfg = TestConfig defaultControlConfig { ccTabNavigation = Contained, ccIsArrowNavigationEnabled = True }
+    arrowCfg = TestConfig (defaultControlConfig (Class "test")) { ccTabNavigation = Contained, ccIsArrowNavigationEnabled = True }
 
 -- | 'Outer' (Contained) holds a nested 'Inner' (also Contained, with its
 -- own children 'InnerA'\/'InnerB') plus a plain 'OuterChildB', followed by
@@ -174,15 +174,15 @@ spec = describe "Blink.Control" $ do
       resultMessages result `shouldBe` ["A lost", "B gained"]
 
     it "FocusTarget redirects focus to the named element instead of the clicker" $ do
-      let cfgA = TestConfig defaultControlConfig { ccIsTabStop = False, ccFocusOnClick = FocusTarget ElemB }
-          cfgB = TestConfig defaultControlConfig { ccIsTabStop = False }
+      let cfgA = TestConfig (defaultControlConfig (Class "test")) { ccIsTabStop = False, ccFocusOnClick = FocusTarget ElemB }
+          cfgB = TestConfig (defaultControlConfig (Class "test")) { ccIsTabStop = False }
           taggedA = [onFocusGained (const [OutMsg ("A gained" :: String)])]
           taggedB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
       result <- runInteractions testBounds seedCtx (both cfgA taggedA cfgB taggedB) [] [ClickAt onA, Wait 1]
       resultMessages result `shouldBe` ["B gained"]
 
     it "NoFocus leaves focus unchanged when clicked" $ do
-      let cfgA = TestConfig defaultControlConfig { ccIsTabStop = False, ccFocusOnClick = NoFocus }
+      let cfgA = TestConfig (defaultControlConfig (Class "test")) { ccIsTabStop = False, ccFocusOnClick = NoFocus }
           attrs :: [Attr']
           attrs = [onFocusGained (const [OutMsg ("gained" :: String)])]
       result <- runInteractions testBounds seedCtx (control ElemA cfgA attrs (pure ())) [] [ClickAt onA, Wait 1]
@@ -275,7 +275,7 @@ spec = describe "Blink.Control" $ do
       resultMessages result `shouldBe` ["Inner lost", "OuterChildB gained"]
 
     it "has no effect when the container isn't a tab stop -- its children participate directly in the enclosing sequence" $ do
-      let notTabStopCfg = TestConfig defaultControlConfig { ccIsTabStop = False, ccTabNavigation = Contained }
+      let notTabStopCfg = TestConfig (defaultControlConfig (Class "test")) { ccIsTabStop = False, ccTabNavigation = Contained }
           tree = do
             control Container notTabStopCfg (tag Container) $
               mapM_ (\c -> control c defaultTestConfig (tag c) (pure ())) [ChildA, ChildB]

@@ -267,7 +267,7 @@ import Blink.Geometry (Alignment (..), Insets (..), Orientation (..), Point (..)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout (BoxConfig (..), Layout (..), Length (..), defaultBoxConfig, hBox, vBox)
 import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Style (..), StyleSet (..))
+import Blink.Style (Style (..), StyleSet (..), StyleKey (..))
 import Blink.UI
 
 -- | The lifecycle events every control can fire, regardless of its own
@@ -477,7 +477,7 @@ text t = configAny (setText t)
 -- determine anyway — real themes don't vary margin by state.
 isMouseOver :: Ord e => e -> UI e msg Bool
 isMouseOver eid = do
-  ss <- getStyleSet eid
+  ss <- getStyleSet (ElementId eid)
   r  <- getBounds
   withBounds (insetRect (styleMargin (styleSetNormal ss)) r) isRegionHit
 
@@ -517,7 +517,7 @@ isPressed eid = do
 -- press. Priority: disabled > pressed > hovered > focused > normal.
 getStyle :: Ord e => e -> UI e msg Style
 getStyle eid = do
-  styles <- getStyleSet eid
+  styles <- getStyleSet (ElementId eid)
   isDis  <- isDisabled
   isHov  <- isMouseOver eid
   isFoc  <- isFocused eid
@@ -1245,7 +1245,7 @@ contentRectFor ss r =
 trackContentRect :: Ord e => e -> UI e msg Rectangle
 trackContentRect trackId = do
   bounds   <- getBounds
-  styleSet <- getStyleSet trackId
+  styleSet <- getStyleSet (ElementId trackId)
   pure (contentRectFor styleSet bounds)
 
 -- | While @trackId@ is being dragged with the button held, returns the track

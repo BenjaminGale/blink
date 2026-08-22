@@ -33,7 +33,7 @@ import Blink.Controls (button)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..), KeyEvent (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Style (..), StyleSet (..), StyleKey (..), Theme (..))
 import Blink.UI
 
 data TestElement = TestControl | OtherControl
@@ -64,7 +64,7 @@ testStyleSet = StyleSet
 
 testTheme :: Theme TestElement
 testTheme = Theme
-  { themeElementStyles = Map.fromList [(TestControl, testStyleSet), (OtherControl, testStyleSet)]
+  { themeElementStyles = Map.fromList [(ElementId TestControl, testStyleSet), (ElementId OtherControl, testStyleSet)]
   , themeDefaultStyle  = testStyleSet
   }
 
@@ -148,7 +148,7 @@ testStyleSetWithBorder = StyleSet
 
 testThemeWithBorder :: Theme TestElement
 testThemeWithBorder = Theme
-  { themeElementStyles = Map.fromList [(TestControl, testStyleSetWithBorder), (OtherControl, testStyleSetWithBorder)]
+  { themeElementStyles = Map.fromList [(ElementId TestControl, testStyleSetWithBorder), (ElementId OtherControl, testStyleSetWithBorder)]
   , themeDefaultStyle  = testStyleSetWithBorder
   }
 
