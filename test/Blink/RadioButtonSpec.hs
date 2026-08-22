@@ -3,10 +3,13 @@ module Blink.RadioButtonSpec (spec) where
 
 import qualified Data.Map.Strict as Map
 import Test.Hspec
+import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
 import Blink.Attributes (Attr, text)
-import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
-import Blink.Input (InputState (..), Key (..), KeyEvent (..))
+import Blink.Generators (genPointIn)
+import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
+import Blink.Input (InputState (..), Key (..))
+import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.RadioButton (RadioButtonConfig, ToggleEvent, isSelected, onSelectedChanged, radioButton)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
@@ -51,20 +54,20 @@ noInput = InputState
   , inputTypedText      = []
   }
 
-down, releasedAt :: Point -> InputState
-down p       = noInput { inputMousePosition = p, inputLeftButtonDown = True }
-releasedAt p = noInput { inputMousePosition = p, inputLeftButtonDown = False }
-
-onControl :: Point
-onControl = Point 50 50
+-- | The margin-inset hit area for a control rendered at 'testBounds' with
+-- the 10px margin the test style here uses -- covers both the radio
+-- button's glyph (x: 15-35) and caption (x: 35-85), so random points from
+-- within it exercise both halves.
+hitRect :: Rectangle
+hitRect = insetRect (uniform 10) testBounds
 
 type Attr' = Attr TestElement ToggleEvent String (RadioButtonConfig TestElement)
 
-start :: [Attr'] -> IO (UIContext TestElement String)
-start attrs = snd <$> runUI (radioButton OptionA attrs) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
+seedCtx :: UIContext TestElement String
+seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
-step :: [Attr'] -> InputState -> UIContext TestElement String -> IO (UIContext TestElement String)
-step attrs input ctx = snd <$> runUI (radioButton OptionA attrs) (nextFrameContext testBounds input testTheme (contextAnimation ctx) ctx)
+start :: [Attr'] -> IO (UIContext TestElement String)
+start attrs = snd <$> runUI (radioButton OptionA attrs) seedCtx
 
 spec :: Spec
 spec = describe "Blink.RadioButton" $ do
@@ -79,22 +82,19 @@ spec = describe "Blink.RadioButton" $ do
     ctx <- start [text "Option A", isSelected True]
     getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 20 70) "\9673" testColour AlignCenter]
 
-  it "fires onSelectedChanged with True when clicked while unselected" $ do
+  it "fires onSelectedChanged with True when clicked while unselected" $ monadicIO $ do
     let attrs = [isSelected False, onSelectedChanged (\b -> [OutMsg (show b)])]
-    ctx0 <- start attrs
-    ctx1 <- step attrs (down onControl) ctx0
-    ctx2 <- step attrs (releasedAt onControl) ctx1
-    getMessages ctx2 `shouldBe` [show True]
+    p <- pick (genPointIn hitRect)
+    result <- run (runInteractions testBounds seedCtx (radioButton OptionA attrs) [] [ClickAt p])
+    assert (resultMessages result == [show True])
 
-  it "does not fire onSelectedChanged when clicked while already selected" $ do
+  it "does not fire onSelectedChanged when clicked while already selected" $ monadicIO $ do
     let attrs = [isSelected True, onSelectedChanged (\b -> [OutMsg (show b)])]
-    ctx0 <- start attrs
-    ctx1 <- step attrs (down onControl) ctx0
-    ctx2 <- step attrs (releasedAt onControl) ctx1
-    getMessages ctx2 `shouldBe` []
+    p <- pick (genPointIn hitRect)
+    result <- run (runInteractions testBounds seedCtx (radioButton OptionA attrs) [] [ClickAt p])
+    assert (resultMessages result == [])
 
   it "fires onSelectedChanged when activated via Enter while unselected and focused" $ do
     let attrs = [isSelected False, onSelectedChanged (\b -> [OutMsg (show b)])]
-    ctx0 <- start attrs
-    ctx1 <- step attrs (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0
-    getMessages ctx1 `shouldBe` [show True]
+    result <- runInteractions testBounds seedCtx (radioButton OptionA attrs) [Wait 1] [PressKey KeyReturn []]
+    resultMessages result `shouldBe` [show True]

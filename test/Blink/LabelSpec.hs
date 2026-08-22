@@ -6,8 +6,10 @@ import Test.Hspec
 
 import Blink.Attributes (Attr, FocusOnClick (..), focusOnClick, text)
 import Blink.Element (ElementEvent)
-import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
+import Blink.ElementBehaviour (elementBehaviourSpec)
+import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
+import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Label (LabelConfig, label, target)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
@@ -52,47 +54,48 @@ noInput = InputState
   , inputTypedText      = []
   }
 
-down, releasedAt :: Point -> InputState
-down p       = noInput { inputMousePosition = p, inputLeftButtonDown = True }
-releasedAt p = noInput { inputMousePosition = p, inputLeftButtonDown = False }
-
 onCaption :: Point
 onCaption = Point 50 50
 
-start :: [Attr'] -> IO (UIContext TestElement String)
-start attrs = snd <$> runUI (label Caption attrs) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
+-- | The margin-inset hit area for a control rendered at 'testBounds' with
+-- the 10px margin the test style here uses.
+hitRect :: Rectangle
+hitRect = insetRect (uniform 10) testBounds
 
 type Attr' = Attr TestElement ElementEvent String (LabelConfig TestElement)
 
+seedCtx :: UIContext TestElement String
+seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
+
+start :: [Attr'] -> IO (UIContext TestElement String)
+start attrs = snd <$> runUI (label Caption attrs) seedCtx
+
 spec :: Spec
 spec = describe "Blink.Label" $ do
+  -- A label never takes focus itself (see below), so 'setFocus' is used
+  -- directly to satisfy the keyboard contract's own focused-state setup
+  -- rather than relying on a click or auto-claim to get it there.
+  elementBehaviourSpec testBounds seedCtx Caption hitRect (Point 200 200) (label Caption)
+
   it "draws its text in the resolved style" $ do
     ctx <- start [text "Hello"]
     getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "Hello" testColour AlignCenter]
 
   it "never claims focus, even with nothing else focused" $ do
-    ctx <- start []
-    contextFocus ctx `shouldBe` Nothing
+    result <- runInteractions testBounds seedCtx (label Caption []) [] []
+    contextFocus (resultContext result) `shouldBe` Nothing
 
   it "does not take focus when clicked by default" $ do
-    ctx0 <- start []
-    ctx1 <- snd <$> runUI (label Caption []) (nextFrameContext testBounds (down onCaption) testTheme (contextAnimation ctx0) ctx0)
-    ctx2 <- snd <$> runUI (label Caption []) (nextFrameContext testBounds (releasedAt onCaption) testTheme (contextAnimation ctx1) ctx1)
-    contextFocus ctx2 `shouldBe` Nothing
+    result <- runInteractions testBounds seedCtx (label Caption []) [] [ClickAt onCaption, Wait 1]
+    contextFocus (resultContext result) `shouldBe` Nothing
 
   it "ignores an explicit focusOnClick -- clicking it never moves focus anywhere" $ do
-    let attrs = [focusOnClick (FocusTarget Target)]
-    ctx0 <- start attrs
-    ctx1 <- snd <$> runUI (label Caption attrs) (nextFrameContext testBounds (down onCaption) testTheme (contextAnimation ctx0) ctx0)
-    ctx2 <- snd <$> runUI (label Caption attrs) (nextFrameContext testBounds (releasedAt onCaption) testTheme (contextAnimation ctx1) ctx1)
-    ctx3 <- snd <$> runUI (label Caption attrs) (nextFrameContext testBounds noInput testTheme (contextAnimation ctx2) ctx2)
-    contextFocus ctx3 `shouldBe` Nothing
+    let attrs :: [Attr']
+        attrs = [focusOnClick (FocusTarget Target)]
+    result <- runInteractions testBounds seedCtx (label Caption attrs) [] [ClickAt onCaption, Wait 1]
+    contextFocus (resultContext result) `shouldBe` Nothing
 
   it "redirects a click's focus onto the element named by target" $ do
     let attrs = [target Target]
-    ctx0 <- start attrs
-    ctx1 <- snd <$> runUI (label Caption attrs) (nextFrameContext testBounds (down onCaption) testTheme (contextAnimation ctx0) ctx0)
-    ctx2 <- snd <$> runUI (label Caption attrs) (nextFrameContext testBounds (releasedAt onCaption) testTheme (contextAnimation ctx1) ctx1)
-    contextFocus ctx2 `shouldBe` Nothing -- not yet -- deferred
-    ctx3 <- snd <$> runUI (label Caption attrs) (nextFrameContext testBounds noInput testTheme (contextAnimation ctx2) ctx2)
-    contextFocus ctx3 `shouldBe` Just Target
+    result <- runInteractions testBounds seedCtx (label Caption attrs) [] [ClickAt onCaption, Wait 1]
+    contextFocus (resultContext result) `shouldBe` Just Target
