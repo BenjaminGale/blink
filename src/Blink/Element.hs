@@ -7,6 +7,7 @@
 -- as 'Blink.Controls.control'.
 module Blink.Element
   ( ElementEvent (..)
+  , HasElementEvent (..)
   , element
   , onMouseEntered
   , onMouseExited
@@ -64,19 +65,35 @@ data ElementEvent
     -- cleared by a 'Blink.UI.ClearFocus' request.
   deriving (Eq, Show)
 
+-- | Lets a control's own event type carry 'ElementEvent's alongside its own
+-- domain-specific ones (e.g. a toggle control's own selected-changed event),
+-- so a single attrs list can react to both with 'onClicked' and friends as
+-- well as the control's own reactions -- the same pattern
+-- 'Blink.Attributes.HasControlConfig' uses for carrying a shared
+-- 'Blink.Attributes.ControlConfig'. 'ElementEvent' itself trivially has an
+-- instance, so a control with no events of its own can use 'ElementEvent'
+-- directly as its attrs list's event type.
+class HasElementEvent ev where
+  liftElementEvent  :: ElementEvent -> ev
+  matchElementEvent :: ev -> Maybe ElementEvent
+
+instance HasElementEvent ElementEvent where
+  liftElementEvent  = id
+  matchElementEvent = Just
+
 -- | Observes and reports this frame's raw interaction events for the given
 -- element (see 'ElementEvent'), firing each against the attrs list via
 -- 'fire'. A higher-level combinator (e.g. 'Blink.Control.control') that
 -- needs to make its own decisions (e.g. "was this element just clicked")
 -- queries the same underlying "Blink.UI" primitives directly, independent
 -- of this call, rather than consuming anything back from it.
-element :: Ord e => e -> [Attr e ElementEvent msg cfg] -> UI e msg ()
+element :: (Ord e, HasElementEvent ev) => e -> [Attr e ev msg cfg] -> UI e msg ()
 element eid attrs = do
   hoverEvs  <- hoverStep eid
   buttonEvs <- buttonStep eid
   keyEvs    <- keyStep eid
   focusEvs  <- focusStep eid
-  fire attrs (hoverEvs ++ buttonEvs ++ keyEvs ++ focusEvs)
+  fire attrs (map liftElementEvent (hoverEvs ++ buttonEvs ++ keyEvs ++ focusEvs))
 
 -- | Advances this element's hover state for the current frame (still doing
 -- the 'registerMouseOver'\/'acquireCapture' bookkeeping other elements'
@@ -147,55 +164,55 @@ focusStep eid = do
     _ -> []
 
 -- | Reacts when the mouse starts being over the element. See 'MouseEntered'.
-onMouseEntered :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
-onMouseEntered reaction = onEvent $ \ev -> case ev of
-  MouseEntered -> reaction ()
-  _            -> []
+onMouseEntered :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
+onMouseEntered reaction = onEvent $ \ev -> case matchElementEvent ev of
+  Just MouseEntered -> reaction ()
+  _                 -> []
 
 -- | Reacts when the mouse stops being over the element. See 'MouseExited'.
-onMouseExited :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
-onMouseExited reaction = onEvent $ \ev -> case ev of
-  MouseExited -> reaction ()
-  _           -> []
+onMouseExited :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
+onMouseExited reaction = onEvent $ \ev -> case matchElementEvent ev of
+  Just MouseExited -> reaction ()
+  _                -> []
 
 -- | Reacts when the mouse button goes down while the element is hit. See
 -- 'MouseDown'.
-onMouseDown :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
-onMouseDown reaction = onEvent $ \ev -> case ev of
-  MouseDown -> reaction ()
-  _         -> []
+onMouseDown :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
+onMouseDown reaction = onEvent $ \ev -> case matchElementEvent ev of
+  Just MouseDown -> reaction ()
+  _              -> []
 
 -- | Reacts when the mouse button comes up while the element is hit. See
 -- 'MouseUp'.
-onMouseUp :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
-onMouseUp reaction = onEvent $ \ev -> case ev of
-  MouseUp -> reaction ()
-  _       -> []
+onMouseUp :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
+onMouseUp reaction = onEvent $ \ev -> case matchElementEvent ev of
+  Just MouseUp -> reaction ()
+  _            -> []
 
 -- | Reacts when the press-and-release cycle completes on this element
 -- (mouse up while hit, having also captured the press). See 'Clicked'.
-onClicked :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
-onClicked reaction = onEvent $ \ev -> case ev of
-  Clicked -> reaction ()
-  _       -> []
+onClicked :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
+onClicked reaction = onEvent $ \ev -> case matchElementEvent ev of
+  Just Clicked -> reaction ()
+  _            -> []
 
 -- | Reacts to a key event while the element holds focus, with the
 -- triggering 'KeyEvent'. See 'KeyPressed'.
-onKeyPressed :: (KeyEvent -> [Out e msg]) -> Attr e ElementEvent msg cfg
-onKeyPressed reaction = onEvent $ \ev -> case ev of
-  KeyPressed k -> reaction k
-  _            -> []
+onKeyPressed :: HasElementEvent ev => (KeyEvent -> [Out e msg]) -> Attr e ev msg cfg
+onKeyPressed reaction = onEvent $ \ev -> case matchElementEvent ev of
+  Just (KeyPressed k) -> reaction k
+  _                   -> []
 
 -- | Reacts when the element is named the winner of a focus transfer. See
 -- 'FocusGained'.
-onFocusGained :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
-onFocusGained reaction = onEvent $ \ev -> case ev of
-  FocusGained -> reaction ()
-  _           -> []
+onFocusGained :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
+onFocusGained reaction = onEvent $ \ev -> case matchElementEvent ev of
+  Just FocusGained -> reaction ()
+  _                -> []
 
 -- | Reacts when the element loses focus, whether to a transfer or a clear.
 -- See 'FocusLost'.
-onFocusLost :: (() -> [Out e msg]) -> Attr e ElementEvent msg cfg
-onFocusLost reaction = onEvent $ \ev -> case ev of
-  FocusLost -> reaction ()
-  _         -> []
+onFocusLost :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
+onFocusLost reaction = onEvent $ \ev -> case matchElementEvent ev of
+  Just FocusLost -> reaction ()
+  _              -> []

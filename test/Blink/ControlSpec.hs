@@ -121,7 +121,7 @@ spec = describe "Blink.Control" $ do
       contextFocus ctx `shouldBe` Just ElemB
 
     it "a disabled control does not auto-claim" $ do
-      ctx <- snd <$> runUI (disableWhen True (control ElemA defaultTestConfig [] (pure ())))
+      ctx <- snd <$> runUI (disableWhen True (control ElemA defaultTestConfig ([] :: [Attr']) (pure ())))
                            (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
       contextFocus ctx `shouldBe` Nothing
 
@@ -196,7 +196,7 @@ spec = describe "Blink.Control" $ do
 
   describe "chrome" $
     it "draws background via styledElement, inset by margin" $ do
-      ctx <- snd <$> runUI (control ElemA defaultTestConfig [] (pure ()))
+      ctx <- snd <$> runUI (control ElemA defaultTestConfig ([] :: [Attr']) (pure ()))
                            (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
       getDrawCommands ctx `shouldContain` [FillRect (insetRect (uniform 10) testBounds) testColour]
 

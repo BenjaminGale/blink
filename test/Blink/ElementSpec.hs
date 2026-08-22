@@ -175,7 +175,8 @@ spec = describe "Blink.Element" $ do
 
   describe "reaction helpers" $ do
     it "onMouseEntered/onMouseExited react only to their own hover edge" $ do
-      let attrs =
+      let attrs :: [Attr TestElement ElementEvent String ()]
+          attrs =
             [ onMouseEntered (const [OutMsg ("entered" :: String)])
             , onMouseExited  (const [OutMsg "exited"])
             ]
@@ -185,7 +186,8 @@ spec = describe "Blink.Element" $ do
       getMessages ctx2 `shouldBe` ["exited"]
 
     it "onMouseDown/onMouseUp react only to their own button edge" $ do
-      let attrs =
+      let attrs :: [Attr TestElement ElementEvent String ()]
+          attrs =
             [ onMouseDown (const [OutMsg ("down" :: String)])
             , onMouseUp   (const [OutMsg "up"])
             ]
@@ -195,19 +197,22 @@ spec = describe "Blink.Element" $ do
       getMessages ctx2 `shouldBe` ["up"]
 
     it "onClicked reacts only when the press and release complete on the same element" $ do
-      let attrs = [onClicked (const [OutMsg ("clicked" :: String)])]
+      let attrs :: [Attr TestElement ElementEvent String ()]
+          attrs = [onClicked (const [OutMsg ("clicked" :: String)])]
       ctx1 <- snd <$> runUI (element ElemA attrs) (emptyUIContext testBounds (down onA) testTheme noOpTextMeasurer)
       ctx2 <- snd <$> runUI (element ElemA attrs) (advance (releasedAt onA) ctx1)
       getMessages ctx2 `shouldBe` ["clicked"]
 
     it "onKeyPressed reacts with the triggering KeyEvent" $ do
-      let attrs = [onKeyPressed (\k -> [OutMsg k])]
+      let attrs :: [Attr TestElement ElementEvent KeyEvent ()]
+          attrs = [onKeyPressed (\k -> [OutMsg k])]
       ctx0 <- snd <$> runUI (setFocus ElemA) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
       ctx  <- snd <$> runUI (element ElemA attrs) (advance (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0)
       getMessages ctx `shouldBe` [KeyEvent KeyReturn []]
 
     it "onFocusGained/onFocusLost react only to their own side of a transfer" $ do
-      let attrsA = [onFocusLost   (const [OutMsg ("A lost"   :: String)])]
+      let attrsA, attrsB :: [Attr TestElement ElementEvent String ()]
+          attrsA = [onFocusLost   (const [OutMsg ("A lost"   :: String)])]
           attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
           render = withBounds rectA (element ElemA attrsA) >> withBounds rectB (element ElemB attrsB)
       ctx0 <- snd <$> runUI (setFocus ElemA >> requestFocus Nothing ElemB)

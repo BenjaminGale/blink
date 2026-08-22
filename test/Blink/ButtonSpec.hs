@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Attributes (Attr, FocusOnClick (..), focusOnClick, text)
-import Blink.Button (ButtonConfig, ToggleButtonConfig, button, isSelected, onSelectedChanged, toggleButton)
+import Blink.Button (ButtonConfig, ToggleButtonConfig, ToggleEvent, button, isSelected, onSelectedChanged, toggleButton)
 import Blink.Element (ElementEvent, onClicked)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
@@ -145,7 +145,7 @@ spec = describe "Blink.Button" $ do
       ctx1 <- stepToggle attrs (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0
       getMessages ctx1 `shouldBe` [show True]
 
-type ToggleAttr' = Attr TestElement ElementEvent String (ToggleButtonConfig TestElement String)
+type ToggleAttr' = Attr TestElement ToggleEvent String (ToggleButtonConfig TestElement)
 
 startToggle :: [ToggleAttr'] -> IO (UIContext TestElement String)
 startToggle attrs = snd <$> runUI (toggleButton Ok attrs) (emptyUIContext testBounds noInput toggleTestTheme noOpTextMeasurer)

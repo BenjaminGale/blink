@@ -18,6 +18,7 @@ module Blink.Attributes
   ( Attr (..)
   , configure
   , fire
+  , reactionsTo
   , onEvent
   , configAny
   , FocusOnClick (..)
@@ -95,12 +96,20 @@ configure = foldl' apply
     apply cfg (Config f) = f cfg
     apply cfg _          = cfg
 
+-- | The 'Out's every matching @On@ reaction in the attrs list produces for
+-- one event, without running any of them -- for a control that needs to
+-- derive a further event of its own from one it's already reacting to
+-- (e.g. a toggle control turning its own @Clicked@ into a selected-state
+-- change) rather than dispatching immediately via 'fire'.
+reactionsTo :: [Attr e ev msg cfg] -> ev -> [Out e msg]
+reactionsTo attrs ev = concatMap ($ ev) [h | On h <- attrs]
+
 -- | Raises each event in turn against every @On@ reaction in the attrs list,
 -- dispatching the resulting 'Out's (emitting messages, queuing effects).
 -- Used by 'Blink.Element.element' to fire its raw events, and (in
 -- "Blink.Controls"'s own copy) by every control to fire its own.
 fire :: [Attr e ev msg cfg] -> [ev] -> UI e msg ()
-fire attrs evs = mapM_ (\ev -> mapM_ dispatch (concatMap ($ ev) [h | On h <- attrs])) evs
+fire attrs = mapM_ (mapM_ dispatch . reactionsTo attrs)
   where
     dispatch (OutMsg msg) = emit msg
     dispatch (OutUi eff)  = emitUi eff

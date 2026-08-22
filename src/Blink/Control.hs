@@ -29,7 +29,7 @@ import Blink.Attributes
   ( Attr, fire
   , HasControlConfig (..), ControlConfig (..), FocusOnClick (..), autoClaimsFocus
   )
-import Blink.Element (ElementEvent (..), element, onClicked)
+import Blink.Element (ElementEvent (..), HasElementEvent (..), element, onClicked)
 import Blink.Geometry (Rectangle, insetRect, borderInsets)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..))
@@ -131,13 +131,13 @@ canAutoClaim eid cfg = do
 -- around @content@. Hovering, clicking, and focus-claiming all respect the
 -- same margin-inset hit area chrome resolution uses -- the margin itself
 -- never counts as "on" the control.
-control :: (Ord e, HasControlConfig e cfg) => e -> cfg -> [Attr e ElementEvent msg cfg] -> UI e msg () -> UI e msg ()
+control :: (Ord e, HasControlConfig e cfg, HasElementEvent ev) => e -> cfg -> [Attr e ev msg cfg] -> UI e msg () -> UI e msg ()
 control eid cfg attrs content = do
   wasFocused <- isFocused eid
   applySelfFocus
   applyTabKeys wasFocused
   nowFocused <- isFocused eid
-  fire attrs $ concat
+  fire attrs $ map liftElementEvent $ concat
     [ [FocusGained | not wasFocused && nowFocused]
     , [FocusLost   | wasFocused && not nowFocused]
     ]

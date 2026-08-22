@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | Buttons and button-like controls: activated by a click or by pressing
@@ -26,6 +25,7 @@ module Blink.Button
   , button
   , ToggleButtonConfig
   , toggleButton
+  , ToggleEvent (..)
   , ToggleConfig (..)
   , HasToggleConfig (..)
   , isSelected
@@ -49,11 +49,11 @@ import Data.Text (Text)
 
 import Blink.Attributes
   ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
-  , configAny, defaultControlConfig, configure, fire, isTabStop, text
+  , configAny, defaultControlConfig, configure, fire, isTabStop, onEvent, reactionsTo, text
   )
 import Blink.Control (control, getStyle)
 import Blink.Element
-  ( ElementEvent (..)
+  ( ElementEvent (..), HasElementEvent (..)
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
 import Blink.Input (Key (KeyReturn), KeyEvent (..), InputState (..))
@@ -69,14 +69,14 @@ import Blink.UI (Out, UI, drawText, getInput, getStyleSet, isDisabled, isFocused
 -- Always takes focus when clicked -- fixed behaviour, not a default, so
 -- unlike a plain "Blink.Control" control it can't be redirected elsewhere
 -- or turned off.
-buttonBase :: (Ord e, HasControlConfig e cfg) => e -> cfg -> [Attr e ElementEvent msg cfg] -> UI e msg () -> UI e msg ()
+buttonBase :: (Ord e, HasControlConfig e cfg, HasElementEvent ev) => e -> cfg -> [Attr e ev msg cfg] -> UI e msg () -> UI e msg ()
 buttonBase eid cfg attrs content = do
   control eid cfg' attrs content
   focused  <- isFocused eid
   disabled <- isDisabled
   input    <- getInput
   let pressedReturn = any (\ev -> key ev == KeyReturn) (inputKeyEvents input)
-  when (not disabled && focused && pressedReturn) $ fire attrs [Clicked]
+  when (not disabled && focused && pressedReturn) $ fire attrs [liftElementEvent Clicked]
   where
     cfg' = setControlConfig ((controlConfig cfg) { ccFocusOnClick = FocusSelf }) cfg
 
@@ -106,39 +106,50 @@ button eid attrs = buttonBase eid cfg attrs $ do
   where
     cfg = configure defaultButtonConfig attrs
 
--- | The selected\/unselected state every toggle-style control (a
--- 'toggleButton', or a checkbox\/radio button built the same way) carries,
--- set via 'isSelected' and 'onSelectedChanged'. Every such control's own @cfg@
--- carries one of these, accessed uniformly via 'HasToggleConfig' -- the
--- same pattern 'HasControlConfig' already uses for 'ControlConfig'.
-data ToggleConfig e msg = ToggleConfig
-  { tcSelected  :: Bool
-  , tcOnSelectedChanged :: Bool -> [Out e msg]
-  }
+-- | Fired for a toggle-style control ('toggleButton', or a checkbox\/radio
+-- button built the same way): either one of the raw facts every control
+-- reports (see 'Blink.Element.ElementEvent'), or 'SelectedChanged' when
+-- activating the control moves its selected state to a new value.
+data ToggleEvent
+  = ToggleRaw ElementEvent
+  | SelectedChanged Bool
+  deriving (Eq, Show)
 
-defaultToggleConfig :: ToggleConfig e msg
-defaultToggleConfig = ToggleConfig { tcSelected = False, tcOnSelectedChanged = const [] }
+instance HasElementEvent ToggleEvent where
+  liftElementEvent  = ToggleRaw
+  matchElementEvent (ToggleRaw ev) = Just ev
+  matchElementEvent _              = Nothing
+
+-- | Whether a toggle-style control is currently selected, set via
+-- 'isSelected'. Every such control's own @cfg@ carries one of these,
+-- accessed uniformly via 'HasToggleConfig' -- the same pattern
+-- 'HasControlConfig' already uses for 'ControlConfig'.
+newtype ToggleConfig = ToggleConfig { tcSelected :: Bool }
+
+defaultToggleConfig :: ToggleConfig
+defaultToggleConfig = ToggleConfig { tcSelected = False }
 
 -- | Implemented by any toggle-style control's own @cfg@ type to say how it
--- carries a 'ToggleConfig' -- lets 'isSelected' \/ 'onSelectedChanged' work
--- uniformly across every such control's differently-shaped @cfg@.
-class HasToggleConfig e msg cfg | cfg -> e msg where
-  toggleConfig    :: cfg -> ToggleConfig e msg
-  setToggleConfig :: ToggleConfig e msg -> cfg -> cfg
+-- carries a 'ToggleConfig' -- lets 'isSelected' work uniformly across every
+-- such control's differently-shaped @cfg@.
+class HasToggleConfig cfg where
+  toggleConfig    :: cfg -> ToggleConfig
+  setToggleConfig :: ToggleConfig -> cfg -> cfg
 
 -- | Whether the control is currently selected.
-isSelected :: HasToggleConfig e msg cfg => Bool -> Attr e ev msg cfg
+isSelected :: HasToggleConfig cfg => Bool -> Attr e ev msg cfg
 isSelected b = configAny $ \cfg -> setToggleConfig ((toggleConfig cfg) { tcSelected = b }) cfg
 
 -- | Reacts when activating the control (a click or Enter while focused)
--- would actually change its selected state, with the value it would
--- change to. Reports what /would/ change; it's up to the reaction to
--- actually store the new value and pass it back in via 'isSelected' next
--- frame.
-onSelectedChanged :: HasToggleConfig e msg cfg => (Bool -> [Out e msg]) -> Attr e ev msg cfg
-onSelectedChanged reaction = configAny $ \cfg -> setToggleConfig ((toggleConfig cfg) { tcOnSelectedChanged = reaction }) cfg
+-- moves its selected state to a new value, with the value it changed to.
+-- It's up to the reaction to actually store the new value and pass it back
+-- in via 'isSelected' next frame.
+onSelectedChanged :: (Bool -> [Out e msg]) -> Attr e ToggleEvent msg cfg
+onSelectedChanged reaction = onEvent $ \ev -> case ev of
+  SelectedChanged b -> reaction b
+  _                 -> []
 
--- | Runs @content@ as 'buttonBase', and additionally fires 'onSelectedChanged'
+-- | Runs @content@ as 'buttonBase', and additionally fires 'SelectedChanged'
 -- (only) when activating the control would move its selected state
 -- (per 'isSelected') to a different value than @next@ computes from it --
 -- e.g. @not@ for a control that flips every time, or @const True@ for one
@@ -147,40 +158,40 @@ onSelectedChanged reaction = configAny $ \cfg -> setToggleConfig ((toggleConfig 
 -- sibling being selected). The shape 'toggleButton' and any checkbox\/
 -- radio button share.
 toggleBase
-  :: (Ord e, HasControlConfig e cfg, HasToggleConfig e msg cfg)
-  => (Bool -> Bool) -> e -> cfg -> [Attr e ElementEvent msg cfg] -> UI e msg () -> UI e msg ()
-toggleBase next eid cfg attrs content = buttonBase eid cfg (attrs ++ [toggledReaction]) content
+  :: (Ord e, HasControlConfig e cfg, HasToggleConfig cfg)
+  => (Bool -> Bool) -> e -> cfg -> [Attr e ToggleEvent msg cfg] -> UI e msg () -> UI e msg ()
+toggleBase next eid cfg attrs content = buttonBase eid cfg (attrs ++ [derivedReaction]) content
   where
     tc          = toggleConfig cfg
     newSelected = next (tcSelected tc)
-    toggledReaction
+    derivedReaction
       | newSelected == tcSelected tc = onClicked (const [])
-      | otherwise                    = onClicked (\() -> tcOnSelectedChanged tc newSelected)
+      | otherwise                    = onClicked (\() -> reactionsTo attrs (SelectedChanged newSelected))
 
 -- | Configuration for 'toggleButton', set via 'text', 'isSelected', and
 -- 'onSelectedChanged'. Defaults to no text, not selected, and no reaction.
-data ToggleButtonConfig e msg = ToggleButtonConfig
+data ToggleButtonConfig e = ToggleButtonConfig
   { toggleButtonConfigControl :: ControlConfig e
-  , toggleButtonConfigToggle  :: ToggleConfig e msg
+  , toggleButtonConfigToggle  :: ToggleConfig
   , toggleButtonConfigText    :: Text
   }
 
-defaultToggleButtonConfig :: ToggleButtonConfig e msg
+defaultToggleButtonConfig :: ToggleButtonConfig e
 defaultToggleButtonConfig = ToggleButtonConfig
   { toggleButtonConfigControl = defaultControlConfig
   , toggleButtonConfigToggle  = defaultToggleConfig
   , toggleButtonConfigText    = ""
   }
 
-instance HasControlConfig e (ToggleButtonConfig e msg) where
+instance HasControlConfig e (ToggleButtonConfig e) where
   controlConfig    = toggleButtonConfigControl
   setControlConfig cc cfg = cfg { toggleButtonConfigControl = cc }
 
-instance HasToggleConfig e msg (ToggleButtonConfig e msg) where
+instance HasToggleConfig (ToggleButtonConfig e) where
   toggleConfig    = toggleButtonConfigToggle
   setToggleConfig tc cfg = cfg { toggleButtonConfigToggle = tc }
 
-instance HasTextConfig (ToggleButtonConfig e msg) where
+instance HasTextConfig (ToggleButtonConfig e) where
   setText t cfg = cfg { toggleButtonConfigText = t }
 
 -- | A button labelled via 'text' that tracks an external selected\/unselected
@@ -188,7 +199,7 @@ instance HasTextConfig (ToggleButtonConfig e msg) where
 -- flipping every time it's activated. Drawn in its pressed style while
 -- selected, even without being physically pressed, unless disabled.
 -- Activated the same way as 'button'; see 'onSelectedChanged' for reacting to it.
-toggleButton :: Ord e => e -> [Attr e ElementEvent msg (ToggleButtonConfig e msg)] -> UI e msg ()
+toggleButton :: Ord e => e -> [Attr e ToggleEvent msg (ToggleButtonConfig e)] -> UI e msg ()
 toggleButton eid attrs = toggleBase not eid cfg attrs $ do
   style <- toggleStyle eid (tcSelected (toggleButtonConfigToggle cfg))
   drawText (styleTextColour style) (styleTextAlign style) (toggleButtonConfigText cfg)

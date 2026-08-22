@@ -7,6 +7,7 @@
 module Blink.Checkbox
   ( CheckboxConfig
   , checkbox
+  , ToggleEvent (..)
   , text
   , isSelected
   , onSelectedChanged
@@ -27,11 +28,10 @@ import Blink.Attributes
   ( Attr, ControlConfig, HasControlConfig (..), HasTextConfig (..)
   , defaultControlConfig, configure, isTabStop, text
   )
-import Blink.Button (HasToggleConfig (..), ToggleConfig (..), isSelected, onSelectedChanged, toggleBase)
+import Blink.Button (HasToggleConfig (..), ToggleConfig (..), ToggleEvent (..), isSelected, onSelectedChanged, toggleBase)
 import Blink.Control (getStyle)
 import Blink.Element
-  ( ElementEvent
-  , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
+  ( onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
 import Blink.Geometry (Rectangle (..))
 import Blink.Rendering (TextAlign (..))
@@ -40,28 +40,28 @@ import Blink.UI (UI, drawText, getBounds, withBounds)
 
 -- | Configuration for 'checkbox', set via 'text', 'isSelected', and
 -- 'onSelectedChanged'. Defaults to no caption, not selected, and no reaction.
-data CheckboxConfig e msg = CheckboxConfig
+data CheckboxConfig e = CheckboxConfig
   { checkboxConfigControl :: ControlConfig e
-  , checkboxConfigToggle  :: ToggleConfig e msg
+  , checkboxConfigToggle  :: ToggleConfig
   , checkboxConfigText    :: Text
   }
 
-defaultCheckboxConfig :: CheckboxConfig e msg
+defaultCheckboxConfig :: CheckboxConfig e
 defaultCheckboxConfig = CheckboxConfig
   { checkboxConfigControl = defaultControlConfig
-  , checkboxConfigToggle  = ToggleConfig { tcSelected = False, tcOnSelectedChanged = const [] }
+  , checkboxConfigToggle  = ToggleConfig { tcSelected = False }
   , checkboxConfigText    = ""
   }
 
-instance HasControlConfig e (CheckboxConfig e msg) where
+instance HasControlConfig e (CheckboxConfig e) where
   controlConfig    = checkboxConfigControl
   setControlConfig cc cfg = cfg { checkboxConfigControl = cc }
 
-instance HasToggleConfig e msg (CheckboxConfig e msg) where
+instance HasToggleConfig (CheckboxConfig e) where
   toggleConfig    = checkboxConfigToggle
   setToggleConfig tc cfg = cfg { checkboxConfigToggle = tc }
 
-instance HasTextConfig (CheckboxConfig e msg) where
+instance HasTextConfig (CheckboxConfig e) where
   setText t cfg = cfg { checkboxConfigText = t }
 
 -- | The fixed width reserved for the glyph, on the left of the caption.
@@ -77,7 +77,7 @@ checkboxGlyph False = "\9744" -- BALLOT BOX
 -- control -- clicking either the glyph or the caption activates it, the
 -- same as 'Blink.Button.toggleButton'. Flips every time it's activated;
 -- see 'onSelectedChanged' for reacting to it.
-checkbox :: Ord e => e -> [Attr e ElementEvent msg (CheckboxConfig e msg)] -> UI e msg ()
+checkbox :: Ord e => e -> [Attr e ToggleEvent msg (CheckboxConfig e)] -> UI e msg ()
 checkbox eid attrs = toggleBase not eid cfg attrs $ do
   style  <- getStyle eid
   bounds <- getBounds

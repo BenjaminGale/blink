@@ -5,8 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Attributes (Attr, text)
-import Blink.Checkbox (CheckboxConfig, checkbox, isSelected, onSelectedChanged)
-import Blink.Element (ElementEvent)
+import Blink.Checkbox (CheckboxConfig, ToggleEvent, checkbox, isSelected, onSelectedChanged)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -59,7 +58,7 @@ releasedAt p = noInput { inputMousePosition = p, inputLeftButtonDown = False }
 onControl :: Point
 onControl = Point 50 50
 
-type Attr' = Attr TestElement ElementEvent String (CheckboxConfig TestElement String)
+type Attr' = Attr TestElement ToggleEvent String (CheckboxConfig TestElement)
 
 start :: [Attr'] -> IO (UIContext TestElement String)
 start attrs = snd <$> runUI (checkbox Remember attrs) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)

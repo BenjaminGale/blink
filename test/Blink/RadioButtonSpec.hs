@@ -5,10 +5,9 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Attributes (Attr, text)
-import Blink.Element (ElementEvent)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
-import Blink.RadioButton (RadioButtonConfig, isSelected, onSelectedChanged, radioButton)
+import Blink.RadioButton (RadioButtonConfig, ToggleEvent, isSelected, onSelectedChanged, radioButton)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -59,7 +58,7 @@ releasedAt p = noInput { inputMousePosition = p, inputLeftButtonDown = False }
 onControl :: Point
 onControl = Point 50 50
 
-type Attr' = Attr TestElement ElementEvent String (RadioButtonConfig TestElement String)
+type Attr' = Attr TestElement ToggleEvent String (RadioButtonConfig TestElement)
 
 start :: [Attr'] -> IO (UIContext TestElement String)
 start attrs = snd <$> runUI (radioButton OptionA attrs) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)

@@ -7,6 +7,7 @@
 module Blink.RadioButton
   ( RadioButtonConfig
   , radioButton
+  , ToggleEvent (..)
   , text
   , isSelected
   , onSelectedChanged
@@ -27,11 +28,10 @@ import Blink.Attributes
   ( Attr, ControlConfig, HasControlConfig (..), HasTextConfig (..)
   , defaultControlConfig, configure, isTabStop, text
   )
-import Blink.Button (HasToggleConfig (..), ToggleConfig (..), isSelected, onSelectedChanged, toggleBase)
+import Blink.Button (HasToggleConfig (..), ToggleConfig (..), ToggleEvent (..), isSelected, onSelectedChanged, toggleBase)
 import Blink.Control (getStyle)
 import Blink.Element
-  ( ElementEvent
-  , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
+  ( onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
 import Blink.Geometry (Rectangle (..))
 import Blink.Rendering (TextAlign (..))
@@ -40,28 +40,28 @@ import Blink.UI (UI, drawText, getBounds, withBounds)
 
 -- | Configuration for 'radioButton', set via 'text', 'isSelected', and
 -- 'onSelectedChanged'. Defaults to no caption, not selected, and no reaction.
-data RadioButtonConfig e msg = RadioButtonConfig
+data RadioButtonConfig e = RadioButtonConfig
   { radioConfigControl :: ControlConfig e
-  , radioConfigToggle  :: ToggleConfig e msg
+  , radioConfigToggle  :: ToggleConfig
   , radioConfigText    :: Text
   }
 
-defaultRadioButtonConfig :: RadioButtonConfig e msg
+defaultRadioButtonConfig :: RadioButtonConfig e
 defaultRadioButtonConfig = RadioButtonConfig
   { radioConfigControl = defaultControlConfig
-  , radioConfigToggle  = ToggleConfig { tcSelected = False, tcOnSelectedChanged = const [] }
+  , radioConfigToggle  = ToggleConfig { tcSelected = False }
   , radioConfigText    = ""
   }
 
-instance HasControlConfig e (RadioButtonConfig e msg) where
+instance HasControlConfig e (RadioButtonConfig e) where
   controlConfig    = radioConfigControl
   setControlConfig cc cfg = cfg { radioConfigControl = cc }
 
-instance HasToggleConfig e msg (RadioButtonConfig e msg) where
+instance HasToggleConfig (RadioButtonConfig e) where
   toggleConfig    = radioConfigToggle
   setToggleConfig tc cfg = cfg { radioConfigToggle = tc }
 
-instance HasTextConfig (RadioButtonConfig e msg) where
+instance HasTextConfig (RadioButtonConfig e) where
   setText t cfg = cfg { radioConfigText = t }
 
 -- | The fixed width reserved for the glyph, on the left of the caption.
@@ -80,7 +80,7 @@ radioGlyph False = "\9675" -- WHITE CIRCLE
 -- ever moves it from unselected to selected, since a radio button gives up
 -- selection by a sibling in its group being selected instead, never by
 -- being clicked again itself. See 'onSelectedChanged' for reacting to it.
-radioButton :: Ord e => e -> [Attr e ElementEvent msg (RadioButtonConfig e msg)] -> UI e msg ()
+radioButton :: Ord e => e -> [Attr e ToggleEvent msg (RadioButtonConfig e)] -> UI e msg ()
 radioButton eid attrs = toggleBase (const True) eid cfg attrs $ do
   style  <- getStyle eid
   bounds <- getBounds
