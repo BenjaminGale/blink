@@ -41,10 +41,13 @@ data ProgressValue
   deriving (Eq, Show)
 
 -- | 'Blink.ProgressBar.progressBar'\'s own closed attrs type: the common
--- capabilities every control has, plus 'progress' and 'bandSpeed'. Doesn't
--- expose 'isFocusable' -- a progress bar is never a tab stop; this is fixed
--- behaviour, not a default, so 'progressBar' simply never exports a smart
--- constructor that could set it.
+-- capabilities every control has, plus 'progress' and 'bandSpeed'. A
+-- progress bar is never a tab stop; this is fixed behaviour, not a default,
+-- so 'progressBar' always appends its own 'isFocusable' 'False' last,
+-- overriding whatever a caller passes -- 'Blink.Control.isFocusable' still
+-- typechecks against 'ProgressBarAttributes' (the 'HasControlConfig'
+-- instance is public, like every other widget's), it just never has any
+-- effect.
 data ProgressBarAttributes e msg
   = ProgressBarCommon (ControlProperties e)
   | ProgressBarEvent (ElementEvents e msg)
@@ -103,7 +106,8 @@ toProgressBarControlAttr a                        = translateCommon a
 -- full 'control' like any other -- it reports hover\/click\/focus events
 -- the same way every other control does, even though a caller has no real
 -- reason to react to them. Never a tab stop, though: fixed behaviour, not
--- a default -- 'progressBar' simply never exposes 'isFocusable'.
+-- a default -- 'progressBar' always appends its own 'isFocusable' 'False'
+-- last, so it wins regardless of what a caller passes.
 progressBar :: Ord e => e -> [ProgressBarAttributes e msg] -> UI e msg ()
 progressBar eid attrs = control eid (mapMaybe toProgressBarControlAttr attrs ++ [isFocusable False, focusOnClick NoFocus, content body])
   where

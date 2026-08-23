@@ -1,19 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Blink.LabelSpec (spec) where
+module Blink.LabelledControlSpec (spec) where
 
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
+import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
-import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Label (DisplayMode (..), LabelAttributes, displayMode, glyph, label, target, text)
+import Blink.Label (DisplayMode (..), LabelledControlAttrs, content, displayMode, glyph, labelledControl, text)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 
-data TestElement = Caption | Target deriving (Eq, Ord, Show)
+data TestElement = Widget deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -52,34 +51,36 @@ noInput = InputState
   , inputTypedText      = []
   }
 
-onCaption :: Point
-onCaption = Point 50 50
-
 -- | The margin-inset hit area for a control rendered at 'testBounds' with
 -- the 10px margin the test style here uses.
 hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
-type Attr' = LabelAttributes TestElement String
+-- | The margin-and-padding-inset content area 'labelledControl' draws its
+-- label into.
+contentRect :: Rectangle
+contentRect = Rectangle 15 15 70 70
+
+type Attr' = LabelledControlAttrs TestElement String
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
 start :: [Attr'] -> IO (UIContext TestElement String)
-start attrs = snd <$> runUI (label Caption attrs) seedCtx
+start attrs = snd <$> runUI (labelledControl Widget attrs) seedCtx
 
 spec :: Spec
-spec = describe "Blink.Label" $ do
-  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    testBounds seedCtx Caption (Point 5 5) hitRect (Point 200 200) (label Caption)
+spec = describe "Blink.Label.labelledControl" $ do
+  controlBehaviourSpec defaultControlBehaviourConfig
+    testBounds seedCtx Widget (Point 5 5) hitRect (Point 200 200) (labelledControl Widget)
 
-  it "draws its text in the resolved style" $ do
+  it "draws just its text, filling the content area, in TextOnly mode (the default)" $ do
     ctx <- start [text "Hello"]
-    getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "Hello" testColour AlignCenter]
+    getDrawCommands ctx `shouldContain` [DrawText contentRect "Hello" testColour AlignCenter]
 
   it "draws just its glyph, filling the content area, in GlyphOnly mode" $ do
     ctx <- start [glyph "*", displayMode GlyphOnly]
-    getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "*" testColour AlignCenter]
+    getDrawCommands ctx `shouldContain` [DrawText contentRect "*" testColour AlignCenter]
 
   it "draws its glyph in a fixed-width column followed by its text in TextAndGlyph mode" $ do
     ctx <- start [text "Hello", glyph "*", displayMode TextAndGlyph]
@@ -88,15 +89,7 @@ spec = describe "Blink.Label" $ do
       , DrawText (Rectangle 35 15 50 70) "Hello" testColour AlignCenter
       ]
 
-  it "never claims focus, even with nothing else focused" $ do
-    result <- runInteractions testBounds seedCtx (label Caption []) [] []
-    contextFocus (resultContext result) `shouldBe` Nothing
-
-  it "does not take focus when clicked by default" $ do
-    result <- runInteractions testBounds seedCtx (label Caption []) [] [ClickAt onCaption, Wait 1]
-    contextFocus (resultContext result) `shouldBe` Nothing
-
-  it "redirects a click's focus onto the element named by target" $ do
-    let attrs = [target Target]
-    result <- runInteractions testBounds seedCtx (label Caption attrs) [] [ClickAt onCaption, Wait 1]
-    contextFocus (resultContext result) `shouldBe` Just Target
+  it "places the rendered label wherever content's function runs it, not just over the whole content area" $ do
+    let shiftDown lbl = withBounds (contentRect { rectY = rectY contentRect + 5 }) lbl
+    ctx <- start [text "Hello", content shiftDown]
+    getDrawCommands ctx `shouldContain` [DrawText (contentRect { rectY = rectY contentRect + 5 }) "Hello" testColour AlignCenter]

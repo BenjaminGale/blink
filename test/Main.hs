@@ -10,6 +10,7 @@ import qualified Blink.ElementSpec as Element
 import qualified Blink.GeometrySpec as Geometry
 import qualified Blink.InteractionSpec as Interaction
 import qualified Blink.LabelSpec as Label
+import qualified Blink.LabelledControlSpec as LabelledControl
 import qualified Blink.LayoutSpec as Layout
 import qualified Blink.MouseSpec as Mouse
 import qualified Blink.ProgressBarSpec as ProgressBar
@@ -29,6 +30,7 @@ main = hspec $ do
   Element.spec
   Control.spec
   Label.spec
+  LabelledControl.spec
   Button.spec
   Checkbox.spec
   ProgressBar.spec
