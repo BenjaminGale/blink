@@ -1,28 +1,48 @@
--- | The low-level interaction primitive beneath
--- "Blink.Controls".'Blink.Controls.control': 'element' observes and reports
--- what happened to one element this frame -- hover, mouse button, and key
--- events -- as plain 'ElementEvent's, and does nothing else. No focus
--- claiming, no tab navigation, no activation\/click semantics: those are
--- built on top of the events this returns, by a higher-level combinator such
--- as 'Blink.Controls.control'.
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+-- | An element is anything on screen that responds to the mouse or
+-- keyboard: a button, a checkbox, a slider, a menu item. Every widget in
+-- "Blink.Control" is built out of one or more elements.
+--
+-- Given an id and a list of handlers, 'element' watches whether the
+-- pointer is over that element, whether a mouse button is pressed or
+-- released on it, whether a full click happens on it, what keys are typed
+-- while it holds focus, and whether focus moves onto or off of it -- and
+-- calls the matching handler in @attrs@ for each.
 module Blink.Element
-  ( Attr (..)
-  , configure
-  , fire
-  , reactionsTo
-  , onEvent
-  , configAny
-  , ElementEvent (..)
-  , HasElementEvent (..)
-  , element
+  ( -- * Elements
+    element
+
+    -- * Events
+    -- $events
+  , EventHandler
+  , KeyEventHandler
+  , ElementEvents
+  , HasElementEvents (..)
+  , ElementAttrs
+
+    -- * Event handlers
+    -- ** Mouse
   , onMouseEntered
   , onMouseExited
   , onMouseDown
   , onMouseUp
   , onClicked
+    -- ** Keyboard
   , onKeyPressed
+    -- ** Focus
   , onFocusGained
   , onFocusLost
+
+    -- * Focus transitions
+    -- $focusTransitions
+  , FocusTransition (..)
+  , focusTransition
+
+    -- * Firing events directly
+    -- $fireDirectly
+  , fireClick
+  , fireFocusChange
   ) where
 
 import Control.Monad (when)
@@ -32,126 +52,23 @@ import Blink.Input (KeyEvent (..), InputState (..))
 import Blink.Mouse (ButtonState (..), Mouse (..), captureOf)
 import Blink.UI
 
--- | One entry in a control's attrs list — either a reaction to an event
--- ('onEvent' and the combinators built on it) or a change to the control's
--- own @cfg@ ('configAny' and the smart constructors built on it). Opaque:
--- built and consumed only through the functions this module exports.
-data Attr e ev msg cfg
-  = On (ev -> [Out e msg])
-  | Config (cfg -> cfg)
+-- * Elements
 
--- | Resolves a control's final @cfg@ by folding every @Config@ attr in the
--- list over the default, left to right — so later attrs override earlier
--- ones that touch the same field.
-configure :: cfg -> [Attr e ev msg cfg] -> cfg
-configure = foldl' apply
-  where
-    apply cfg (Config f) = f cfg
-    apply cfg _          = cfg
-
--- | The 'Out's every matching @On@ reaction in the attrs list produces for
--- one event, without running any of them -- for a control that needs to
--- derive a further event of its own from one it's already reacting to
--- (e.g. a toggle control turning its own @Clicked@ into a selected-state
--- change) rather than dispatching immediately via 'fire'.
-reactionsTo :: [Attr e ev msg cfg] -> ev -> [Out e msg]
-reactionsTo attrs ev = concatMap ($ ev) [h | On h <- attrs]
-
--- | Raises each event in turn against every @On@ reaction in the attrs list,
--- dispatching the resulting 'Out's (emitting messages, queuing effects).
--- Used by 'element' to fire its raw events, and (in "Blink.Control"'s own
--- copy) by every control to fire its own.
-fire :: [Attr e ev msg cfg] -> [ev] -> UI e msg ()
-fire attrs = mapM_ (mapM_ dispatch . reactionsTo attrs)
-  where
-    dispatch (OutMsg msg) = emit msg
-    dispatch (OutUi eff)  = emitUi eff
-
--- | The raw escape hatch: react to an event with an arbitrary function to
--- 'Out's.
-onEvent :: (ev -> [Out e msg]) -> Attr e ev msg cfg
-onEvent = On
-
--- | The raw escape hatch for changing a control's own @cfg@.
-configAny :: (cfg -> cfg) -> Attr e ev msg cfg
-configAny = Config
-
--- | A low-level interaction event 'element' fires: a purely observed fact
--- about mouse, keyboard, or focus state relative to one element, with no
--- interpretation of what it means (no click\/activation semantics, no focus
--- claiming). Higher-level combinators (e.g. 'Blink.Controls.control') build
--- meaningful behaviour on top of these.
-data ElementEvent
-  = MouseEntered
-    -- ^ The mouse just started being over the element this frame.
-  | MouseExited
-    -- ^ The mouse just stopped being over the element this frame.
-  | MouseDown
-    -- ^ The mouse button just went down while the element was hit.
-  | MouseUp
-    -- ^ The mouse button just came up while the element was hit -- fires
-    -- regardless of which element (if any) holds capture, so a drag begun
-    -- on a different element and released here still reports this for this
-    -- element; a higher layer decides whether that counts as a click.
-  | Clicked
-    -- ^ The mouse button just came up while the element was hit, /and/ this
-    -- element is the one that captured the original press -- fires
-    -- alongside 'MouseUp' for the element the press-and-release cycle
-    -- actually completed on, but not for one that merely happened to be
-    -- hit when a drag begun elsewhere was released. A higher layer still
-    -- decides whether this (or some other activation key) counts as
-    -- "activated" -- this is the mouse-specific half of that fact, already
-    -- checked against capture so the caller doesn't have to.
-  | KeyPressed KeyEvent
-    -- ^ A key event this frame, while the element holds focus.
-  | FocusGained
-    -- ^ This element was just named the winner of a 'Blink.UI.Focus'
-    -- request. 'element' only observes this -- it never claims focus
-    -- itself; auto-claim\/self-clear are a different, simpler case handled
-    -- entirely by whichever code performs them directly (see
-    -- 'Blink.UI.getFocusChange').
-  | FocusLost
-    -- ^ This element was just displaced by a 'Blink.UI.Focus' request, or
-    -- cleared by a 'Blink.UI.ClearFocus' request.
-  deriving (Eq, Show)
-
--- | Lets a control's own event type carry 'ElementEvent's alongside its own
--- domain-specific ones (e.g. a toggle control's own selected-changed event),
--- so a single attrs list can react to both with 'onClicked' and friends as
--- well as the control's own reactions -- the same pattern
--- 'Blink.Control.HasControlConfig' uses for carrying a shared
--- 'Blink.Control.ControlConfig'. 'ElementEvent' itself trivially has an
--- instance, so a control with no events of its own can use 'ElementEvent'
--- directly as its attrs list's event type.
-class HasElementEvent ev where
-  liftElementEvent  :: ElementEvent -> ev
-  matchElementEvent :: ev -> Maybe ElementEvent
-
-instance HasElementEvent ElementEvent where
-  liftElementEvent  = id
-  matchElementEvent = Just
-
--- | Observes and reports this frame's raw interaction events for the given
--- element (see 'ElementEvent'), firing each against the attrs list via
--- 'fire'. A higher-level combinator (e.g. 'Blink.Control.control') that
--- needs to make its own decisions (e.g. "was this element just clicked")
--- queries the same underlying "Blink.UI" primitives directly, independent
--- of this call, rather than consuming anything back from it.
-element :: (Ord e, HasElementEvent ev) => e -> [Attr e ev msg cfg] -> UI e msg ()
+-- | Watches this element's hover, mouse-button, and key activity for the
+-- current frame, and calls the matching handler in @attrs@ for each.
+element :: Ord e => e -> [ElementAttrs e msg] -> UI e msg ()
 element eid attrs = do
-  hoverEvs  <- hoverStep eid
-  buttonEvs <- buttonStep eid
-  keyEvs    <- keyStep eid
-  focusEvs  <- focusStep eid
-  fire attrs (map liftElementEvent (hoverEvs ++ buttonEvs ++ keyEvs ++ focusEvs))
+  let ec = resolveElementConfig attrs
+  hoverStep ec eid
+  buttonStep ec eid
+  keyStep ec eid
+  focusStep ec eid
 
--- | Advances this element's hover state for the current frame (still doing
--- the 'registerMouseOver'\/'acquireCapture' bookkeeping other elements'
--- contest checks depend on) and reports the hover edge, if any. Disabled
--- elements never register as hovered, matching
--- 'Blink.Controls.applyMouseOver'.
-hoverStep :: Ord e => e -> UI e msg [ElementEvent]
-hoverStep eid = do
+-- | Fires 'onMouseEntered' when the pointer starts being over this
+-- element this frame, and 'onMouseExited' when it stops. A disabled
+-- element is never treated as hovered.
+hoverStep :: Ord e => ElementConfig e msg -> e -> UI e msg ()
+hoverStep ec eid = do
   disabled <- isDisabled
   hit      <- isRegionHit
   let isOver = not disabled && hit
@@ -159,110 +76,209 @@ hoverStep eid = do
     registerMouseOver eid
     acquireCapture eid
   wasOver <- wasMouseOverLastFrame eid
-  pure $ concat
-    [ [MouseEntered | not wasOver && isOver]
-    , [MouseExited  | wasOver && not isOver]
-    ]
+  when (not wasOver && isOver) $ runHandlers (ecOnMouseEntered ec) ()
+  when (wasOver && not isOver) $ runHandlers (ecOnMouseExited ec) ()
 
--- | Reports the button edge for this element: hit and enabled only, with no
--- capture-contest check on 'MouseUp' itself -- a drag started on a
--- different element still reports 'MouseUp' here if the button comes up
--- while this element is hit. 'Clicked' is the one exception: it only fires
--- alongside 'MouseUp' when this element also holds capture (i.e. the press
--- started here too), which is exactly why @eid@ -- unused by the rest of
--- this step -- is needed here.
-buttonStep :: Ord e => e -> UI e msg [ElementEvent]
-buttonStep eid = do
+-- | Fires 'onMouseDown' when a mouse button is pressed on this element,
+-- and 'onMouseUp' when one is released on it, even if the press started
+-- elsewhere. Also fires 'onClicked' alongside 'onMouseUp', but only when
+-- the press started on this element too.
+buttonStep :: Ord e => ElementConfig e msg -> e -> UI e msg ()
+buttonStep ec eid = do
   disabled <- isDisabled
   hit      <- isRegionHit
   mouse    <- getMouse
   let eligible     = not disabled && hit
       capturedByMe = captureOf (mouseButton mouse) == MouseCapturedBy eid
-  pure $ if not eligible
-    then []
-    else case mouseButton mouse of
-      ButtonDown     _ -> [MouseDown]
-      ButtonReleased _ | capturedByMe -> [MouseUp, Clicked]
-                       | otherwise    -> [MouseUp]
-      _                -> []
+  when eligible $ case mouseButton mouse of
+    ButtonDown _ -> runHandlers (ecOnMouseDown ec) ()
+    ButtonReleased _ -> do
+      runHandlers (ecOnMouseUp ec) ()
+      when capturedByMe $ runHandlers (ecOnClicked ec) ()
+    _ -> pure ()
 
--- | Reports one 'KeyPressed' per key event this frame while the element
+-- | Fires one 'onKeyPressed' per key event this frame while the element
 -- holds focus and is enabled.
-keyStep :: Ord e => e -> UI e msg [ElementEvent]
-keyStep eid = do
+keyStep :: Ord e => ElementConfig e msg -> e -> UI e msg ()
+keyStep ec eid = do
   disabled <- isDisabled
   focused  <- isFocused eid
   input    <- getInput
-  pure $ if not disabled && focused
-    then map KeyPressed (inputKeyEvents input)
-    else []
+  when (not disabled && focused) $
+    mapM_ (runHandlers (ecOnKeyPressed ec)) (inputKeyEvents input)
 
--- | Reports 'FocusGained'\/'FocusLost' from the most recent
--- 'Blink.UI.getFocusChange' still visible to this element's scope, if this
--- element is either side of it. Not disabled-gated, unlike the other
--- steps -- a disabled element still observing its own focus loss is
--- consistent with 'element' reporting facts truthfully, and the case that
--- would otherwise need suppressing (the element removed from the tree
--- entirely) already has no attrs list to fire against regardless.
-focusStep :: Eq e => e -> UI e msg [ElementEvent]
-focusStep eid = do
+-- | Fires 'onFocusGained' or 'onFocusLost' when this element is the
+-- source or target of the most recent focus change. Fires even when the
+-- element is disabled.
+focusStep :: Eq e => ElementConfig e msg -> e -> UI e msg ()
+focusStep ec eid = do
   change <- getFocusChange
-  pure $ case change of
+  case change of
     Just fc
-      | focusChangeTo   fc == Just eid -> [FocusGained]
-      | focusChangeFrom fc == Just eid -> [FocusLost]
-    _ -> []
+      | focusChangeTo   fc == Just eid -> runHandlers (ecOnFocusGained ec) ()
+      | focusChangeFrom fc == Just eid -> runHandlers (ecOnFocusLost ec) ()
+    _ -> pure ()
 
--- | Reacts when the mouse starts being over the element. See 'MouseEntered'.
-onMouseEntered :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
-onMouseEntered reaction = onEvent $ \ev -> case matchElementEvent ev of
-  Just MouseEntered -> reaction ()
-  _                 -> []
+-- * Events
 
--- | Reacts when the mouse stops being over the element. See 'MouseExited'.
-onMouseExited :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
-onMouseExited reaction = onEvent $ \ev -> case matchElementEvent ev of
-  Just MouseExited -> reaction ()
-  _                -> []
+-- $events
+-- Each @on...@ function below builds one of these values. A widget's own
+-- attrs type collects them alongside its other capabilities via
+-- 'HasElementEvents'.
 
--- | Reacts when the mouse button goes down while the element is hit. See
--- 'MouseDown'.
-onMouseDown :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
-onMouseDown reaction = onEvent $ \ev -> case matchElementEvent ev of
-  Just MouseDown -> reaction ()
-  _              -> []
+-- | A handler for an element event with no data of its own.
+type EventHandler e msg = () -> [Out e msg]
 
--- | Reacts when the mouse button comes up while the element is hit. See
--- 'MouseUp'.
-onMouseUp :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
-onMouseUp reaction = onEvent $ \ev -> case matchElementEvent ev of
-  Just MouseUp -> reaction ()
-  _            -> []
+-- | A handler for 'onKeyPressed', with the triggering 'KeyEvent'.
+type KeyEventHandler e msg = KeyEvent -> [Out e msg]
 
--- | Reacts when the press-and-release cycle completes on this element
--- (mouse up while hit, having also captured the press). See 'Clicked'.
-onClicked :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
-onClicked reaction = onEvent $ \ev -> case matchElementEvent ev of
-  Just Clicked -> reaction ()
-  _            -> []
+-- | One of the events an element can raise: a click, a mouse action, a
+-- key press, or a focus change.
+data ElementEvents e msg
+  = ElementOnClicked (EventHandler e msg)
+  | ElementOnFocusGained (EventHandler e msg)
+  | ElementOnFocusLost (EventHandler e msg)
+  | ElementOnMouseEntered (EventHandler e msg)
+  | ElementOnMouseExited (EventHandler e msg)
+  | ElementOnMouseDown (EventHandler e msg)
+  | ElementOnMouseUp (EventHandler e msg)
+  | ElementOnKeyPressed (KeyEventHandler e msg)
+
+-- | Implemented by any attrs type that carries an element's mouse,
+-- keyboard, and focus event handlers.
+class HasElementEvents e msg cfg | cfg -> e msg where
+  configureElementEvent :: ElementEvents e msg -> cfg
+  extractElementEvent :: cfg -> Maybe (ElementEvents e msg)
+
+-- | The plain attrs type for an element: nothing but its event handlers.
+-- Widgets in "Blink.Control" build their own richer attrs types on
+-- 'HasElementEvents' instead.
+type ElementAttrs e msg = ElementEvents e msg
+
+instance HasElementEvents e msg (ElementEvents e msg) where
+  configureElementEvent = id
+  extractElementEvent = Just
+
+-- | One element's handlers, grouped by event.
+data ElementConfig e msg = ElementConfig
+  { ecOnClicked      :: [EventHandler e msg]
+  , ecOnFocusGained  :: [EventHandler e msg]
+  , ecOnFocusLost    :: [EventHandler e msg]
+  , ecOnMouseEntered :: [EventHandler e msg]
+  , ecOnMouseExited  :: [EventHandler e msg]
+  , ecOnMouseDown    :: [EventHandler e msg]
+  , ecOnMouseUp      :: [EventHandler e msg]
+  , ecOnKeyPressed   :: [KeyEventHandler e msg]
+  }
+
+defaultElementConfig :: ElementConfig e msg
+defaultElementConfig = ElementConfig [] [] [] [] [] [] [] []
+
+-- | Resolves a @['ElementEvents' e msg]@ into its per-event handler lists;
+-- a handler given multiple times for the same event fires every time.
+resolveElementConfig :: [ElementEvents e msg] -> ElementConfig e msg
+resolveElementConfig = foldl' apply defaultElementConfig
+  where
+    apply ec (ElementOnClicked f)      = ec { ecOnClicked = ecOnClicked ec ++ [f] }
+    apply ec (ElementOnFocusGained f)  = ec { ecOnFocusGained = ecOnFocusGained ec ++ [f] }
+    apply ec (ElementOnFocusLost f)    = ec { ecOnFocusLost = ecOnFocusLost ec ++ [f] }
+    apply ec (ElementOnMouseEntered f) = ec { ecOnMouseEntered = ecOnMouseEntered ec ++ [f] }
+    apply ec (ElementOnMouseExited f)  = ec { ecOnMouseExited = ecOnMouseExited ec ++ [f] }
+    apply ec (ElementOnMouseDown f)    = ec { ecOnMouseDown = ecOnMouseDown ec ++ [f] }
+    apply ec (ElementOnMouseUp f)      = ec { ecOnMouseUp = ecOnMouseUp ec ++ [f] }
+    apply ec (ElementOnKeyPressed f)   = ec { ecOnKeyPressed = ecOnKeyPressed ec ++ [f] }
+
+-- | Runs every handler in @hs@ on @a@.
+runHandlers :: [a -> [Out e msg]] -> a -> UI e msg ()
+runHandlers hs a = mapM_ dispatch (concatMap ($ a) hs)
+  where
+    dispatch (OutMsg msg) = emit msg
+    dispatch (OutUi eff)  = emitUi eff
+
+-- * Event handlers
+
+-- ** Mouse
+
+-- | Reacts when the mouse starts being over the element this frame.
+onMouseEntered :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
+onMouseEntered = configureElementEvent . ElementOnMouseEntered
+
+-- | Reacts when the mouse stops being over the element this frame.
+onMouseExited :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
+onMouseExited = configureElementEvent . ElementOnMouseExited
+
+-- | Reacts when the mouse button goes down while the element is hit.
+onMouseDown :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
+onMouseDown = configureElementEvent . ElementOnMouseDown
+
+-- | Reacts when the mouse button comes up while the element is hit, even
+-- if the press started elsewhere. See 'onClicked' for the click-only
+-- version.
+onMouseUp :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
+onMouseUp = configureElementEvent . ElementOnMouseUp
+
+-- | Reacts when the element is clicked: the mouse button pressed and
+-- released on it without leaving. Fires alongside 'onMouseUp', but only
+-- when the press also started on this element.
+onClicked :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
+onClicked = configureElementEvent . ElementOnClicked
+
+-- ** Keyboard
 
 -- | Reacts to a key event while the element holds focus, with the
--- triggering 'KeyEvent'. See 'KeyPressed'.
-onKeyPressed :: HasElementEvent ev => (KeyEvent -> [Out e msg]) -> Attr e ev msg cfg
-onKeyPressed reaction = onEvent $ \ev -> case matchElementEvent ev of
-  Just (KeyPressed k) -> reaction k
-  _                   -> []
+-- triggering 'KeyEvent'.
+onKeyPressed :: HasElementEvents e msg cfg => KeyEventHandler e msg -> cfg
+onKeyPressed = configureElementEvent . ElementOnKeyPressed
 
--- | Reacts when the element is named the winner of a focus transfer. See
--- 'FocusGained'.
-onFocusGained :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
-onFocusGained reaction = onEvent $ \ev -> case matchElementEvent ev of
-  Just FocusGained -> reaction ()
-  _                -> []
+-- ** Focus
+
+-- | Reacts when the element is named the winner of a focus transfer.
+onFocusGained :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
+onFocusGained = configureElementEvent . ElementOnFocusGained
 
 -- | Reacts when the element loses focus, whether to a transfer or a clear.
--- See 'FocusLost'.
-onFocusLost :: HasElementEvent ev => (() -> [Out e msg]) -> Attr e ev msg cfg
-onFocusLost reaction = onEvent $ \ev -> case matchElementEvent ev of
-  Just FocusLost -> reaction ()
-  _              -> []
+onFocusLost :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
+onFocusLost = configureElementEvent . ElementOnFocusLost
+
+-- * Focus transitions
+
+-- $focusTransitions
+-- For a caller tracking focus itself across frames: compare last frame's
+-- holder to this frame's with 'focusTransition', then fire the result
+-- with 'fireFocusChange'.
+
+-- | Which way, if any, focus just moved -- see 'focusTransition'.
+data FocusTransition
+  = FocusUnchanged
+  | GainedFocus
+  | LostFocus
+
+-- | Classifies a was\/now pair of focus states into the 'FocusTransition'
+-- it represents, for 'fireFocusChange'.
+focusTransition :: Bool -> Bool -> FocusTransition
+focusTransition was now
+  | not was && now = GainedFocus
+  | was && not now  = LostFocus
+  | otherwise       = FocusUnchanged
+
+-- * Firing events directly
+
+-- $fireDirectly
+-- Extension points for widgets built on 'element' to fire these events
+-- themselves -- for example, firing a click when Enter is pressed on a
+-- focused button.
+
+-- | Fires every 'onClicked' handler in @attrs@, the same way a real mouse
+-- click would.
+fireClick :: [ElementAttrs e msg] -> UI e msg ()
+fireClick attrs = runHandlers (ecOnClicked (resolveElementConfig attrs)) ()
+
+-- | Fires 'onFocusGained'\/'onFocusLost' directly from a given
+-- 'FocusTransition', immediately rather than on the next frame.
+fireFocusChange :: [ElementAttrs e msg] -> FocusTransition -> UI e msg ()
+fireFocusChange attrs transition = do
+  let ec = resolveElementConfig attrs
+  case transition of
+    GainedFocus    -> runHandlers (ecOnFocusGained ec) ()
+    LostFocus      -> runHandlers (ecOnFocusLost ec) ()
+    FocusUnchanged -> pure ()

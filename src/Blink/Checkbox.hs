@@ -5,10 +5,10 @@
 -- Built on 'toggleBase' -- see "Blink.Button" for how it and every other
 -- button-like control fit together.
 module Blink.Checkbox
-  ( CheckboxConfig
+  ( CheckboxAttributes
+  , CheckboxConfig
   , checkbox
   , checkboxStyleKey
-  , ToggleEvent (..)
   , text
   , isSelected
   , onSelectedChanged
@@ -26,28 +26,54 @@ module Blink.Checkbox
   , onFocusLost
   ) where
 
+import Data.List (foldl')
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 
-import Blink.Control (ControlConfig, HasControlConfig (..), HasTextConfig (..), defaultControlConfig, isEnabled, isFocusable, style, text)
-import Blink.Button
-  ( HasToggleConfig (..), ToggleConfig, ToggleEvent (..)
-  , defaultToggleConfig, isSelected, onSelectedChanged, toggleBase
-  )
-import Blink.Element
-  ( Attr, configure
-  , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
-  )
+import Blink.Button (HasIsSelectedConfig (..), HasSelectedChangedEvents (..), isSelected, onSelectedChanged, toggleBase)
+import Blink.Control
 import Blink.Geometry (Rectangle (..))
 import Blink.Rendering (TextAlign (..))
-import Blink.Style (Style (..), StyleKey (..))
-import Blink.UI (UI, currentStyle, drawText, getBounds, withBounds)
+import Blink.Style (Style (..))
+import Blink.UI (Out, UI, currentStyle, drawText, getBounds, withBounds)
 
--- | Configuration for 'checkbox', set via 'text', 'isSelected', and
--- 'onSelectedChanged'. Defaults to no caption, not selected, and no reaction.
-data CheckboxConfig e = CheckboxConfig
-  { checkboxConfigControl :: ControlConfig e
-  , checkboxConfigToggle  :: ToggleConfig
-  , checkboxConfigText    :: Text
+-- | 'Blink.Checkbox.checkbox'\'s own closed attrs type: the common
+-- capabilities every control has, plus 'text', 'isSelected', and
+-- 'onSelectedChanged'.
+data CheckboxAttributes e msg
+  = CheckboxCommon (ControlProperties e)
+  | CheckboxEvent (ElementEvents e msg)
+  | CheckboxText Text
+  | CheckboxIsSelected Bool
+  | CheckboxOnSelectedChanged (Bool -> [Out e msg])
+
+instance HasControlConfig e (CheckboxAttributes e msg) where
+  configureControlCapability = CheckboxCommon
+  extractControlCapability (CheckboxCommon c) = Just c
+  extractControlCapability _ = Nothing
+
+instance HasElementEvents e msg (CheckboxAttributes e msg) where
+  configureElementEvent = CheckboxEvent
+  extractElementEvent (CheckboxEvent c) = Just c
+  extractElementEvent _ = Nothing
+
+instance HasTextConfig (CheckboxAttributes e msg) where
+  configureText = CheckboxText
+  extractText (CheckboxText t) = Just t
+  extractText _ = Nothing
+
+instance HasIsSelectedConfig (CheckboxAttributes e msg) where
+  configureIsSelected = CheckboxIsSelected
+
+instance HasSelectedChangedEvents e msg (CheckboxAttributes e msg) where
+  configureOnSelectedChanged = CheckboxOnSelectedChanged
+
+-- | Configuration for 'checkbox', resolved from a
+-- @['CheckboxAttributes' e msg]@.
+data CheckboxConfig e msg = CheckboxConfig
+  { ckcfgText              :: Text
+  , ckcfgSelected          :: Bool
+  , ckcfgOnSelectedChanged :: [Bool -> [Out e msg]]
   }
 
 -- | The 'StyleKey' 'checkbox' resolves its style from unless overridden via
@@ -55,23 +81,23 @@ data CheckboxConfig e = CheckboxConfig
 checkboxStyleKey :: StyleKey e
 checkboxStyleKey = Class "checkbox"
 
-defaultCheckboxConfig :: CheckboxConfig e
+defaultCheckboxConfig :: CheckboxConfig e msg
 defaultCheckboxConfig = CheckboxConfig
-  { checkboxConfigControl = defaultControlConfig checkboxStyleKey
-  , checkboxConfigToggle  = defaultToggleConfig
-  , checkboxConfigText    = ""
-  }
+  { ckcfgText = "", ckcfgSelected = False, ckcfgOnSelectedChanged = [] }
 
-instance HasControlConfig e (CheckboxConfig e) where
-  controlConfig    = checkboxConfigControl
-  setControlConfig cc cfg = cfg { checkboxConfigControl = cc }
+resolveCheckboxConfig :: [CheckboxAttributes e msg] -> CheckboxConfig e msg
+resolveCheckboxConfig = foldl' apply defaultCheckboxConfig
+  where
+    apply cfg (CheckboxText t)              = cfg { ckcfgText = t }
+    apply cfg (CheckboxIsSelected b)        = cfg { ckcfgSelected = b }
+    apply cfg (CheckboxOnSelectedChanged f) = cfg { ckcfgOnSelectedChanged = ckcfgOnSelectedChanged cfg ++ [f] }
+    apply cfg _                             = cfg
 
-instance HasToggleConfig (CheckboxConfig e) where
-  toggleConfig    = checkboxConfigToggle
-  setToggleConfig tc cfg = cfg { checkboxConfigToggle = tc }
-
-instance HasTextConfig (CheckboxConfig e) where
-  setText t cfg = cfg { checkboxConfigText = t }
+toCheckboxControlAttr :: CheckboxAttributes e msg -> Maybe (ControlAttrs e msg)
+toCheckboxControlAttr (CheckboxText _)              = Nothing
+toCheckboxControlAttr (CheckboxIsSelected _)        = Nothing
+toCheckboxControlAttr (CheckboxOnSelectedChanged _) = Nothing
+toCheckboxControlAttr a                             = translateCommon a
 
 -- | The fixed width reserved for the glyph, on the left of the caption.
 glyphWidth :: Double
@@ -86,13 +112,15 @@ checkboxGlyph False = "\9744" -- BALLOT BOX
 -- control -- clicking either the glyph or the caption activates it, the
 -- same as 'Blink.Button.toggleButton'. Flips every time it's activated;
 -- see 'onSelectedChanged' for reacting to it.
-checkbox :: Ord e => e -> [Attr e ToggleEvent msg (CheckboxConfig e)] -> UI e msg ()
-checkbox eid attrs = toggleBase not eid cfg attrs $ \selected -> do
-  s      <- currentStyle
-  bounds <- getBounds
-  let glyphRect = bounds { rectWidth = glyphWidth }
-      textRect  = bounds { rectX = rectX bounds + glyphWidth, rectWidth = max 0 (rectWidth bounds - glyphWidth) }
-  withBounds glyphRect $ drawText (styleTextColour s) AlignCenter (checkboxGlyph selected)
-  withBounds textRect  $ drawText (styleTextColour s) (styleTextAlign s) (checkboxConfigText cfg)
+checkbox :: Ord e => e -> [CheckboxAttributes e msg] -> UI e msg ()
+checkbox eid attrs =
+  toggleBase not eid (mapMaybe toCheckboxControlAttr attrs) (ckcfgSelected cfg) (ckcfgOnSelectedChanged cfg) draw
   where
-    cfg = configure defaultCheckboxConfig attrs
+    cfg = resolveCheckboxConfig attrs
+    draw selected = do
+      s      <- currentStyle
+      bounds <- getBounds
+      let glyphRect = bounds { rectWidth = glyphWidth }
+          textRect  = bounds { rectX = rectX bounds + glyphWidth, rectWidth = max 0 (rectWidth bounds - glyphWidth) }
+      withBounds glyphRect $ drawText (styleTextColour s) AlignCenter (checkboxGlyph selected)
+      withBounds textRect  $ drawText (styleTextColour s) (styleTextAlign s) (ckcfgText cfg)

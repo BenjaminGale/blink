@@ -5,13 +5,13 @@
 -- Shift+arrow extension, and selection-aware editing. Long text scrolls
 -- horizontally to keep the cursor visible.
 module Blink.TextInput
-  ( TextInputConfig
+  ( TextInputAttributes
+  , TextInputConfig
   , textInput
   , textInputStyleKey
   , text
   , inputFilter
   , displayFilter
-  , TextInputEvent (..)
   , onInput
   , onSubmit
   , isFocusable
@@ -28,55 +28,45 @@ module Blink.TextInput
   , onFocusLost
   ) where
 
-import Control.Monad (when)
-import Data.Maybe (fromMaybe)
+import Control.Monad (forM_, when)
+import Data.List (foldl')
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 
 import Blink.Control
-  ( ControlConfig, FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
-  , control, defaultControlConfig, isEnabled, isFocusable, style, text
-  )
-import Blink.Element
-  ( Attr, ElementEvent, HasElementEvent (..)
-  , configAny, configure, fire, onEvent
-  , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
-  )
 import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Style (..), StyleKey (..))
+import Blink.Style (Style (..))
 import Blink.UI
 
--- | Configuration for 'textInput', set via 'text' (the field's current
--- value), 'inputFilter', and 'displayFilter'. Defaults to no value and no
--- filtering.
-data TextInputConfig e = TextInputConfig
-  { textInputConfigControl       :: ControlConfig e
-  , textInputConfigValue         :: Text
-  , textInputConfigInputFilter   :: Text -> Text
-  , textInputConfigDisplayFilter :: Text -> Text
-  }
+-- | 'Blink.TextInput.textInput'\'s own closed attrs type: the common
+-- capabilities every control has, plus 'text' (the field's current value),
+-- 'inputFilter', 'displayFilter', 'onInput', and 'onSubmit'.
+data TextInputAttributes e msg
+  = TextInputCommon (ControlProperties e)
+  | TextInputEvent (ElementEvents e msg)
+  | TextInputText Text
+  | TextInputInputFilter (Text -> Text)
+  | TextInputDisplayFilter (Text -> Text)
+  | TextInputOnInput (Text -> [Out e msg])
+  | TextInputOnSubmit (EventHandler e msg)
 
--- | The 'StyleKey' 'textInput' resolves its style from unless overridden
--- via 'style'.
-textInputStyleKey :: StyleKey e
-textInputStyleKey = Class "textInput"
+instance HasControlConfig e (TextInputAttributes e msg) where
+  configureControlCapability = TextInputCommon
+  extractControlCapability (TextInputCommon c) = Just c
+  extractControlCapability _ = Nothing
 
-defaultTextInputConfig :: TextInputConfig e
-defaultTextInputConfig = TextInputConfig
-  { textInputConfigControl       = defaultControlConfig textInputStyleKey
-  , textInputConfigValue         = ""
-  , textInputConfigInputFilter   = id
-  , textInputConfigDisplayFilter = id
-  }
+instance HasElementEvents e msg (TextInputAttributes e msg) where
+  configureElementEvent = TextInputEvent
+  extractElementEvent (TextInputEvent c) = Just c
+  extractElementEvent _ = Nothing
 
-instance HasControlConfig e (TextInputConfig e) where
-  controlConfig    = textInputConfigControl
-  setControlConfig cc cfg = cfg { textInputConfigControl = cc }
-
-instance HasTextConfig (TextInputConfig e) where
-  setText t cfg = cfg { textInputConfigValue = t }
+instance HasTextConfig (TextInputAttributes e msg) where
+  configureText = TextInputText
+  extractText (TextInputText t) = Just t
+  extractText _ = Nothing
 
 -- | Applied to newly typed text before it's inserted, letting callers
 -- restrict which keystrokes are accepted (e.g. @T.filter isDigit@ for a
@@ -84,8 +74,8 @@ instance HasTextConfig (TextInputConfig e) where
 -- punctuation as the user types) is an application concern, not this
 -- control's -- do it in an 'onInput' handler and pass the already-formatted
 -- value back in on the next frame. Defaults to 'id'.
-inputFilter :: (Text -> Text) -> Attr e ev msg (TextInputConfig e)
-inputFilter f = configAny $ \cfg -> cfg { textInputConfigInputFilter = f }
+inputFilter :: (Text -> Text) -> TextInputAttributes e msg
+inputFilter = TextInputInputFilter
 
 -- | Applied to the value everywhere it is measured or drawn -- the rendered
 -- text, and every character-offset calculation used for cursor placement,
@@ -94,35 +84,53 @@ inputFilter f = configAny $ \cfg -> cfg { textInputConfigInputFilter = f }
 -- (e.g. @T.map (const '\8226')@ to mask each character of a password); the
 -- underlying value edited by 'inputFilter'\/'onInput' is never affected by
 -- it. Defaults to 'id'.
-displayFilter :: (Text -> Text) -> Attr e ev msg (TextInputConfig e)
-displayFilter f = configAny $ \cfg -> cfg { textInputConfigDisplayFilter = f }
+displayFilter :: (Text -> Text) -> TextInputAttributes e msg
+displayFilter = TextInputDisplayFilter
 
--- | Fired by 'textInput': either one of the raw facts every control reports
--- (see 'Blink.Element.ElementEvent'), 'Edited' with the new value whenever
--- a keystroke changes it, or 'Submitted' when Enter is pressed while
--- focused and enabled.
-data TextInputEvent
-  = TextInputRaw ElementEvent
-  | Edited Text
-  | Submitted
-  deriving (Eq, Show)
+-- | Reacts with the new value whenever a keystroke changes it.
+onInput :: (Text -> [Out e msg]) -> TextInputAttributes e msg
+onInput = TextInputOnInput
 
-instance HasElementEvent TextInputEvent where
-  liftElementEvent  = TextInputRaw
-  matchElementEvent (TextInputRaw ev) = Just ev
-  matchElementEvent _                 = Nothing
+-- | Reacts when Enter is pressed while the field is focused and enabled.
+onSubmit :: (EventHandler e msg) -> TextInputAttributes e msg
+onSubmit = TextInputOnSubmit
 
--- | Reacts with the new value on every 'Edited'.
-onInput :: (Text -> [Out e msg]) -> Attr e TextInputEvent msg cfg
-onInput reaction = onEvent $ \ev -> case ev of
-  Edited t -> reaction t
-  _        -> []
+-- | Configuration for 'textInput', resolved from a
+-- @['TextInputAttributes' e msg]@.
+data TextInputConfig e msg = TextInputConfig
+  { ticfgValue         :: Text
+  , ticfgInputFilter   :: Text -> Text
+  , ticfgDisplayFilter :: Text -> Text
+  , ticfgOnInput       :: [Text -> [Out e msg]]
+  , ticfgOnSubmit      :: [EventHandler e msg]
+  }
 
--- | Reacts when Enter is pressed while the field is focused ('Submitted').
-onSubmit :: (() -> [Out e msg]) -> Attr e TextInputEvent msg cfg
-onSubmit reaction = onEvent $ \ev -> case ev of
-  Submitted -> reaction ()
-  _         -> []
+-- | The 'StyleKey' 'textInput' resolves its style from unless overridden
+-- via 'style'.
+textInputStyleKey :: StyleKey e
+textInputStyleKey = Class "textInput"
+
+defaultTextInputConfig :: TextInputConfig e msg
+defaultTextInputConfig = TextInputConfig
+  { ticfgValue = "", ticfgInputFilter = id, ticfgDisplayFilter = id, ticfgOnInput = [], ticfgOnSubmit = [] }
+
+resolveTextInputConfig :: [TextInputAttributes e msg] -> TextInputConfig e msg
+resolveTextInputConfig = foldl' apply defaultTextInputConfig
+  where
+    apply cfg (TextInputText t)           = cfg { ticfgValue = t }
+    apply cfg (TextInputInputFilter f)    = cfg { ticfgInputFilter = f }
+    apply cfg (TextInputDisplayFilter f)  = cfg { ticfgDisplayFilter = f }
+    apply cfg (TextInputOnInput f)        = cfg { ticfgOnInput = ticfgOnInput cfg ++ [f] }
+    apply cfg (TextInputOnSubmit f)       = cfg { ticfgOnSubmit = ticfgOnSubmit cfg ++ [f] }
+    apply cfg _                           = cfg
+
+toTextInputControlAttr :: TextInputAttributes e msg -> Maybe (ControlAttrs e msg)
+toTextInputControlAttr (TextInputText _)          = Nothing
+toTextInputControlAttr (TextInputInputFilter _)   = Nothing
+toTextInputControlAttr (TextInputDisplayFilter _) = Nothing
+toTextInputControlAttr (TextInputOnInput _)       = Nothing
+toTextInputControlAttr (TextInputOnSubmit _)      = Nothing
+toTextInputControlAttr a                          = translateCommon a
 
 -- | Click sets both selection ends at the clicked character; dragging
 -- extends only the active end, keeping the anchor from before the drag
@@ -263,63 +271,66 @@ drawTextInputContent s bounds displayValue canEdit ox sel@(Selection _ active) =
 -- position and selection are control state, not application data --
 -- 'textInput' reads and writes them itself via 'getSelection' and
 -- 'getScrollState', keyed by the element ID.
-textInput :: Ord e => e -> [Attr e TextInputEvent msg (TextInputConfig e)] -> UI e msg ()
+textInput :: Ord e => e -> [TextInputAttributes e msg] -> UI e msg ()
 textInput eid attrs = do
   wasFocused   <- isFocused eid
   wasCapturing <- isDragging eid
-  control eid FocusSelf cfg attrs $ do
-    s        <- currentStyle
-    hasFocus <- isFocused eid
-    disabled <- isDisabled
-    bounds   <- getBounds
-    input    <- getInput
-    sel      <- getSelection eid
-    frac     <- getScrollState eid
-
-    let displayValue = textInputConfigDisplayFilter cfg currentValue
-        w           = rectWidth bounds
-        selInit     = fromMaybe (cursor (T.length currentValue)) sel
-        -- Focus was gained by a click this frame (e.g. clicking from
-        -- another element). Treat as a fresh click rather than a drag
-        -- continuation so the old anchor is not inherited.
-        justFocused = hasFocus && not wasFocused
-        canEdit     = hasFocus && not disabled
-
-    contentW <- realToFrac <$> charOffset displayValue (T.length displayValue)
-    let maxScrollPx = maxScrollPixels contentW w
-        scrollX     = scrollPixels maxScrollPx frac
-
-    selAfterMouse <-
-      if canEdit
-        then resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX selInit
-        else pure selInit
-
-    let selAfterKeys = resolveKeyboardSelection canEdit (inputKeyEvents input) (T.length currentValue) selAfterMouse
-
-        (selFinal, edited)
-          | canEdit   = applyEdit (textInputConfigInputFilter cfg) currentValue input selAfterKeys
-          | otherwise = (selAfterKeys, Nothing)
-
-        submitted = canEdit && any (\e -> key e == KeyReturn) (inputKeyEvents input)
-
-    fire attrs ([Submitted | submitted] ++ [Edited t | Just t <- [edited]])
-
-    when canEdit $ emitUi (SetSelectionAt eid selFinal)
-
-    -- Computed locally rather than re-read via 'getScrollState': scroll
-    -- writes are deferred (applied between frames), so a same-frame
-    -- re-read would still see the pre-write value and the cursor would lag
-    -- the auto-scroll by one frame.
-    effectiveScrollX <-
-      if canEdit
-        then do
-          curX <- charOffset displayValue (selectionActive selFinal)
-          let newScrollX = resolveScroll w scrollX (realToFrac curX)
-          when (newScrollX /= scrollX) $ emitUi (ScrollTo eid (scrollFraction maxScrollPx newScrollX))
-          pure newScrollX
-        else pure scrollX
-
-    drawTextInputContent s bounds displayValue canEdit effectiveScrollX selFinal
+  control eid (mapMaybe toTextInputControlAttr attrs ++ [focusOnClick FocusSelf, content (body wasFocused wasCapturing)])
   where
-    cfg          = configure defaultTextInputConfig attrs
-    currentValue = textInputConfigValue cfg
+    cfg          = resolveTextInputConfig attrs
+    currentValue = ticfgValue cfg
+
+    body wasFocused wasCapturing = do
+      s        <- currentStyle
+      hasFocus <- isFocused eid
+      disabled <- isDisabled
+      bounds   <- getBounds
+      input    <- getInput
+      sel      <- getSelection eid
+      frac     <- getScrollState eid
+
+      let displayValue = ticfgDisplayFilter cfg currentValue
+          w           = rectWidth bounds
+          selInit     = fromMaybe (cursor (T.length currentValue)) sel
+          -- Focus was gained by a click this frame (e.g. clicking from
+          -- another element). Treat as a fresh click rather than a drag
+          -- continuation so the old anchor is not inherited.
+          justFocused = hasFocus && not wasFocused
+          canEdit     = hasFocus && not disabled
+
+      contentW <- realToFrac <$> charOffset displayValue (T.length displayValue)
+      let maxScrollPx = maxScrollPixels contentW w
+          scrollX     = scrollPixels maxScrollPx frac
+
+      selAfterMouse <-
+        if canEdit
+          then resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX selInit
+          else pure selInit
+
+      let selAfterKeys = resolveKeyboardSelection canEdit (inputKeyEvents input) (T.length currentValue) selAfterMouse
+
+          (selFinal, edited)
+            | canEdit   = applyEdit (ticfgInputFilter cfg) currentValue input selAfterKeys
+            | otherwise = (selAfterKeys, Nothing)
+
+          submitted = canEdit && any (\e -> key e == KeyReturn) (inputKeyEvents input)
+
+      when submitted $ runHandlers (ticfgOnSubmit cfg) ()
+      forM_ edited $ \t -> runHandlers (ticfgOnInput cfg) t
+
+      when canEdit $ emitUi (SetSelectionAt eid selFinal)
+
+      -- Computed locally rather than re-read via 'getScrollState': scroll
+      -- writes are deferred (applied between frames), so a same-frame
+      -- re-read would still see the pre-write value and the cursor would lag
+      -- the auto-scroll by one frame.
+      effectiveScrollX <-
+        if canEdit
+          then do
+            curX <- charOffset displayValue (selectionActive selFinal)
+            let newScrollX = resolveScroll w scrollX (realToFrac curX)
+            when (newScrollX /= scrollX) $ emitUi (ScrollTo eid (scrollFraction maxScrollPx newScrollX))
+            pure newScrollX
+          else pure scrollX
+
+      drawTextInputContent s bounds displayValue canEdit effectiveScrollX selFinal

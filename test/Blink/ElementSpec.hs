@@ -3,7 +3,10 @@ module Blink.ElementSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Element (Attr, ElementEvent (..), element, onEvent, onKeyPressed)
+import Blink.Element
+  ( ElementAttrs
+  , element, onClicked, onFocusGained, onFocusLost, onKeyPressed, onMouseDown, onMouseEntered, onMouseExited, onMouseUp
+  )
 import Blink.ElementBehaviour (elementBehaviourSpec)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
@@ -61,12 +64,29 @@ onA     = Point 10 50
 offBoth = Point 200 200
 onB     = Point 60 50
 
--- | Runs 'ElemA' at 'rectA' and 'ElemB' at 'rectB' together, each firing its
--- 'ElementEvent's as a message tagged with which element it came from.
-both :: UI TestElement (TestElement, ElementEvent) ()
+-- | Every raw event a reaction built on 'element' can raise, tagged with
+-- @e@ and a plain label naming which one it was -- 'Blink.Element' has no
+-- symbolic event type to tag with any more (each smart constructor reacts
+-- to exactly one event, so this lists all eight rather than reacting
+-- generically the way the old @onEvent@ escape hatch did).
+tagAll :: TestElement -> [ElementAttrs TestElement (TestElement, String)]
+tagAll e =
+  [ onMouseEntered (const [OutMsg (e, "MouseEntered")])
+  , onMouseExited  (const [OutMsg (e, "MouseExited")])
+  , onMouseDown    (const [OutMsg (e, "MouseDown")])
+  , onMouseUp      (const [OutMsg (e, "MouseUp")])
+  , onClicked      (const [OutMsg (e, "Clicked")])
+  , onKeyPressed   (const [OutMsg (e, "KeyPressed")])
+  , onFocusGained  (const [OutMsg (e, "FocusGained")])
+  , onFocusLost    (const [OutMsg (e, "FocusLost")])
+  ]
+
+-- | Runs 'ElemA' at 'rectA' and 'ElemB' at 'rectB' together, each firing a
+-- tagged message naming which element raised which raw event.
+both :: UI TestElement (TestElement, String) ()
 both = do
-  withBounds rectA $ element ElemA [onEvent (\ev -> [OutMsg (ElemA, ev)])]
-  withBounds rectB $ element ElemB [onEvent (\ev -> [OutMsg (ElemB, ev)])]
+  withBounds rectA $ element ElemA (tagAll ElemA)
+  withBounds rectB $ element ElemB (tagAll ElemB)
 
 advance :: Ord e => InputState -> UIContext e msg -> UIContext e msg
 advance input ctx = nextFrameContext testBounds input (contextTheme ctx) (contextAnimation ctx) ctx
@@ -74,16 +94,16 @@ advance input ctx = nextFrameContext testBounds input (contextTheme ctx) (contex
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
-seedBothCtx :: UIContext TestElement (TestElement, ElementEvent)
+seedBothCtx :: UIContext TestElement (TestElement, String)
 seedBothCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
 spec :: Spec
 spec = describe "Blink.Element" $ do
-  elementBehaviourSpec testBounds seedCtx ElemA testBounds offBoth (element ElemA :: [Attr TestElement ElementEvent String ()] -> UI TestElement String ())
+  elementBehaviourSpec testBounds seedCtx ElemA testBounds offBoth (element ElemA :: [ElementAttrs TestElement String] -> UI TestElement String ())
 
   describe "onKeyPressed" $
     it "reacts with the triggering KeyEvent" $ do
-      let attrs :: [Attr TestElement ElementEvent KeyEvent ()]
+      let attrs :: [ElementAttrs TestElement KeyEvent]
           attrs = [onKeyPressed (\k -> [OutMsg k])]
       ctx0 <- snd <$> runUI (setFocus ElemA) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
       ctx  <- snd <$> runUI (element ElemA attrs) (advance (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0)
@@ -102,12 +122,12 @@ spec = describe "Blink.Element" $ do
       result <- runInteractions testBounds seedBothCtx both []
         [Ixn.MouseDown onA, DragTo onB, Ixn.MouseUp onB]
       resultMessages result `shouldBe`
-        [ (ElemA, MouseEntered), (ElemA, MouseDown)
-        , (ElemA, MouseExited),  (ElemB, MouseEntered)
-        , (ElemB, MouseUp)
+        [ (ElemA, "MouseEntered"), (ElemA, "MouseDown")
+        , (ElemA, "MouseExited"),  (ElemB, "MouseEntered")
+        , (ElemB, "MouseUp")
         ]
 
     it "reports FocusLost for the loser and FocusGained for the winner, one frame after a focus request" $ do
       result <- runInteractions testBounds seedBothCtx
                   (setFocus ElemA >> requestFocus Nothing ElemB >> both) [Wait 1] []
-      resultMessages result `shouldBe` [(ElemA, FocusLost), (ElemB, FocusGained)]
+      resultMessages result `shouldBe` [(ElemA, "FocusLost"), (ElemB, "FocusGained")]

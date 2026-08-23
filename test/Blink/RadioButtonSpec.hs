@@ -5,10 +5,9 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Control (text)
-import Blink.Element (Attr)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
-import Blink.RadioButton (RadioButtonConfig, ToggleEvent, isSelected, radioButton)
+import Blink.RadioButton (RadioButtonAttributes, isSelected, radioButton)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.ToggleBehaviour (toggleBehaviourSpec)
@@ -60,7 +59,7 @@ noInput = InputState
 hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
-type Attr' = Attr TestElement ToggleEvent String (RadioButtonConfig TestElement)
+type Attr' = RadioButtonAttributes TestElement String
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer

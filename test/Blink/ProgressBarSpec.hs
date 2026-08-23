@@ -5,10 +5,9 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
-import Blink.Element (Attr, ElementEvent)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
-import Blink.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, progress, progressBar)
+import Blink.ProgressBar (ProgressBarAttributes, ProgressValue (..), bandSpeed, progress, progressBar)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -61,7 +60,7 @@ hitRect = insetRect (uniform 10) testBounds
 contentRect :: Rectangle
 contentRect = Rectangle 15 15 70 70
 
-type Attr' = Attr TestElement ElementEvent String (ProgressBarConfig TestElement)
+type Attr' = ProgressBarAttributes TestElement String
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
