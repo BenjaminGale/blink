@@ -95,11 +95,11 @@ import Control.Monad (forM_, guard, unless, when)
 import Data.Foldable (asum)
 import Data.Functor (($>))
 import Data.List (find, foldl')
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 
 import Blink.Element
-  ( HasElementEvents (..)
+  ( ElementAttrs, HasElementEvents (..)
   , element, fireFocusChange, onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp
   )
@@ -324,6 +324,24 @@ instance HasContentConfig e msg (ControlAttrs e msg) where
   matchContent (ControlContent c) = Just c
   matchContent _ = Nothing
 
+-- | Translates a 'ControlAttrs' down to "Blink.Element"'s own closed
+-- 'ElementAttrs' -- @Nothing@ for every capability 'Blink.Element' has no
+-- concept of ('isFocusable', 'style', 'focusOnClick', 'content', ...). The
+-- mechanism 'control' uses to call 'Blink.Element.element' with a concrete
+-- attrs list of the type it actually expects, the same way every widget's
+-- own @toXControlAttr@ calls 'control' with one of 'ControlAttrs'.
+toElementAttr :: ControlAttrs e msg -> Maybe (ElementAttrs e msg)
+toElementAttr a = asum
+  [ mkOnClicked <$> matchOnClicked a
+  , mkOnFocusGained <$> matchOnFocusGained a
+  , mkOnFocusLost <$> matchOnFocusLost a
+  , mkOnMouseEntered <$> matchOnMouseEntered a
+  , mkOnMouseExited <$> matchOnMouseExited a
+  , mkOnMouseDown <$> matchOnMouseDown a
+  , mkOnMouseUp <$> matchOnMouseUp a
+  , mkOnKeyPressed <$> matchOnKeyPressed a
+  ]
+
 -- | Concatenates the 'Out's every handler in @hs@ produces for @a@, without
 -- dispatching any of them -- for composing a resolved handler list into a
 -- single reaction, e.g. building the 'Blink.Element' attrs 'control' passes
@@ -530,11 +548,11 @@ control eid attrs = disableWhen (not (ccIsEnabled cc)) $ do
   applySelfFocus
   unless opensScope (applyNavigationKeys wasFocused)
   midFocused <- isFocused eid
-  fireFocusChange attrs wasFocused midFocused
+  fireFocusChange elementAttrs wasFocused midFocused
   hitBounds <- marginInsetBounds styleKey
   withBounds hitBounds $
     (if opensScope then withoutKeyEvents reservedKeys else id) $
-      element eid (attrs ++ clickFocusReaction currentScope)
+      element eid (elementAttrs ++ clickFocusReaction currentScope)
   styledElement eid styleKey (withChildNavigation (ccContent cc))
   -- A nested container gets first claim on Ctrl+Tab\/Ctrl+Shift+Tab (it
   -- consumes the key while the content above is still running, before this
@@ -546,7 +564,7 @@ control eid attrs = disableWhen (not (ccIsEnabled cc)) $ do
   when opensScope $ do
     _ <- applyScopeEscape wasFocused
     nowFocused <- isFocused eid
-    fireFocusChange attrs midFocused nowFocused
+    fireFocusChange elementAttrs midFocused nowFocused
   -- Recorded last, after this control's own retreat (if any) has already
   -- read whatever the previous tab stop was -- otherwise a control would
   -- see its own, just-written entry instead of the one before it.
@@ -556,6 +574,7 @@ control eid attrs = disableWhen (not (ccIsEnabled cc)) $ do
     styleKey = ccStyleKey cc
     foc = ccFocusOnClick cc
     opensScope = ccIsFocusable cc && ccTabNavigation cc == Contained
+    elementAttrs = mapMaybe toElementAttr attrs
 
     -- Immediate, not deferred: needed so that when several controls are
     -- simultaneously eligible, only the first one to render claims focus.

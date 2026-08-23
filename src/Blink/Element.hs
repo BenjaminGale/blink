@@ -160,24 +160,21 @@ data ElementConfig e msg = ElementConfig
 defaultElementConfig :: ElementConfig e msg
 defaultElementConfig = ElementConfig [] [] [] [] [] [] [] []
 
--- | Resolves an attrs list of /any/ type implementing 'HasElementEvents' by
--- folding left to right -- each entry matches exactly one of the eight
--- capabilities (every other @match@ call returns 'Nothing' for it), so this
--- works generically without knowing the attrs type's concrete shape.
-resolveElementConfig :: HasElementEvents e msg cfg => [cfg] -> ElementConfig e msg
+-- | Resolves a @['ElementAttrs' e msg]@ by folding every entry over
+-- 'defaultElementConfig' left to right -- each constructor appends to its
+-- own event's handler list, so every handler given for the same event
+-- still fires.
+resolveElementConfig :: [ElementAttrs e msg] -> ElementConfig e msg
 resolveElementConfig = foldl' apply defaultElementConfig
   where
-    apply ec c = ElementConfig
-      { ecOnClicked      = extend ecOnClicked      matchOnClicked
-      , ecOnFocusGained  = extend ecOnFocusGained  matchOnFocusGained
-      , ecOnFocusLost    = extend ecOnFocusLost    matchOnFocusLost
-      , ecOnMouseEntered = extend ecOnMouseEntered matchOnMouseEntered
-      , ecOnMouseExited  = extend ecOnMouseExited  matchOnMouseExited
-      , ecOnMouseDown    = extend ecOnMouseDown    matchOnMouseDown
-      , ecOnMouseUp      = extend ecOnMouseUp      matchOnMouseUp
-      , ecOnKeyPressed   = extend ecOnKeyPressed   matchOnKeyPressed
-      }
-      where extend field match = maybe (field ec) (\f -> field ec ++ [f]) (match c)
+    apply ec (ElementOnClicked f)      = ec { ecOnClicked = ecOnClicked ec ++ [f] }
+    apply ec (ElementOnFocusGained f)  = ec { ecOnFocusGained = ecOnFocusGained ec ++ [f] }
+    apply ec (ElementOnFocusLost f)    = ec { ecOnFocusLost = ecOnFocusLost ec ++ [f] }
+    apply ec (ElementOnMouseEntered f) = ec { ecOnMouseEntered = ecOnMouseEntered ec ++ [f] }
+    apply ec (ElementOnMouseExited f)  = ec { ecOnMouseExited = ecOnMouseExited ec ++ [f] }
+    apply ec (ElementOnMouseDown f)    = ec { ecOnMouseDown = ecOnMouseDown ec ++ [f] }
+    apply ec (ElementOnMouseUp f)      = ec { ecOnMouseUp = ecOnMouseUp ec ++ [f] }
+    apply ec (ElementOnKeyPressed f)   = ec { ecOnKeyPressed = ecOnKeyPressed ec ++ [f] }
 
 -- | Dispatches every handler in @hs@ against @a@.
 runHandlers :: [a -> [Out e msg]] -> a -> UI e msg ()
@@ -192,7 +189,7 @@ runHandlers hs a = mapM_ dispatch (concatMap ($ a) hs)
 -- report a focus change it just caused itself this same frame, rather than
 -- via 'Blink.UI.getFocusChange' (which only reflects it starting next
 -- frame).
-fireFocusChange :: HasElementEvents e msg cfg => [cfg] -> Bool -> Bool -> UI e msg ()
+fireFocusChange :: [ElementAttrs e msg] -> Bool -> Bool -> UI e msg ()
 fireFocusChange attrs was now = do
   let ec = resolveElementConfig attrs
   when (not was && now) $ runHandlers (ecOnFocusGained ec) ()
@@ -204,7 +201,7 @@ fireFocusChange attrs was now = do
 -- make its own decisions (e.g. "was this element just clicked") queries
 -- the same underlying "Blink.UI" primitives directly, independent of this
 -- call, rather than consuming anything back from it.
-element :: (Ord e, HasElementEvents e msg cfg) => e -> [cfg] -> UI e msg ()
+element :: Ord e => e -> [ElementAttrs e msg] -> UI e msg ()
 element eid attrs = do
   let ec = resolveElementConfig attrs
   hoverStep ec eid
