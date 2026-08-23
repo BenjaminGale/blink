@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.ControlSpec (spec) where
 
@@ -7,16 +5,16 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Control
-  ( ControlConfig, FocusOnClick (..), HasControlConfig (..), NavigationMode (..)
-  , control, defaultControlConfig, isArrowNavigationEnabled, isFocusable, tabNavigation
+  ( ControlAttrs, FocusOnClick (..), NavigationMode (..)
+  , content, control, focusOnClick, isArrowNavigationEnabled, isFocusable, tabNavigation
+  , onFocusGained, onFocusLost, onKeyPressed
   )
 import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Element (Attr, ElementEvent, configure, onFocusGained, onFocusLost, onKeyPressed)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Style (..), StyleSet (..), StyleKey (..), Theme (..))
+import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 
 data TestElement
@@ -24,17 +22,6 @@ data TestElement
   | Container | ChildA | ChildB | ChildC | Sibling
   | Outer | Inner | InnerA | InnerB | OuterChildB | OuterSibling
   deriving (Eq, Ord, Show)
-
--- | The shared config type every test control uses -- just a
--- 'ControlConfig' wrapper, since 'control' needs a resolved @cfg@.
-newtype TestConfig e = TestConfig { testControlConfig :: ControlConfig e }
-
-defaultTestConfig :: TestConfig e
-defaultTestConfig = TestConfig (defaultControlConfig (Class "test"))
-
-instance HasControlConfig e (TestConfig e) where
-  controlConfig    = testControlConfig
-  setControlConfig cc c = c { testControlConfig = cc }
 
 rectA, rectB :: Rectangle
 rectA = Rectangle 0 0 50 100
@@ -73,22 +60,19 @@ onA, onB :: Point
 onA = Point 10 50
 onB = Point 60 50
 
-type Attr' = Attr TestElement ElementEvent String (TestConfig TestElement)
+type Attr' = ControlAttrs TestElement String
 
 -- | Renders 'ElemA' at 'rectA' and 'ElemB' at 'rectB' with the given
--- per-element config and attrs.
-both :: FocusOnClick TestElement -> TestConfig TestElement -> [Attr'] -> FocusOnClick TestElement -> TestConfig TestElement -> [Attr'] -> UI TestElement String ()
-both focA cfgA attrsA focB cfgB attrsB = do
-  withBounds rectA (control ElemA focA cfgA attrsA (pure ()))
-  withBounds rectB (control ElemB focB cfgB attrsB (pure ()))
+-- per-element 'FocusOnClick' and attrs.
+both :: FocusOnClick TestElement -> [Attr'] -> FocusOnClick TestElement -> [Attr'] -> UI TestElement String ()
+both focA attrsA focB attrsB = do
+  withBounds rectA (control ElemA (focusOnClick focA : attrsA))
+  withBounds rectB (control ElemB (focusOnClick focB : attrsB))
 
--- | Renders a single 'ElemA' at 'testBounds', resolving its @cfg@ from
--- @attrs@ the same way every real widget built on 'control' does --
--- @attrs@ alone (e.g. 'isFocusable') is enough to configure it.
+-- | Renders a single 'ElemA' at 'testBounds' with the given attrs -- the
+-- same way every real widget built on 'control' does.
 renderControl :: [Attr'] -> UI TestElement String ()
-renderControl attrs = control ElemA FocusSelf cfg attrs (pure ())
-  where
-    cfg = configure defaultTestConfig attrs
+renderControl attrs = control ElemA attrs
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
@@ -109,25 +93,22 @@ tag e =
   , onFocusLost   (const [OutMsg (show e ++ " lost")])
   ]
 
-containedCfg :: TestConfig TestElement
-containedCfg = configure defaultTestConfig ([tabNavigation Contained] :: [Attr'])
-
 -- | 'Container' (Contained) holding 'ChildA'\/'ChildB'\/'ChildC', followed
 -- by a plain 'Sibling' -- the basic shape for testing Tab\/Shift-Tab
 -- containment and cycling, and Ctrl+Tab\/Ctrl+Shift+Tab escaping to the
 -- next\/previous thing at the enclosing level.
 containedTree :: UI TestElement String ()
 containedTree = do
-  control Container FocusSelf containedCfg (tag Container) $
-    mapM_ (\c -> control c FocusSelf defaultTestConfig (tag c) (pure ())) [ChildA, ChildB, ChildC]
-  control Sibling FocusSelf defaultTestConfig (tag Sibling) (pure ())
+  control Container (tabNavigation Contained : content children : tag Container)
+  control Sibling (tag Sibling)
+  where
+    children = mapM_ (\c -> control c (tag c)) [ChildA, ChildB, ChildC]
 
 -- | Same shape as 'containedTree', but with arrow-key cycling also enabled.
 arrowTree :: UI TestElement String ()
-arrowTree = control Container FocusSelf arrowCfg (tag Container) $
-  mapM_ (\c -> control c FocusSelf defaultTestConfig (tag c) (pure ())) [ChildA, ChildB, ChildC]
+arrowTree = control Container (tabNavigation Contained : isArrowNavigationEnabled True : content children : tag Container)
   where
-    arrowCfg = configure defaultTestConfig ([tabNavigation Contained, isArrowNavigationEnabled True] :: [Attr'])
+    children = mapM_ (\c -> control c (tag c)) [ChildA, ChildB, ChildC]
 
 -- | 'Outer' (Contained) holds a nested 'Inner' (also Contained, with its
 -- own children 'InnerA'\/'InnerB') plus a plain 'OuterChildB', followed by
@@ -136,11 +117,13 @@ arrowTree = control Container FocusSelf arrowCfg (tag Container) $
 -- the enclosing one rather than jumping all the way out.
 nestedTree :: UI TestElement String ()
 nestedTree = do
-  control Outer FocusSelf containedCfg (tag Outer) $ do
-    control Inner FocusSelf containedCfg (tag Inner) $
-      mapM_ (\c -> control c FocusSelf defaultTestConfig (tag c) (pure ())) [InnerA, InnerB]
-    control OuterChildB FocusSelf defaultTestConfig (tag OuterChildB) (pure ())
-  control OuterSibling FocusSelf defaultTestConfig (tag OuterSibling) (pure ())
+  control Outer (tabNavigation Contained : content innerAndB : tag Outer)
+  control OuterSibling (tag OuterSibling)
+  where
+    innerAndB = do
+      control Inner (tabNavigation Contained : content innerChildren : tag Inner)
+      control OuterChildB (tag OuterChildB)
+    innerChildren = mapM_ (\c -> control c (tag c)) [InnerA, InnerB]
 
 spec :: Spec
 spec = describe "Blink.Control" $ do
@@ -155,13 +138,13 @@ spec = describe "Blink.Control" $ do
     it "raises a focus gained event for only the first of several simultaneously-eligible controls" $ do
       let attrsA = [onFocusGained (const [OutMsg ("A gained" :: String)])]
           attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
-      result <- runInteractions testBounds seedCtx (both FocusSelf defaultTestConfig attrsA FocusSelf defaultTestConfig attrsB) [] []
+      result <- runInteractions testBounds seedCtx (both FocusSelf attrsA FocusSelf attrsB) [] []
       resultMessages result `shouldBe` ["A gained"]
 
   describe "click-to-focus" $ do
     let attrsA = [onFocusLost   (const [OutMsg ("A lost"   :: String)])]
         attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
-        render = both FocusSelf defaultTestConfig attrsA FocusSelf defaultTestConfig attrsB
+        render = both FocusSelf attrsA FocusSelf attrsB
 
     it "does not take effect on the click's own frame" $ do
       result <- runInteractions testBounds seedCtx render [] [ClickAt onB]
@@ -172,24 +155,21 @@ spec = describe "Blink.Control" $ do
       resultMessages result `shouldBe` ["A lost", "B gained"]
 
     it "FocusTarget redirects focus to the named element instead of the clicker" $ do
-      let cfgA = configure defaultTestConfig ([isFocusable False] :: [Attr'])
-          cfgB = configure defaultTestConfig ([isFocusable False] :: [Attr'])
-          taggedA = [onFocusGained (const [OutMsg ("A gained" :: String)])]
-          taggedB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
-      result <- runInteractions testBounds seedCtx (both (FocusTarget ElemB) cfgA taggedA FocusSelf cfgB taggedB) [] [ClickAt onA, Wait 1]
+      let taggedA = [isFocusable False, onFocusGained (const [OutMsg ("A gained" :: String)])]
+          taggedB = [isFocusable False, onFocusGained (const [OutMsg ("B gained" :: String)])]
+      result <- runInteractions testBounds seedCtx (both (FocusTarget ElemB) taggedA FocusSelf taggedB) [] [ClickAt onA, Wait 1]
       resultMessages result `shouldBe` ["B gained"]
 
     it "NoFocus leaves focus unchanged when clicked" $ do
-      let cfgA = configure defaultTestConfig ([isFocusable False] :: [Attr'])
-          attrs :: [Attr']
-          attrs = [onFocusGained (const [OutMsg ("gained" :: String)])]
-      result <- runInteractions testBounds seedCtx (control ElemA NoFocus cfgA attrs (pure ())) [] [ClickAt onA, Wait 1]
+      let attrs :: [Attr']
+          attrs = [isFocusable False, onFocusGained (const [OutMsg ("gained" :: String)])]
+      result <- runInteractions testBounds seedCtx (control ElemA (focusOnClick NoFocus : attrs)) [] [ClickAt onA, Wait 1]
       resultMessages result `shouldBe` []
 
   describe "keyboard navigation" $ do
     let attrsA = [onFocusLost   (const [OutMsg ("A lost"   :: String)])]
         attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
-        render = both FocusSelf defaultTestConfig attrsA FocusSelf defaultTestConfig attrsB
+        render = both FocusSelf attrsA FocusSelf attrsB
 
     it "Tab gives up focus immediately, letting the next control auto-claim in the same frame" $ do
       result <- runInteractions testBounds seedCtx render [Wait 1] [Tab]
@@ -205,12 +185,12 @@ spec = describe "Blink.Control" $ do
 
     it "does not report Tab as a key event to the control it moves focus away from" $ do
       let keyAttrs = [onKeyPressed (\k -> [OutMsg (show k)])]
-      result <- runInteractions testBounds seedCtx (both FocusSelf defaultTestConfig keyAttrs FocusSelf defaultTestConfig []) [Wait 1] [Tab]
+      result <- runInteractions testBounds seedCtx (both FocusSelf keyAttrs FocusSelf []) [Wait 1] [Tab]
       resultMessages result `shouldBe` []
 
     it "does not report Shift-Tab as a key event to the control it moves focus away from" $ do
       let keyAttrs = [onKeyPressed (\k -> [OutMsg (show k)])]
-      result <- runInteractions testBounds seedCtx (both FocusSelf defaultTestConfig keyAttrs FocusSelf defaultTestConfig []) [Wait 1] [ShiftTab]
+      result <- runInteractions testBounds seedCtx (both FocusSelf keyAttrs FocusSelf []) [Wait 1] [ShiftTab]
       resultMessages result `shouldBe` []
 
   describe "container navigation (tabNavigation Contained)" $ do
@@ -261,8 +241,13 @@ spec = describe "Blink.Control" $ do
       resultMessages result `shouldBe` ["Container lost", "Sibling gained"]
 
     it "does not leak Tab or Ctrl+Tab as raw key events to the container itself" $ do
-      let tree = control Container FocusSelf containedCfg (onKeyPressed (const [OutMsg ("Container key" :: String)]) : tag Container) $
-            mapM_ (\c -> control c FocusSelf defaultTestConfig (tag c) (pure ())) [ChildA, ChildB]
+      let tree = do
+            control Container
+              ( tabNavigation Contained
+              : content (mapM_ (\c -> control c (tag c)) [ChildA, ChildB])
+              : onKeyPressed (const [OutMsg ("Container key" :: String)])
+              : tag Container
+              )
       tabResult <- runInteractions testBounds seedCtx tree [Wait 1] [Tab]
       resultMessages tabResult `shouldBe` ["ChildA lost", "ChildB gained"]
       ctrlTabResult <- runInteractions testBounds seedCtx tree [Wait 1] [PressKey KeyTab [Ctrl]]
@@ -273,11 +258,9 @@ spec = describe "Blink.Control" $ do
       resultMessages result `shouldBe` ["Inner lost", "OuterChildB gained"]
 
     it "has no effect when the container isn't focusable -- its children participate directly in the enclosing sequence" $ do
-      let notFocusableCfg = configure defaultTestConfig ([isFocusable False, tabNavigation Contained] :: [Attr'])
-          tree = do
-            control Container FocusSelf notFocusableCfg (tag Container) $
-              mapM_ (\c -> control c FocusSelf defaultTestConfig (tag c) (pure ())) [ChildA, ChildB]
-            control Sibling FocusSelf defaultTestConfig (tag Sibling) (pure ())
+      let tree = do
+            control Container (isFocusable False : tabNavigation Contained : content (mapM_ (\c -> control c (tag c)) [ChildA, ChildB]) : tag Container)
+            control Sibling (tag Sibling)
       entry <- runInteractions testBounds seedCtx tree [] []
       resultMessages entry `shouldBe` ["ChildA gained"]
       result <- runInteractions testBounds seedCtx tree [Wait 1] [Tab, Tab]

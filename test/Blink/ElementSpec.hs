@@ -3,7 +3,10 @@ module Blink.ElementSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Element (Attr, ElementEvent (..), element, onEvent, onKeyPressed)
+import Blink.Element
+  ( ElementAttrs, ElementEvent (..)
+  , element, onClicked, onFocusGained, onFocusLost, onKeyPressed, onMouseDown, onMouseEntered, onMouseExited, onMouseUp
+  )
 import Blink.ElementBehaviour (elementBehaviourSpec)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
@@ -61,12 +64,29 @@ onA     = Point 10 50
 offBoth = Point 200 200
 onB     = Point 60 50
 
+-- | Every raw event a reaction built on 'element' can raise, tagged with
+-- @e@ and which 'ElementEvent' it was -- since the new batched
+-- 'Blink.Element.HasElementEvents' has one smart constructor per event
+-- rather than a single catch-all reaction, this lists all eight instead of
+-- reacting generically the way the old @onEvent@ escape hatch did.
+tagAll :: TestElement -> [ElementAttrs TestElement (TestElement, ElementEvent)]
+tagAll e =
+  [ onMouseEntered (const [OutMsg (e, MouseEntered)])
+  , onMouseExited  (const [OutMsg (e, MouseExited)])
+  , onMouseDown    (const [OutMsg (e, MouseDown)])
+  , onMouseUp      (const [OutMsg (e, MouseUp)])
+  , onClicked      (const [OutMsg (e, Clicked)])
+  , onKeyPressed   (\k -> [OutMsg (e, KeyPressed k)])
+  , onFocusGained  (const [OutMsg (e, FocusGained)])
+  , onFocusLost    (const [OutMsg (e, FocusLost)])
+  ]
+
 -- | Runs 'ElemA' at 'rectA' and 'ElemB' at 'rectB' together, each firing its
 -- 'ElementEvent's as a message tagged with which element it came from.
 both :: UI TestElement (TestElement, ElementEvent) ()
 both = do
-  withBounds rectA $ element ElemA [onEvent (\ev -> [OutMsg (ElemA, ev)])]
-  withBounds rectB $ element ElemB [onEvent (\ev -> [OutMsg (ElemB, ev)])]
+  withBounds rectA $ element ElemA (tagAll ElemA)
+  withBounds rectB $ element ElemB (tagAll ElemB)
 
 advance :: Ord e => InputState -> UIContext e msg -> UIContext e msg
 advance input ctx = nextFrameContext testBounds input (contextTheme ctx) (contextAnimation ctx) ctx
@@ -79,11 +99,11 @@ seedBothCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
 spec :: Spec
 spec = describe "Blink.Element" $ do
-  elementBehaviourSpec testBounds seedCtx ElemA testBounds offBoth (element ElemA :: [Attr TestElement ElementEvent String ()] -> UI TestElement String ())
+  elementBehaviourSpec testBounds seedCtx ElemA testBounds offBoth (element ElemA :: [ElementAttrs TestElement String] -> UI TestElement String ())
 
   describe "onKeyPressed" $
     it "reacts with the triggering KeyEvent" $ do
-      let attrs :: [Attr TestElement ElementEvent KeyEvent ()]
+      let attrs :: [ElementAttrs TestElement KeyEvent]
           attrs = [onKeyPressed (\k -> [OutMsg k])]
       ctx0 <- snd <$> runUI (setFocus ElemA) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
       ctx  <- snd <$> runUI (element ElemA attrs) (advance (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0)

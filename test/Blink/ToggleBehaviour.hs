@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | The shared "activating it changes its selected state and reports the
 -- new value" contract every toggle-style control must satisfy, on top of
@@ -13,9 +14,8 @@ module Blink.ToggleBehaviour
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Control (HasControlConfig)
-import Blink.Button (HasToggleConfig, ToggleEvent, isSelected, onSelectedChanged)
-import Blink.Element (Attr)
+import Blink.Control (HasControlConfig, HasElementEvents)
+import Blink.Button (HasIsSelectedConfig, HasSelectedChangedEvents, isSelected, onSelectedChanged)
 import Blink.ButtonBehaviour (buttonBehaviourSpec)
 import Blink.ElementBehaviour (tagged)
 import Blink.Generators (genPointIn)
@@ -26,7 +26,7 @@ import Blink.UI
 
 -- | Every raw\/activation reaction, plus a tagged reaction to
 -- 'onSelectedChanged' naming the value it changed to.
-taggedToggle :: HasToggleConfig cfg => [Attr e ToggleEvent String cfg]
+taggedToggle :: (HasElementEvents e String cfg, HasSelectedChangedEvents e String cfg) => [cfg]
 taggedToggle = onSelectedChanged (\b -> [OutMsg ("SelectedChanged:" ++ show b)]) : tagged
 
 -- | 'True' when @msgs@ reports activating a control starting at @current@
@@ -47,15 +47,15 @@ reportsSelectedChange next current msgs
 -- becomes selected -- asserts it reports exactly that change, or nothing
 -- when the value would stay the same.
 toggleBehaviourSpec
-  :: (Ord e, Show e, HasControlConfig e cfg, HasToggleConfig cfg)
-  => (Bool -> Bool)                                       -- ^ how activating it changes its selected state
-  -> Rectangle                                          -- ^ bounds the control renders at
-  -> UIContext e String                                 -- ^ starting context (theme\/measurer already set up)
-  -> e                                                    -- ^ element id under test
-  -> Point                                                -- ^ a point inside its margin (not part of its hit area)
-  -> Rectangle                                            -- ^ the region making up its margin-inset hit area
-  -> Point                                                -- ^ a point outside its bounds entirely
-  -> ([Attr e ToggleEvent String cfg] -> UI e String ())  -- ^ render the control under test with these attrs
+  :: (Ord e, Show e, HasControlConfig e cfg, HasElementEvents e String cfg, HasIsSelectedConfig cfg, HasSelectedChangedEvents e String cfg)
+  => (Bool -> Bool)                 -- ^ how activating it changes its selected state
+  -> Rectangle                      -- ^ bounds the control renders at
+  -> UIContext e String             -- ^ starting context (theme\/measurer already set up)
+  -> e                                -- ^ element id under test
+  -> Point                            -- ^ a point inside its margin (not part of its hit area)
+  -> Rectangle                        -- ^ the region making up its margin-inset hit area
+  -> Point                            -- ^ a point outside its bounds entirely
+  -> ([cfg] -> UI e String ())        -- ^ render the control under test with these attrs
   -> Spec
 toggleBehaviourSpec next bounds ctx eid marginPoint insideRect outsidePoint render = do
   buttonBehaviourSpec bounds ctx eid marginPoint insideRect outsidePoint (\attrs -> render (isSelected False : attrs))

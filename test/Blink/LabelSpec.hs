@@ -6,11 +6,10 @@ import Test.Hspec
 
 import Blink.Control (text)
 import Blink.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
-import Blink.Element (Attr, ElementEvent)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Label (LabelConfig, label, target)
+import Blink.Label (LabelAttributes, label, target)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -62,7 +61,7 @@ onCaption = Point 50 50
 hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
-type Attr' = Attr TestElement ElementEvent String (LabelConfig TestElement)
+type Attr' = LabelAttributes TestElement String
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer

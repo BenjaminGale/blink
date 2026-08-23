@@ -3,7 +3,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | Text drawn in the resolved style, set via 'text'.
 module Blink.Label
-  ( LabelConfig
+  ( LabelAttributes
+  , LabelConfig
   , label
   , labelStyleKey
   , text
@@ -21,26 +22,98 @@ module Blink.Label
   , onFocusLost
   ) where
 
+import Data.List (foldl')
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 
 import Blink.Control
-  ( ControlConfig, FocusOnClick (..), HasControlConfig (..), HasTextConfig (..)
-  , control, defaultControlConfig, isEnabled, isFocusable, style, text
-  )
-import Blink.Element
-  ( Attr, ElementEvent (..)
-  , configAny, configure
-  , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
-  )
-import Blink.Style (Style (..), StyleKey (..))
-import Blink.UI (UI, currentStyle, drawText)
+import Blink.Input (KeyEvent)
+import Blink.Style (Style (..))
+import Blink.UI (Out, UI, currentStyle, drawText)
 
--- | Configuration for 'label', set via 'text' and 'target'. Defaults to no
--- text and no target.
+-- | 'Blink.Label.label'\'s own closed attrs type: most of the common
+-- capabilities every control has, plus 'text' and 'target'. Doesn't expose
+-- 'isFocusable' -- a label never takes keyboard focus itself, whether by
+-- Tab or by being clicked; this is fixed behaviour, not a default, so
+-- 'label' has to still implement a @LabelIsFocusable@ constructor for its
+-- 'HasControlConfig' instance to type-check, but simply never exports a
+-- smart constructor that could build one.
+data LabelAttributes e msg
+  = LabelIsFocusable Bool
+  | LabelIsEnabled Bool
+  | LabelStyle (StyleKey e)
+  | LabelTabNavigation NavigationMode
+  | LabelIsArrowNavigationEnabled Bool
+  | LabelOnClicked (() -> [Out e msg])
+  | LabelOnFocusGained (() -> [Out e msg])
+  | LabelOnFocusLost (() -> [Out e msg])
+  | LabelOnMouseEntered (() -> [Out e msg])
+  | LabelOnMouseExited (() -> [Out e msg])
+  | LabelOnMouseDown (() -> [Out e msg])
+  | LabelOnMouseUp (() -> [Out e msg])
+  | LabelOnKeyPressed (KeyEvent -> [Out e msg])
+  | LabelText Text
+  | LabelTarget e
+
+instance HasControlConfig e (LabelAttributes e msg) where
+  mkIsFocusable = LabelIsFocusable
+  matchIsFocusable (LabelIsFocusable b) = Just b
+  matchIsFocusable _ = Nothing
+  mkIsEnabled = LabelIsEnabled
+  matchIsEnabled (LabelIsEnabled b) = Just b
+  matchIsEnabled _ = Nothing
+  mkStyle = LabelStyle
+  matchStyle (LabelStyle k) = Just k
+  matchStyle _ = Nothing
+  mkTabNavigation = LabelTabNavigation
+  matchTabNavigation (LabelTabNavigation m) = Just m
+  matchTabNavigation _ = Nothing
+  mkIsArrowNavigationEnabled = LabelIsArrowNavigationEnabled
+  matchIsArrowNavigationEnabled (LabelIsArrowNavigationEnabled b) = Just b
+  matchIsArrowNavigationEnabled _ = Nothing
+
+instance HasElementEvents e msg (LabelAttributes e msg) where
+  mkOnClicked = LabelOnClicked
+  matchOnClicked (LabelOnClicked f) = Just f
+  matchOnClicked _ = Nothing
+  mkOnFocusGained = LabelOnFocusGained
+  matchOnFocusGained (LabelOnFocusGained f) = Just f
+  matchOnFocusGained _ = Nothing
+  mkOnFocusLost = LabelOnFocusLost
+  matchOnFocusLost (LabelOnFocusLost f) = Just f
+  matchOnFocusLost _ = Nothing
+  mkOnMouseEntered = LabelOnMouseEntered
+  matchOnMouseEntered (LabelOnMouseEntered f) = Just f
+  matchOnMouseEntered _ = Nothing
+  mkOnMouseExited = LabelOnMouseExited
+  matchOnMouseExited (LabelOnMouseExited f) = Just f
+  matchOnMouseExited _ = Nothing
+  mkOnMouseDown = LabelOnMouseDown
+  matchOnMouseDown (LabelOnMouseDown f) = Just f
+  matchOnMouseDown _ = Nothing
+  mkOnMouseUp = LabelOnMouseUp
+  matchOnMouseUp (LabelOnMouseUp f) = Just f
+  matchOnMouseUp _ = Nothing
+  mkOnKeyPressed = LabelOnKeyPressed
+  matchOnKeyPressed (LabelOnKeyPressed f) = Just f
+  matchOnKeyPressed _ = Nothing
+
+instance HasTextConfig (LabelAttributes e msg) where
+  mkText = LabelText
+  matchText (LabelText t) = Just t
+  matchText _ = Nothing
+
+-- | Names the element a click on the label should focus instead of the
+-- label itself -- e.g. a caption redirecting a click onto the input beside
+-- it. Unset by default, in which case clicking the label does nothing to
+-- focus.
+target :: e -> LabelAttributes e msg
+target = LabelTarget
+
+-- | Configuration for 'label', resolved from a @['LabelAttributes' e msg]@.
 data LabelConfig e = LabelConfig
-  { labelConfigControl :: ControlConfig e
-  , labelConfigText    :: Text
-  , labelConfigTarget  :: Maybe e
+  { lcfgText   :: Text
+  , lcfgTarget :: Maybe e
   }
 
 -- | The 'StyleKey' 'label' resolves its style from unless overridden via
@@ -49,38 +122,31 @@ labelStyleKey :: StyleKey e
 labelStyleKey = Class "label"
 
 defaultLabelConfig :: LabelConfig e
-defaultLabelConfig = LabelConfig
-  { labelConfigControl = defaultControlConfig labelStyleKey
-  , labelConfigText    = ""
-  , labelConfigTarget  = Nothing
-  }
+defaultLabelConfig = LabelConfig { lcfgText = "", lcfgTarget = Nothing }
 
-instance HasControlConfig e (LabelConfig e) where
-  controlConfig    = labelConfigControl
-  setControlConfig cc cfg = cfg { labelConfigControl = cc }
+resolveLabelConfig :: [LabelAttributes e msg] -> LabelConfig e
+resolveLabelConfig = foldl' apply defaultLabelConfig
+  where
+    apply cfg (LabelText t)   = cfg { lcfgText = t }
+    apply cfg (LabelTarget t) = cfg { lcfgTarget = Just t }
+    apply cfg _               = cfg
 
-instance HasTextConfig (LabelConfig e) where
-  setText t cfg = cfg { labelConfigText = t }
-
--- | Names the element a click on the label should focus instead of the
--- label itself -- e.g. a caption redirecting a click onto the input beside
--- it. Unset by default, in which case clicking the label does nothing to
--- focus.
-target :: e -> Attr e ev msg (LabelConfig e)
-target t = configAny $ \cfg -> cfg { labelConfigTarget = Just t }
+toLabelControlAttr :: LabelAttributes e msg -> Maybe (ControlAttrs e msg)
+toLabelControlAttr (LabelText _)   = Nothing
+toLabelControlAttr (LabelTarget _) = Nothing
+toLabelControlAttr a               = translateCommon a
 
 -- | Displays text in the resolved style. Unlike every other control built
 -- on 'control', a label never takes keyboard focus itself, whether by Tab
--- or by being clicked: this is fixed behaviour, not a default, so passing
--- @isFocusable@\/@focusOnClick@ in @attrs@ has no effect on it. The only way
--- a click on a label affects focus at all is 'target', which redirects it
--- to a different, named element.
-label :: Ord e => e -> [Attr e ElementEvent msg (LabelConfig e)] -> UI e msg ()
-label eid attrs = control eid focusOnClick cfg attrs $ do
-  s <- currentStyle
-  drawText (styleTextColour s) (styleTextAlign s) (labelConfigText cfg)
+-- or by being clicked: this is fixed behaviour, not a default -- 'label'
+-- simply never exposes 'isFocusable', and always overrides it to 'False'
+-- itself. The only way a click on a label affects focus at all is
+-- 'target', which redirects it to a different, named element.
+label :: Ord e => e -> [LabelAttributes e msg] -> UI e msg ()
+label eid attrs = control eid (mapMaybe toLabelControlAttr attrs ++ [isFocusable False, focusOnClick focusTarget, content bodyContent])
   where
-    -- isFocusable appended last so a caller can't override it -- 'target'
-    -- is the only supported way to affect a label's focus behaviour.
-    cfg = configure defaultLabelConfig (attrs ++ [isFocusable False])
-    focusOnClick = maybe NoFocus FocusTarget (labelConfigTarget cfg)
+    cfg = resolveLabelConfig attrs
+    focusTarget = maybe NoFocus FocusTarget (lcfgTarget cfg)
+    bodyContent = do
+      s <- currentStyle
+      drawText (styleTextColour s) (styleTextAlign s) (lcfgText cfg)

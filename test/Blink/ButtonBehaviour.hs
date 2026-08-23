@@ -1,9 +1,10 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | The shared "activated by a click or by Enter while focused" contract
 -- every 'Blink.Button.buttonBase'-based control must satisfy, on top of
--- the focus\/hit-region contract every control already satisfies (see
--- 'Blink.ControlBehaviour.controlBehaviourSpec'). 'Blink.ButtonSpec' runs
--- this against 'Blink.Button.button'; 'toggleButton', 'checkbox', and
+-- the raw-event\/focus\/hit-region contract every control already satisfies
+-- (see 'Blink.ControlBehaviour.controlBehaviourSpec'). 'Blink.ButtonSpec'
+-- runs this against 'Blink.Button.button'; 'toggleButton', 'checkbox', and
 -- 'radioButton' reuse it too, on top of their own toggle-specific contract.
 module Blink.ButtonBehaviour
   ( buttonBehaviourSpec
@@ -11,9 +12,8 @@ module Blink.ButtonBehaviour
 
 import Test.Hspec
 
-import Blink.Control (HasControlConfig, isFocusable)
+import Blink.Control (HasControlConfig, HasElementEvents, isFocusable)
 import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Element (Attr, HasElementEvent)
 import Blink.ElementBehaviour (tagged)
 import Blink.Geometry (Point, Rectangle)
 import Blink.Input (Key (KeyReturn))
@@ -25,14 +25,14 @@ import Blink.UI
 -- the same way it's activated by a click -- and not while unfocused or
 -- disabled.
 buttonBehaviourSpec
-  :: (Ord e, Show e, HasElementEvent ev, HasControlConfig e cfg)
+  :: (Ord e, Show e, HasControlConfig e cfg, HasElementEvents e String cfg)
   => Rectangle                                   -- ^ bounds the control renders at
   -> UIContext e String                          -- ^ starting context (theme\/measurer already set up)
   -> e                                             -- ^ element id under test
   -> Point                                         -- ^ a point inside its margin (not part of its hit area)
   -> Rectangle                                     -- ^ the region making up its margin-inset hit area
   -> Point                                         -- ^ a point outside its bounds entirely
-  -> ([Attr e ev String cfg] -> UI e String ())    -- ^ render the control under test with these attrs
+  -> ([cfg] -> UI e String ())                     -- ^ render the control under test with these attrs
   -> Spec
 buttonBehaviourSpec bounds ctx eid marginPoint insideRect outsidePoint render = do
   controlBehaviourSpec defaultControlBehaviourConfig bounds ctx eid marginPoint insideRect outsidePoint render

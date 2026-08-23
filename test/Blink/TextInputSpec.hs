@@ -8,14 +8,13 @@ import Test.Hspec
 
 import Blink.Control (text)
 import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Element (Attr)
 import Blink.Geometry (Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.TextInput
-  (TextInputConfig, TextInputEvent, displayFilter, inputFilter, onInput, onSubmit, textInput)
+  (TextInputAttributes, displayFilter, inputFilter, onInput, onSubmit, textInput)
 import Blink.UI
 
 data TestElement = Field | Other deriving (Eq, Ord, Show)
@@ -86,7 +85,7 @@ hitRect = insetRect (uniform 10) testBounds
 cursorRectAt :: Double -> DrawCommand
 cursorRectAt x = FillRect (Rectangle x 15 1 70) testColour
 
-type Attr' = Attr TestElement TextInputEvent String (TextInputConfig TestElement)
+type Attr' = TextInputAttributes TestElement String
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpMeasurer

@@ -1,10 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 -- | The shared "raises the right raw event for the right interaction"
 -- contract every 'Blink.Element.element'-based primitive must satisfy.
 -- 'Blink.ElementSpec' runs this against 'Blink.Element.element' directly;
 -- anything built on top (a control, and every widget built on that) reuses
 -- it to confirm the same raw facts still surface through its own attrs
--- list, on top of whatever that layer adds.
+-- type, on top of whatever that layer adds.
 module Blink.ElementBehaviour
   ( elementBehaviourSpec
   , tagged
@@ -15,7 +16,7 @@ import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
 import Blink.Element
-  ( Attr, HasElementEvent
+  ( HasElementEvents
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed
   , onFocusGained, onFocusLost
   )
@@ -29,7 +30,7 @@ import Blink.UI
 -- raise with a plain label naming it, discarding any payload -- enough to
 -- assert "this fired" declaratively without a bespoke message type per
 -- caller.
-tagged :: HasElementEvent ev => [Attr e ev String cfg]
+tagged :: HasElementEvents e String cfg => [cfg]
 tagged =
   [ onMouseEntered (const [OutMsg "MouseEntered"])
   , onMouseExited  (const [OutMsg "MouseExited"])
@@ -50,13 +51,13 @@ tagged =
 -- distinct part (e.g. a checkbox's glyph and caption) can't pass just
 -- because one particular point happens to work.
 elementBehaviourSpec
-  :: (Ord e, HasElementEvent ev)
+  :: (Ord e, HasElementEvents e String cfg)
   => Rectangle                                    -- ^ bounds the thing under test renders at
   -> UIContext e String                           -- ^ starting context (theme\/measurer already set up)
   -> e                                             -- ^ element id under test
   -> Rectangle                                     -- ^ the region making up its hit area
   -> Point                                         -- ^ a point outside its bounds
-  -> ([Attr e ev String cfg] -> UI e String ())    -- ^ render the thing under test with these attrs
+  -> ([cfg] -> UI e String ())                     -- ^ render the thing under test with these attrs
   -> Spec
 elementBehaviourSpec bounds ctx eid insideRect outside render = do
   describe "hover" $ do

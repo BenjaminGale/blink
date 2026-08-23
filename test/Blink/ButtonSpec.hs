@@ -4,11 +4,10 @@ module Blink.ButtonSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Button (ButtonConfig, ToggleButtonConfig, ToggleEvent, button, isSelected, toggleButton)
+import Blink.Button (ButtonAttributes, ToggleButtonAttributes, button, isSelected, toggleButton)
 import Blink.ButtonBehaviour (buttonBehaviourSpec)
 import Blink.Control (text)
 import Blink.ToggleBehaviour (toggleBehaviourSpec)
-import Blink.Element (Attr, ElementEvent)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -68,7 +67,7 @@ noInput = InputState
 hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
-type Attr' = Attr TestElement ElementEvent String (ButtonConfig TestElement)
+type Attr' = ButtonAttributes TestElement String
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
@@ -95,7 +94,7 @@ spec = describe "Blink.Button" $ do
       ctx <- startToggle [isSelected True]
       getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "" pressedColour AlignCenter]
 
-type ToggleAttr' = Attr TestElement ToggleEvent String (ToggleButtonConfig TestElement)
+type ToggleAttr' = ToggleButtonAttributes TestElement String
 
 toggleSeedCtx :: UIContext TestElement String
 toggleSeedCtx = emptyUIContext testBounds noInput toggleTestTheme noOpTextMeasurer
