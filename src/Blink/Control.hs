@@ -105,7 +105,7 @@ import Data.Text (Text)
 
 import Blink.Element
   ( ElementAttrs, ElementEvents, EventHandler, HasElementEvents (..), KeyEventHandler
-  , element, fireClick, fireFocusChange, onClicked, onFocusGained, onFocusLost, onKeyPressed
+  , element, fireClick, fireFocusChange, focusTransition, onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp
   )
 import Blink.Geometry (Rectangle, insetRect, borderInsets)
@@ -503,7 +503,7 @@ control eid attrs = disableWhen (not (ccIsEnabled cc)) $ do
   applySelfFocus
   unless opensScope (applyNavigationKeys wasFocused)
   midFocused <- isFocused eid
-  fireFocusChange elementAttrs wasFocused midFocused
+  fireFocusChange elementAttrs (focusTransition wasFocused midFocused)
   hitBounds <- marginInsetBounds styleKey
   withBounds hitBounds $
     (if opensScope then withoutKeyEvents reservedKeys else id) $
@@ -519,7 +519,7 @@ control eid attrs = disableWhen (not (ccIsEnabled cc)) $ do
   when opensScope $ do
     _ <- applyScopeEscape wasFocused
     nowFocused <- isFocused eid
-    fireFocusChange elementAttrs midFocused nowFocused
+    fireFocusChange elementAttrs (focusTransition midFocused nowFocused)
   -- Recorded last, after this control's own retreat (if any) has already
   -- read whatever the previous tab stop was -- otherwise a control would
   -- see its own, just-written entry instead of the one before it.

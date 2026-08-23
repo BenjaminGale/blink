@@ -13,6 +13,8 @@ module Blink.Element
   , ElementEvents
   , HasElementEvents (..)
   , ElementAttrs
+  , FocusTransition (..)
+  , focusTransition
   , element
   , fireFocusChange
   , onMouseEntered
@@ -168,17 +170,32 @@ runHandlers hs a = mapM_ dispatch (concatMap ($ a) hs)
     dispatch (OutMsg msg) = emit msg
     dispatch (OutUi eff)  = emitUi eff
 
--- | Fires 'onFocusGained'\/'onFocusLost' directly from a was\/now focus
--- transition, without waiting for 'element's own frame observation to
--- catch up -- for a caller (e.g. 'Blink.Control.control') that needs to
--- report a focus change it just caused itself this same frame, rather than
--- via 'Blink.UI.getFocusChange' (which only reflects it starting next
--- frame).
-fireFocusChange :: [ElementAttrs e msg] -> Bool -> Bool -> UI e msg ()
-fireFocusChange attrs was now = do
+-- | Which way, if any, focus just moved -- see 'focusTransition'.
+data FocusTransition
+  = FocusUnchanged
+  | GainedFocus
+  | LostFocus
+
+-- | Classifies a was\/now pair of focus states into the 'FocusTransition'
+-- it represents, for 'fireFocusChange'.
+focusTransition :: Bool -> Bool -> FocusTransition
+focusTransition was now
+  | not was && now = GainedFocus
+  | was && not now  = LostFocus
+  | otherwise       = FocusUnchanged
+
+-- | Fires 'onFocusGained'\/'onFocusLost' directly from a 'FocusTransition',
+-- without waiting for 'element's own frame observation to catch up -- for a
+-- caller (e.g. 'Blink.Control.control') that needs to report a focus
+-- change it just caused itself this same frame, rather than via
+-- 'Blink.UI.getFocusChange' (which only reflects it starting next frame).
+fireFocusChange :: [ElementAttrs e msg] -> FocusTransition -> UI e msg ()
+fireFocusChange attrs transition = do
   let ec = resolveElementConfig attrs
-  when (not was && now) $ runHandlers (ecOnFocusGained ec) ()
-  when (was && not now) $ runHandlers (ecOnFocusLost ec) ()
+  case transition of
+    GainedFocus    -> runHandlers (ecOnFocusGained ec) ()
+    LostFocus      -> runHandlers (ecOnFocusLost ec) ()
+    FocusUnchanged -> pure ()
 
 -- | Fires every 'onClicked' handler in @attrs@ directly, the same way a
 -- real mouse click would -- for a caller (e.g. 'Blink.Button.buttonBase')
