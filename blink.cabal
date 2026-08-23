@@ -81,6 +81,7 @@ test-suite blink-tests
         Blink.ControlsTestSupport
         Blink.ElementBehaviour
         Blink.ElementSpec
+        Blink.FixedFocusBehaviour
         Blink.Generators
         Blink.GeometrySpec
         Blink.Interaction

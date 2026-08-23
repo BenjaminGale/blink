@@ -25,6 +25,7 @@ module Blink.Label
 
     -- * Configuring a label
   , HasLabelConfig (..)
+  , LabelProperties
   , DisplayMode (..)
   , text
   , glyph

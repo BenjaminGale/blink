@@ -5,6 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
+import Blink.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -72,6 +73,8 @@ spec :: Spec
 spec = describe "Blink.Label" $ do
   controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
     testBounds seedCtx Caption (Point 5 5) hitRect (Point 200 200) (label Caption)
+
+  fixedNotFocusableSpec testBounds seedCtx (label Caption)
 
   it "draws its text in the resolved style" $ do
     ctx <- start [text "Hello"]
