@@ -99,8 +99,8 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
 import Blink.Element
-  ( ElementEvent (..), HasElementEvents (..)
-  , element, fire, onClicked, onFocusGained, onFocusLost, onKeyPressed
+  ( HasElementEvents (..)
+  , element, fireFocusChange, onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp
   )
 import Blink.Geometry (Rectangle, insetRect, borderInsets)
@@ -530,7 +530,7 @@ control eid attrs = disableWhen (not (ccIsEnabled cc)) $ do
   applySelfFocus
   unless opensScope (applyNavigationKeys wasFocused)
   midFocused <- isFocused eid
-  fire attrs (focusEvents wasFocused midFocused)
+  fireFocusChange attrs wasFocused midFocused
   hitBounds <- marginInsetBounds styleKey
   withBounds hitBounds $
     (if opensScope then withoutKeyEvents reservedKeys else id) $
@@ -546,7 +546,7 @@ control eid attrs = disableWhen (not (ccIsEnabled cc)) $ do
   when opensScope $ do
     _ <- applyScopeEscape wasFocused
     nowFocused <- isFocused eid
-    fire attrs (focusEvents midFocused nowFocused)
+    fireFocusChange attrs midFocused nowFocused
   -- Recorded last, after this control's own retreat (if any) has already
   -- read whatever the previous tab stop was -- otherwise a control would
   -- see its own, just-written entry instead of the one before it.
@@ -556,11 +556,6 @@ control eid attrs = disableWhen (not (ccIsEnabled cc)) $ do
     styleKey = ccStyleKey cc
     foc = ccFocusOnClick cc
     opensScope = ccIsFocusable cc && ccTabNavigation cc == Contained
-
-    focusEvents was now = concat
-      [ [FocusGained | not was && now]
-      , [FocusLost   | was && not now]
-      ]
 
     -- Immediate, not deferred: needed so that when several controls are
     -- simultaneously eligible, only the first one to render claims focus.
