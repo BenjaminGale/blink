@@ -73,7 +73,6 @@ instance HasSelectedChangedEvents e msg (CheckboxAttributes e msg) where
 data CheckboxConfig e msg = CheckboxConfig
   { ckcfgText              :: Text
   , ckcfgSelected          :: Bool
-  , ckcfgOnClicked         :: [EventHandler e msg]
   , ckcfgOnSelectedChanged :: [Bool -> [Out e msg]]
   }
 
@@ -84,17 +83,15 @@ checkboxStyleKey = Class "checkbox"
 
 defaultCheckboxConfig :: CheckboxConfig e msg
 defaultCheckboxConfig = CheckboxConfig
-  { ckcfgText = "", ckcfgSelected = False, ckcfgOnClicked = [], ckcfgOnSelectedChanged = [] }
+  { ckcfgText = "", ckcfgSelected = False, ckcfgOnSelectedChanged = [] }
 
 resolveCheckboxConfig :: [CheckboxAttributes e msg] -> CheckboxConfig e msg
 resolveCheckboxConfig = foldl' apply defaultCheckboxConfig
   where
-    apply cfg (CheckboxText t)       = cfg { ckcfgText = t }
-    apply cfg (CheckboxIsSelected b) = cfg { ckcfgSelected = b }
-    apply cfg (CheckboxEvent c)
-      | Just f <- matchOnClicked c = cfg { ckcfgOnClicked = ckcfgOnClicked cfg ++ [f] }
+    apply cfg (CheckboxText t)              = cfg { ckcfgText = t }
+    apply cfg (CheckboxIsSelected b)        = cfg { ckcfgSelected = b }
     apply cfg (CheckboxOnSelectedChanged f) = cfg { ckcfgOnSelectedChanged = ckcfgOnSelectedChanged cfg ++ [f] }
-    apply cfg _                      = cfg
+    apply cfg _                             = cfg
 
 toCheckboxControlAttr :: CheckboxAttributes e msg -> Maybe (ControlAttrs e msg)
 toCheckboxControlAttr (CheckboxText _)              = Nothing
@@ -117,7 +114,7 @@ checkboxGlyph False = "\9744" -- BALLOT BOX
 -- see 'onSelectedChanged' for reacting to it.
 checkbox :: Ord e => e -> [CheckboxAttributes e msg] -> UI e msg ()
 checkbox eid attrs =
-  toggleBase not eid (mapMaybe toCheckboxControlAttr attrs) (ckcfgOnClicked cfg) (ckcfgSelected cfg) (ckcfgOnSelectedChanged cfg) draw
+  toggleBase not eid (mapMaybe toCheckboxControlAttr attrs) (ckcfgSelected cfg) (ckcfgOnSelectedChanged cfg) draw
   where
     cfg = resolveCheckboxConfig attrs
     draw selected = do

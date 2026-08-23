@@ -90,7 +90,7 @@ module Blink.Control
   , onMouseDown
   , onMouseUp
   , onKeyPressed
-  , matchOnClicked
+  , fireOnClick
   , focusOnClick
   , content
   , text
@@ -105,7 +105,7 @@ import Data.Text (Text)
 
 import Blink.Element
   ( ElementAttrs, ElementEvents, EventHandler, HasElementEvents (..), KeyEventHandler
-  , element, fireFocusChange, matchOnClicked, onClicked, onFocusGained, onFocusLost, onKeyPressed
+  , element, fireClick, fireFocusChange, onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp
   )
 import Blink.Geometry (Rectangle, insetRect, borderInsets)
@@ -286,6 +286,14 @@ instance HasContentConfig e msg (ControlAttrs e msg) where
 toElementAttr :: ControlAttrs e msg -> Maybe (ElementAttrs e msg)
 toElementAttr (ControlEvent c) = Just c
 toElementAttr _               = Nothing
+
+-- | Fires every 'onClicked' handler in @attrs@ directly, the same way a
+-- real mouse click would -- for a widget (e.g. 'Blink.Button.buttonBase')
+-- that needs to re-fire the same reactions from a different trigger (Enter
+-- while focused) using the same, already-translated attrs list it passes
+-- to 'control', rather than resolving its own handler list on the side.
+fireOnClick :: [ControlAttrs e msg] -> UI e msg ()
+fireOnClick = fireClick . mapMaybe toElementAttr
 
 -- | Concatenates the 'Out's every handler in @hs@ produces for @a@, without
 -- dispatching any of them -- for composing a resolved handler list into a

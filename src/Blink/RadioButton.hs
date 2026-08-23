@@ -73,7 +73,6 @@ instance HasSelectedChangedEvents e msg (RadioButtonAttributes e msg) where
 data RadioButtonConfig e msg = RadioButtonConfig
   { rbcfgText              :: Text
   , rbcfgSelected          :: Bool
-  , rbcfgOnClicked         :: [EventHandler e msg]
   , rbcfgOnSelectedChanged :: [Bool -> [Out e msg]]
   }
 
@@ -84,17 +83,15 @@ radioButtonStyleKey = Class "radioButton"
 
 defaultRadioButtonConfig :: RadioButtonConfig e msg
 defaultRadioButtonConfig = RadioButtonConfig
-  { rbcfgText = "", rbcfgSelected = False, rbcfgOnClicked = [], rbcfgOnSelectedChanged = [] }
+  { rbcfgText = "", rbcfgSelected = False, rbcfgOnSelectedChanged = [] }
 
 resolveRadioButtonConfig :: [RadioButtonAttributes e msg] -> RadioButtonConfig e msg
 resolveRadioButtonConfig = foldl' apply defaultRadioButtonConfig
   where
-    apply cfg (RadioButtonText t)       = cfg { rbcfgText = t }
-    apply cfg (RadioButtonIsSelected b) = cfg { rbcfgSelected = b }
-    apply cfg (RadioButtonEvent c)
-      | Just f <- matchOnClicked c = cfg { rbcfgOnClicked = rbcfgOnClicked cfg ++ [f] }
+    apply cfg (RadioButtonText t)              = cfg { rbcfgText = t }
+    apply cfg (RadioButtonIsSelected b)        = cfg { rbcfgSelected = b }
     apply cfg (RadioButtonOnSelectedChanged f) = cfg { rbcfgOnSelectedChanged = rbcfgOnSelectedChanged cfg ++ [f] }
-    apply cfg _                         = cfg
+    apply cfg _                                = cfg
 
 toRadioButtonControlAttr :: RadioButtonAttributes e msg -> Maybe (ControlAttrs e msg)
 toRadioButtonControlAttr (RadioButtonText _)              = Nothing
@@ -120,7 +117,7 @@ radioGlyph False = "\9675" -- WHITE CIRCLE
 -- being clicked again itself. See 'onSelectedChanged' for reacting to it.
 radioButton :: Ord e => e -> [RadioButtonAttributes e msg] -> UI e msg ()
 radioButton eid attrs =
-  toggleBase (const True) eid (mapMaybe toRadioButtonControlAttr attrs) (rbcfgOnClicked cfg) (rbcfgSelected cfg) (rbcfgOnSelectedChanged cfg) draw
+  toggleBase (const True) eid (mapMaybe toRadioButtonControlAttr attrs) (rbcfgSelected cfg) (rbcfgOnSelectedChanged cfg) draw
   where
     cfg = resolveRadioButtonConfig attrs
     draw selected = do
