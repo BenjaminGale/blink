@@ -65,6 +65,8 @@ module Blink.Control
   , ControlConfig
   , NavigationMode (..)
   , StyleKey (..)
+  , EventHandler
+  , KeyEventHandler
   , HasControlConfig (..)
   , HasElementEvents (..)
   , HasFocusOnClickConfig (..)
@@ -99,7 +101,7 @@ import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 
 import Blink.Element
-  ( ElementAttrs, HasElementEvents (..)
+  ( ElementAttrs, EventHandler, HasElementEvents (..), KeyEventHandler
   , element, fireFocusChange, onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp
   )
@@ -260,14 +262,14 @@ data ControlAttrs e msg
   | ControlStyle (StyleKey e)
   | ControlTabNavigation NavigationMode
   | ControlIsArrowNavigationEnabled Bool
-  | ControlOnClicked (() -> [Out e msg])
-  | ControlOnFocusGained (() -> [Out e msg])
-  | ControlOnFocusLost (() -> [Out e msg])
-  | ControlOnMouseEntered (() -> [Out e msg])
-  | ControlOnMouseExited (() -> [Out e msg])
-  | ControlOnMouseDown (() -> [Out e msg])
-  | ControlOnMouseUp (() -> [Out e msg])
-  | ControlOnKeyPressed (KeyEvent -> [Out e msg])
+  | ControlOnClicked (EventHandler e msg)
+  | ControlOnFocusGained (EventHandler e msg)
+  | ControlOnFocusLost (EventHandler e msg)
+  | ControlOnMouseEntered (EventHandler e msg)
+  | ControlOnMouseExited (EventHandler e msg)
+  | ControlOnMouseDown (EventHandler e msg)
+  | ControlOnMouseUp (EventHandler e msg)
+  | ControlOnKeyPressed (KeyEventHandler e msg)
   | ControlFocusOnClick (FocusOnClick e)
   | ControlContent (UI e msg ())
 

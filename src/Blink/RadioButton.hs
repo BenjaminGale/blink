@@ -33,7 +33,6 @@ import Data.Text (Text)
 import Blink.Button (HasIsSelectedConfig (..), HasSelectedChangedEvents (..), isSelected, onSelectedChanged, toggleBase)
 import Blink.Control
 import Blink.Geometry (Rectangle (..))
-import Blink.Input (KeyEvent)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..))
 import Blink.UI (Out, UI, currentStyle, drawText, getBounds, withBounds)
@@ -47,14 +46,14 @@ data RadioButtonAttributes e msg
   | RadioButtonStyle (StyleKey e)
   | RadioButtonTabNavigation NavigationMode
   | RadioButtonIsArrowNavigationEnabled Bool
-  | RadioButtonOnClicked (() -> [Out e msg])
-  | RadioButtonOnFocusGained (() -> [Out e msg])
-  | RadioButtonOnFocusLost (() -> [Out e msg])
-  | RadioButtonOnMouseEntered (() -> [Out e msg])
-  | RadioButtonOnMouseExited (() -> [Out e msg])
-  | RadioButtonOnMouseDown (() -> [Out e msg])
-  | RadioButtonOnMouseUp (() -> [Out e msg])
-  | RadioButtonOnKeyPressed (KeyEvent -> [Out e msg])
+  | RadioButtonOnClicked (EventHandler e msg)
+  | RadioButtonOnFocusGained (EventHandler e msg)
+  | RadioButtonOnFocusLost (EventHandler e msg)
+  | RadioButtonOnMouseEntered (EventHandler e msg)
+  | RadioButtonOnMouseExited (EventHandler e msg)
+  | RadioButtonOnMouseDown (EventHandler e msg)
+  | RadioButtonOnMouseUp (EventHandler e msg)
+  | RadioButtonOnKeyPressed (KeyEventHandler e msg)
   | RadioButtonText Text
   | RadioButtonIsSelected Bool
   | RadioButtonOnSelectedChanged (Bool -> [Out e msg])
@@ -118,7 +117,7 @@ instance HasSelectedChangedEvents e msg (RadioButtonAttributes e msg) where
 data RadioButtonConfig e msg = RadioButtonConfig
   { rbcfgText              :: Text
   , rbcfgSelected          :: Bool
-  , rbcfgOnClicked         :: [() -> [Out e msg]]
+  , rbcfgOnClicked         :: [EventHandler e msg]
   , rbcfgOnSelectedChanged :: [Bool -> [Out e msg]]
   }
 

@@ -71,7 +71,7 @@ import Blink.UI (Out, UI, currentStyle, drawText, getInput, getStyleSet, isDisab
 -- Always takes focus when clicked -- fixed behaviour, not a default, so
 -- unlike a plain "Blink.Control" control it can't be redirected elsewhere
 -- or turned off.
-buttonBase :: Ord e => e -> [ControlAttrs e msg] -> [() -> [Out e msg]] -> UI e msg () -> UI e msg ()
+buttonBase :: Ord e => e -> [ControlAttrs e msg] -> [EventHandler e msg] -> UI e msg () -> UI e msg ()
 buttonBase eid controlAttrs onClickedHandlers body = do
   control eid (controlAttrs ++ [focusOnClick FocusSelf, content body])
   focused  <- isFocused eid
@@ -90,14 +90,14 @@ data ButtonAttributes e msg
   | ButtonStyle (StyleKey e)
   | ButtonTabNavigation NavigationMode
   | ButtonIsArrowNavigationEnabled Bool
-  | ButtonOnClicked (() -> [Out e msg])
-  | ButtonOnFocusGained (() -> [Out e msg])
-  | ButtonOnFocusLost (() -> [Out e msg])
-  | ButtonOnMouseEntered (() -> [Out e msg])
-  | ButtonOnMouseExited (() -> [Out e msg])
-  | ButtonOnMouseDown (() -> [Out e msg])
-  | ButtonOnMouseUp (() -> [Out e msg])
-  | ButtonOnKeyPressed (KeyEvent -> [Out e msg])
+  | ButtonOnClicked (EventHandler e msg)
+  | ButtonOnFocusGained (EventHandler e msg)
+  | ButtonOnFocusLost (EventHandler e msg)
+  | ButtonOnMouseEntered (EventHandler e msg)
+  | ButtonOnMouseExited (EventHandler e msg)
+  | ButtonOnMouseDown (EventHandler e msg)
+  | ButtonOnMouseUp (EventHandler e msg)
+  | ButtonOnKeyPressed (KeyEventHandler e msg)
   | ButtonText Text
 
 instance HasControlConfig e (ButtonAttributes e msg) where
@@ -151,7 +151,7 @@ instance HasTextConfig (ButtonAttributes e msg) where
 -- | Configuration for 'button', resolved from a @['ButtonAttributes' e msg]@.
 data ButtonConfig e msg = ButtonConfig
   { bcfgText      :: Text
-  , bcfgOnClicked :: [() -> [Out e msg]]
+  , bcfgOnClicked :: [EventHandler e msg]
   }
 
 -- | The 'StyleKey' 'button' resolves its style from unless overridden via
@@ -221,7 +221,7 @@ toggleBase
   => (Bool -> Bool)                -- ^ how activating the control changes its selected state
   -> e
   -> [ControlAttrs e msg]          -- ^ this widget's own attrs, already translated
-  -> [() -> [Out e msg]]           -- ^ this widget's own resolved 'onClicked' handlers
+  -> [EventHandler e msg]           -- ^ this widget's own resolved 'onClicked' handlers
   -> Bool                          -- ^ whether it was selected (per 'isSelected')
   -> [Bool -> [Out e msg]]         -- ^ this widget's own resolved 'onSelectedChanged' handlers
   -> (Bool -> UI e msg ())         -- ^ content, parameterised by whether it was selected
@@ -243,14 +243,14 @@ data ToggleButtonAttributes e msg
   | ToggleButtonStyle (StyleKey e)
   | ToggleButtonTabNavigation NavigationMode
   | ToggleButtonIsArrowNavigationEnabled Bool
-  | ToggleButtonOnClicked (() -> [Out e msg])
-  | ToggleButtonOnFocusGained (() -> [Out e msg])
-  | ToggleButtonOnFocusLost (() -> [Out e msg])
-  | ToggleButtonOnMouseEntered (() -> [Out e msg])
-  | ToggleButtonOnMouseExited (() -> [Out e msg])
-  | ToggleButtonOnMouseDown (() -> [Out e msg])
-  | ToggleButtonOnMouseUp (() -> [Out e msg])
-  | ToggleButtonOnKeyPressed (KeyEvent -> [Out e msg])
+  | ToggleButtonOnClicked (EventHandler e msg)
+  | ToggleButtonOnFocusGained (EventHandler e msg)
+  | ToggleButtonOnFocusLost (EventHandler e msg)
+  | ToggleButtonOnMouseEntered (EventHandler e msg)
+  | ToggleButtonOnMouseExited (EventHandler e msg)
+  | ToggleButtonOnMouseDown (EventHandler e msg)
+  | ToggleButtonOnMouseUp (EventHandler e msg)
+  | ToggleButtonOnKeyPressed (KeyEventHandler e msg)
   | ToggleButtonText Text
   | ToggleButtonIsSelected Bool
   | ToggleButtonOnSelectedChanged (Bool -> [Out e msg])
@@ -314,7 +314,7 @@ instance HasSelectedChangedEvents e msg (ToggleButtonAttributes e msg) where
 data ToggleButtonConfig e msg = ToggleButtonConfig
   { tbcfgText              :: Text
   , tbcfgSelected          :: Bool
-  , tbcfgOnClicked         :: [() -> [Out e msg]]
+  , tbcfgOnClicked         :: [EventHandler e msg]
   , tbcfgOnSelectedChanged :: [Bool -> [Out e msg]]
   }
 

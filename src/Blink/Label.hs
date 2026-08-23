@@ -27,9 +27,8 @@ import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 
 import Blink.Control
-import Blink.Input (KeyEvent)
 import Blink.Style (Style (..))
-import Blink.UI (Out, UI, currentStyle, drawText)
+import Blink.UI (UI, currentStyle, drawText)
 
 -- | 'Blink.Label.label'\'s own closed attrs type: most of the common
 -- capabilities every control has, plus 'text' and 'target'. Doesn't expose
@@ -44,14 +43,14 @@ data LabelAttributes e msg
   | LabelStyle (StyleKey e)
   | LabelTabNavigation NavigationMode
   | LabelIsArrowNavigationEnabled Bool
-  | LabelOnClicked (() -> [Out e msg])
-  | LabelOnFocusGained (() -> [Out e msg])
-  | LabelOnFocusLost (() -> [Out e msg])
-  | LabelOnMouseEntered (() -> [Out e msg])
-  | LabelOnMouseExited (() -> [Out e msg])
-  | LabelOnMouseDown (() -> [Out e msg])
-  | LabelOnMouseUp (() -> [Out e msg])
-  | LabelOnKeyPressed (KeyEvent -> [Out e msg])
+  | LabelOnClicked (EventHandler e msg)
+  | LabelOnFocusGained (EventHandler e msg)
+  | LabelOnFocusLost (EventHandler e msg)
+  | LabelOnMouseEntered (EventHandler e msg)
+  | LabelOnMouseExited (EventHandler e msg)
+  | LabelOnMouseDown (EventHandler e msg)
+  | LabelOnMouseUp (EventHandler e msg)
+  | LabelOnKeyPressed (KeyEventHandler e msg)
   | LabelText Text
   | LabelTarget e
 

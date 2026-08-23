@@ -50,19 +50,19 @@ data TextInputAttributes e msg
   | TextInputStyle (StyleKey e)
   | TextInputTabNavigation NavigationMode
   | TextInputIsArrowNavigationEnabled Bool
-  | TextInputOnClicked (() -> [Out e msg])
-  | TextInputOnFocusGained (() -> [Out e msg])
-  | TextInputOnFocusLost (() -> [Out e msg])
-  | TextInputOnMouseEntered (() -> [Out e msg])
-  | TextInputOnMouseExited (() -> [Out e msg])
-  | TextInputOnMouseDown (() -> [Out e msg])
-  | TextInputOnMouseUp (() -> [Out e msg])
-  | TextInputOnKeyPressed (KeyEvent -> [Out e msg])
+  | TextInputOnClicked (EventHandler e msg)
+  | TextInputOnFocusGained (EventHandler e msg)
+  | TextInputOnFocusLost (EventHandler e msg)
+  | TextInputOnMouseEntered (EventHandler e msg)
+  | TextInputOnMouseExited (EventHandler e msg)
+  | TextInputOnMouseDown (EventHandler e msg)
+  | TextInputOnMouseUp (EventHandler e msg)
+  | TextInputOnKeyPressed (KeyEventHandler e msg)
   | TextInputText Text
   | TextInputInputFilter (Text -> Text)
   | TextInputDisplayFilter (Text -> Text)
   | TextInputOnInput (Text -> [Out e msg])
-  | TextInputOnSubmit (() -> [Out e msg])
+  | TextInputOnSubmit (EventHandler e msg)
 
 instance HasControlConfig e (TextInputAttributes e msg) where
   mkIsFocusable = TextInputIsFocusable
@@ -136,7 +136,7 @@ onInput :: (Text -> [Out e msg]) -> TextInputAttributes e msg
 onInput = TextInputOnInput
 
 -- | Reacts when Enter is pressed while the field is focused and enabled.
-onSubmit :: (() -> [Out e msg]) -> TextInputAttributes e msg
+onSubmit :: (EventHandler e msg) -> TextInputAttributes e msg
 onSubmit = TextInputOnSubmit
 
 -- | Configuration for 'textInput', resolved from a
@@ -146,7 +146,7 @@ data TextInputConfig e msg = TextInputConfig
   , ticfgInputFilter   :: Text -> Text
   , ticfgDisplayFilter :: Text -> Text
   , ticfgOnInput       :: [Text -> [Out e msg]]
-  , ticfgOnSubmit      :: [() -> [Out e msg]]
+  , ticfgOnSubmit      :: [EventHandler e msg]
   }
 
 -- | The 'StyleKey' 'textInput' resolves its style from unless overridden

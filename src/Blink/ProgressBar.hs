@@ -29,7 +29,6 @@ import Data.Maybe (mapMaybe)
 
 import Blink.Control
 import Blink.Geometry (Rectangle (..))
-import Blink.Input (KeyEvent)
 import Blink.Style (Style (..))
 import Blink.UI
 
@@ -54,14 +53,14 @@ data ProgressBarAttributes e msg
   | ProgressBarStyle (StyleKey e)
   | ProgressBarTabNavigation NavigationMode
   | ProgressBarIsArrowNavigationEnabled Bool
-  | ProgressBarOnClicked (() -> [Out e msg])
-  | ProgressBarOnFocusGained (() -> [Out e msg])
-  | ProgressBarOnFocusLost (() -> [Out e msg])
-  | ProgressBarOnMouseEntered (() -> [Out e msg])
-  | ProgressBarOnMouseExited (() -> [Out e msg])
-  | ProgressBarOnMouseDown (() -> [Out e msg])
-  | ProgressBarOnMouseUp (() -> [Out e msg])
-  | ProgressBarOnKeyPressed (KeyEvent -> [Out e msg])
+  | ProgressBarOnClicked (EventHandler e msg)
+  | ProgressBarOnFocusGained (EventHandler e msg)
+  | ProgressBarOnFocusLost (EventHandler e msg)
+  | ProgressBarOnMouseEntered (EventHandler e msg)
+  | ProgressBarOnMouseExited (EventHandler e msg)
+  | ProgressBarOnMouseDown (EventHandler e msg)
+  | ProgressBarOnMouseUp (EventHandler e msg)
+  | ProgressBarOnKeyPressed (KeyEventHandler e msg)
   | ProgressBarProgress ProgressValue
   | ProgressBarBandSpeed Double
 

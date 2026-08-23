@@ -33,7 +33,6 @@ import Data.Text (Text)
 import Blink.Button (HasIsSelectedConfig (..), HasSelectedChangedEvents (..), isSelected, onSelectedChanged, toggleBase)
 import Blink.Control
 import Blink.Geometry (Rectangle (..))
-import Blink.Input (KeyEvent)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..))
 import Blink.UI (Out, UI, currentStyle, drawText, getBounds, withBounds)
@@ -47,14 +46,14 @@ data CheckboxAttributes e msg
   | CheckboxStyle (StyleKey e)
   | CheckboxTabNavigation NavigationMode
   | CheckboxIsArrowNavigationEnabled Bool
-  | CheckboxOnClicked (() -> [Out e msg])
-  | CheckboxOnFocusGained (() -> [Out e msg])
-  | CheckboxOnFocusLost (() -> [Out e msg])
-  | CheckboxOnMouseEntered (() -> [Out e msg])
-  | CheckboxOnMouseExited (() -> [Out e msg])
-  | CheckboxOnMouseDown (() -> [Out e msg])
-  | CheckboxOnMouseUp (() -> [Out e msg])
-  | CheckboxOnKeyPressed (KeyEvent -> [Out e msg])
+  | CheckboxOnClicked (EventHandler e msg)
+  | CheckboxOnFocusGained (EventHandler e msg)
+  | CheckboxOnFocusLost (EventHandler e msg)
+  | CheckboxOnMouseEntered (EventHandler e msg)
+  | CheckboxOnMouseExited (EventHandler e msg)
+  | CheckboxOnMouseDown (EventHandler e msg)
+  | CheckboxOnMouseUp (EventHandler e msg)
+  | CheckboxOnKeyPressed (KeyEventHandler e msg)
   | CheckboxText Text
   | CheckboxIsSelected Bool
   | CheckboxOnSelectedChanged (Bool -> [Out e msg])
@@ -118,7 +117,7 @@ instance HasSelectedChangedEvents e msg (CheckboxAttributes e msg) where
 data CheckboxConfig e msg = CheckboxConfig
   { ckcfgText              :: Text
   , ckcfgSelected          :: Bool
-  , ckcfgOnClicked         :: [() -> [Out e msg]]
+  , ckcfgOnClicked         :: [EventHandler e msg]
   , ckcfgOnSelectedChanged :: [Bool -> [Out e msg]]
   }
 
