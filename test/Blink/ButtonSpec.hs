@@ -4,11 +4,11 @@ module Blink.ButtonSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Attributes (Attr, text)
 import Blink.Button (ButtonConfig, ToggleButtonConfig, ToggleEvent, button, isSelected, toggleButton)
 import Blink.ButtonBehaviour (buttonBehaviourSpec)
+import Blink.Control (text)
 import Blink.ToggleBehaviour (toggleBehaviourSpec)
-import Blink.Element (ElementEvent)
+import Blink.Element (Attr, ElementEvent)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))

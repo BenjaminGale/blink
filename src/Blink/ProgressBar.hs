@@ -23,13 +23,13 @@ module Blink.ProgressBar
   , onFocusLost
   ) where
 
-import Blink.Attributes (Attr, configAny, configure)
 import Blink.Control
   ( ControlConfig, FocusOnClick (NoFocus), HasControlConfig (..)
   , control, defaultControlConfig, isEnabled, isFocusable, style
   )
 import Blink.Element
-  ( ElementEvent
+  ( Attr, ElementEvent
+  , configAny, configure
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
 import Blink.Geometry (Rectangle (..))

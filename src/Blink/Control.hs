@@ -54,6 +54,8 @@ module Blink.Control
   , NavigationMode (..)
   , style
   , StyleKey (..)
+  , HasTextConfig (..)
+  , text
   ) where
 
 import Control.Monad (forM_, guard, unless, when)
@@ -61,9 +63,9 @@ import Data.Foldable (asum)
 import Data.Functor (($>))
 import Data.List (find)
 import Data.Maybe (fromMaybe)
+import Data.Text (Text)
 
-import Blink.Attributes (Attr, configAny, fire)
-import Blink.Element (ElementEvent (..), HasElementEvent (..), element, onClicked)
+import Blink.Element (Attr, ElementEvent (..), HasElementEvent (..), configAny, element, fire, onClicked)
 import Blink.Geometry (Rectangle, insetRect, borderInsets)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), StyleKey (..))
@@ -121,8 +123,8 @@ defaultControlConfig styleKey = ControlConfig
 
 -- | Implemented by any control's own @cfg@ type to say how it carries a
 -- 'ControlConfig' -- lets 'isFocusable' and friends work uniformly across
--- every control's differently-shaped @cfg@, the same pattern
--- 'Blink.Controls.HasTextConfig' already uses for 'Blink.Controls.text'.
+-- every control's differently-shaped @cfg@, the same pattern 'HasTextConfig'
+-- uses for 'text'.
 class HasControlConfig e cfg | cfg -> e where
   controlConfig    :: cfg -> ControlConfig e
   setControlConfig :: ControlConfig e -> cfg -> cfg
@@ -399,3 +401,13 @@ control eid foc cfg attrs content = disableWhen (not (ccIsEnabled cc)) $ do
       | otherwise  = content'
       where
         scopeKeys = NavigationKeys { navAdvance = scopeAdvanceKeys, navRetreat = scopeRetreatKeys }
+
+-- | Implemented by any control's own @cfg@ type to say how it carries
+-- displayed text, letting 'text' work uniformly across them.
+class HasTextConfig cfg where
+  setText :: Text -> cfg -> cfg
+
+-- | Sets the text a control displays — a caption for a label or button, or
+-- the current value for a text input. Defaults to @\"\"@ when not given.
+text :: HasTextConfig cfg => Text -> Attr e ev msg cfg
+text t = configAny (setText t)

@@ -18,9 +18,8 @@ import Control.Monad (when)
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Attributes (Attr)
 import Blink.Control (HasControlConfig, isEnabled, isFocusable)
-import Blink.Element (HasElementEvent)
+import Blink.Element (Attr, HasElementEvent)
 import Blink.ElementBehaviour (elementBehaviourSpec, tagged)
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)

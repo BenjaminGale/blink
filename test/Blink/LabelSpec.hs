@@ -4,9 +4,9 @@ module Blink.LabelSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Attributes (Attr, text)
+import Blink.Control (text)
 import Blink.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
-import Blink.Element (ElementEvent)
+import Blink.Element (Attr, ElementEvent)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)

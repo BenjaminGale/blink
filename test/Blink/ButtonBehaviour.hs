@@ -11,10 +11,9 @@ module Blink.ButtonBehaviour
 
 import Test.Hspec
 
-import Blink.Attributes (Attr)
 import Blink.Control (HasControlConfig, isFocusable)
 import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Element (HasElementEvent)
+import Blink.Element (Attr, HasElementEvent)
 import Blink.ElementBehaviour (tagged)
 import Blink.Geometry (Point, Rectangle)
 import Blink.Input (Key (KeyReturn))

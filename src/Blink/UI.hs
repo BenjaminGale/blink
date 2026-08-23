@@ -553,7 +553,7 @@ data UIContext e msg = UIContext
     -- ^ The scope id currently ambient -- 'Nothing' for root, @'Just'
     -- scopeId@ while inside that scope's own 'withFocusScope' call. Lets
     -- an effect queued from deep inside a scope (a Shift-Tab retreat, a
-    -- click's 'Blink.Attributes.FocusTarget') address /that/ scope
+    -- click's 'Blink.Control.FocusTarget') address /that/ scope
     -- instead of always root. See 'getCurrentScope'.
   , ctxMouse           :: Mouse e
     -- ^ The left mouse button's state this frame (and which element, if

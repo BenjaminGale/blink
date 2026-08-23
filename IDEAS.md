@@ -49,7 +49,7 @@ Two ways to fix this were considered and set aside for now:
   defined — not something to do as a side effect of fixing one widget.
 
 ### Clamped (non-wrapping) arrow-key navigation for a future list widget
-Depends on: Scope-aware container support (implemented; see `ccTabNavigation`/`ccIsArrowNavigationEnabled` on `Blink.Attributes.ControlConfig`)
+Depends on: Scope-aware container support (implemented; see `ccTabNavigation`/`ccIsArrowNavigationEnabled` on `Blink.Control.ControlConfig`)
 
 `control`'s `Contained` arrow-key navigation always wraps (same mechanism
 as Tab), since it works purely off render order with no notion of "am I
@@ -279,8 +279,7 @@ already has.
 
 Separately, move the control-building layer under a `Blink.Controls.*`
 namespace: today's `Blink.Element` → `Blink.Controls.Element`,
-`Blink.Attributes` → `Blink.Controls.Attributes`, `Blink.Control` →
-`Blink.Controls.Control`. Once that shared core is cleanly factored out,
+`Blink.Control` → `Blink.Controls.Control`. Once that shared core is cleanly factored out,
 splitting the ready-made widgets one-per-module (`Blink.Controls.Button`,
 `.Checkbox`, ...) becomes more justified than it would be today, since each
 would be thin and self-contained rather than fighting over shared machinery.

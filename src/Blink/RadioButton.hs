@@ -28,14 +28,14 @@ module Blink.RadioButton
 
 import Data.Text (Text)
 
-import Blink.Attributes (Attr, HasTextConfig (..), configure, text)
-import Blink.Control (ControlConfig, HasControlConfig (..), defaultControlConfig, isEnabled, isFocusable, style)
+import Blink.Control (ControlConfig, HasControlConfig (..), HasTextConfig (..), defaultControlConfig, isEnabled, isFocusable, style, text)
 import Blink.Button
   ( HasToggleConfig (..), ToggleConfig, ToggleEvent (..)
   , defaultToggleConfig, isSelected, onSelectedChanged, toggleBase
   )
 import Blink.Element
-  ( onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
+  ( Attr, configure
+  , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
 import Blink.Geometry (Rectangle (..))
 import Blink.Rendering (TextAlign (..))

@@ -32,7 +32,6 @@ library
     exposed-modules:
         Blink
         Blink.App
-        Blink.Attributes
         Blink.Button
         Blink.Checkbox
         Blink.Control

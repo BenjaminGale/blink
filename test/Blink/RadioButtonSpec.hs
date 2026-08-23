@@ -4,7 +4,8 @@ module Blink.RadioButtonSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Attributes (Attr, text)
+import Blink.Control (text)
+import Blink.Element (Attr)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.RadioButton (RadioButtonConfig, ToggleEvent, isSelected, radioButton)

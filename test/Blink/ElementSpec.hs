@@ -3,8 +3,7 @@ module Blink.ElementSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Attributes (Attr, onEvent)
-import Blink.Element (ElementEvent (..), element, onKeyPressed)
+import Blink.Element (Attr, ElementEvent (..), element, onEvent, onKeyPressed)
 import Blink.ElementBehaviour (elementBehaviourSpec)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))

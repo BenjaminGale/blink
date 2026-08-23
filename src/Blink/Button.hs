@@ -53,13 +53,13 @@ module Blink.Button
 import Control.Monad (when)
 import Data.Text (Text)
 
-import Blink.Attributes (Attr, HasTextConfig (..), configAny, configure, fire, onEvent, reactionsTo, text)
 import Blink.Control
-  ( ControlConfig, FocusOnClick (FocusSelf), HasControlConfig (..)
-  , control, defaultControlConfig, isEnabled, isFocusable, style
+  ( ControlConfig, FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
+  , control, defaultControlConfig, isEnabled, isFocusable, style, text
   )
 import Blink.Element
-  ( ElementEvent (..), HasElementEvent (..)
+  ( Attr, ElementEvent (..), HasElementEvent (..)
+  , configAny, configure, fire, onEvent, reactionsTo
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
 import Blink.Input (Key (KeyReturn), KeyEvent (..), InputState (..))

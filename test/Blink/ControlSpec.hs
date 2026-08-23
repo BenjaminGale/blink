@@ -6,13 +6,12 @@ module Blink.ControlSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Attributes (Attr, configure)
 import Blink.Control
   ( ControlConfig, FocusOnClick (..), HasControlConfig (..), NavigationMode (..)
   , control, defaultControlConfig, isArrowNavigationEnabled, isFocusable, tabNavigation
   )
 import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Element (ElementEvent, onFocusGained, onFocusLost, onKeyPressed)
+import Blink.Element (Attr, ElementEvent, configure, onFocusGained, onFocusLost, onKeyPressed)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)

@@ -33,13 +33,13 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Blink.Attributes (Attr, HasTextConfig (..), configAny, configure, fire, onEvent, text)
 import Blink.Control
-  ( ControlConfig, FocusOnClick (FocusSelf), HasControlConfig (..)
-  , control, defaultControlConfig, isEnabled, isFocusable, style
+  ( ControlConfig, FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
+  , control, defaultControlConfig, isEnabled, isFocusable, style, text
   )
 import Blink.Element
-  ( ElementEvent, HasElementEvent (..)
+  ( Attr, ElementEvent, HasElementEvent (..)
+  , configAny, configure, fire, onEvent
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
 import Blink.Geometry (Point (..), Rectangle (..))

@@ -4,8 +4,9 @@ module Blink.CheckboxSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Attributes (Attr, text)
 import Blink.Checkbox (CheckboxConfig, ToggleEvent, checkbox, isSelected)
+import Blink.Control (text)
+import Blink.Element (Attr)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))

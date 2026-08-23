@@ -4,9 +4,8 @@ module Blink.ProgressBarSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Attributes (Attr)
 import Blink.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
-import Blink.Element (ElementEvent)
+import Blink.Element (Attr, ElementEvent)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, progress, progressBar)

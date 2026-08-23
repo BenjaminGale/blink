@@ -6,7 +6,13 @@
 -- built on top of the events this returns, by a higher-level combinator such
 -- as 'Blink.Controls.control'.
 module Blink.Element
-  ( ElementEvent (..)
+  ( Attr (..)
+  , configure
+  , fire
+  , reactionsTo
+  , onEvent
+  , configAny
+  , ElementEvent (..)
   , HasElementEvent (..)
   , element
   , onMouseEntered
@@ -20,11 +26,55 @@ module Blink.Element
   ) where
 
 import Control.Monad (when)
+import Data.List (foldl')
 
-import Blink.Attributes (Attr, fire, onEvent)
 import Blink.Input (KeyEvent (..), InputState (..))
 import Blink.Mouse (ButtonState (..), Mouse (..), captureOf)
 import Blink.UI
+
+-- | One entry in a control's attrs list — either a reaction to an event
+-- ('onEvent' and the combinators built on it) or a change to the control's
+-- own @cfg@ ('configAny' and the smart constructors built on it). Opaque:
+-- built and consumed only through the functions this module exports.
+data Attr e ev msg cfg
+  = On (ev -> [Out e msg])
+  | Config (cfg -> cfg)
+
+-- | Resolves a control's final @cfg@ by folding every @Config@ attr in the
+-- list over the default, left to right — so later attrs override earlier
+-- ones that touch the same field.
+configure :: cfg -> [Attr e ev msg cfg] -> cfg
+configure = foldl' apply
+  where
+    apply cfg (Config f) = f cfg
+    apply cfg _          = cfg
+
+-- | The 'Out's every matching @On@ reaction in the attrs list produces for
+-- one event, without running any of them -- for a control that needs to
+-- derive a further event of its own from one it's already reacting to
+-- (e.g. a toggle control turning its own @Clicked@ into a selected-state
+-- change) rather than dispatching immediately via 'fire'.
+reactionsTo :: [Attr e ev msg cfg] -> ev -> [Out e msg]
+reactionsTo attrs ev = concatMap ($ ev) [h | On h <- attrs]
+
+-- | Raises each event in turn against every @On@ reaction in the attrs list,
+-- dispatching the resulting 'Out's (emitting messages, queuing effects).
+-- Used by 'element' to fire its raw events, and (in "Blink.Control"'s own
+-- copy) by every control to fire its own.
+fire :: [Attr e ev msg cfg] -> [ev] -> UI e msg ()
+fire attrs = mapM_ (mapM_ dispatch . reactionsTo attrs)
+  where
+    dispatch (OutMsg msg) = emit msg
+    dispatch (OutUi eff)  = emitUi eff
+
+-- | The raw escape hatch: react to an event with an arbitrary function to
+-- 'Out's.
+onEvent :: (ev -> [Out e msg]) -> Attr e ev msg cfg
+onEvent = On
+
+-- | The raw escape hatch for changing a control's own @cfg@.
+configAny :: (cfg -> cfg) -> Attr e ev msg cfg
+configAny = Config
 
 -- | A low-level interaction event 'element' fires: a purely observed fact
 -- about mouse, keyboard, or focus state relative to one element, with no
@@ -69,8 +119,8 @@ data ElementEvent
 -- domain-specific ones (e.g. a toggle control's own selected-changed event),
 -- so a single attrs list can react to both with 'onClicked' and friends as
 -- well as the control's own reactions -- the same pattern
--- 'Blink.Attributes.HasControlConfig' uses for carrying a shared
--- 'Blink.Attributes.ControlConfig'. 'ElementEvent' itself trivially has an
+-- 'Blink.Control.HasControlConfig' uses for carrying a shared
+-- 'Blink.Control.ControlConfig'. 'ElementEvent' itself trivially has an
 -- instance, so a control with no events of its own can use 'ElementEvent'
 -- directly as its attrs list's event type.
 class HasElementEvent ev where

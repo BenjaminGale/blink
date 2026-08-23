@@ -23,13 +23,13 @@ module Blink.Label
 
 import Data.Text (Text)
 
-import Blink.Attributes (Attr, HasTextConfig (..), configAny, configure, text)
 import Blink.Control
-  ( ControlConfig, FocusOnClick (..), HasControlConfig (..)
-  , control, defaultControlConfig, isEnabled, isFocusable, style
+  ( ControlConfig, FocusOnClick (..), HasControlConfig (..), HasTextConfig (..)
+  , control, defaultControlConfig, isEnabled, isFocusable, style, text
   )
 import Blink.Element
-  ( ElementEvent (..)
+  ( Attr, ElementEvent (..)
+  , configAny, configure
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
 import Blink.Style (Style (..), StyleKey (..))

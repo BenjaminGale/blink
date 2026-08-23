@@ -14,9 +14,8 @@ import Test.Hspec
 
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Attributes (Attr)
 import Blink.Element
-  ( HasElementEvent
+  ( Attr, HasElementEvent
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed
   , onFocusGained, onFocusLost
   )
