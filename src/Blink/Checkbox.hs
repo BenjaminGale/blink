@@ -89,11 +89,12 @@ defaultCheckboxConfig = CheckboxConfig
 resolveCheckboxConfig :: [CheckboxAttributes e msg] -> CheckboxConfig e msg
 resolveCheckboxConfig = foldl' apply defaultCheckboxConfig
   where
-    apply cfg (CheckboxText t)                     = cfg { ckcfgText = t }
-    apply cfg (CheckboxIsSelected b)               = cfg { ckcfgSelected = b }
-    apply cfg (CheckboxEvent (ElementOnClicked f)) = cfg { ckcfgOnClicked = ckcfgOnClicked cfg ++ [f] }
-    apply cfg (CheckboxOnSelectedChanged f)        = cfg { ckcfgOnSelectedChanged = ckcfgOnSelectedChanged cfg ++ [f] }
-    apply cfg _                                    = cfg
+    apply cfg (CheckboxText t)       = cfg { ckcfgText = t }
+    apply cfg (CheckboxIsSelected b) = cfg { ckcfgSelected = b }
+    apply cfg (CheckboxEvent c)
+      | Just f <- matchOnClicked c = cfg { ckcfgOnClicked = ckcfgOnClicked cfg ++ [f] }
+    apply cfg (CheckboxOnSelectedChanged f) = cfg { ckcfgOnSelectedChanged = ckcfgOnSelectedChanged cfg ++ [f] }
+    apply cfg _                      = cfg
 
 toCheckboxControlAttr :: CheckboxAttributes e msg -> Maybe (ControlAttrs e msg)
 toCheckboxControlAttr (CheckboxText _)              = Nothing

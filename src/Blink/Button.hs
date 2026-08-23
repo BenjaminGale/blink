@@ -121,9 +121,10 @@ defaultButtonConfig = ButtonConfig { bcfgText = "", bcfgOnClicked = [] }
 resolveButtonConfig :: [ButtonAttributes e msg] -> ButtonConfig e msg
 resolveButtonConfig = foldl' apply defaultButtonConfig
   where
-    apply cfg (ButtonText t)                     = cfg { bcfgText = t }
-    apply cfg (ButtonEvent (ElementOnClicked f)) = cfg { bcfgOnClicked = bcfgOnClicked cfg ++ [f] }
-    apply cfg _                                  = cfg
+    apply cfg (ButtonText t)  = cfg { bcfgText = t }
+    apply cfg (ButtonEvent c)
+      | Just f <- matchOnClicked c = cfg { bcfgOnClicked = bcfgOnClicked cfg ++ [f] }
+    apply cfg _               = cfg
 
 -- | Translates the common capabilities of a 'ButtonAttributes' down to
 -- 'ControlAttrs' for 'control' -- @Nothing@ for 'ButtonText', which
@@ -242,11 +243,12 @@ defaultToggleButtonConfig = ToggleButtonConfig
 resolveToggleButtonConfig :: [ToggleButtonAttributes e msg] -> ToggleButtonConfig e msg
 resolveToggleButtonConfig = foldl' apply defaultToggleButtonConfig
   where
-    apply cfg (ToggleButtonText t)                     = cfg { tbcfgText = t }
-    apply cfg (ToggleButtonIsSelected b)               = cfg { tbcfgSelected = b }
-    apply cfg (ToggleButtonEvent (ElementOnClicked f)) = cfg { tbcfgOnClicked = tbcfgOnClicked cfg ++ [f] }
-    apply cfg (ToggleButtonOnSelectedChanged f)        = cfg { tbcfgOnSelectedChanged = tbcfgOnSelectedChanged cfg ++ [f] }
-    apply cfg _                                        = cfg
+    apply cfg (ToggleButtonText t)       = cfg { tbcfgText = t }
+    apply cfg (ToggleButtonIsSelected b) = cfg { tbcfgSelected = b }
+    apply cfg (ToggleButtonEvent c)
+      | Just f <- matchOnClicked c = cfg { tbcfgOnClicked = tbcfgOnClicked cfg ++ [f] }
+    apply cfg (ToggleButtonOnSelectedChanged f) = cfg { tbcfgOnSelectedChanged = tbcfgOnSelectedChanged cfg ++ [f] }
+    apply cfg _                          = cfg
 
 toToggleButtonControlAttr :: ToggleButtonAttributes e msg -> Maybe (ControlAttrs e msg)
 toToggleButtonControlAttr (ToggleButtonText _)              = Nothing

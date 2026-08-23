@@ -10,7 +10,7 @@
 module Blink.Element
   ( EventHandler
   , KeyEventHandler
-  , ElementEvents (..)
+  , ElementEvents
   , HasElementEvents (..)
   , ElementAttrs
   , element
@@ -23,6 +23,7 @@ module Blink.Element
   , onKeyPressed
   , onFocusGained
   , onFocusLost
+  , matchOnClicked
   ) where
 
 import Control.Monad (when)
@@ -41,11 +42,12 @@ type EventHandler e msg = () -> [Out e msg]
 type KeyEventHandler e msg = KeyEvent -> [Out e msg]
 
 -- | One of the eight raw reactions every element can raise -- the single
--- payload every attrs type carries one of via 'HasElementEvents', instead
--- of each attrs type repeating its own parallel set of eight constructors.
--- Exported with its constructors so a widget's own @resolveXConfig@ fold
--- can inspect the ones it cares about directly (e.g. 'ElementOnClicked', to
--- also fire a button's Enter-key activation).
+-- opaque payload every attrs type carries one of via 'HasElementEvents',
+-- instead of each attrs type repeating its own parallel set of eight
+-- constructors. Its constructors aren't exported; 'matchOnClicked' is the
+-- one accessor a widget's own @resolveXConfig@ fold needs (to also fire a
+-- button's Enter-key activation) -- add more @matchOnX@ accessors here if
+-- a future widget needs to inspect a different one.
 data ElementEvents e msg
   = ElementOnClicked (EventHandler e msg)
   | ElementOnFocusGained (EventHandler e msg)
@@ -55,6 +57,14 @@ data ElementEvents e msg
   | ElementOnMouseDown (EventHandler e msg)
   | ElementOnMouseUp (EventHandler e msg)
   | ElementOnKeyPressed (KeyEventHandler e msg)
+
+-- | 'Just' the handler when this is the 'onClicked' reaction, 'Nothing'
+-- otherwise -- for a widget's own @resolveXConfig@ fold to pick its
+-- 'onClicked' handlers back out of a resolved 'ElementEvents' value without
+-- needing its (unexported) constructors.
+matchOnClicked :: ElementEvents e msg -> Maybe (EventHandler e msg)
+matchOnClicked (ElementOnClicked f) = Just f
+matchOnClicked _                    = Nothing
 
 -- | Implemented by any attrs type that carries the raw mouse\/keyboard\/
 -- focus reactions every element can raise -- one @configure@\/@extract@

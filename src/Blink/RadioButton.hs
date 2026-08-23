@@ -89,11 +89,12 @@ defaultRadioButtonConfig = RadioButtonConfig
 resolveRadioButtonConfig :: [RadioButtonAttributes e msg] -> RadioButtonConfig e msg
 resolveRadioButtonConfig = foldl' apply defaultRadioButtonConfig
   where
-    apply cfg (RadioButtonText t)                     = cfg { rbcfgText = t }
-    apply cfg (RadioButtonIsSelected b)               = cfg { rbcfgSelected = b }
-    apply cfg (RadioButtonEvent (ElementOnClicked f)) = cfg { rbcfgOnClicked = rbcfgOnClicked cfg ++ [f] }
-    apply cfg (RadioButtonOnSelectedChanged f)        = cfg { rbcfgOnSelectedChanged = rbcfgOnSelectedChanged cfg ++ [f] }
-    apply cfg _                                       = cfg
+    apply cfg (RadioButtonText t)       = cfg { rbcfgText = t }
+    apply cfg (RadioButtonIsSelected b) = cfg { rbcfgSelected = b }
+    apply cfg (RadioButtonEvent c)
+      | Just f <- matchOnClicked c = cfg { rbcfgOnClicked = rbcfgOnClicked cfg ++ [f] }
+    apply cfg (RadioButtonOnSelectedChanged f) = cfg { rbcfgOnSelectedChanged = rbcfgOnSelectedChanged cfg ++ [f] }
+    apply cfg _                         = cfg
 
 toRadioButtonControlAttr :: RadioButtonAttributes e msg -> Maybe (ControlAttrs e msg)
 toRadioButtonControlAttr (RadioButtonText _)              = Nothing

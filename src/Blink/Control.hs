@@ -67,7 +67,7 @@ module Blink.Control
   , StyleKey (..)
   , EventHandler
   , KeyEventHandler
-  , ElementEvents (..)
+  , ElementEvents
   , ControlProperties
   , HasControlConfig (..)
   , HasElementEvents (..)
@@ -90,6 +90,7 @@ module Blink.Control
   , onMouseDown
   , onMouseUp
   , onKeyPressed
+  , matchOnClicked
   , focusOnClick
   , content
   , text
@@ -103,8 +104,8 @@ import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 
 import Blink.Element
-  ( ElementAttrs, ElementEvents (..), EventHandler, HasElementEvents (..), KeyEventHandler
-  , element, fireFocusChange, onClicked, onFocusGained, onFocusLost, onKeyPressed
+  ( ElementAttrs, ElementEvents, EventHandler, HasElementEvents (..), KeyEventHandler
+  , element, fireFocusChange, matchOnClicked, onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp
   )
 import Blink.Geometry (Rectangle, insetRect, borderInsets)
