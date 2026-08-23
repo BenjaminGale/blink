@@ -1,10 +1,12 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | The standard entry point for interactive controls: manages keyboard
--- focus, reports raw mouse\/keyboard\/focus events, and draws styled chrome
--- around the control's content -- all configured via a plain list of
--- 'ControlAttrs', with no positional arguments beyond the element id.
+-- | A control is a widget's outer shell: the focus handling, input
+-- reactions, and styled chrome (background, border, padding) wrapped
+-- around a button, checkbox, or any other interactive content. 'control'
+-- is the standard entry point for building one, entirely configured via a
+-- plain list of 'ControlAttrs', with no positional arguments beyond the
+-- element id.
 --
 -- Focus is claimed automatically when nothing else holds it (subject to
 -- 'isFocusable'), reaffirmed each frame while held, and given up on Tab. A
@@ -19,28 +21,25 @@
 -- = Building a widget
 --
 -- Every ready-made widget ('Blink.Button.button', 'Blink.Label.label', ...)
--- is built by resolving its own closed attrs type down to a
--- @['ControlAttrs' e msg]@ and calling 'control' directly -- see
--- 'HasControlConfig'\/'HasElementEvents' for the batched, mechanical way a
--- widget's own attrs type shares the common capabilities, and
--- 'translateCommon' for converting between them. 'focusOnClick' and
--- 'content' are deliberately /not/ part of either batched class: a widget
--- fixes both itself and never writes 'HasFocusOnClickConfig'\/
--- 'HasContentConfig' instances for its own attrs type, so e.g.
--- @button eid [content ...]@ simply fails to typecheck -- nothing stops a
--- more-derived control from writing those instances itself if it
--- deliberately wants to expose either.
+-- is just 'control' with its own fixed list of 'ControlAttrs' behind a
+-- dedicated name -- see 'HasControlConfig'\/'HasElementEvents' for the
+-- capabilities a widget's own attrs type shares with 'control', and
+-- 'translateCommon' for how one gets turned into the other. A widget
+-- fixes 'focusOnClick' and 'content' itself, so e.g.
+-- @button eid [content ...]@ simply fails to typecheck -- a more-derived
+-- control that wants callers to set either can still write its own
+-- 'HasFocusOnClickConfig'\/'HasContentConfig' instance.
 --
 -- = Building a container
 --
 -- 'control' is also the direct way to build a control that manages a
 -- group of other controls as children, via 'tabNavigation' and
--- 'isArrowNavigationEnabled' -- there is no separate "container" primitive; a
--- container is just a plain 'control' configured this way:
+-- 'isArrowNavigationEnabled' -- a container is just a plain 'control'
+-- configured this way:
 --
--- ['Flatten' (the default)] Not a navigation container: this control's own
---     slot (if it's a tab stop) and its children all fold into the same
---     Tab sequence as its siblings.
+-- ['Flatten' (the default)] This control's own slot (if it's a tab stop)
+--     and its children all fold into the same Tab sequence as its
+--     siblings.
 -- ['Contained'] Opens a focus scope for this control's children:
 --     Tab\/Shift-Tab (and, with 'isArrowNavigationEnabled', the arrow keys too)
 --     cycle within it forever. Ctrl+Tab\/Ctrl+Shift+Tab are always the way
@@ -59,29 +58,39 @@
 -- overrides the key a specific @control@ call resolves against, e.g. to
 -- 'Blink.Style.ElementId' for a one-off, per-instance style.
 module Blink.Control
-  ( control
-  , FocusOnClick (..)
+  ( -- * Controls
+    control
   , ControlAttrs
   , ControlConfig
-  , NavigationMode (..)
-  , StyleKey (..)
-  , EventHandler
-  , KeyEventHandler
-  , ElementEvents
   , ControlProperties
+
+    -- * Sharing capabilities across a widget's attrs type
   , HasControlConfig (..)
   , HasElementEvents (..)
   , HasFocusOnClickConfig (..)
   , HasContentConfig (..)
   , HasTextConfig (..)
   , translateCommon
-  , combineHandlers
-  , runHandlers
+
+    -- * Configuring a control
   , isFocusable
   , isEnabled
   , style
+  , StyleKey (..)
+  , FocusOnClick (..)
+  , focusOnClick
+  , content
+  , text
+
+    -- * Navigation
+  , NavigationMode (..)
   , tabNavigation
   , isArrowNavigationEnabled
+
+    -- * Events
+  , EventHandler
+  , KeyEventHandler
+  , ElementEvents
   , onClicked
   , onFocusGained
   , onFocusLost
@@ -90,10 +99,13 @@ module Blink.Control
   , onMouseDown
   , onMouseUp
   , onKeyPressed
+
+    -- * Firing events directly
   , fireOnClick
-  , focusOnClick
-  , content
-  , text
+
+    -- * Handler plumbing
+  , resolveHandlers
+  , runHandlers
   ) where
 
 import Control.Monad (forM_, guard, unless, when)
@@ -117,11 +129,11 @@ import Blink.UI
 -- 'tabNavigation'.
 data NavigationMode
   = Flatten
-    -- ^ Not a navigation container: this control's own slot (if it's a tab
-    -- stop) and its children all fold into the same Tab sequence as its
-    -- siblings, entering and leaving without any special trapping. The
-    -- default -- and, for a control with no navigable children at all,
-    -- indistinguishable from plain leaf behaviour.
+    -- ^ This control's own slot (if it's a tab stop) and its children all
+    -- fold into the same Tab sequence as its siblings, entering and
+    -- leaving without any special trapping. The default -- and, for a
+    -- control with no navigable children at all, indistinguishable from
+    -- plain leaf behaviour.
   | Contained
     -- ^ Opens a focus scope for this control's children: Tab\/Shift-Tab
     -- cycle within it forever, never escaping back out that way.
@@ -152,14 +164,10 @@ data ControlProperties e
   | ControlTabNavigation NavigationMode
   | ControlIsArrowNavigationEnabled Bool
 
--- | Implemented by any attrs type that carries the capabilities shared by
--- every control -- one @configure@\/@extract@ pair over the shared
--- 'ControlProperties', rather than one pair per individual capability, so a
--- value can be both constructed /and/ generically inspected (see
--- 'translateCommon'). 'isFocusable'\/'isEnabled'\/'style'\/
--- 'tabNavigation'\/'isArrowNavigationEnabled' are the smart constructors
--- built on the @configure@ half; a widget's own module only re-exports the
--- ones it actually wants callers to be able to set.
+-- | Implemented by an attrs type that lets a widget author set
+-- 'isFocusable'\/'isEnabled'\/'style'\/'tabNavigation'\/
+-- 'isArrowNavigationEnabled' -- a widget's own module re-exports whichever
+-- of those it actually wants callers to be able to set.
 class HasControlConfig e cfg | cfg -> e where
   configureControlCapability :: ControlProperties e -> cfg
   extractControlCapability :: cfg -> Maybe (ControlProperties e)
@@ -194,12 +202,11 @@ tabNavigation = configureControlCapability . ControlTabNavigation
 isArrowNavigationEnabled :: HasControlConfig e cfg => Bool -> cfg
 isArrowNavigationEnabled = configureControlCapability . ControlIsArrowNavigationEnabled
 
--- | Converts the common subset of one attrs type onto another's, using the
--- @extract@ half of the source's instances and the @configure@ half of the
--- destination's -- 'Nothing' when @a@ doesn't carry either of these
--- capabilities (i.e. it's one of the destination type's own-specific
--- attrs). The mechanism every widget uses to translate its own closed
--- attrs type down to @['ControlAttrs' e msg]@ before calling 'control'.
+-- | Copies whichever shared control capability or element event @a@
+-- carries onto @b@; 'Nothing' when @a@ is one of the source type's own,
+-- unshared attrs that @b@ has no equivalent for. The mechanism every
+-- widget uses to translate its own closed attrs type down to
+-- @['ControlAttrs' e msg]@ before calling 'control'.
 translateCommon
   :: (HasControlConfig e a, HasControlConfig e b, HasElementEvents e msg a, HasElementEvents e msg b)
   => a -> Maybe b
@@ -208,38 +215,29 @@ translateCommon a = asum
   , configureElementEvent <$> extractElementEvent a
   ]
 
--- | Implemented only by 'ControlAttrs' in this migration: what clicking a
--- control does to focus (see 'FocusOnClick'). Deliberately /not/ part of
--- 'HasControlConfig' -- every widget fixes this itself, and simply never
--- writes this instance for its own attrs type, so callers can't override
--- it. A more-derived control that genuinely wants callers to set this can
--- still write the instance itself.
+-- | Implemented by an attrs type that carries what clicking a control does
+-- to focus (see 'FocusOnClick').
 class HasFocusOnClickConfig e cfg | cfg -> e where
   configureFocusOnClick :: FocusOnClick e -> cfg
   extractFocusOnClick :: cfg -> Maybe (FocusOnClick e)
 
--- | Sets what clicking this control does to focus. Only ever called from
--- inside a widget's own module -- see 'HasFocusOnClickConfig'.
+-- | Sets what clicking this control does to focus (see 'FocusOnClick').
 focusOnClick :: HasFocusOnClickConfig e cfg => FocusOnClick e -> cfg
 focusOnClick = configureFocusOnClick
 
--- | Implemented only by 'ControlAttrs' in this migration: the content
--- rendered inside a control's chrome. Deliberately not part of
--- 'HasControlConfig' -- see 'HasFocusOnClickConfig', which this mirrors.
+-- | Implemented by an attrs type that carries the content rendered inside
+-- a control's chrome.
 class HasContentConfig e msg cfg | cfg -> e msg where
   configureContent :: UI e msg () -> cfg
   extractContent :: cfg -> Maybe (UI e msg ())
 
--- | Sets the content rendered inside this control's chrome. Only ever
--- called from inside a widget's own module -- see 'HasContentConfig'.
+-- | Sets the content rendered inside this control's chrome.
 content :: HasContentConfig e msg cfg => UI e msg () -> cfg
 content = configureContent
 
 -- | Implemented by any attrs type that carries displayed text, letting
 -- 'text' work uniformly across every widget that has some (a caption for a
--- label\/button, the current value for a text input). Standalone -- not
--- folded into 'translateCommon', since "Blink.Control" itself has no text
--- capability to translate onto.
+-- label\/button, the current value for a text input).
 class HasTextConfig cfg where
   configureText :: Text -> cfg
   extractText :: cfg -> Maybe Text
@@ -248,9 +246,9 @@ class HasTextConfig cfg where
 text :: HasTextConfig cfg => Text -> cfg
 text = configureText
 
--- | 'Blink.Control'\'s own closed attrs type -- the shared
--- 'ControlProperties' and 'ElementEvents', plus 'focusOnClick'\/'content'
--- (unlike every other widget's own attrs type, which never gets those two).
+-- | 'Blink.Control'\'s own closed attrs type: the shared
+-- 'ControlProperties' and 'ElementEvents', plus 'focusOnClick' and
+-- 'content'.
 data ControlAttrs e msg
   = ControlCommon (ControlProperties e)
   | ControlEvent (ElementEvents e msg)
@@ -301,24 +299,23 @@ fireOnClick = fireClick . mapMaybe toElementAttr
 -- down from a resolved 'ControlConfig', or a widget's derived reaction that
 -- itself becomes one more handler in another resolved list (see
 -- 'Blink.Button.toggleBase').
-combineHandlers :: [a -> [Out e msg]] -> a -> [Out e msg]
-combineHandlers hs a = concatMap ($ a) hs
+resolveHandlers :: [a -> [Out e msg]] -> a -> [Out e msg]
+resolveHandlers hs a = concatMap ($ a) hs
 
 -- | Runs every handler in @hs@ against @a@, dispatching the resulting
 -- 'Out's -- for firing a resolved handler list directly, outside
 -- 'Blink.Element.fire' (e.g. a button's Enter-key activation, which isn't
 -- itself a raw 'Blink.Element.ElementEvent').
 runHandlers :: [a -> [Out e msg]] -> a -> UI e msg ()
-runHandlers hs a = mapM_ dispatch (combineHandlers hs a)
+runHandlers hs a = mapM_ dispatch (resolveHandlers hs a)
   where
     dispatch (OutMsg msg) = emit msg
     dispatch (OutUi eff)  = emitUi eff
 
--- | Configuration shared by every control, resolved from a
--- @['ControlAttrs' e msg]@ by @resolveControlConfig@. Doesn't carry the raw
--- event reactions (@onClicked@ and friends) -- those fire straight off the
--- attrs list itself, via 'Blink.Element.fire'\/'Blink.Element.element'
--- (see 'control'), rather than being resolved here first.
+-- | Every capability a control's attrs list can configure, resolved once
+-- from a @['ControlAttrs' e msg]@: whether it's focusable and enabled, its
+-- style, how its children navigate, what clicking it does to focus, and
+-- its content.
 data ControlConfig e msg = ControlConfig
   { ccIsFocusable              :: Bool
   , ccIsEnabled                :: Bool
@@ -486,16 +483,15 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
 
 -- | Manages this element's keyboard focus (see the module header), reports
 -- its raw mouse\/keyboard\/focus events, and draws its chrome around its
--- content -- all configured entirely by @attrs@, resolved once via
--- @resolveControlConfig@. Hovering, clicking, and focus-claiming all
--- respect the same margin-inset hit area chrome resolution uses -- the
--- margin itself never counts as "on" the control.
+-- content -- all configured entirely by @attrs@. Hovering, clicking, and
+-- focus-claiming all respect the same margin-inset hit area chrome
+-- resolution uses -- the margin itself never counts as "on" the control.
 --
--- When @ccTabNavigation@ is 'Contained' (and this control is itself a tab
--- stop -- see @withChildNavigation@), the content becomes a focus scope for
--- Tab\/Shift-Tab (and, if @ccIsArrowNavigationEnabled@, the arrow keys too);
--- Ctrl+Tab\/Ctrl+Shift+Tab always escape it, moving this control's own
--- slot to the next\/previous one at the enclosing level.
+-- When 'tabNavigation' is 'Contained' (and this control is itself a tab
+-- stop), its content becomes a focus scope for Tab\/Shift-Tab (and, if
+-- 'isArrowNavigationEnabled', the arrow keys too); Ctrl+Tab\/Ctrl+Shift+Tab
+-- always escape it, moving this control's own slot to the next\/previous
+-- one at the enclosing level.
 control :: Ord e => e -> [ControlAttrs e msg] -> UI e msg ()
 control eid attrs = disableWhen (not (ccIsEnabled cc)) $ do
   wasFocused  <- isFocused eid

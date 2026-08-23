@@ -185,7 +185,7 @@ toggleBase next eid controlAttrs wasSelected onSelectedChangedHandlers body =
     newSelected = next wasSelected
     derived ()
       | newSelected == wasSelected = []
-      | otherwise                  = combineHandlers onSelectedChangedHandlers newSelected
+      | otherwise                  = resolveHandlers onSelectedChangedHandlers newSelected
 
 -- | 'Blink.Button.toggleButton'\'s own closed attrs type: the same common
 -- capabilities as 'ButtonAttributes', plus 'text', 'isSelected', and
