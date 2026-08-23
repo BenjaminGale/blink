@@ -67,6 +67,8 @@ module Blink.Control
   , StyleKey (..)
   , EventHandler
   , KeyEventHandler
+  , ElementEvents (..)
+  , ControlProperties
   , HasControlConfig (..)
   , HasElementEvents (..)
   , HasFocusOnClickConfig (..)
@@ -101,7 +103,7 @@ import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 
 import Blink.Element
-  ( ElementAttrs, EventHandler, HasElementEvents (..), KeyEventHandler
+  ( ElementAttrs, ElementEvents (..), EventHandler, HasElementEvents (..), KeyEventHandler
   , element, fireFocusChange, onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp
   )
@@ -139,58 +141,61 @@ data FocusOnClick e
     -- ^ Clicking the control has no effect on focus at all.
   deriving (Eq, Show)
 
+-- | One of the five capabilities shared by every control -- the single
+-- payload every attrs type carries one of via 'HasControlConfig', instead
+-- of each attrs type repeating its own parallel set of five constructors.
+data ControlProperties e
+  = ControlIsFocusable Bool
+  | ControlIsEnabled Bool
+  | ControlStyle (StyleKey e)
+  | ControlTabNavigation NavigationMode
+  | ControlIsArrowNavigationEnabled Bool
+
 -- | Implemented by any attrs type that carries the capabilities shared by
--- every control -- built from @configure@\/@extract@ pairs rather than plain
--- accessors, so a value can be both constructed /and/ generically inspected
--- (see 'translateCommon'). 'isFocusable'\/'isEnabled'\/'style'\/
+-- every control -- one @configure@\/@extract@ pair over the shared
+-- 'ControlProperties', rather than one pair per individual capability, so a
+-- value can be both constructed /and/ generically inspected (see
+-- 'translateCommon'). 'isFocusable'\/'isEnabled'\/'style'\/
 -- 'tabNavigation'\/'isArrowNavigationEnabled' are the smart constructors
--- built on the @configure@ half; a widget's own module only re-exports the ones it
--- actually wants callers to be able to set.
+-- built on the @configure@ half; a widget's own module only re-exports the
+-- ones it actually wants callers to be able to set.
 class HasControlConfig e cfg | cfg -> e where
-  configureIsFocusable :: Bool -> cfg
-  extractIsFocusable :: cfg -> Maybe Bool
-  configureIsEnabled :: Bool -> cfg
-  extractIsEnabled :: cfg -> Maybe Bool
-  configureStyle :: StyleKey e -> cfg
-  extractStyle :: cfg -> Maybe (StyleKey e)
-  configureTabNavigation :: NavigationMode -> cfg
-  extractTabNavigation :: cfg -> Maybe NavigationMode
-  configureIsArrowNavigationEnabled :: Bool -> cfg
-  extractIsArrowNavigationEnabled :: cfg -> Maybe Bool
+  configureControlCapability :: ControlProperties e -> cfg
+  extractControlCapability :: cfg -> Maybe (ControlProperties e)
 
 -- | Whether this control participates in keyboard focus at all: Tab\/
 -- Shift-Tab cycling onto it, and auto-claiming focus by rendering first
 -- while nothing else holds it. 'False' excludes it from both.
 isFocusable :: HasControlConfig e cfg => Bool -> cfg
-isFocusable = configureIsFocusable
+isFocusable = configureControlCapability . ControlIsFocusable
 
 -- | Whether the control responds to input at all. A disabled control still
 -- renders (in its disabled style) but ignores hover, clicks, key presses,
 -- and focus, and is skipped by Tab\/Shift-Tab. Defaults to 'True'.
 isEnabled :: HasControlConfig e cfg => Bool -> cfg
-isEnabled = configureIsEnabled
+isEnabled = configureControlCapability . ControlIsEnabled
 
 -- | Which 'StyleKey' this control resolves its style from. Defaults to a
 -- 'Class' named after the control; pass 'ElementId' to theme this one
 -- instance differently, or a different 'Class' to group it with others.
 style :: HasControlConfig e cfg => StyleKey e -> cfg
-style = configureStyle
+style = configureControlCapability . ControlStyle
 
 -- | How this control's children navigate via Tab\/Shift-Tab (and, since
 -- they ride along with the same scope, Ctrl+Tab\/Ctrl+Shift+Tab) -- see
 -- 'NavigationMode'. Defaults to 'Flatten'.
 tabNavigation :: HasControlConfig e cfg => NavigationMode -> cfg
-tabNavigation = configureTabNavigation
+tabNavigation = configureControlCapability . ControlTabNavigation
 
 -- | Whether the arrow keys also cycle within this control's focus scope,
 -- the same way Tab\/Shift-Tab do. Only meaningful when 'tabNavigation' is
 -- 'Contained'. Defaults to 'False'.
 isArrowNavigationEnabled :: HasControlConfig e cfg => Bool -> cfg
-isArrowNavigationEnabled = configureIsArrowNavigationEnabled
+isArrowNavigationEnabled = configureControlCapability . ControlIsArrowNavigationEnabled
 
 -- | Converts the common subset of one attrs type onto another's, using the
 -- @extract@ half of the source's instances and the @configure@ half of the
--- destination's -- 'Nothing' when @a@ doesn't carry any of these
+-- destination's -- 'Nothing' when @a@ doesn't carry either of these
 -- capabilities (i.e. it's one of the destination type's own-specific
 -- attrs). The mechanism every widget uses to translate its own closed
 -- attrs type down to @['ControlAttrs' e msg]@ before calling 'control'.
@@ -198,19 +203,8 @@ translateCommon
   :: (HasControlConfig e a, HasControlConfig e b, HasElementEvents e msg a, HasElementEvents e msg b)
   => a -> Maybe b
 translateCommon a = asum
-  [ configureIsFocusable <$> extractIsFocusable a
-  , configureIsEnabled <$> extractIsEnabled a
-  , configureStyle <$> extractStyle a
-  , configureTabNavigation <$> extractTabNavigation a
-  , configureIsArrowNavigationEnabled <$> extractIsArrowNavigationEnabled a
-  , configureOnClicked <$> extractOnClicked a
-  , configureOnFocusGained <$> extractOnFocusGained a
-  , configureOnFocusLost <$> extractOnFocusLost a
-  , configureOnMouseEntered <$> extractOnMouseEntered a
-  , configureOnMouseExited <$> extractOnMouseExited a
-  , configureOnMouseDown <$> extractOnMouseDown a
-  , configureOnMouseUp <$> extractOnMouseUp a
-  , configureOnKeyPressed <$> extractOnKeyPressed a
+  [ configureControlCapability <$> extractControlCapability a
+  , configureElementEvent <$> extractElementEvent a
   ]
 
 -- | Implemented only by 'ControlAttrs' in this migration: what clicking a
@@ -253,68 +247,24 @@ class HasTextConfig cfg where
 text :: HasTextConfig cfg => Text -> cfg
 text = configureText
 
--- | 'Blink.Control'\'s own closed attrs type -- one constructor per
--- capability, including 'focusOnClick'\/'content' (unlike every other
--- widget's own attrs type, which never gets those two).
+-- | 'Blink.Control'\'s own closed attrs type -- the shared
+-- 'ControlProperties' and 'ElementEvents', plus 'focusOnClick'\/'content'
+-- (unlike every other widget's own attrs type, which never gets those two).
 data ControlAttrs e msg
-  = ControlIsFocusable Bool
-  | ControlIsEnabled Bool
-  | ControlStyle (StyleKey e)
-  | ControlTabNavigation NavigationMode
-  | ControlIsArrowNavigationEnabled Bool
-  | ControlOnClicked (EventHandler e msg)
-  | ControlOnFocusGained (EventHandler e msg)
-  | ControlOnFocusLost (EventHandler e msg)
-  | ControlOnMouseEntered (EventHandler e msg)
-  | ControlOnMouseExited (EventHandler e msg)
-  | ControlOnMouseDown (EventHandler e msg)
-  | ControlOnMouseUp (EventHandler e msg)
-  | ControlOnKeyPressed (KeyEventHandler e msg)
+  = ControlCommon (ControlProperties e)
+  | ControlEvent (ElementEvents e msg)
   | ControlFocusOnClick (FocusOnClick e)
   | ControlContent (UI e msg ())
 
 instance HasControlConfig e (ControlAttrs e msg) where
-  configureIsFocusable = ControlIsFocusable
-  extractIsFocusable (ControlIsFocusable b) = Just b
-  extractIsFocusable _ = Nothing
-  configureIsEnabled = ControlIsEnabled
-  extractIsEnabled (ControlIsEnabled b) = Just b
-  extractIsEnabled _ = Nothing
-  configureStyle = ControlStyle
-  extractStyle (ControlStyle k) = Just k
-  extractStyle _ = Nothing
-  configureTabNavigation = ControlTabNavigation
-  extractTabNavigation (ControlTabNavigation m) = Just m
-  extractTabNavigation _ = Nothing
-  configureIsArrowNavigationEnabled = ControlIsArrowNavigationEnabled
-  extractIsArrowNavigationEnabled (ControlIsArrowNavigationEnabled b) = Just b
-  extractIsArrowNavigationEnabled _ = Nothing
+  configureControlCapability = ControlCommon
+  extractControlCapability (ControlCommon c) = Just c
+  extractControlCapability _ = Nothing
 
 instance HasElementEvents e msg (ControlAttrs e msg) where
-  configureOnClicked = ControlOnClicked
-  extractOnClicked (ControlOnClicked f) = Just f
-  extractOnClicked _ = Nothing
-  configureOnFocusGained = ControlOnFocusGained
-  extractOnFocusGained (ControlOnFocusGained f) = Just f
-  extractOnFocusGained _ = Nothing
-  configureOnFocusLost = ControlOnFocusLost
-  extractOnFocusLost (ControlOnFocusLost f) = Just f
-  extractOnFocusLost _ = Nothing
-  configureOnMouseEntered = ControlOnMouseEntered
-  extractOnMouseEntered (ControlOnMouseEntered f) = Just f
-  extractOnMouseEntered _ = Nothing
-  configureOnMouseExited = ControlOnMouseExited
-  extractOnMouseExited (ControlOnMouseExited f) = Just f
-  extractOnMouseExited _ = Nothing
-  configureOnMouseDown = ControlOnMouseDown
-  extractOnMouseDown (ControlOnMouseDown f) = Just f
-  extractOnMouseDown _ = Nothing
-  configureOnMouseUp = ControlOnMouseUp
-  extractOnMouseUp (ControlOnMouseUp f) = Just f
-  extractOnMouseUp _ = Nothing
-  configureOnKeyPressed = ControlOnKeyPressed
-  extractOnKeyPressed (ControlOnKeyPressed f) = Just f
-  extractOnKeyPressed _ = Nothing
+  configureElementEvent = ControlEvent
+  extractElementEvent (ControlEvent c) = Just c
+  extractElementEvent _ = Nothing
 
 instance HasFocusOnClickConfig e (ControlAttrs e msg) where
   configureFocusOnClick = ControlFocusOnClick
@@ -333,16 +283,8 @@ instance HasContentConfig e msg (ControlAttrs e msg) where
 -- attrs list of the type it actually expects, the same way every widget's
 -- own @toXControlAttr@ calls 'control' with one of 'ControlAttrs'.
 toElementAttr :: ControlAttrs e msg -> Maybe (ElementAttrs e msg)
-toElementAttr a = asum
-  [ configureOnClicked <$> extractOnClicked a
-  , configureOnFocusGained <$> extractOnFocusGained a
-  , configureOnFocusLost <$> extractOnFocusLost a
-  , configureOnMouseEntered <$> extractOnMouseEntered a
-  , configureOnMouseExited <$> extractOnMouseExited a
-  , configureOnMouseDown <$> extractOnMouseDown a
-  , configureOnMouseUp <$> extractOnMouseUp a
-  , configureOnKeyPressed <$> extractOnKeyPressed a
-  ]
+toElementAttr (ControlEvent c) = Just c
+toElementAttr _               = Nothing
 
 -- | Concatenates the 'Out's every handler in @hs@ produces for @a@, without
 -- dispatching any of them -- for composing a resolved handler list into a
@@ -395,20 +337,22 @@ defaultControlConfig = ControlConfig
 
 -- | Resolves a @['ControlAttrs' e msg]@ by folding every entry over
 -- 'defaultControlConfig' left to right -- a later attr setting the same
--- field (e.g. 'style') overrides an earlier one. The eight @onX@
--- constructors are no-ops here -- 'control' fires those directly off the
--- original attrs list instead (see 'ControlConfig').
+-- field (e.g. 'style') overrides an earlier one. 'ControlEvent' is a no-op
+-- here -- 'control' fires those directly off the original attrs list
+-- instead (see 'ControlConfig').
 resolveControlConfig :: [ControlAttrs e msg] -> ControlConfig e msg
 resolveControlConfig = foldl' apply defaultControlConfig
   where
-    apply cc (ControlIsFocusable b)              = cc { ccIsFocusable = b }
-    apply cc (ControlIsEnabled b)                = cc { ccIsEnabled = b }
-    apply cc (ControlStyle k)                    = cc { ccStyleKey = k }
-    apply cc (ControlTabNavigation m)            = cc { ccTabNavigation = m }
-    apply cc (ControlIsArrowNavigationEnabled b) = cc { ccIsArrowNavigationEnabled = b }
-    apply cc (ControlFocusOnClick f)             = cc { ccFocusOnClick = f }
-    apply cc (ControlContent c)                  = cc { ccContent = c }
-    apply cc _                                   = cc
+    apply cc (ControlCommon cap)     = applyCapability cc cap
+    apply cc (ControlFocusOnClick f) = cc { ccFocusOnClick = f }
+    apply cc (ControlContent c)      = cc { ccContent = c }
+    apply cc (ControlEvent _)        = cc
+
+    applyCapability cc (ControlIsFocusable b)              = cc { ccIsFocusable = b }
+    applyCapability cc (ControlIsEnabled b)                = cc { ccIsEnabled = b }
+    applyCapability cc (ControlStyle k)                    = cc { ccStyleKey = k }
+    applyCapability cc (ControlTabNavigation m)            = cc { ccTabNavigation = m }
+    applyCapability cc (ControlIsArrowNavigationEnabled b) = cc { ccIsArrowNavigationEnabled = b }
 
 -- | The control-specific hit area: the current bounds inset by the
 -- element's margin -- the margin itself is never part of the control, so a

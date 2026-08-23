@@ -10,6 +10,7 @@
 module Blink.Element
   ( EventHandler
   , KeyEventHandler
+  , ElementEvents (..)
   , HasElementEvents (..)
   , ElementAttrs
   , element
@@ -39,31 +40,33 @@ type EventHandler e msg = () -> [Out e msg]
 -- | A reaction to 'onKeyPressed', with the triggering 'KeyEvent'.
 type KeyEventHandler e msg = KeyEvent -> [Out e msg]
 
+-- | One of the eight raw reactions every element can raise -- the single
+-- payload every attrs type carries one of via 'HasElementEvents', instead
+-- of each attrs type repeating its own parallel set of eight constructors.
+-- Exported with its constructors so a widget's own @resolveXConfig@ fold
+-- can inspect the ones it cares about directly (e.g. 'ElementOnClicked', to
+-- also fire a button's Enter-key activation).
+data ElementEvents e msg
+  = ElementOnClicked (EventHandler e msg)
+  | ElementOnFocusGained (EventHandler e msg)
+  | ElementOnFocusLost (EventHandler e msg)
+  | ElementOnMouseEntered (EventHandler e msg)
+  | ElementOnMouseExited (EventHandler e msg)
+  | ElementOnMouseDown (EventHandler e msg)
+  | ElementOnMouseUp (EventHandler e msg)
+  | ElementOnKeyPressed (KeyEventHandler e msg)
+
 -- | Implemented by any attrs type that carries the raw mouse\/keyboard\/
--- focus reactions every element can raise -- built from @configure@\/@extract@ pairs
--- rather than plain accessors, so a value can be both constructed /and/
--- generically inspected. 'Blink.Control.HasControlConfig' and friends use
--- the same shape; 'Blink.Control.ControlAttrs' and every ready-made
--- widget's own attrs type all implement this alongside their own
--- capabilities, which is what lets 'element' and 'Blink.Control.control'
--- both dispatch against whichever concrete attrs type a caller built.
+-- focus reactions every element can raise -- one @configure@\/@extract@
+-- pair over the shared 'ElementEvents', rather than one pair per
+-- individual event, so a value can be both constructed /and/ generically
+-- inspected. 'Blink.Control.ControlAttrs' and every ready-made widget's own
+-- attrs type all implement this alongside their own capabilities, which is
+-- what lets 'element' and 'Blink.Control.control' both dispatch against
+-- whichever concrete attrs type a caller built.
 class HasElementEvents e msg cfg | cfg -> e msg where
-  configureOnClicked :: EventHandler e msg -> cfg
-  extractOnClicked :: cfg -> Maybe (EventHandler e msg)
-  configureOnFocusGained :: EventHandler e msg -> cfg
-  extractOnFocusGained :: cfg -> Maybe (EventHandler e msg)
-  configureOnFocusLost :: EventHandler e msg -> cfg
-  extractOnFocusLost :: cfg -> Maybe (EventHandler e msg)
-  configureOnMouseEntered :: EventHandler e msg -> cfg
-  extractOnMouseEntered :: cfg -> Maybe (EventHandler e msg)
-  configureOnMouseExited :: EventHandler e msg -> cfg
-  extractOnMouseExited :: cfg -> Maybe (EventHandler e msg)
-  configureOnMouseDown :: EventHandler e msg -> cfg
-  extractOnMouseDown :: cfg -> Maybe (EventHandler e msg)
-  configureOnMouseUp :: EventHandler e msg -> cfg
-  extractOnMouseUp :: cfg -> Maybe (EventHandler e msg)
-  configureOnKeyPressed :: KeyEventHandler e msg -> cfg
-  extractOnKeyPressed :: cfg -> Maybe (KeyEventHandler e msg)
+  configureElementEvent :: ElementEvents e msg -> cfg
+  extractElementEvent :: cfg -> Maybe (ElementEvents e msg)
 
 -- | Reacts when the press-and-release cycle completes on this element --
 -- the mouse button coming up while the element is hit, /and/ this element
@@ -75,30 +78,30 @@ class HasElementEvents e msg cfg | cfg -> e msg where
 -- mouse-specific half of that fact, already checked against capture so the
 -- caller doesn't have to.
 onClicked :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onClicked = configureOnClicked
+onClicked = configureElementEvent . ElementOnClicked
 
 -- | Reacts when the element is named the winner of a focus transfer.
 -- 'element' only observes this -- it never claims focus itself;
 -- auto-claim\/self-clear are a different, simpler case handled entirely by
 -- whichever code performs them directly (see 'Blink.UI.getFocusChange').
 onFocusGained :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onFocusGained = configureOnFocusGained
+onFocusGained = configureElementEvent . ElementOnFocusGained
 
 -- | Reacts when the element loses focus, whether to a transfer or a clear.
 onFocusLost :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onFocusLost = configureOnFocusLost
+onFocusLost = configureElementEvent . ElementOnFocusLost
 
 -- | Reacts when the mouse starts being over the element this frame.
 onMouseEntered :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onMouseEntered = configureOnMouseEntered
+onMouseEntered = configureElementEvent . ElementOnMouseEntered
 
 -- | Reacts when the mouse stops being over the element this frame.
 onMouseExited :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onMouseExited = configureOnMouseExited
+onMouseExited = configureElementEvent . ElementOnMouseExited
 
 -- | Reacts when the mouse button goes down while the element is hit.
 onMouseDown :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onMouseDown = configureOnMouseDown
+onMouseDown = configureElementEvent . ElementOnMouseDown
 
 -- | Reacts when the mouse button comes up while the element is hit --
 -- fires regardless of which element (if any) holds capture, so a drag
@@ -106,53 +109,23 @@ onMouseDown = configureOnMouseDown
 -- this element; a higher layer decides whether that counts as a click
 -- (see 'onClicked').
 onMouseUp :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onMouseUp = configureOnMouseUp
+onMouseUp = configureElementEvent . ElementOnMouseUp
 
 -- | Reacts to a key event while the element holds focus, with the
 -- triggering 'KeyEvent'.
 onKeyPressed :: HasElementEvents e msg cfg => KeyEventHandler e msg -> cfg
-onKeyPressed = configureOnKeyPressed
+onKeyPressed = configureElementEvent . ElementOnKeyPressed
 
--- | 'Blink.Element'\'s own closed attrs type -- one constructor per raw
--- event, and nothing else. For anything that wants bare raw-event
+-- | 'Blink.Element'\'s own closed attrs type -- literally 'ElementEvents'
+-- itself, and nothing else. For anything that wants bare raw-event
 -- reporting with no control chrome\/focus\/tab behaviour on top; every
 -- ready-made widget instead builds its own richer attrs type on
 -- 'HasElementEvents' (see "Blink.Control").
-data ElementAttrs e msg
-  = ElementOnClicked (EventHandler e msg)
-  | ElementOnFocusGained (EventHandler e msg)
-  | ElementOnFocusLost (EventHandler e msg)
-  | ElementOnMouseEntered (EventHandler e msg)
-  | ElementOnMouseExited (EventHandler e msg)
-  | ElementOnMouseDown (EventHandler e msg)
-  | ElementOnMouseUp (EventHandler e msg)
-  | ElementOnKeyPressed (KeyEventHandler e msg)
+type ElementAttrs e msg = ElementEvents e msg
 
-instance HasElementEvents e msg (ElementAttrs e msg) where
-  configureOnClicked = ElementOnClicked
-  extractOnClicked (ElementOnClicked f) = Just f
-  extractOnClicked _ = Nothing
-  configureOnFocusGained = ElementOnFocusGained
-  extractOnFocusGained (ElementOnFocusGained f) = Just f
-  extractOnFocusGained _ = Nothing
-  configureOnFocusLost = ElementOnFocusLost
-  extractOnFocusLost (ElementOnFocusLost f) = Just f
-  extractOnFocusLost _ = Nothing
-  configureOnMouseEntered = ElementOnMouseEntered
-  extractOnMouseEntered (ElementOnMouseEntered f) = Just f
-  extractOnMouseEntered _ = Nothing
-  configureOnMouseExited = ElementOnMouseExited
-  extractOnMouseExited (ElementOnMouseExited f) = Just f
-  extractOnMouseExited _ = Nothing
-  configureOnMouseDown = ElementOnMouseDown
-  extractOnMouseDown (ElementOnMouseDown f) = Just f
-  extractOnMouseDown _ = Nothing
-  configureOnMouseUp = ElementOnMouseUp
-  extractOnMouseUp (ElementOnMouseUp f) = Just f
-  extractOnMouseUp _ = Nothing
-  configureOnKeyPressed = ElementOnKeyPressed
-  extractOnKeyPressed (ElementOnKeyPressed f) = Just f
-  extractOnKeyPressed _ = Nothing
+instance HasElementEvents e msg (ElementEvents e msg) where
+  configureElementEvent = id
+  extractElementEvent = Just
 
 -- | Every raw event's resolved handler list, folded from an attrs list by
 -- 'resolveElementConfig'.
@@ -170,11 +143,11 @@ data ElementConfig e msg = ElementConfig
 defaultElementConfig :: ElementConfig e msg
 defaultElementConfig = ElementConfig [] [] [] [] [] [] [] []
 
--- | Resolves a @['ElementAttrs' e msg]@ by folding every entry over
+-- | Resolves a @['ElementEvents' e msg]@ by folding every entry over
 -- 'defaultElementConfig' left to right -- each constructor appends to its
 -- own event's handler list, so every handler given for the same event
 -- still fires.
-resolveElementConfig :: [ElementAttrs e msg] -> ElementConfig e msg
+resolveElementConfig :: [ElementEvents e msg] -> ElementConfig e msg
 resolveElementConfig = foldl' apply defaultElementConfig
   where
     apply ec (ElementOnClicked f)      = ec { ecOnClicked = ecOnClicked ec ++ [f] }

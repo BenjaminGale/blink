@@ -40,72 +40,26 @@ data ProgressValue
     -- ^ Unknown progress: a band animates continuously across the bar.
   deriving (Eq, Show)
 
--- | 'Blink.ProgressBar.progressBar'\'s own closed attrs type: most of the
--- common capabilities every control has, plus 'progress' and 'bandSpeed'.
--- Doesn't expose 'isFocusable' -- a progress bar is never a tab stop; this
--- is fixed behaviour, not a default, so 'progressBar' has to still
--- implement a @ProgressBarIsFocusable@ constructor for its
--- 'HasControlConfig' instance to type-check, but simply never exports a
--- smart constructor that could build one.
+-- | 'Blink.ProgressBar.progressBar'\'s own closed attrs type: the common
+-- capabilities every control has, plus 'progress' and 'bandSpeed'. Doesn't
+-- expose 'isFocusable' -- a progress bar is never a tab stop; this is fixed
+-- behaviour, not a default, so 'progressBar' simply never exports a smart
+-- constructor that could set it.
 data ProgressBarAttributes e msg
-  = ProgressBarIsFocusable Bool
-  | ProgressBarIsEnabled Bool
-  | ProgressBarStyle (StyleKey e)
-  | ProgressBarTabNavigation NavigationMode
-  | ProgressBarIsArrowNavigationEnabled Bool
-  | ProgressBarOnClicked (EventHandler e msg)
-  | ProgressBarOnFocusGained (EventHandler e msg)
-  | ProgressBarOnFocusLost (EventHandler e msg)
-  | ProgressBarOnMouseEntered (EventHandler e msg)
-  | ProgressBarOnMouseExited (EventHandler e msg)
-  | ProgressBarOnMouseDown (EventHandler e msg)
-  | ProgressBarOnMouseUp (EventHandler e msg)
-  | ProgressBarOnKeyPressed (KeyEventHandler e msg)
+  = ProgressBarCommon (ControlProperties e)
+  | ProgressBarEvent (ElementEvents e msg)
   | ProgressBarProgress ProgressValue
   | ProgressBarBandSpeed Double
 
 instance HasControlConfig e (ProgressBarAttributes e msg) where
-  configureIsFocusable = ProgressBarIsFocusable
-  extractIsFocusable (ProgressBarIsFocusable b) = Just b
-  extractIsFocusable _ = Nothing
-  configureIsEnabled = ProgressBarIsEnabled
-  extractIsEnabled (ProgressBarIsEnabled b) = Just b
-  extractIsEnabled _ = Nothing
-  configureStyle = ProgressBarStyle
-  extractStyle (ProgressBarStyle k) = Just k
-  extractStyle _ = Nothing
-  configureTabNavigation = ProgressBarTabNavigation
-  extractTabNavigation (ProgressBarTabNavigation m) = Just m
-  extractTabNavigation _ = Nothing
-  configureIsArrowNavigationEnabled = ProgressBarIsArrowNavigationEnabled
-  extractIsArrowNavigationEnabled (ProgressBarIsArrowNavigationEnabled b) = Just b
-  extractIsArrowNavigationEnabled _ = Nothing
+  configureControlCapability = ProgressBarCommon
+  extractControlCapability (ProgressBarCommon c) = Just c
+  extractControlCapability _ = Nothing
 
 instance HasElementEvents e msg (ProgressBarAttributes e msg) where
-  configureOnClicked = ProgressBarOnClicked
-  extractOnClicked (ProgressBarOnClicked f) = Just f
-  extractOnClicked _ = Nothing
-  configureOnFocusGained = ProgressBarOnFocusGained
-  extractOnFocusGained (ProgressBarOnFocusGained f) = Just f
-  extractOnFocusGained _ = Nothing
-  configureOnFocusLost = ProgressBarOnFocusLost
-  extractOnFocusLost (ProgressBarOnFocusLost f) = Just f
-  extractOnFocusLost _ = Nothing
-  configureOnMouseEntered = ProgressBarOnMouseEntered
-  extractOnMouseEntered (ProgressBarOnMouseEntered f) = Just f
-  extractOnMouseEntered _ = Nothing
-  configureOnMouseExited = ProgressBarOnMouseExited
-  extractOnMouseExited (ProgressBarOnMouseExited f) = Just f
-  extractOnMouseExited _ = Nothing
-  configureOnMouseDown = ProgressBarOnMouseDown
-  extractOnMouseDown (ProgressBarOnMouseDown f) = Just f
-  extractOnMouseDown _ = Nothing
-  configureOnMouseUp = ProgressBarOnMouseUp
-  extractOnMouseUp (ProgressBarOnMouseUp f) = Just f
-  extractOnMouseUp _ = Nothing
-  configureOnKeyPressed = ProgressBarOnKeyPressed
-  extractOnKeyPressed (ProgressBarOnKeyPressed f) = Just f
-  extractOnKeyPressed _ = Nothing
+  configureElementEvent = ProgressBarEvent
+  extractElementEvent (ProgressBarEvent c) = Just c
+  extractElementEvent _ = Nothing
 
 -- | Sets the bar to 'Progress' (determinate) or 'Indeterminate'. Defaults
 -- to @'Progress' 0@.

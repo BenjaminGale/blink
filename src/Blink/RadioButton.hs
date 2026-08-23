@@ -41,65 +41,21 @@ import Blink.UI (Out, UI, currentStyle, drawText, getBounds, withBounds)
 -- capabilities every control has, plus 'text', 'isSelected', and
 -- 'onSelectedChanged'.
 data RadioButtonAttributes e msg
-  = RadioButtonIsFocusable Bool
-  | RadioButtonIsEnabled Bool
-  | RadioButtonStyle (StyleKey e)
-  | RadioButtonTabNavigation NavigationMode
-  | RadioButtonIsArrowNavigationEnabled Bool
-  | RadioButtonOnClicked (EventHandler e msg)
-  | RadioButtonOnFocusGained (EventHandler e msg)
-  | RadioButtonOnFocusLost (EventHandler e msg)
-  | RadioButtonOnMouseEntered (EventHandler e msg)
-  | RadioButtonOnMouseExited (EventHandler e msg)
-  | RadioButtonOnMouseDown (EventHandler e msg)
-  | RadioButtonOnMouseUp (EventHandler e msg)
-  | RadioButtonOnKeyPressed (KeyEventHandler e msg)
+  = RadioButtonCommon (ControlProperties e)
+  | RadioButtonEvent (ElementEvents e msg)
   | RadioButtonText Text
   | RadioButtonIsSelected Bool
   | RadioButtonOnSelectedChanged (Bool -> [Out e msg])
 
 instance HasControlConfig e (RadioButtonAttributes e msg) where
-  configureIsFocusable = RadioButtonIsFocusable
-  extractIsFocusable (RadioButtonIsFocusable b) = Just b
-  extractIsFocusable _ = Nothing
-  configureIsEnabled = RadioButtonIsEnabled
-  extractIsEnabled (RadioButtonIsEnabled b) = Just b
-  extractIsEnabled _ = Nothing
-  configureStyle = RadioButtonStyle
-  extractStyle (RadioButtonStyle k) = Just k
-  extractStyle _ = Nothing
-  configureTabNavigation = RadioButtonTabNavigation
-  extractTabNavigation (RadioButtonTabNavigation m) = Just m
-  extractTabNavigation _ = Nothing
-  configureIsArrowNavigationEnabled = RadioButtonIsArrowNavigationEnabled
-  extractIsArrowNavigationEnabled (RadioButtonIsArrowNavigationEnabled b) = Just b
-  extractIsArrowNavigationEnabled _ = Nothing
+  configureControlCapability = RadioButtonCommon
+  extractControlCapability (RadioButtonCommon c) = Just c
+  extractControlCapability _ = Nothing
 
 instance HasElementEvents e msg (RadioButtonAttributes e msg) where
-  configureOnClicked = RadioButtonOnClicked
-  extractOnClicked (RadioButtonOnClicked f) = Just f
-  extractOnClicked _ = Nothing
-  configureOnFocusGained = RadioButtonOnFocusGained
-  extractOnFocusGained (RadioButtonOnFocusGained f) = Just f
-  extractOnFocusGained _ = Nothing
-  configureOnFocusLost = RadioButtonOnFocusLost
-  extractOnFocusLost (RadioButtonOnFocusLost f) = Just f
-  extractOnFocusLost _ = Nothing
-  configureOnMouseEntered = RadioButtonOnMouseEntered
-  extractOnMouseEntered (RadioButtonOnMouseEntered f) = Just f
-  extractOnMouseEntered _ = Nothing
-  configureOnMouseExited = RadioButtonOnMouseExited
-  extractOnMouseExited (RadioButtonOnMouseExited f) = Just f
-  extractOnMouseExited _ = Nothing
-  configureOnMouseDown = RadioButtonOnMouseDown
-  extractOnMouseDown (RadioButtonOnMouseDown f) = Just f
-  extractOnMouseDown _ = Nothing
-  configureOnMouseUp = RadioButtonOnMouseUp
-  extractOnMouseUp (RadioButtonOnMouseUp f) = Just f
-  extractOnMouseUp _ = Nothing
-  configureOnKeyPressed = RadioButtonOnKeyPressed
-  extractOnKeyPressed (RadioButtonOnKeyPressed f) = Just f
-  extractOnKeyPressed _ = Nothing
+  configureElementEvent = RadioButtonEvent
+  extractElementEvent (RadioButtonEvent c) = Just c
+  extractElementEvent _ = Nothing
 
 instance HasTextConfig (RadioButtonAttributes e msg) where
   configureText = RadioButtonText
@@ -133,11 +89,11 @@ defaultRadioButtonConfig = RadioButtonConfig
 resolveRadioButtonConfig :: [RadioButtonAttributes e msg] -> RadioButtonConfig e msg
 resolveRadioButtonConfig = foldl' apply defaultRadioButtonConfig
   where
-    apply cfg (RadioButtonText t)              = cfg { rbcfgText = t }
-    apply cfg (RadioButtonIsSelected b)        = cfg { rbcfgSelected = b }
-    apply cfg (RadioButtonOnClicked f)         = cfg { rbcfgOnClicked = rbcfgOnClicked cfg ++ [f] }
-    apply cfg (RadioButtonOnSelectedChanged f) = cfg { rbcfgOnSelectedChanged = rbcfgOnSelectedChanged cfg ++ [f] }
-    apply cfg _                                = cfg
+    apply cfg (RadioButtonText t)                     = cfg { rbcfgText = t }
+    apply cfg (RadioButtonIsSelected b)               = cfg { rbcfgSelected = b }
+    apply cfg (RadioButtonEvent (ElementOnClicked f)) = cfg { rbcfgOnClicked = rbcfgOnClicked cfg ++ [f] }
+    apply cfg (RadioButtonOnSelectedChanged f)        = cfg { rbcfgOnSelectedChanged = rbcfgOnSelectedChanged cfg ++ [f] }
+    apply cfg _                                       = cfg
 
 toRadioButtonControlAttr :: RadioButtonAttributes e msg -> Maybe (ControlAttrs e msg)
 toRadioButtonControlAttr (RadioButtonText _)              = Nothing

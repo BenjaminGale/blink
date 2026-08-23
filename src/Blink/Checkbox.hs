@@ -41,65 +41,21 @@ import Blink.UI (Out, UI, currentStyle, drawText, getBounds, withBounds)
 -- capabilities every control has, plus 'text', 'isSelected', and
 -- 'onSelectedChanged'.
 data CheckboxAttributes e msg
-  = CheckboxIsFocusable Bool
-  | CheckboxIsEnabled Bool
-  | CheckboxStyle (StyleKey e)
-  | CheckboxTabNavigation NavigationMode
-  | CheckboxIsArrowNavigationEnabled Bool
-  | CheckboxOnClicked (EventHandler e msg)
-  | CheckboxOnFocusGained (EventHandler e msg)
-  | CheckboxOnFocusLost (EventHandler e msg)
-  | CheckboxOnMouseEntered (EventHandler e msg)
-  | CheckboxOnMouseExited (EventHandler e msg)
-  | CheckboxOnMouseDown (EventHandler e msg)
-  | CheckboxOnMouseUp (EventHandler e msg)
-  | CheckboxOnKeyPressed (KeyEventHandler e msg)
+  = CheckboxCommon (ControlProperties e)
+  | CheckboxEvent (ElementEvents e msg)
   | CheckboxText Text
   | CheckboxIsSelected Bool
   | CheckboxOnSelectedChanged (Bool -> [Out e msg])
 
 instance HasControlConfig e (CheckboxAttributes e msg) where
-  configureIsFocusable = CheckboxIsFocusable
-  extractIsFocusable (CheckboxIsFocusable b) = Just b
-  extractIsFocusable _ = Nothing
-  configureIsEnabled = CheckboxIsEnabled
-  extractIsEnabled (CheckboxIsEnabled b) = Just b
-  extractIsEnabled _ = Nothing
-  configureStyle = CheckboxStyle
-  extractStyle (CheckboxStyle k) = Just k
-  extractStyle _ = Nothing
-  configureTabNavigation = CheckboxTabNavigation
-  extractTabNavigation (CheckboxTabNavigation m) = Just m
-  extractTabNavigation _ = Nothing
-  configureIsArrowNavigationEnabled = CheckboxIsArrowNavigationEnabled
-  extractIsArrowNavigationEnabled (CheckboxIsArrowNavigationEnabled b) = Just b
-  extractIsArrowNavigationEnabled _ = Nothing
+  configureControlCapability = CheckboxCommon
+  extractControlCapability (CheckboxCommon c) = Just c
+  extractControlCapability _ = Nothing
 
 instance HasElementEvents e msg (CheckboxAttributes e msg) where
-  configureOnClicked = CheckboxOnClicked
-  extractOnClicked (CheckboxOnClicked f) = Just f
-  extractOnClicked _ = Nothing
-  configureOnFocusGained = CheckboxOnFocusGained
-  extractOnFocusGained (CheckboxOnFocusGained f) = Just f
-  extractOnFocusGained _ = Nothing
-  configureOnFocusLost = CheckboxOnFocusLost
-  extractOnFocusLost (CheckboxOnFocusLost f) = Just f
-  extractOnFocusLost _ = Nothing
-  configureOnMouseEntered = CheckboxOnMouseEntered
-  extractOnMouseEntered (CheckboxOnMouseEntered f) = Just f
-  extractOnMouseEntered _ = Nothing
-  configureOnMouseExited = CheckboxOnMouseExited
-  extractOnMouseExited (CheckboxOnMouseExited f) = Just f
-  extractOnMouseExited _ = Nothing
-  configureOnMouseDown = CheckboxOnMouseDown
-  extractOnMouseDown (CheckboxOnMouseDown f) = Just f
-  extractOnMouseDown _ = Nothing
-  configureOnMouseUp = CheckboxOnMouseUp
-  extractOnMouseUp (CheckboxOnMouseUp f) = Just f
-  extractOnMouseUp _ = Nothing
-  configureOnKeyPressed = CheckboxOnKeyPressed
-  extractOnKeyPressed (CheckboxOnKeyPressed f) = Just f
-  extractOnKeyPressed _ = Nothing
+  configureElementEvent = CheckboxEvent
+  extractElementEvent (CheckboxEvent c) = Just c
+  extractElementEvent _ = Nothing
 
 instance HasTextConfig (CheckboxAttributes e msg) where
   configureText = CheckboxText
@@ -133,11 +89,11 @@ defaultCheckboxConfig = CheckboxConfig
 resolveCheckboxConfig :: [CheckboxAttributes e msg] -> CheckboxConfig e msg
 resolveCheckboxConfig = foldl' apply defaultCheckboxConfig
   where
-    apply cfg (CheckboxText t)              = cfg { ckcfgText = t }
-    apply cfg (CheckboxIsSelected b)        = cfg { ckcfgSelected = b }
-    apply cfg (CheckboxOnClicked f)         = cfg { ckcfgOnClicked = ckcfgOnClicked cfg ++ [f] }
-    apply cfg (CheckboxOnSelectedChanged f) = cfg { ckcfgOnSelectedChanged = ckcfgOnSelectedChanged cfg ++ [f] }
-    apply cfg _                             = cfg
+    apply cfg (CheckboxText t)                     = cfg { ckcfgText = t }
+    apply cfg (CheckboxIsSelected b)               = cfg { ckcfgSelected = b }
+    apply cfg (CheckboxEvent (ElementOnClicked f)) = cfg { ckcfgOnClicked = ckcfgOnClicked cfg ++ [f] }
+    apply cfg (CheckboxOnSelectedChanged f)        = cfg { ckcfgOnSelectedChanged = ckcfgOnSelectedChanged cfg ++ [f] }
+    apply cfg _                                    = cfg
 
 toCheckboxControlAttr :: CheckboxAttributes e msg -> Maybe (ControlAttrs e msg)
 toCheckboxControlAttr (CheckboxText _)              = Nothing

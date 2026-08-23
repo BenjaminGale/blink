@@ -45,19 +45,8 @@ import Blink.UI
 -- capabilities every control has, plus 'text' (the field's current value),
 -- 'inputFilter', 'displayFilter', 'onInput', and 'onSubmit'.
 data TextInputAttributes e msg
-  = TextInputIsFocusable Bool
-  | TextInputIsEnabled Bool
-  | TextInputStyle (StyleKey e)
-  | TextInputTabNavigation NavigationMode
-  | TextInputIsArrowNavigationEnabled Bool
-  | TextInputOnClicked (EventHandler e msg)
-  | TextInputOnFocusGained (EventHandler e msg)
-  | TextInputOnFocusLost (EventHandler e msg)
-  | TextInputOnMouseEntered (EventHandler e msg)
-  | TextInputOnMouseExited (EventHandler e msg)
-  | TextInputOnMouseDown (EventHandler e msg)
-  | TextInputOnMouseUp (EventHandler e msg)
-  | TextInputOnKeyPressed (KeyEventHandler e msg)
+  = TextInputCommon (ControlProperties e)
+  | TextInputEvent (ElementEvents e msg)
   | TextInputText Text
   | TextInputInputFilter (Text -> Text)
   | TextInputDisplayFilter (Text -> Text)
@@ -65,47 +54,14 @@ data TextInputAttributes e msg
   | TextInputOnSubmit (EventHandler e msg)
 
 instance HasControlConfig e (TextInputAttributes e msg) where
-  configureIsFocusable = TextInputIsFocusable
-  extractIsFocusable (TextInputIsFocusable b) = Just b
-  extractIsFocusable _ = Nothing
-  configureIsEnabled = TextInputIsEnabled
-  extractIsEnabled (TextInputIsEnabled b) = Just b
-  extractIsEnabled _ = Nothing
-  configureStyle = TextInputStyle
-  extractStyle (TextInputStyle k) = Just k
-  extractStyle _ = Nothing
-  configureTabNavigation = TextInputTabNavigation
-  extractTabNavigation (TextInputTabNavigation m) = Just m
-  extractTabNavigation _ = Nothing
-  configureIsArrowNavigationEnabled = TextInputIsArrowNavigationEnabled
-  extractIsArrowNavigationEnabled (TextInputIsArrowNavigationEnabled b) = Just b
-  extractIsArrowNavigationEnabled _ = Nothing
+  configureControlCapability = TextInputCommon
+  extractControlCapability (TextInputCommon c) = Just c
+  extractControlCapability _ = Nothing
 
 instance HasElementEvents e msg (TextInputAttributes e msg) where
-  configureOnClicked = TextInputOnClicked
-  extractOnClicked (TextInputOnClicked f) = Just f
-  extractOnClicked _ = Nothing
-  configureOnFocusGained = TextInputOnFocusGained
-  extractOnFocusGained (TextInputOnFocusGained f) = Just f
-  extractOnFocusGained _ = Nothing
-  configureOnFocusLost = TextInputOnFocusLost
-  extractOnFocusLost (TextInputOnFocusLost f) = Just f
-  extractOnFocusLost _ = Nothing
-  configureOnMouseEntered = TextInputOnMouseEntered
-  extractOnMouseEntered (TextInputOnMouseEntered f) = Just f
-  extractOnMouseEntered _ = Nothing
-  configureOnMouseExited = TextInputOnMouseExited
-  extractOnMouseExited (TextInputOnMouseExited f) = Just f
-  extractOnMouseExited _ = Nothing
-  configureOnMouseDown = TextInputOnMouseDown
-  extractOnMouseDown (TextInputOnMouseDown f) = Just f
-  extractOnMouseDown _ = Nothing
-  configureOnMouseUp = TextInputOnMouseUp
-  extractOnMouseUp (TextInputOnMouseUp f) = Just f
-  extractOnMouseUp _ = Nothing
-  configureOnKeyPressed = TextInputOnKeyPressed
-  extractOnKeyPressed (TextInputOnKeyPressed f) = Just f
-  extractOnKeyPressed _ = Nothing
+  configureElementEvent = TextInputEvent
+  extractElementEvent (TextInputEvent c) = Just c
+  extractElementEvent _ = Nothing
 
 instance HasTextConfig (TextInputAttributes e msg) where
   configureText = TextInputText

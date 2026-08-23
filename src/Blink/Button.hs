@@ -85,63 +85,19 @@ buttonBase eid controlAttrs onClickedHandlers body = do
 -- 'HasContentConfig' -- see the "Blink.Control" module header for why
 -- @button eid [content ...]@ therefore fails to typecheck.
 data ButtonAttributes e msg
-  = ButtonIsFocusable Bool
-  | ButtonIsEnabled Bool
-  | ButtonStyle (StyleKey e)
-  | ButtonTabNavigation NavigationMode
-  | ButtonIsArrowNavigationEnabled Bool
-  | ButtonOnClicked (EventHandler e msg)
-  | ButtonOnFocusGained (EventHandler e msg)
-  | ButtonOnFocusLost (EventHandler e msg)
-  | ButtonOnMouseEntered (EventHandler e msg)
-  | ButtonOnMouseExited (EventHandler e msg)
-  | ButtonOnMouseDown (EventHandler e msg)
-  | ButtonOnMouseUp (EventHandler e msg)
-  | ButtonOnKeyPressed (KeyEventHandler e msg)
+  = ButtonCommon (ControlProperties e)
+  | ButtonEvent (ElementEvents e msg)
   | ButtonText Text
 
 instance HasControlConfig e (ButtonAttributes e msg) where
-  configureIsFocusable = ButtonIsFocusable
-  extractIsFocusable (ButtonIsFocusable b) = Just b
-  extractIsFocusable _ = Nothing
-  configureIsEnabled = ButtonIsEnabled
-  extractIsEnabled (ButtonIsEnabled b) = Just b
-  extractIsEnabled _ = Nothing
-  configureStyle = ButtonStyle
-  extractStyle (ButtonStyle k) = Just k
-  extractStyle _ = Nothing
-  configureTabNavigation = ButtonTabNavigation
-  extractTabNavigation (ButtonTabNavigation m) = Just m
-  extractTabNavigation _ = Nothing
-  configureIsArrowNavigationEnabled = ButtonIsArrowNavigationEnabled
-  extractIsArrowNavigationEnabled (ButtonIsArrowNavigationEnabled b) = Just b
-  extractIsArrowNavigationEnabled _ = Nothing
+  configureControlCapability = ButtonCommon
+  extractControlCapability (ButtonCommon c) = Just c
+  extractControlCapability _ = Nothing
 
 instance HasElementEvents e msg (ButtonAttributes e msg) where
-  configureOnClicked = ButtonOnClicked
-  extractOnClicked (ButtonOnClicked f) = Just f
-  extractOnClicked _ = Nothing
-  configureOnFocusGained = ButtonOnFocusGained
-  extractOnFocusGained (ButtonOnFocusGained f) = Just f
-  extractOnFocusGained _ = Nothing
-  configureOnFocusLost = ButtonOnFocusLost
-  extractOnFocusLost (ButtonOnFocusLost f) = Just f
-  extractOnFocusLost _ = Nothing
-  configureOnMouseEntered = ButtonOnMouseEntered
-  extractOnMouseEntered (ButtonOnMouseEntered f) = Just f
-  extractOnMouseEntered _ = Nothing
-  configureOnMouseExited = ButtonOnMouseExited
-  extractOnMouseExited (ButtonOnMouseExited f) = Just f
-  extractOnMouseExited _ = Nothing
-  configureOnMouseDown = ButtonOnMouseDown
-  extractOnMouseDown (ButtonOnMouseDown f) = Just f
-  extractOnMouseDown _ = Nothing
-  configureOnMouseUp = ButtonOnMouseUp
-  extractOnMouseUp (ButtonOnMouseUp f) = Just f
-  extractOnMouseUp _ = Nothing
-  configureOnKeyPressed = ButtonOnKeyPressed
-  extractOnKeyPressed (ButtonOnKeyPressed f) = Just f
-  extractOnKeyPressed _ = Nothing
+  configureElementEvent = ButtonEvent
+  extractElementEvent (ButtonEvent c) = Just c
+  extractElementEvent _ = Nothing
 
 instance HasTextConfig (ButtonAttributes e msg) where
   configureText = ButtonText
@@ -165,9 +121,9 @@ defaultButtonConfig = ButtonConfig { bcfgText = "", bcfgOnClicked = [] }
 resolveButtonConfig :: [ButtonAttributes e msg] -> ButtonConfig e msg
 resolveButtonConfig = foldl' apply defaultButtonConfig
   where
-    apply cfg (ButtonText t)      = cfg { bcfgText = t }
-    apply cfg (ButtonOnClicked f) = cfg { bcfgOnClicked = bcfgOnClicked cfg ++ [f] }
-    apply cfg _                   = cfg
+    apply cfg (ButtonText t)                     = cfg { bcfgText = t }
+    apply cfg (ButtonEvent (ElementOnClicked f)) = cfg { bcfgOnClicked = bcfgOnClicked cfg ++ [f] }
+    apply cfg _                                  = cfg
 
 -- | Translates the common capabilities of a 'ButtonAttributes' down to
 -- 'ControlAttrs' for 'control' -- @Nothing@ for 'ButtonText', which
@@ -238,65 +194,21 @@ toggleBase next eid controlAttrs onClickedHandlers wasSelected onSelectedChanged
 -- capabilities as 'ButtonAttributes', plus 'text', 'isSelected', and
 -- 'onSelectedChanged'.
 data ToggleButtonAttributes e msg
-  = ToggleButtonIsFocusable Bool
-  | ToggleButtonIsEnabled Bool
-  | ToggleButtonStyle (StyleKey e)
-  | ToggleButtonTabNavigation NavigationMode
-  | ToggleButtonIsArrowNavigationEnabled Bool
-  | ToggleButtonOnClicked (EventHandler e msg)
-  | ToggleButtonOnFocusGained (EventHandler e msg)
-  | ToggleButtonOnFocusLost (EventHandler e msg)
-  | ToggleButtonOnMouseEntered (EventHandler e msg)
-  | ToggleButtonOnMouseExited (EventHandler e msg)
-  | ToggleButtonOnMouseDown (EventHandler e msg)
-  | ToggleButtonOnMouseUp (EventHandler e msg)
-  | ToggleButtonOnKeyPressed (KeyEventHandler e msg)
+  = ToggleButtonCommon (ControlProperties e)
+  | ToggleButtonEvent (ElementEvents e msg)
   | ToggleButtonText Text
   | ToggleButtonIsSelected Bool
   | ToggleButtonOnSelectedChanged (Bool -> [Out e msg])
 
 instance HasControlConfig e (ToggleButtonAttributes e msg) where
-  configureIsFocusable = ToggleButtonIsFocusable
-  extractIsFocusable (ToggleButtonIsFocusable b) = Just b
-  extractIsFocusable _ = Nothing
-  configureIsEnabled = ToggleButtonIsEnabled
-  extractIsEnabled (ToggleButtonIsEnabled b) = Just b
-  extractIsEnabled _ = Nothing
-  configureStyle = ToggleButtonStyle
-  extractStyle (ToggleButtonStyle k) = Just k
-  extractStyle _ = Nothing
-  configureTabNavigation = ToggleButtonTabNavigation
-  extractTabNavigation (ToggleButtonTabNavigation m) = Just m
-  extractTabNavigation _ = Nothing
-  configureIsArrowNavigationEnabled = ToggleButtonIsArrowNavigationEnabled
-  extractIsArrowNavigationEnabled (ToggleButtonIsArrowNavigationEnabled b) = Just b
-  extractIsArrowNavigationEnabled _ = Nothing
+  configureControlCapability = ToggleButtonCommon
+  extractControlCapability (ToggleButtonCommon c) = Just c
+  extractControlCapability _ = Nothing
 
 instance HasElementEvents e msg (ToggleButtonAttributes e msg) where
-  configureOnClicked = ToggleButtonOnClicked
-  extractOnClicked (ToggleButtonOnClicked f) = Just f
-  extractOnClicked _ = Nothing
-  configureOnFocusGained = ToggleButtonOnFocusGained
-  extractOnFocusGained (ToggleButtonOnFocusGained f) = Just f
-  extractOnFocusGained _ = Nothing
-  configureOnFocusLost = ToggleButtonOnFocusLost
-  extractOnFocusLost (ToggleButtonOnFocusLost f) = Just f
-  extractOnFocusLost _ = Nothing
-  configureOnMouseEntered = ToggleButtonOnMouseEntered
-  extractOnMouseEntered (ToggleButtonOnMouseEntered f) = Just f
-  extractOnMouseEntered _ = Nothing
-  configureOnMouseExited = ToggleButtonOnMouseExited
-  extractOnMouseExited (ToggleButtonOnMouseExited f) = Just f
-  extractOnMouseExited _ = Nothing
-  configureOnMouseDown = ToggleButtonOnMouseDown
-  extractOnMouseDown (ToggleButtonOnMouseDown f) = Just f
-  extractOnMouseDown _ = Nothing
-  configureOnMouseUp = ToggleButtonOnMouseUp
-  extractOnMouseUp (ToggleButtonOnMouseUp f) = Just f
-  extractOnMouseUp _ = Nothing
-  configureOnKeyPressed = ToggleButtonOnKeyPressed
-  extractOnKeyPressed (ToggleButtonOnKeyPressed f) = Just f
-  extractOnKeyPressed _ = Nothing
+  configureElementEvent = ToggleButtonEvent
+  extractElementEvent (ToggleButtonEvent c) = Just c
+  extractElementEvent _ = Nothing
 
 instance HasTextConfig (ToggleButtonAttributes e msg) where
   configureText = ToggleButtonText
@@ -330,11 +242,11 @@ defaultToggleButtonConfig = ToggleButtonConfig
 resolveToggleButtonConfig :: [ToggleButtonAttributes e msg] -> ToggleButtonConfig e msg
 resolveToggleButtonConfig = foldl' apply defaultToggleButtonConfig
   where
-    apply cfg (ToggleButtonText t)              = cfg { tbcfgText = t }
-    apply cfg (ToggleButtonIsSelected b)        = cfg { tbcfgSelected = b }
-    apply cfg (ToggleButtonOnClicked f)         = cfg { tbcfgOnClicked = tbcfgOnClicked cfg ++ [f] }
-    apply cfg (ToggleButtonOnSelectedChanged f) = cfg { tbcfgOnSelectedChanged = tbcfgOnSelectedChanged cfg ++ [f] }
-    apply cfg _                                 = cfg
+    apply cfg (ToggleButtonText t)                     = cfg { tbcfgText = t }
+    apply cfg (ToggleButtonIsSelected b)               = cfg { tbcfgSelected = b }
+    apply cfg (ToggleButtonEvent (ElementOnClicked f)) = cfg { tbcfgOnClicked = tbcfgOnClicked cfg ++ [f] }
+    apply cfg (ToggleButtonOnSelectedChanged f)        = cfg { tbcfgOnSelectedChanged = tbcfgOnSelectedChanged cfg ++ [f] }
+    apply cfg _                                        = cfg
 
 toToggleButtonControlAttr :: ToggleButtonAttributes e msg -> Maybe (ControlAttrs e msg)
 toToggleButtonControlAttr (ToggleButtonText _)              = Nothing

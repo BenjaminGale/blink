@@ -30,72 +30,28 @@ import Blink.Control
 import Blink.Style (Style (..))
 import Blink.UI (UI, currentStyle, drawText)
 
--- | 'Blink.Label.label'\'s own closed attrs type: most of the common
--- capabilities every control has, plus 'text' and 'target'. Doesn't expose
--- 'isFocusable' -- a label never takes keyboard focus itself, whether by
--- Tab or by being clicked; this is fixed behaviour, not a default, so
--- 'label' has to still implement a @LabelIsFocusable@ constructor for its
--- 'HasControlConfig' instance to type-check, but simply never exports a
--- smart constructor that could build one.
+-- | 'Blink.Label.label'\'s own closed attrs type: the common capabilities
+-- every control has, plus 'text' and 'target'. Doesn't expose 'isFocusable'
+-- -- a label never takes keyboard focus itself, whether by Tab or by being
+-- clicked; this is fixed behaviour, not a default, so 'label' simply never
+-- exports a smart constructor that could set it, even though the
+-- 'HasControlConfig' instance carries the capability generically like every
+-- other widget's.
 data LabelAttributes e msg
-  = LabelIsFocusable Bool
-  | LabelIsEnabled Bool
-  | LabelStyle (StyleKey e)
-  | LabelTabNavigation NavigationMode
-  | LabelIsArrowNavigationEnabled Bool
-  | LabelOnClicked (EventHandler e msg)
-  | LabelOnFocusGained (EventHandler e msg)
-  | LabelOnFocusLost (EventHandler e msg)
-  | LabelOnMouseEntered (EventHandler e msg)
-  | LabelOnMouseExited (EventHandler e msg)
-  | LabelOnMouseDown (EventHandler e msg)
-  | LabelOnMouseUp (EventHandler e msg)
-  | LabelOnKeyPressed (KeyEventHandler e msg)
+  = LabelCommon (ControlProperties e)
+  | LabelEvent (ElementEvents e msg)
   | LabelText Text
   | LabelTarget e
 
 instance HasControlConfig e (LabelAttributes e msg) where
-  configureIsFocusable = LabelIsFocusable
-  extractIsFocusable (LabelIsFocusable b) = Just b
-  extractIsFocusable _ = Nothing
-  configureIsEnabled = LabelIsEnabled
-  extractIsEnabled (LabelIsEnabled b) = Just b
-  extractIsEnabled _ = Nothing
-  configureStyle = LabelStyle
-  extractStyle (LabelStyle k) = Just k
-  extractStyle _ = Nothing
-  configureTabNavigation = LabelTabNavigation
-  extractTabNavigation (LabelTabNavigation m) = Just m
-  extractTabNavigation _ = Nothing
-  configureIsArrowNavigationEnabled = LabelIsArrowNavigationEnabled
-  extractIsArrowNavigationEnabled (LabelIsArrowNavigationEnabled b) = Just b
-  extractIsArrowNavigationEnabled _ = Nothing
+  configureControlCapability = LabelCommon
+  extractControlCapability (LabelCommon c) = Just c
+  extractControlCapability _ = Nothing
 
 instance HasElementEvents e msg (LabelAttributes e msg) where
-  configureOnClicked = LabelOnClicked
-  extractOnClicked (LabelOnClicked f) = Just f
-  extractOnClicked _ = Nothing
-  configureOnFocusGained = LabelOnFocusGained
-  extractOnFocusGained (LabelOnFocusGained f) = Just f
-  extractOnFocusGained _ = Nothing
-  configureOnFocusLost = LabelOnFocusLost
-  extractOnFocusLost (LabelOnFocusLost f) = Just f
-  extractOnFocusLost _ = Nothing
-  configureOnMouseEntered = LabelOnMouseEntered
-  extractOnMouseEntered (LabelOnMouseEntered f) = Just f
-  extractOnMouseEntered _ = Nothing
-  configureOnMouseExited = LabelOnMouseExited
-  extractOnMouseExited (LabelOnMouseExited f) = Just f
-  extractOnMouseExited _ = Nothing
-  configureOnMouseDown = LabelOnMouseDown
-  extractOnMouseDown (LabelOnMouseDown f) = Just f
-  extractOnMouseDown _ = Nothing
-  configureOnMouseUp = LabelOnMouseUp
-  extractOnMouseUp (LabelOnMouseUp f) = Just f
-  extractOnMouseUp _ = Nothing
-  configureOnKeyPressed = LabelOnKeyPressed
-  extractOnKeyPressed (LabelOnKeyPressed f) = Just f
-  extractOnKeyPressed _ = Nothing
+  configureElementEvent = LabelEvent
+  extractElementEvent (LabelEvent c) = Just c
+  extractElementEvent _ = Nothing
 
 instance HasTextConfig (LabelAttributes e msg) where
   configureText = LabelText
