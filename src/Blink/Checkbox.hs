@@ -59,58 +59,58 @@ data CheckboxAttributes e msg
   | CheckboxOnSelectedChanged (Bool -> [Out e msg])
 
 instance HasControlConfig e (CheckboxAttributes e msg) where
-  mkIsFocusable = CheckboxIsFocusable
-  matchIsFocusable (CheckboxIsFocusable b) = Just b
-  matchIsFocusable _ = Nothing
-  mkIsEnabled = CheckboxIsEnabled
-  matchIsEnabled (CheckboxIsEnabled b) = Just b
-  matchIsEnabled _ = Nothing
-  mkStyle = CheckboxStyle
-  matchStyle (CheckboxStyle k) = Just k
-  matchStyle _ = Nothing
-  mkTabNavigation = CheckboxTabNavigation
-  matchTabNavigation (CheckboxTabNavigation m) = Just m
-  matchTabNavigation _ = Nothing
-  mkIsArrowNavigationEnabled = CheckboxIsArrowNavigationEnabled
-  matchIsArrowNavigationEnabled (CheckboxIsArrowNavigationEnabled b) = Just b
-  matchIsArrowNavigationEnabled _ = Nothing
+  configureIsFocusable = CheckboxIsFocusable
+  extractIsFocusable (CheckboxIsFocusable b) = Just b
+  extractIsFocusable _ = Nothing
+  configureIsEnabled = CheckboxIsEnabled
+  extractIsEnabled (CheckboxIsEnabled b) = Just b
+  extractIsEnabled _ = Nothing
+  configureStyle = CheckboxStyle
+  extractStyle (CheckboxStyle k) = Just k
+  extractStyle _ = Nothing
+  configureTabNavigation = CheckboxTabNavigation
+  extractTabNavigation (CheckboxTabNavigation m) = Just m
+  extractTabNavigation _ = Nothing
+  configureIsArrowNavigationEnabled = CheckboxIsArrowNavigationEnabled
+  extractIsArrowNavigationEnabled (CheckboxIsArrowNavigationEnabled b) = Just b
+  extractIsArrowNavigationEnabled _ = Nothing
 
 instance HasElementEvents e msg (CheckboxAttributes e msg) where
-  mkOnClicked = CheckboxOnClicked
-  matchOnClicked (CheckboxOnClicked f) = Just f
-  matchOnClicked _ = Nothing
-  mkOnFocusGained = CheckboxOnFocusGained
-  matchOnFocusGained (CheckboxOnFocusGained f) = Just f
-  matchOnFocusGained _ = Nothing
-  mkOnFocusLost = CheckboxOnFocusLost
-  matchOnFocusLost (CheckboxOnFocusLost f) = Just f
-  matchOnFocusLost _ = Nothing
-  mkOnMouseEntered = CheckboxOnMouseEntered
-  matchOnMouseEntered (CheckboxOnMouseEntered f) = Just f
-  matchOnMouseEntered _ = Nothing
-  mkOnMouseExited = CheckboxOnMouseExited
-  matchOnMouseExited (CheckboxOnMouseExited f) = Just f
-  matchOnMouseExited _ = Nothing
-  mkOnMouseDown = CheckboxOnMouseDown
-  matchOnMouseDown (CheckboxOnMouseDown f) = Just f
-  matchOnMouseDown _ = Nothing
-  mkOnMouseUp = CheckboxOnMouseUp
-  matchOnMouseUp (CheckboxOnMouseUp f) = Just f
-  matchOnMouseUp _ = Nothing
-  mkOnKeyPressed = CheckboxOnKeyPressed
-  matchOnKeyPressed (CheckboxOnKeyPressed f) = Just f
-  matchOnKeyPressed _ = Nothing
+  configureOnClicked = CheckboxOnClicked
+  extractOnClicked (CheckboxOnClicked f) = Just f
+  extractOnClicked _ = Nothing
+  configureOnFocusGained = CheckboxOnFocusGained
+  extractOnFocusGained (CheckboxOnFocusGained f) = Just f
+  extractOnFocusGained _ = Nothing
+  configureOnFocusLost = CheckboxOnFocusLost
+  extractOnFocusLost (CheckboxOnFocusLost f) = Just f
+  extractOnFocusLost _ = Nothing
+  configureOnMouseEntered = CheckboxOnMouseEntered
+  extractOnMouseEntered (CheckboxOnMouseEntered f) = Just f
+  extractOnMouseEntered _ = Nothing
+  configureOnMouseExited = CheckboxOnMouseExited
+  extractOnMouseExited (CheckboxOnMouseExited f) = Just f
+  extractOnMouseExited _ = Nothing
+  configureOnMouseDown = CheckboxOnMouseDown
+  extractOnMouseDown (CheckboxOnMouseDown f) = Just f
+  extractOnMouseDown _ = Nothing
+  configureOnMouseUp = CheckboxOnMouseUp
+  extractOnMouseUp (CheckboxOnMouseUp f) = Just f
+  extractOnMouseUp _ = Nothing
+  configureOnKeyPressed = CheckboxOnKeyPressed
+  extractOnKeyPressed (CheckboxOnKeyPressed f) = Just f
+  extractOnKeyPressed _ = Nothing
 
 instance HasTextConfig (CheckboxAttributes e msg) where
-  mkText = CheckboxText
-  matchText (CheckboxText t) = Just t
-  matchText _ = Nothing
+  configureText = CheckboxText
+  extractText (CheckboxText t) = Just t
+  extractText _ = Nothing
 
 instance HasIsSelectedConfig (CheckboxAttributes e msg) where
-  mkIsSelected = CheckboxIsSelected
+  configureIsSelected = CheckboxIsSelected
 
 instance HasSelectedChangedEvents e msg (CheckboxAttributes e msg) where
-  mkOnSelectedChanged = CheckboxOnSelectedChanged
+  configureOnSelectedChanged = CheckboxOnSelectedChanged
 
 -- | Configuration for 'checkbox', resolved from a
 -- @['CheckboxAttributes' e msg]@.

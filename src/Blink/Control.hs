@@ -140,56 +140,56 @@ data FocusOnClick e
   deriving (Eq, Show)
 
 -- | Implemented by any attrs type that carries the capabilities shared by
--- every control -- built from @mk@\/@match@ pairs rather than plain
+-- every control -- built from @configure@\/@extract@ pairs rather than plain
 -- accessors, so a value can be both constructed /and/ generically inspected
 -- (see 'translateCommon'). 'isFocusable'\/'isEnabled'\/'style'\/
 -- 'tabNavigation'\/'isArrowNavigationEnabled' are the smart constructors
--- built on the @mk@ half; a widget's own module only re-exports the ones it
+-- built on the @configure@ half; a widget's own module only re-exports the ones it
 -- actually wants callers to be able to set.
 class HasControlConfig e cfg | cfg -> e where
-  mkIsFocusable :: Bool -> cfg
-  matchIsFocusable :: cfg -> Maybe Bool
-  mkIsEnabled :: Bool -> cfg
-  matchIsEnabled :: cfg -> Maybe Bool
-  mkStyle :: StyleKey e -> cfg
-  matchStyle :: cfg -> Maybe (StyleKey e)
-  mkTabNavigation :: NavigationMode -> cfg
-  matchTabNavigation :: cfg -> Maybe NavigationMode
-  mkIsArrowNavigationEnabled :: Bool -> cfg
-  matchIsArrowNavigationEnabled :: cfg -> Maybe Bool
+  configureIsFocusable :: Bool -> cfg
+  extractIsFocusable :: cfg -> Maybe Bool
+  configureIsEnabled :: Bool -> cfg
+  extractIsEnabled :: cfg -> Maybe Bool
+  configureStyle :: StyleKey e -> cfg
+  extractStyle :: cfg -> Maybe (StyleKey e)
+  configureTabNavigation :: NavigationMode -> cfg
+  extractTabNavigation :: cfg -> Maybe NavigationMode
+  configureIsArrowNavigationEnabled :: Bool -> cfg
+  extractIsArrowNavigationEnabled :: cfg -> Maybe Bool
 
 -- | Whether this control participates in keyboard focus at all: Tab\/
 -- Shift-Tab cycling onto it, and auto-claiming focus by rendering first
 -- while nothing else holds it. 'False' excludes it from both.
 isFocusable :: HasControlConfig e cfg => Bool -> cfg
-isFocusable = mkIsFocusable
+isFocusable = configureIsFocusable
 
 -- | Whether the control responds to input at all. A disabled control still
 -- renders (in its disabled style) but ignores hover, clicks, key presses,
 -- and focus, and is skipped by Tab\/Shift-Tab. Defaults to 'True'.
 isEnabled :: HasControlConfig e cfg => Bool -> cfg
-isEnabled = mkIsEnabled
+isEnabled = configureIsEnabled
 
 -- | Which 'StyleKey' this control resolves its style from. Defaults to a
 -- 'Class' named after the control; pass 'ElementId' to theme this one
 -- instance differently, or a different 'Class' to group it with others.
 style :: HasControlConfig e cfg => StyleKey e -> cfg
-style = mkStyle
+style = configureStyle
 
 -- | How this control's children navigate via Tab\/Shift-Tab (and, since
 -- they ride along with the same scope, Ctrl+Tab\/Ctrl+Shift+Tab) -- see
 -- 'NavigationMode'. Defaults to 'Flatten'.
 tabNavigation :: HasControlConfig e cfg => NavigationMode -> cfg
-tabNavigation = mkTabNavigation
+tabNavigation = configureTabNavigation
 
 -- | Whether the arrow keys also cycle within this control's focus scope,
 -- the same way Tab\/Shift-Tab do. Only meaningful when 'tabNavigation' is
 -- 'Contained'. Defaults to 'False'.
 isArrowNavigationEnabled :: HasControlConfig e cfg => Bool -> cfg
-isArrowNavigationEnabled = mkIsArrowNavigationEnabled
+isArrowNavigationEnabled = configureIsArrowNavigationEnabled
 
 -- | Converts the common subset of one attrs type onto another's, using the
--- @match@ half of the source's instances and the @mk@ half of the
+-- @extract@ half of the source's instances and the @configure@ half of the
 -- destination's -- 'Nothing' when @a@ doesn't carry any of these
 -- capabilities (i.e. it's one of the destination type's own-specific
 -- attrs). The mechanism every widget uses to translate its own closed
@@ -198,19 +198,19 @@ translateCommon
   :: (HasControlConfig e a, HasControlConfig e b, HasElementEvents e msg a, HasElementEvents e msg b)
   => a -> Maybe b
 translateCommon a = asum
-  [ mkIsFocusable <$> matchIsFocusable a
-  , mkIsEnabled <$> matchIsEnabled a
-  , mkStyle <$> matchStyle a
-  , mkTabNavigation <$> matchTabNavigation a
-  , mkIsArrowNavigationEnabled <$> matchIsArrowNavigationEnabled a
-  , mkOnClicked <$> matchOnClicked a
-  , mkOnFocusGained <$> matchOnFocusGained a
-  , mkOnFocusLost <$> matchOnFocusLost a
-  , mkOnMouseEntered <$> matchOnMouseEntered a
-  , mkOnMouseExited <$> matchOnMouseExited a
-  , mkOnMouseDown <$> matchOnMouseDown a
-  , mkOnMouseUp <$> matchOnMouseUp a
-  , mkOnKeyPressed <$> matchOnKeyPressed a
+  [ configureIsFocusable <$> extractIsFocusable a
+  , configureIsEnabled <$> extractIsEnabled a
+  , configureStyle <$> extractStyle a
+  , configureTabNavigation <$> extractTabNavigation a
+  , configureIsArrowNavigationEnabled <$> extractIsArrowNavigationEnabled a
+  , configureOnClicked <$> extractOnClicked a
+  , configureOnFocusGained <$> extractOnFocusGained a
+  , configureOnFocusLost <$> extractOnFocusLost a
+  , configureOnMouseEntered <$> extractOnMouseEntered a
+  , configureOnMouseExited <$> extractOnMouseExited a
+  , configureOnMouseDown <$> extractOnMouseDown a
+  , configureOnMouseUp <$> extractOnMouseUp a
+  , configureOnKeyPressed <$> extractOnKeyPressed a
   ]
 
 -- | Implemented only by 'ControlAttrs' in this migration: what clicking a
@@ -220,25 +220,25 @@ translateCommon a = asum
 -- it. A more-derived control that genuinely wants callers to set this can
 -- still write the instance itself.
 class HasFocusOnClickConfig e cfg | cfg -> e where
-  mkFocusOnClick :: FocusOnClick e -> cfg
-  matchFocusOnClick :: cfg -> Maybe (FocusOnClick e)
+  configureFocusOnClick :: FocusOnClick e -> cfg
+  extractFocusOnClick :: cfg -> Maybe (FocusOnClick e)
 
 -- | Sets what clicking this control does to focus. Only ever called from
 -- inside a widget's own module -- see 'HasFocusOnClickConfig'.
 focusOnClick :: HasFocusOnClickConfig e cfg => FocusOnClick e -> cfg
-focusOnClick = mkFocusOnClick
+focusOnClick = configureFocusOnClick
 
 -- | Implemented only by 'ControlAttrs' in this migration: the content
 -- rendered inside a control's chrome. Deliberately not part of
 -- 'HasControlConfig' -- see 'HasFocusOnClickConfig', which this mirrors.
 class HasContentConfig e msg cfg | cfg -> e msg where
-  mkContent :: UI e msg () -> cfg
-  matchContent :: cfg -> Maybe (UI e msg ())
+  configureContent :: UI e msg () -> cfg
+  extractContent :: cfg -> Maybe (UI e msg ())
 
 -- | Sets the content rendered inside this control's chrome. Only ever
 -- called from inside a widget's own module -- see 'HasContentConfig'.
 content :: HasContentConfig e msg cfg => UI e msg () -> cfg
-content = mkContent
+content = configureContent
 
 -- | Implemented by any attrs type that carries displayed text, letting
 -- 'text' work uniformly across every widget that has some (a caption for a
@@ -246,12 +246,12 @@ content = mkContent
 -- folded into 'translateCommon', since "Blink.Control" itself has no text
 -- capability to translate onto.
 class HasTextConfig cfg where
-  mkText :: Text -> cfg
-  matchText :: cfg -> Maybe Text
+  configureText :: Text -> cfg
+  extractText :: cfg -> Maybe Text
 
 -- | Sets the text a control displays. Defaults to @\"\"@ when not given.
 text :: HasTextConfig cfg => Text -> cfg
-text = mkText
+text = configureText
 
 -- | 'Blink.Control'\'s own closed attrs type -- one constructor per
 -- capability, including 'focusOnClick'\/'content' (unlike every other
@@ -274,57 +274,57 @@ data ControlAttrs e msg
   | ControlContent (UI e msg ())
 
 instance HasControlConfig e (ControlAttrs e msg) where
-  mkIsFocusable = ControlIsFocusable
-  matchIsFocusable (ControlIsFocusable b) = Just b
-  matchIsFocusable _ = Nothing
-  mkIsEnabled = ControlIsEnabled
-  matchIsEnabled (ControlIsEnabled b) = Just b
-  matchIsEnabled _ = Nothing
-  mkStyle = ControlStyle
-  matchStyle (ControlStyle k) = Just k
-  matchStyle _ = Nothing
-  mkTabNavigation = ControlTabNavigation
-  matchTabNavigation (ControlTabNavigation m) = Just m
-  matchTabNavigation _ = Nothing
-  mkIsArrowNavigationEnabled = ControlIsArrowNavigationEnabled
-  matchIsArrowNavigationEnabled (ControlIsArrowNavigationEnabled b) = Just b
-  matchIsArrowNavigationEnabled _ = Nothing
+  configureIsFocusable = ControlIsFocusable
+  extractIsFocusable (ControlIsFocusable b) = Just b
+  extractIsFocusable _ = Nothing
+  configureIsEnabled = ControlIsEnabled
+  extractIsEnabled (ControlIsEnabled b) = Just b
+  extractIsEnabled _ = Nothing
+  configureStyle = ControlStyle
+  extractStyle (ControlStyle k) = Just k
+  extractStyle _ = Nothing
+  configureTabNavigation = ControlTabNavigation
+  extractTabNavigation (ControlTabNavigation m) = Just m
+  extractTabNavigation _ = Nothing
+  configureIsArrowNavigationEnabled = ControlIsArrowNavigationEnabled
+  extractIsArrowNavigationEnabled (ControlIsArrowNavigationEnabled b) = Just b
+  extractIsArrowNavigationEnabled _ = Nothing
 
 instance HasElementEvents e msg (ControlAttrs e msg) where
-  mkOnClicked = ControlOnClicked
-  matchOnClicked (ControlOnClicked f) = Just f
-  matchOnClicked _ = Nothing
-  mkOnFocusGained = ControlOnFocusGained
-  matchOnFocusGained (ControlOnFocusGained f) = Just f
-  matchOnFocusGained _ = Nothing
-  mkOnFocusLost = ControlOnFocusLost
-  matchOnFocusLost (ControlOnFocusLost f) = Just f
-  matchOnFocusLost _ = Nothing
-  mkOnMouseEntered = ControlOnMouseEntered
-  matchOnMouseEntered (ControlOnMouseEntered f) = Just f
-  matchOnMouseEntered _ = Nothing
-  mkOnMouseExited = ControlOnMouseExited
-  matchOnMouseExited (ControlOnMouseExited f) = Just f
-  matchOnMouseExited _ = Nothing
-  mkOnMouseDown = ControlOnMouseDown
-  matchOnMouseDown (ControlOnMouseDown f) = Just f
-  matchOnMouseDown _ = Nothing
-  mkOnMouseUp = ControlOnMouseUp
-  matchOnMouseUp (ControlOnMouseUp f) = Just f
-  matchOnMouseUp _ = Nothing
-  mkOnKeyPressed = ControlOnKeyPressed
-  matchOnKeyPressed (ControlOnKeyPressed f) = Just f
-  matchOnKeyPressed _ = Nothing
+  configureOnClicked = ControlOnClicked
+  extractOnClicked (ControlOnClicked f) = Just f
+  extractOnClicked _ = Nothing
+  configureOnFocusGained = ControlOnFocusGained
+  extractOnFocusGained (ControlOnFocusGained f) = Just f
+  extractOnFocusGained _ = Nothing
+  configureOnFocusLost = ControlOnFocusLost
+  extractOnFocusLost (ControlOnFocusLost f) = Just f
+  extractOnFocusLost _ = Nothing
+  configureOnMouseEntered = ControlOnMouseEntered
+  extractOnMouseEntered (ControlOnMouseEntered f) = Just f
+  extractOnMouseEntered _ = Nothing
+  configureOnMouseExited = ControlOnMouseExited
+  extractOnMouseExited (ControlOnMouseExited f) = Just f
+  extractOnMouseExited _ = Nothing
+  configureOnMouseDown = ControlOnMouseDown
+  extractOnMouseDown (ControlOnMouseDown f) = Just f
+  extractOnMouseDown _ = Nothing
+  configureOnMouseUp = ControlOnMouseUp
+  extractOnMouseUp (ControlOnMouseUp f) = Just f
+  extractOnMouseUp _ = Nothing
+  configureOnKeyPressed = ControlOnKeyPressed
+  extractOnKeyPressed (ControlOnKeyPressed f) = Just f
+  extractOnKeyPressed _ = Nothing
 
 instance HasFocusOnClickConfig e (ControlAttrs e msg) where
-  mkFocusOnClick = ControlFocusOnClick
-  matchFocusOnClick (ControlFocusOnClick f) = Just f
-  matchFocusOnClick _ = Nothing
+  configureFocusOnClick = ControlFocusOnClick
+  extractFocusOnClick (ControlFocusOnClick f) = Just f
+  extractFocusOnClick _ = Nothing
 
 instance HasContentConfig e msg (ControlAttrs e msg) where
-  mkContent = ControlContent
-  matchContent (ControlContent c) = Just c
-  matchContent _ = Nothing
+  configureContent = ControlContent
+  extractContent (ControlContent c) = Just c
+  extractContent _ = Nothing
 
 -- | Translates a 'ControlAttrs' down to "Blink.Element"'s own closed
 -- 'ElementAttrs' -- @Nothing@ for every capability 'Blink.Element' has no
@@ -334,14 +334,14 @@ instance HasContentConfig e msg (ControlAttrs e msg) where
 -- own @toXControlAttr@ calls 'control' with one of 'ControlAttrs'.
 toElementAttr :: ControlAttrs e msg -> Maybe (ElementAttrs e msg)
 toElementAttr a = asum
-  [ mkOnClicked <$> matchOnClicked a
-  , mkOnFocusGained <$> matchOnFocusGained a
-  , mkOnFocusLost <$> matchOnFocusLost a
-  , mkOnMouseEntered <$> matchOnMouseEntered a
-  , mkOnMouseExited <$> matchOnMouseExited a
-  , mkOnMouseDown <$> matchOnMouseDown a
-  , mkOnMouseUp <$> matchOnMouseUp a
-  , mkOnKeyPressed <$> matchOnKeyPressed a
+  [ configureOnClicked <$> extractOnClicked a
+  , configureOnFocusGained <$> extractOnFocusGained a
+  , configureOnFocusLost <$> extractOnFocusLost a
+  , configureOnMouseEntered <$> extractOnMouseEntered a
+  , configureOnMouseExited <$> extractOnMouseExited a
+  , configureOnMouseDown <$> extractOnMouseDown a
+  , configureOnMouseUp <$> extractOnMouseUp a
+  , configureOnKeyPressed <$> extractOnKeyPressed a
   ]
 
 -- | Concatenates the 'Out's every handler in @hs@ produces for @a@, without

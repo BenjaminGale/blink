@@ -40,7 +40,7 @@ type EventHandler e msg = () -> [Out e msg]
 type KeyEventHandler e msg = KeyEvent -> [Out e msg]
 
 -- | Implemented by any attrs type that carries the raw mouse\/keyboard\/
--- focus reactions every element can raise -- built from @mk@\/@match@ pairs
+-- focus reactions every element can raise -- built from @configure@\/@extract@ pairs
 -- rather than plain accessors, so a value can be both constructed /and/
 -- generically inspected. 'Blink.Control.HasControlConfig' and friends use
 -- the same shape; 'Blink.Control.ControlAttrs' and every ready-made
@@ -48,22 +48,22 @@ type KeyEventHandler e msg = KeyEvent -> [Out e msg]
 -- capabilities, which is what lets 'element' and 'Blink.Control.control'
 -- both dispatch against whichever concrete attrs type a caller built.
 class HasElementEvents e msg cfg | cfg -> e msg where
-  mkOnClicked :: EventHandler e msg -> cfg
-  matchOnClicked :: cfg -> Maybe (EventHandler e msg)
-  mkOnFocusGained :: EventHandler e msg -> cfg
-  matchOnFocusGained :: cfg -> Maybe (EventHandler e msg)
-  mkOnFocusLost :: EventHandler e msg -> cfg
-  matchOnFocusLost :: cfg -> Maybe (EventHandler e msg)
-  mkOnMouseEntered :: EventHandler e msg -> cfg
-  matchOnMouseEntered :: cfg -> Maybe (EventHandler e msg)
-  mkOnMouseExited :: EventHandler e msg -> cfg
-  matchOnMouseExited :: cfg -> Maybe (EventHandler e msg)
-  mkOnMouseDown :: EventHandler e msg -> cfg
-  matchOnMouseDown :: cfg -> Maybe (EventHandler e msg)
-  mkOnMouseUp :: EventHandler e msg -> cfg
-  matchOnMouseUp :: cfg -> Maybe (EventHandler e msg)
-  mkOnKeyPressed :: KeyEventHandler e msg -> cfg
-  matchOnKeyPressed :: cfg -> Maybe (KeyEventHandler e msg)
+  configureOnClicked :: EventHandler e msg -> cfg
+  extractOnClicked :: cfg -> Maybe (EventHandler e msg)
+  configureOnFocusGained :: EventHandler e msg -> cfg
+  extractOnFocusGained :: cfg -> Maybe (EventHandler e msg)
+  configureOnFocusLost :: EventHandler e msg -> cfg
+  extractOnFocusLost :: cfg -> Maybe (EventHandler e msg)
+  configureOnMouseEntered :: EventHandler e msg -> cfg
+  extractOnMouseEntered :: cfg -> Maybe (EventHandler e msg)
+  configureOnMouseExited :: EventHandler e msg -> cfg
+  extractOnMouseExited :: cfg -> Maybe (EventHandler e msg)
+  configureOnMouseDown :: EventHandler e msg -> cfg
+  extractOnMouseDown :: cfg -> Maybe (EventHandler e msg)
+  configureOnMouseUp :: EventHandler e msg -> cfg
+  extractOnMouseUp :: cfg -> Maybe (EventHandler e msg)
+  configureOnKeyPressed :: KeyEventHandler e msg -> cfg
+  extractOnKeyPressed :: cfg -> Maybe (KeyEventHandler e msg)
 
 -- | Reacts when the press-and-release cycle completes on this element --
 -- the mouse button coming up while the element is hit, /and/ this element
@@ -75,30 +75,30 @@ class HasElementEvents e msg cfg | cfg -> e msg where
 -- mouse-specific half of that fact, already checked against capture so the
 -- caller doesn't have to.
 onClicked :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onClicked = mkOnClicked
+onClicked = configureOnClicked
 
 -- | Reacts when the element is named the winner of a focus transfer.
 -- 'element' only observes this -- it never claims focus itself;
 -- auto-claim\/self-clear are a different, simpler case handled entirely by
 -- whichever code performs them directly (see 'Blink.UI.getFocusChange').
 onFocusGained :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onFocusGained = mkOnFocusGained
+onFocusGained = configureOnFocusGained
 
 -- | Reacts when the element loses focus, whether to a transfer or a clear.
 onFocusLost :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onFocusLost = mkOnFocusLost
+onFocusLost = configureOnFocusLost
 
 -- | Reacts when the mouse starts being over the element this frame.
 onMouseEntered :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onMouseEntered = mkOnMouseEntered
+onMouseEntered = configureOnMouseEntered
 
 -- | Reacts when the mouse stops being over the element this frame.
 onMouseExited :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onMouseExited = mkOnMouseExited
+onMouseExited = configureOnMouseExited
 
 -- | Reacts when the mouse button goes down while the element is hit.
 onMouseDown :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onMouseDown = mkOnMouseDown
+onMouseDown = configureOnMouseDown
 
 -- | Reacts when the mouse button comes up while the element is hit --
 -- fires regardless of which element (if any) holds capture, so a drag
@@ -106,12 +106,12 @@ onMouseDown = mkOnMouseDown
 -- this element; a higher layer decides whether that counts as a click
 -- (see 'onClicked').
 onMouseUp :: HasElementEvents e msg cfg => EventHandler e msg -> cfg
-onMouseUp = mkOnMouseUp
+onMouseUp = configureOnMouseUp
 
 -- | Reacts to a key event while the element holds focus, with the
 -- triggering 'KeyEvent'.
 onKeyPressed :: HasElementEvents e msg cfg => KeyEventHandler e msg -> cfg
-onKeyPressed = mkOnKeyPressed
+onKeyPressed = configureOnKeyPressed
 
 -- | 'Blink.Element'\'s own closed attrs type -- one constructor per raw
 -- event, and nothing else. For anything that wants bare raw-event
@@ -129,30 +129,30 @@ data ElementAttrs e msg
   | ElementOnKeyPressed (KeyEventHandler e msg)
 
 instance HasElementEvents e msg (ElementAttrs e msg) where
-  mkOnClicked = ElementOnClicked
-  matchOnClicked (ElementOnClicked f) = Just f
-  matchOnClicked _ = Nothing
-  mkOnFocusGained = ElementOnFocusGained
-  matchOnFocusGained (ElementOnFocusGained f) = Just f
-  matchOnFocusGained _ = Nothing
-  mkOnFocusLost = ElementOnFocusLost
-  matchOnFocusLost (ElementOnFocusLost f) = Just f
-  matchOnFocusLost _ = Nothing
-  mkOnMouseEntered = ElementOnMouseEntered
-  matchOnMouseEntered (ElementOnMouseEntered f) = Just f
-  matchOnMouseEntered _ = Nothing
-  mkOnMouseExited = ElementOnMouseExited
-  matchOnMouseExited (ElementOnMouseExited f) = Just f
-  matchOnMouseExited _ = Nothing
-  mkOnMouseDown = ElementOnMouseDown
-  matchOnMouseDown (ElementOnMouseDown f) = Just f
-  matchOnMouseDown _ = Nothing
-  mkOnMouseUp = ElementOnMouseUp
-  matchOnMouseUp (ElementOnMouseUp f) = Just f
-  matchOnMouseUp _ = Nothing
-  mkOnKeyPressed = ElementOnKeyPressed
-  matchOnKeyPressed (ElementOnKeyPressed f) = Just f
-  matchOnKeyPressed _ = Nothing
+  configureOnClicked = ElementOnClicked
+  extractOnClicked (ElementOnClicked f) = Just f
+  extractOnClicked _ = Nothing
+  configureOnFocusGained = ElementOnFocusGained
+  extractOnFocusGained (ElementOnFocusGained f) = Just f
+  extractOnFocusGained _ = Nothing
+  configureOnFocusLost = ElementOnFocusLost
+  extractOnFocusLost (ElementOnFocusLost f) = Just f
+  extractOnFocusLost _ = Nothing
+  configureOnMouseEntered = ElementOnMouseEntered
+  extractOnMouseEntered (ElementOnMouseEntered f) = Just f
+  extractOnMouseEntered _ = Nothing
+  configureOnMouseExited = ElementOnMouseExited
+  extractOnMouseExited (ElementOnMouseExited f) = Just f
+  extractOnMouseExited _ = Nothing
+  configureOnMouseDown = ElementOnMouseDown
+  extractOnMouseDown (ElementOnMouseDown f) = Just f
+  extractOnMouseDown _ = Nothing
+  configureOnMouseUp = ElementOnMouseUp
+  extractOnMouseUp (ElementOnMouseUp f) = Just f
+  extractOnMouseUp _ = Nothing
+  configureOnKeyPressed = ElementOnKeyPressed
+  extractOnKeyPressed (ElementOnKeyPressed f) = Just f
+  extractOnKeyPressed _ = Nothing
 
 -- | Every raw event's resolved handler list, folded from an attrs list by
 -- 'resolveElementConfig'.

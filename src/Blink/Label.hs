@@ -55,52 +55,52 @@ data LabelAttributes e msg
   | LabelTarget e
 
 instance HasControlConfig e (LabelAttributes e msg) where
-  mkIsFocusable = LabelIsFocusable
-  matchIsFocusable (LabelIsFocusable b) = Just b
-  matchIsFocusable _ = Nothing
-  mkIsEnabled = LabelIsEnabled
-  matchIsEnabled (LabelIsEnabled b) = Just b
-  matchIsEnabled _ = Nothing
-  mkStyle = LabelStyle
-  matchStyle (LabelStyle k) = Just k
-  matchStyle _ = Nothing
-  mkTabNavigation = LabelTabNavigation
-  matchTabNavigation (LabelTabNavigation m) = Just m
-  matchTabNavigation _ = Nothing
-  mkIsArrowNavigationEnabled = LabelIsArrowNavigationEnabled
-  matchIsArrowNavigationEnabled (LabelIsArrowNavigationEnabled b) = Just b
-  matchIsArrowNavigationEnabled _ = Nothing
+  configureIsFocusable = LabelIsFocusable
+  extractIsFocusable (LabelIsFocusable b) = Just b
+  extractIsFocusable _ = Nothing
+  configureIsEnabled = LabelIsEnabled
+  extractIsEnabled (LabelIsEnabled b) = Just b
+  extractIsEnabled _ = Nothing
+  configureStyle = LabelStyle
+  extractStyle (LabelStyle k) = Just k
+  extractStyle _ = Nothing
+  configureTabNavigation = LabelTabNavigation
+  extractTabNavigation (LabelTabNavigation m) = Just m
+  extractTabNavigation _ = Nothing
+  configureIsArrowNavigationEnabled = LabelIsArrowNavigationEnabled
+  extractIsArrowNavigationEnabled (LabelIsArrowNavigationEnabled b) = Just b
+  extractIsArrowNavigationEnabled _ = Nothing
 
 instance HasElementEvents e msg (LabelAttributes e msg) where
-  mkOnClicked = LabelOnClicked
-  matchOnClicked (LabelOnClicked f) = Just f
-  matchOnClicked _ = Nothing
-  mkOnFocusGained = LabelOnFocusGained
-  matchOnFocusGained (LabelOnFocusGained f) = Just f
-  matchOnFocusGained _ = Nothing
-  mkOnFocusLost = LabelOnFocusLost
-  matchOnFocusLost (LabelOnFocusLost f) = Just f
-  matchOnFocusLost _ = Nothing
-  mkOnMouseEntered = LabelOnMouseEntered
-  matchOnMouseEntered (LabelOnMouseEntered f) = Just f
-  matchOnMouseEntered _ = Nothing
-  mkOnMouseExited = LabelOnMouseExited
-  matchOnMouseExited (LabelOnMouseExited f) = Just f
-  matchOnMouseExited _ = Nothing
-  mkOnMouseDown = LabelOnMouseDown
-  matchOnMouseDown (LabelOnMouseDown f) = Just f
-  matchOnMouseDown _ = Nothing
-  mkOnMouseUp = LabelOnMouseUp
-  matchOnMouseUp (LabelOnMouseUp f) = Just f
-  matchOnMouseUp _ = Nothing
-  mkOnKeyPressed = LabelOnKeyPressed
-  matchOnKeyPressed (LabelOnKeyPressed f) = Just f
-  matchOnKeyPressed _ = Nothing
+  configureOnClicked = LabelOnClicked
+  extractOnClicked (LabelOnClicked f) = Just f
+  extractOnClicked _ = Nothing
+  configureOnFocusGained = LabelOnFocusGained
+  extractOnFocusGained (LabelOnFocusGained f) = Just f
+  extractOnFocusGained _ = Nothing
+  configureOnFocusLost = LabelOnFocusLost
+  extractOnFocusLost (LabelOnFocusLost f) = Just f
+  extractOnFocusLost _ = Nothing
+  configureOnMouseEntered = LabelOnMouseEntered
+  extractOnMouseEntered (LabelOnMouseEntered f) = Just f
+  extractOnMouseEntered _ = Nothing
+  configureOnMouseExited = LabelOnMouseExited
+  extractOnMouseExited (LabelOnMouseExited f) = Just f
+  extractOnMouseExited _ = Nothing
+  configureOnMouseDown = LabelOnMouseDown
+  extractOnMouseDown (LabelOnMouseDown f) = Just f
+  extractOnMouseDown _ = Nothing
+  configureOnMouseUp = LabelOnMouseUp
+  extractOnMouseUp (LabelOnMouseUp f) = Just f
+  extractOnMouseUp _ = Nothing
+  configureOnKeyPressed = LabelOnKeyPressed
+  extractOnKeyPressed (LabelOnKeyPressed f) = Just f
+  extractOnKeyPressed _ = Nothing
 
 instance HasTextConfig (LabelAttributes e msg) where
-  mkText = LabelText
-  matchText (LabelText t) = Just t
-  matchText _ = Nothing
+  configureText = LabelText
+  extractText (LabelText t) = Just t
+  extractText _ = Nothing
 
 -- | Names the element a click on the label should focus instead of the
 -- label itself -- e.g. a caption redirecting a click onto the input beside

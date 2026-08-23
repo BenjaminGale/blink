@@ -101,52 +101,52 @@ data ButtonAttributes e msg
   | ButtonText Text
 
 instance HasControlConfig e (ButtonAttributes e msg) where
-  mkIsFocusable = ButtonIsFocusable
-  matchIsFocusable (ButtonIsFocusable b) = Just b
-  matchIsFocusable _ = Nothing
-  mkIsEnabled = ButtonIsEnabled
-  matchIsEnabled (ButtonIsEnabled b) = Just b
-  matchIsEnabled _ = Nothing
-  mkStyle = ButtonStyle
-  matchStyle (ButtonStyle k) = Just k
-  matchStyle _ = Nothing
-  mkTabNavigation = ButtonTabNavigation
-  matchTabNavigation (ButtonTabNavigation m) = Just m
-  matchTabNavigation _ = Nothing
-  mkIsArrowNavigationEnabled = ButtonIsArrowNavigationEnabled
-  matchIsArrowNavigationEnabled (ButtonIsArrowNavigationEnabled b) = Just b
-  matchIsArrowNavigationEnabled _ = Nothing
+  configureIsFocusable = ButtonIsFocusable
+  extractIsFocusable (ButtonIsFocusable b) = Just b
+  extractIsFocusable _ = Nothing
+  configureIsEnabled = ButtonIsEnabled
+  extractIsEnabled (ButtonIsEnabled b) = Just b
+  extractIsEnabled _ = Nothing
+  configureStyle = ButtonStyle
+  extractStyle (ButtonStyle k) = Just k
+  extractStyle _ = Nothing
+  configureTabNavigation = ButtonTabNavigation
+  extractTabNavigation (ButtonTabNavigation m) = Just m
+  extractTabNavigation _ = Nothing
+  configureIsArrowNavigationEnabled = ButtonIsArrowNavigationEnabled
+  extractIsArrowNavigationEnabled (ButtonIsArrowNavigationEnabled b) = Just b
+  extractIsArrowNavigationEnabled _ = Nothing
 
 instance HasElementEvents e msg (ButtonAttributes e msg) where
-  mkOnClicked = ButtonOnClicked
-  matchOnClicked (ButtonOnClicked f) = Just f
-  matchOnClicked _ = Nothing
-  mkOnFocusGained = ButtonOnFocusGained
-  matchOnFocusGained (ButtonOnFocusGained f) = Just f
-  matchOnFocusGained _ = Nothing
-  mkOnFocusLost = ButtonOnFocusLost
-  matchOnFocusLost (ButtonOnFocusLost f) = Just f
-  matchOnFocusLost _ = Nothing
-  mkOnMouseEntered = ButtonOnMouseEntered
-  matchOnMouseEntered (ButtonOnMouseEntered f) = Just f
-  matchOnMouseEntered _ = Nothing
-  mkOnMouseExited = ButtonOnMouseExited
-  matchOnMouseExited (ButtonOnMouseExited f) = Just f
-  matchOnMouseExited _ = Nothing
-  mkOnMouseDown = ButtonOnMouseDown
-  matchOnMouseDown (ButtonOnMouseDown f) = Just f
-  matchOnMouseDown _ = Nothing
-  mkOnMouseUp = ButtonOnMouseUp
-  matchOnMouseUp (ButtonOnMouseUp f) = Just f
-  matchOnMouseUp _ = Nothing
-  mkOnKeyPressed = ButtonOnKeyPressed
-  matchOnKeyPressed (ButtonOnKeyPressed f) = Just f
-  matchOnKeyPressed _ = Nothing
+  configureOnClicked = ButtonOnClicked
+  extractOnClicked (ButtonOnClicked f) = Just f
+  extractOnClicked _ = Nothing
+  configureOnFocusGained = ButtonOnFocusGained
+  extractOnFocusGained (ButtonOnFocusGained f) = Just f
+  extractOnFocusGained _ = Nothing
+  configureOnFocusLost = ButtonOnFocusLost
+  extractOnFocusLost (ButtonOnFocusLost f) = Just f
+  extractOnFocusLost _ = Nothing
+  configureOnMouseEntered = ButtonOnMouseEntered
+  extractOnMouseEntered (ButtonOnMouseEntered f) = Just f
+  extractOnMouseEntered _ = Nothing
+  configureOnMouseExited = ButtonOnMouseExited
+  extractOnMouseExited (ButtonOnMouseExited f) = Just f
+  extractOnMouseExited _ = Nothing
+  configureOnMouseDown = ButtonOnMouseDown
+  extractOnMouseDown (ButtonOnMouseDown f) = Just f
+  extractOnMouseDown _ = Nothing
+  configureOnMouseUp = ButtonOnMouseUp
+  extractOnMouseUp (ButtonOnMouseUp f) = Just f
+  extractOnMouseUp _ = Nothing
+  configureOnKeyPressed = ButtonOnKeyPressed
+  extractOnKeyPressed (ButtonOnKeyPressed f) = Just f
+  extractOnKeyPressed _ = Nothing
 
 instance HasTextConfig (ButtonAttributes e msg) where
-  mkText = ButtonText
-  matchText (ButtonText t) = Just t
-  matchText _ = Nothing
+  configureText = ButtonText
+  extractText (ButtonText t) = Just t
+  extractText _ = Nothing
 
 -- | Configuration for 'button', resolved from a @['ButtonAttributes' e msg]@.
 data ButtonConfig e msg = ButtonConfig
@@ -190,23 +190,23 @@ button eid attrs = buttonBase eid (mapMaybe toButtonControlAttr attrs) (bcfgOnCl
 -- carries whether it's currently selected -- lets 'isSelected' work
 -- uniformly across every such control's differently-shaped attrs type.
 class HasIsSelectedConfig cfg where
-  mkIsSelected :: Bool -> cfg
+  configureIsSelected :: Bool -> cfg
 
 -- | Whether the control is currently selected.
 isSelected :: HasIsSelectedConfig cfg => Bool -> cfg
-isSelected = mkIsSelected
+isSelected = configureIsSelected
 
 -- | Implemented by any toggle-style control's own attrs type to say how it
 -- carries a reaction to its selected state changing.
 class HasSelectedChangedEvents e msg cfg | cfg -> e msg where
-  mkOnSelectedChanged :: (Bool -> [Out e msg]) -> cfg
+  configureOnSelectedChanged :: (Bool -> [Out e msg]) -> cfg
 
 -- | Reacts when activating the control (a click or Enter while focused)
 -- moves its selected state to a new value, with the value it changed to.
 -- It's up to the reaction to actually store the new value and pass it back
 -- in via 'isSelected' next frame.
 onSelectedChanged :: HasSelectedChangedEvents e msg cfg => (Bool -> [Out e msg]) -> cfg
-onSelectedChanged = mkOnSelectedChanged
+onSelectedChanged = configureOnSelectedChanged
 
 -- | Runs @content@ as 'buttonBase', and additionally fires every
 -- @onSelectedChangedHandlers@ reaction (only) when activating the control
@@ -256,58 +256,58 @@ data ToggleButtonAttributes e msg
   | ToggleButtonOnSelectedChanged (Bool -> [Out e msg])
 
 instance HasControlConfig e (ToggleButtonAttributes e msg) where
-  mkIsFocusable = ToggleButtonIsFocusable
-  matchIsFocusable (ToggleButtonIsFocusable b) = Just b
-  matchIsFocusable _ = Nothing
-  mkIsEnabled = ToggleButtonIsEnabled
-  matchIsEnabled (ToggleButtonIsEnabled b) = Just b
-  matchIsEnabled _ = Nothing
-  mkStyle = ToggleButtonStyle
-  matchStyle (ToggleButtonStyle k) = Just k
-  matchStyle _ = Nothing
-  mkTabNavigation = ToggleButtonTabNavigation
-  matchTabNavigation (ToggleButtonTabNavigation m) = Just m
-  matchTabNavigation _ = Nothing
-  mkIsArrowNavigationEnabled = ToggleButtonIsArrowNavigationEnabled
-  matchIsArrowNavigationEnabled (ToggleButtonIsArrowNavigationEnabled b) = Just b
-  matchIsArrowNavigationEnabled _ = Nothing
+  configureIsFocusable = ToggleButtonIsFocusable
+  extractIsFocusable (ToggleButtonIsFocusable b) = Just b
+  extractIsFocusable _ = Nothing
+  configureIsEnabled = ToggleButtonIsEnabled
+  extractIsEnabled (ToggleButtonIsEnabled b) = Just b
+  extractIsEnabled _ = Nothing
+  configureStyle = ToggleButtonStyle
+  extractStyle (ToggleButtonStyle k) = Just k
+  extractStyle _ = Nothing
+  configureTabNavigation = ToggleButtonTabNavigation
+  extractTabNavigation (ToggleButtonTabNavigation m) = Just m
+  extractTabNavigation _ = Nothing
+  configureIsArrowNavigationEnabled = ToggleButtonIsArrowNavigationEnabled
+  extractIsArrowNavigationEnabled (ToggleButtonIsArrowNavigationEnabled b) = Just b
+  extractIsArrowNavigationEnabled _ = Nothing
 
 instance HasElementEvents e msg (ToggleButtonAttributes e msg) where
-  mkOnClicked = ToggleButtonOnClicked
-  matchOnClicked (ToggleButtonOnClicked f) = Just f
-  matchOnClicked _ = Nothing
-  mkOnFocusGained = ToggleButtonOnFocusGained
-  matchOnFocusGained (ToggleButtonOnFocusGained f) = Just f
-  matchOnFocusGained _ = Nothing
-  mkOnFocusLost = ToggleButtonOnFocusLost
-  matchOnFocusLost (ToggleButtonOnFocusLost f) = Just f
-  matchOnFocusLost _ = Nothing
-  mkOnMouseEntered = ToggleButtonOnMouseEntered
-  matchOnMouseEntered (ToggleButtonOnMouseEntered f) = Just f
-  matchOnMouseEntered _ = Nothing
-  mkOnMouseExited = ToggleButtonOnMouseExited
-  matchOnMouseExited (ToggleButtonOnMouseExited f) = Just f
-  matchOnMouseExited _ = Nothing
-  mkOnMouseDown = ToggleButtonOnMouseDown
-  matchOnMouseDown (ToggleButtonOnMouseDown f) = Just f
-  matchOnMouseDown _ = Nothing
-  mkOnMouseUp = ToggleButtonOnMouseUp
-  matchOnMouseUp (ToggleButtonOnMouseUp f) = Just f
-  matchOnMouseUp _ = Nothing
-  mkOnKeyPressed = ToggleButtonOnKeyPressed
-  matchOnKeyPressed (ToggleButtonOnKeyPressed f) = Just f
-  matchOnKeyPressed _ = Nothing
+  configureOnClicked = ToggleButtonOnClicked
+  extractOnClicked (ToggleButtonOnClicked f) = Just f
+  extractOnClicked _ = Nothing
+  configureOnFocusGained = ToggleButtonOnFocusGained
+  extractOnFocusGained (ToggleButtonOnFocusGained f) = Just f
+  extractOnFocusGained _ = Nothing
+  configureOnFocusLost = ToggleButtonOnFocusLost
+  extractOnFocusLost (ToggleButtonOnFocusLost f) = Just f
+  extractOnFocusLost _ = Nothing
+  configureOnMouseEntered = ToggleButtonOnMouseEntered
+  extractOnMouseEntered (ToggleButtonOnMouseEntered f) = Just f
+  extractOnMouseEntered _ = Nothing
+  configureOnMouseExited = ToggleButtonOnMouseExited
+  extractOnMouseExited (ToggleButtonOnMouseExited f) = Just f
+  extractOnMouseExited _ = Nothing
+  configureOnMouseDown = ToggleButtonOnMouseDown
+  extractOnMouseDown (ToggleButtonOnMouseDown f) = Just f
+  extractOnMouseDown _ = Nothing
+  configureOnMouseUp = ToggleButtonOnMouseUp
+  extractOnMouseUp (ToggleButtonOnMouseUp f) = Just f
+  extractOnMouseUp _ = Nothing
+  configureOnKeyPressed = ToggleButtonOnKeyPressed
+  extractOnKeyPressed (ToggleButtonOnKeyPressed f) = Just f
+  extractOnKeyPressed _ = Nothing
 
 instance HasTextConfig (ToggleButtonAttributes e msg) where
-  mkText = ToggleButtonText
-  matchText (ToggleButtonText t) = Just t
-  matchText _ = Nothing
+  configureText = ToggleButtonText
+  extractText (ToggleButtonText t) = Just t
+  extractText _ = Nothing
 
 instance HasIsSelectedConfig (ToggleButtonAttributes e msg) where
-  mkIsSelected = ToggleButtonIsSelected
+  configureIsSelected = ToggleButtonIsSelected
 
 instance HasSelectedChangedEvents e msg (ToggleButtonAttributes e msg) where
-  mkOnSelectedChanged = ToggleButtonOnSelectedChanged
+  configureOnSelectedChanged = ToggleButtonOnSelectedChanged
 
 -- | Configuration for 'toggleButton', resolved from a
 -- @['ToggleButtonAttributes' e msg]@.

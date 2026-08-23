@@ -65,47 +65,47 @@ data ProgressBarAttributes e msg
   | ProgressBarBandSpeed Double
 
 instance HasControlConfig e (ProgressBarAttributes e msg) where
-  mkIsFocusable = ProgressBarIsFocusable
-  matchIsFocusable (ProgressBarIsFocusable b) = Just b
-  matchIsFocusable _ = Nothing
-  mkIsEnabled = ProgressBarIsEnabled
-  matchIsEnabled (ProgressBarIsEnabled b) = Just b
-  matchIsEnabled _ = Nothing
-  mkStyle = ProgressBarStyle
-  matchStyle (ProgressBarStyle k) = Just k
-  matchStyle _ = Nothing
-  mkTabNavigation = ProgressBarTabNavigation
-  matchTabNavigation (ProgressBarTabNavigation m) = Just m
-  matchTabNavigation _ = Nothing
-  mkIsArrowNavigationEnabled = ProgressBarIsArrowNavigationEnabled
-  matchIsArrowNavigationEnabled (ProgressBarIsArrowNavigationEnabled b) = Just b
-  matchIsArrowNavigationEnabled _ = Nothing
+  configureIsFocusable = ProgressBarIsFocusable
+  extractIsFocusable (ProgressBarIsFocusable b) = Just b
+  extractIsFocusable _ = Nothing
+  configureIsEnabled = ProgressBarIsEnabled
+  extractIsEnabled (ProgressBarIsEnabled b) = Just b
+  extractIsEnabled _ = Nothing
+  configureStyle = ProgressBarStyle
+  extractStyle (ProgressBarStyle k) = Just k
+  extractStyle _ = Nothing
+  configureTabNavigation = ProgressBarTabNavigation
+  extractTabNavigation (ProgressBarTabNavigation m) = Just m
+  extractTabNavigation _ = Nothing
+  configureIsArrowNavigationEnabled = ProgressBarIsArrowNavigationEnabled
+  extractIsArrowNavigationEnabled (ProgressBarIsArrowNavigationEnabled b) = Just b
+  extractIsArrowNavigationEnabled _ = Nothing
 
 instance HasElementEvents e msg (ProgressBarAttributes e msg) where
-  mkOnClicked = ProgressBarOnClicked
-  matchOnClicked (ProgressBarOnClicked f) = Just f
-  matchOnClicked _ = Nothing
-  mkOnFocusGained = ProgressBarOnFocusGained
-  matchOnFocusGained (ProgressBarOnFocusGained f) = Just f
-  matchOnFocusGained _ = Nothing
-  mkOnFocusLost = ProgressBarOnFocusLost
-  matchOnFocusLost (ProgressBarOnFocusLost f) = Just f
-  matchOnFocusLost _ = Nothing
-  mkOnMouseEntered = ProgressBarOnMouseEntered
-  matchOnMouseEntered (ProgressBarOnMouseEntered f) = Just f
-  matchOnMouseEntered _ = Nothing
-  mkOnMouseExited = ProgressBarOnMouseExited
-  matchOnMouseExited (ProgressBarOnMouseExited f) = Just f
-  matchOnMouseExited _ = Nothing
-  mkOnMouseDown = ProgressBarOnMouseDown
-  matchOnMouseDown (ProgressBarOnMouseDown f) = Just f
-  matchOnMouseDown _ = Nothing
-  mkOnMouseUp = ProgressBarOnMouseUp
-  matchOnMouseUp (ProgressBarOnMouseUp f) = Just f
-  matchOnMouseUp _ = Nothing
-  mkOnKeyPressed = ProgressBarOnKeyPressed
-  matchOnKeyPressed (ProgressBarOnKeyPressed f) = Just f
-  matchOnKeyPressed _ = Nothing
+  configureOnClicked = ProgressBarOnClicked
+  extractOnClicked (ProgressBarOnClicked f) = Just f
+  extractOnClicked _ = Nothing
+  configureOnFocusGained = ProgressBarOnFocusGained
+  extractOnFocusGained (ProgressBarOnFocusGained f) = Just f
+  extractOnFocusGained _ = Nothing
+  configureOnFocusLost = ProgressBarOnFocusLost
+  extractOnFocusLost (ProgressBarOnFocusLost f) = Just f
+  extractOnFocusLost _ = Nothing
+  configureOnMouseEntered = ProgressBarOnMouseEntered
+  extractOnMouseEntered (ProgressBarOnMouseEntered f) = Just f
+  extractOnMouseEntered _ = Nothing
+  configureOnMouseExited = ProgressBarOnMouseExited
+  extractOnMouseExited (ProgressBarOnMouseExited f) = Just f
+  extractOnMouseExited _ = Nothing
+  configureOnMouseDown = ProgressBarOnMouseDown
+  extractOnMouseDown (ProgressBarOnMouseDown f) = Just f
+  extractOnMouseDown _ = Nothing
+  configureOnMouseUp = ProgressBarOnMouseUp
+  extractOnMouseUp (ProgressBarOnMouseUp f) = Just f
+  extractOnMouseUp _ = Nothing
+  configureOnKeyPressed = ProgressBarOnKeyPressed
+  extractOnKeyPressed (ProgressBarOnKeyPressed f) = Just f
+  extractOnKeyPressed _ = Nothing
 
 -- | Sets the bar to 'Progress' (determinate) or 'Indeterminate'. Defaults
 -- to @'Progress' 0@.

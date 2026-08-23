@@ -65,52 +65,52 @@ data TextInputAttributes e msg
   | TextInputOnSubmit (EventHandler e msg)
 
 instance HasControlConfig e (TextInputAttributes e msg) where
-  mkIsFocusable = TextInputIsFocusable
-  matchIsFocusable (TextInputIsFocusable b) = Just b
-  matchIsFocusable _ = Nothing
-  mkIsEnabled = TextInputIsEnabled
-  matchIsEnabled (TextInputIsEnabled b) = Just b
-  matchIsEnabled _ = Nothing
-  mkStyle = TextInputStyle
-  matchStyle (TextInputStyle k) = Just k
-  matchStyle _ = Nothing
-  mkTabNavigation = TextInputTabNavigation
-  matchTabNavigation (TextInputTabNavigation m) = Just m
-  matchTabNavigation _ = Nothing
-  mkIsArrowNavigationEnabled = TextInputIsArrowNavigationEnabled
-  matchIsArrowNavigationEnabled (TextInputIsArrowNavigationEnabled b) = Just b
-  matchIsArrowNavigationEnabled _ = Nothing
+  configureIsFocusable = TextInputIsFocusable
+  extractIsFocusable (TextInputIsFocusable b) = Just b
+  extractIsFocusable _ = Nothing
+  configureIsEnabled = TextInputIsEnabled
+  extractIsEnabled (TextInputIsEnabled b) = Just b
+  extractIsEnabled _ = Nothing
+  configureStyle = TextInputStyle
+  extractStyle (TextInputStyle k) = Just k
+  extractStyle _ = Nothing
+  configureTabNavigation = TextInputTabNavigation
+  extractTabNavigation (TextInputTabNavigation m) = Just m
+  extractTabNavigation _ = Nothing
+  configureIsArrowNavigationEnabled = TextInputIsArrowNavigationEnabled
+  extractIsArrowNavigationEnabled (TextInputIsArrowNavigationEnabled b) = Just b
+  extractIsArrowNavigationEnabled _ = Nothing
 
 instance HasElementEvents e msg (TextInputAttributes e msg) where
-  mkOnClicked = TextInputOnClicked
-  matchOnClicked (TextInputOnClicked f) = Just f
-  matchOnClicked _ = Nothing
-  mkOnFocusGained = TextInputOnFocusGained
-  matchOnFocusGained (TextInputOnFocusGained f) = Just f
-  matchOnFocusGained _ = Nothing
-  mkOnFocusLost = TextInputOnFocusLost
-  matchOnFocusLost (TextInputOnFocusLost f) = Just f
-  matchOnFocusLost _ = Nothing
-  mkOnMouseEntered = TextInputOnMouseEntered
-  matchOnMouseEntered (TextInputOnMouseEntered f) = Just f
-  matchOnMouseEntered _ = Nothing
-  mkOnMouseExited = TextInputOnMouseExited
-  matchOnMouseExited (TextInputOnMouseExited f) = Just f
-  matchOnMouseExited _ = Nothing
-  mkOnMouseDown = TextInputOnMouseDown
-  matchOnMouseDown (TextInputOnMouseDown f) = Just f
-  matchOnMouseDown _ = Nothing
-  mkOnMouseUp = TextInputOnMouseUp
-  matchOnMouseUp (TextInputOnMouseUp f) = Just f
-  matchOnMouseUp _ = Nothing
-  mkOnKeyPressed = TextInputOnKeyPressed
-  matchOnKeyPressed (TextInputOnKeyPressed f) = Just f
-  matchOnKeyPressed _ = Nothing
+  configureOnClicked = TextInputOnClicked
+  extractOnClicked (TextInputOnClicked f) = Just f
+  extractOnClicked _ = Nothing
+  configureOnFocusGained = TextInputOnFocusGained
+  extractOnFocusGained (TextInputOnFocusGained f) = Just f
+  extractOnFocusGained _ = Nothing
+  configureOnFocusLost = TextInputOnFocusLost
+  extractOnFocusLost (TextInputOnFocusLost f) = Just f
+  extractOnFocusLost _ = Nothing
+  configureOnMouseEntered = TextInputOnMouseEntered
+  extractOnMouseEntered (TextInputOnMouseEntered f) = Just f
+  extractOnMouseEntered _ = Nothing
+  configureOnMouseExited = TextInputOnMouseExited
+  extractOnMouseExited (TextInputOnMouseExited f) = Just f
+  extractOnMouseExited _ = Nothing
+  configureOnMouseDown = TextInputOnMouseDown
+  extractOnMouseDown (TextInputOnMouseDown f) = Just f
+  extractOnMouseDown _ = Nothing
+  configureOnMouseUp = TextInputOnMouseUp
+  extractOnMouseUp (TextInputOnMouseUp f) = Just f
+  extractOnMouseUp _ = Nothing
+  configureOnKeyPressed = TextInputOnKeyPressed
+  extractOnKeyPressed (TextInputOnKeyPressed f) = Just f
+  extractOnKeyPressed _ = Nothing
 
 instance HasTextConfig (TextInputAttributes e msg) where
-  mkText = TextInputText
-  matchText (TextInputText t) = Just t
-  matchText _ = Nothing
+  configureText = TextInputText
+  extractText (TextInputText t) = Just t
+  extractText _ = Nothing
 
 -- | Applied to newly typed text before it's inserted, letting callers
 -- restrict which keystrokes are accepted (e.g. @T.filter isDigit@ for a

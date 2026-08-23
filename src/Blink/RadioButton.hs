@@ -59,58 +59,58 @@ data RadioButtonAttributes e msg
   | RadioButtonOnSelectedChanged (Bool -> [Out e msg])
 
 instance HasControlConfig e (RadioButtonAttributes e msg) where
-  mkIsFocusable = RadioButtonIsFocusable
-  matchIsFocusable (RadioButtonIsFocusable b) = Just b
-  matchIsFocusable _ = Nothing
-  mkIsEnabled = RadioButtonIsEnabled
-  matchIsEnabled (RadioButtonIsEnabled b) = Just b
-  matchIsEnabled _ = Nothing
-  mkStyle = RadioButtonStyle
-  matchStyle (RadioButtonStyle k) = Just k
-  matchStyle _ = Nothing
-  mkTabNavigation = RadioButtonTabNavigation
-  matchTabNavigation (RadioButtonTabNavigation m) = Just m
-  matchTabNavigation _ = Nothing
-  mkIsArrowNavigationEnabled = RadioButtonIsArrowNavigationEnabled
-  matchIsArrowNavigationEnabled (RadioButtonIsArrowNavigationEnabled b) = Just b
-  matchIsArrowNavigationEnabled _ = Nothing
+  configureIsFocusable = RadioButtonIsFocusable
+  extractIsFocusable (RadioButtonIsFocusable b) = Just b
+  extractIsFocusable _ = Nothing
+  configureIsEnabled = RadioButtonIsEnabled
+  extractIsEnabled (RadioButtonIsEnabled b) = Just b
+  extractIsEnabled _ = Nothing
+  configureStyle = RadioButtonStyle
+  extractStyle (RadioButtonStyle k) = Just k
+  extractStyle _ = Nothing
+  configureTabNavigation = RadioButtonTabNavigation
+  extractTabNavigation (RadioButtonTabNavigation m) = Just m
+  extractTabNavigation _ = Nothing
+  configureIsArrowNavigationEnabled = RadioButtonIsArrowNavigationEnabled
+  extractIsArrowNavigationEnabled (RadioButtonIsArrowNavigationEnabled b) = Just b
+  extractIsArrowNavigationEnabled _ = Nothing
 
 instance HasElementEvents e msg (RadioButtonAttributes e msg) where
-  mkOnClicked = RadioButtonOnClicked
-  matchOnClicked (RadioButtonOnClicked f) = Just f
-  matchOnClicked _ = Nothing
-  mkOnFocusGained = RadioButtonOnFocusGained
-  matchOnFocusGained (RadioButtonOnFocusGained f) = Just f
-  matchOnFocusGained _ = Nothing
-  mkOnFocusLost = RadioButtonOnFocusLost
-  matchOnFocusLost (RadioButtonOnFocusLost f) = Just f
-  matchOnFocusLost _ = Nothing
-  mkOnMouseEntered = RadioButtonOnMouseEntered
-  matchOnMouseEntered (RadioButtonOnMouseEntered f) = Just f
-  matchOnMouseEntered _ = Nothing
-  mkOnMouseExited = RadioButtonOnMouseExited
-  matchOnMouseExited (RadioButtonOnMouseExited f) = Just f
-  matchOnMouseExited _ = Nothing
-  mkOnMouseDown = RadioButtonOnMouseDown
-  matchOnMouseDown (RadioButtonOnMouseDown f) = Just f
-  matchOnMouseDown _ = Nothing
-  mkOnMouseUp = RadioButtonOnMouseUp
-  matchOnMouseUp (RadioButtonOnMouseUp f) = Just f
-  matchOnMouseUp _ = Nothing
-  mkOnKeyPressed = RadioButtonOnKeyPressed
-  matchOnKeyPressed (RadioButtonOnKeyPressed f) = Just f
-  matchOnKeyPressed _ = Nothing
+  configureOnClicked = RadioButtonOnClicked
+  extractOnClicked (RadioButtonOnClicked f) = Just f
+  extractOnClicked _ = Nothing
+  configureOnFocusGained = RadioButtonOnFocusGained
+  extractOnFocusGained (RadioButtonOnFocusGained f) = Just f
+  extractOnFocusGained _ = Nothing
+  configureOnFocusLost = RadioButtonOnFocusLost
+  extractOnFocusLost (RadioButtonOnFocusLost f) = Just f
+  extractOnFocusLost _ = Nothing
+  configureOnMouseEntered = RadioButtonOnMouseEntered
+  extractOnMouseEntered (RadioButtonOnMouseEntered f) = Just f
+  extractOnMouseEntered _ = Nothing
+  configureOnMouseExited = RadioButtonOnMouseExited
+  extractOnMouseExited (RadioButtonOnMouseExited f) = Just f
+  extractOnMouseExited _ = Nothing
+  configureOnMouseDown = RadioButtonOnMouseDown
+  extractOnMouseDown (RadioButtonOnMouseDown f) = Just f
+  extractOnMouseDown _ = Nothing
+  configureOnMouseUp = RadioButtonOnMouseUp
+  extractOnMouseUp (RadioButtonOnMouseUp f) = Just f
+  extractOnMouseUp _ = Nothing
+  configureOnKeyPressed = RadioButtonOnKeyPressed
+  extractOnKeyPressed (RadioButtonOnKeyPressed f) = Just f
+  extractOnKeyPressed _ = Nothing
 
 instance HasTextConfig (RadioButtonAttributes e msg) where
-  mkText = RadioButtonText
-  matchText (RadioButtonText t) = Just t
-  matchText _ = Nothing
+  configureText = RadioButtonText
+  extractText (RadioButtonText t) = Just t
+  extractText _ = Nothing
 
 instance HasIsSelectedConfig (RadioButtonAttributes e msg) where
-  mkIsSelected = RadioButtonIsSelected
+  configureIsSelected = RadioButtonIsSelected
 
 instance HasSelectedChangedEvents e msg (RadioButtonAttributes e msg) where
-  mkOnSelectedChanged = RadioButtonOnSelectedChanged
+  configureOnSelectedChanged = RadioButtonOnSelectedChanged
 
 -- | Configuration for 'radioButton', resolved from a
 -- @['RadioButtonAttributes' e msg]@.
