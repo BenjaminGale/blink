@@ -35,7 +35,7 @@ module Blink.Button
   , buttonBase
   , toggleBase
   , text
-  , isTabStop
+  , isFocusable
   , isEnabled
   , style
   , StyleKey (..)
@@ -54,7 +54,7 @@ import Data.Text (Text)
 
 import Blink.Attributes
   ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
-  , configAny, defaultControlConfig, configure, isEnabled, fire, isTabStop, onEvent, reactionsTo, style, text
+  , configAny, defaultControlConfig, configure, isEnabled, fire, isFocusable, onEvent, reactionsTo, style, text
   )
 import Blink.Control (control)
 import Blink.Element

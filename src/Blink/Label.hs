@@ -72,7 +72,7 @@ target t = configAny $ \cfg -> cfg { labelConfigTarget = Just t }
 -- | Displays text in the resolved style. Unlike every other control built
 -- on 'control', a label never takes keyboard focus itself, whether by Tab
 -- or by being clicked: this is fixed behaviour, not a default, so passing
--- @isTabStop@\/@focusOnClick@ in @attrs@ has no effect on it. The only way
+-- @isFocusable@\/@focusOnClick@ in @attrs@ has no effect on it. The only way
 -- a click on a label affects focus at all is 'target', which redirects it
 -- to a different, named element.
 label :: Ord e => e -> [Attr e ElementEvent msg (LabelConfig e)] -> UI e msg ()
@@ -80,11 +80,11 @@ label eid attrs = control eid cfg attrs $ do
   s <- currentStyle
   drawText (styleTextColour s) (styleTextAlign s) (labelConfigText cfg)
   where
-    -- Applied after resolving attrs, so a caller can't override isTabStop\/
+    -- Applied after resolving attrs, so a caller can't override isFocusable\/
     -- focusOnClick even by importing them directly from "Blink.Attributes"
     -- -- 'target' is the only supported way to affect a label's focus
     -- behaviour.
     cfg = fixFocusBehaviour (configure defaultLabelConfig attrs)
     fixFocusBehaviour c = setControlConfig
-      ((controlConfig c) { ccIsTabStop = False, ccFocusOnClick = maybe NoFocus FocusTarget (labelConfigTarget c) })
+      ((controlConfig c) { ccIsFocusable = False, ccFocusOnClick = maybe NoFocus FocusTarget (labelConfigTarget c) })
       c

@@ -14,7 +14,7 @@ module Blink.TextInput
   , TextInputEvent (..)
   , onInput
   , onSubmit
-  , isTabStop
+  , isFocusable
   , isEnabled
   , style
   , StyleKey (..)
@@ -35,7 +35,7 @@ import qualified Data.Text as T
 
 import Blink.Attributes
   ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
-  , configAny, defaultControlConfig, configure, isEnabled, fire, isTabStop, onEvent, style, text
+  , configAny, defaultControlConfig, configure, isEnabled, fire, isFocusable, onEvent, style, text
   )
 import Blink.Control (control)
 import Blink.Element

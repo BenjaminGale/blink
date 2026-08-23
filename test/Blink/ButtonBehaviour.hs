@@ -11,7 +11,7 @@ module Blink.ButtonBehaviour
 
 import Test.Hspec
 
-import Blink.Attributes (Attr, HasControlConfig, isTabStop)
+import Blink.Attributes (Attr, HasControlConfig, isFocusable)
 import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Element (HasElementEvent)
 import Blink.ElementBehaviour (tagged)
@@ -43,7 +43,7 @@ buttonBehaviourSpec bounds ctx eid marginPoint insideRect outsidePoint render = 
       resultMessages result `shouldContain` ["Clicked"]
 
     it "raises no click event from Enter while it doesn't hold focus" $ do
-      result <- runInteractions bounds ctx (render (isTabStop False : tagged)) [] [PressKey KeyReturn []]
+      result <- runInteractions bounds ctx (render (isFocusable False : tagged)) [] [PressKey KeyReturn []]
       resultMessages result `shouldBe` []
 
     it "raises no click event from Enter while disabled, even while already focused" $ do

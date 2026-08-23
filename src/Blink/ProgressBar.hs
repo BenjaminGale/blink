@@ -83,7 +83,7 @@ bandSpeed v = configAny $ \cfg -> cfg { progressBarConfigBandSpeed = v }
 -- full 'control' like any other -- it reports hover\/click\/focus events
 -- the same way every other control does, even though a caller has no real
 -- reason to react to them. Never a tab stop, though: fixed behaviour, not
--- a default, so passing @isTabStop@ in @attrs@ has no effect on it.
+-- a default, so passing @isFocusable@ in @attrs@ has no effect on it.
 progressBar :: Ord e => e -> [Attr e ElementEvent msg (ProgressBarConfig e)] -> UI e msg ()
 progressBar eid attrs = control eid cfg attrs $ do
   s <- currentStyle
@@ -104,4 +104,4 @@ progressBar eid attrs = control eid cfg attrs $ do
       withBounds (r { rectX = left, rectWidth = bandW }) $ fillRect (styleTextColour s)
   where
     cfg = fixFocusBehaviour (configure defaultProgressBarConfig attrs)
-    fixFocusBehaviour c = setControlConfig ((controlConfig c) { ccIsTabStop = False, ccFocusOnClick = FocusSelf }) c
+    fixFocusBehaviour c = setControlConfig ((controlConfig c) { ccIsFocusable = False, ccFocusOnClick = FocusSelf }) c

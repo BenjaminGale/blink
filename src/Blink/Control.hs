@@ -4,7 +4,7 @@
 -- draws styled chrome around the control's content.
 --
 -- Focus is claimed automatically when nothing else holds it (subject to
--- 'isTabStop'), reaffirmed each frame while held, and given up on Tab. A
+-- 'isFocusable'), reaffirmed each frame while held, and given up on Tab. A
 -- click or Shift-Tab can also hand focus to a /different/ specific
 -- element, per @ccFocusOnClick@ on the @cfg@ passed in -- set directly on
 -- that config by whatever builds it (there is deliberately no public attr
@@ -45,7 +45,7 @@
 -- 'Blink.Style.ElementId' for a one-off, per-instance style.
 module Blink.Control
   ( control
-  , isTabStop
+  , isFocusable
   , isEnabled
   , tabNavigation
   , isArrowNavigationEnabled
@@ -63,7 +63,7 @@ import Data.Maybe (fromMaybe)
 import Blink.Attributes
   ( Attr, fire
   , HasControlConfig (..), ControlConfig (..), FocusOnClick (..), NavigationMode (..)
-  , autoClaimsFocus, isTabStop, isEnabled, tabNavigation, isArrowNavigationEnabled, style
+  , autoClaimsFocus, isFocusable, isEnabled, tabNavigation, isArrowNavigationEnabled, style
   )
 import Blink.Element (ElementEvent (..), HasElementEvent (..), element, onClicked)
 import Blink.Geometry (Rectangle, insetRect, borderInsets)
@@ -224,11 +224,11 @@ control eid cfg attrs content = disableWhen (not (ccIsEnabled cc)) $ do
   -- Recorded last, after this control's own retreat (if any) has already
   -- read whatever the previous tab stop was -- otherwise a control would
   -- see its own, just-written entry instead of the one before it.
-  when (ccIsTabStop cc) $ setPreviousTabStop eid
+  when (ccIsFocusable cc) $ setPreviousTabStop eid
   where
     cc = controlConfig cfg
     styleKey = ccStyleKey cc
-    opensScope = ccIsTabStop cc && ccTabNavigation cc == Contained
+    opensScope = ccIsFocusable cc && ccTabNavigation cc == Contained
 
     focusEvents was now = map liftElementEvent $ concat
       [ [FocusGained | not was && now]

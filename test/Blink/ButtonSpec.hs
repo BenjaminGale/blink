@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Attributes
-  (Attr, ControlConfig (..), FocusOnClick (..), HasControlConfig (..), configAny, isTabStop, text)
+  (Attr, ControlConfig (..), FocusOnClick (..), HasControlConfig (..), configAny, isFocusable, text)
 import Blink.Button (ButtonConfig, ToggleButtonConfig, ToggleEvent, button, isSelected, toggleButton)
 import Blink.ButtonBehaviour (buttonBehaviourSpec)
 import Blink.ToggleBehaviour (toggleBehaviourSpec)
@@ -92,7 +92,7 @@ spec = describe "Blink.Button" $ do
   it "always takes focus on itself when clicked, even if ccFocusOnClick is forced directly on its own config" $ do
     let attrs :: [Attr']
         attrs =
-          [ isTabStop False
+          [ isFocusable False
           , configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccFocusOnClick = FocusTarget Other }) cfg
           , onFocusGained (const [OutMsg ("gained" :: String)])
           ]

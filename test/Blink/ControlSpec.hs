@@ -28,7 +28,7 @@ data TestElement
 
 -- | The shared config type every test control uses -- just a
 -- 'ControlConfig' wrapper, since 'control' needs a resolved @cfg@ to read
--- 'ccIsTabStop'\/'ccFocusOnClick' off.
+-- 'ccIsFocusable'\/'ccFocusOnClick' off.
 newtype TestConfig e = TestConfig { testControlConfig :: ControlConfig e }
 
 defaultTestConfig :: TestConfig e
@@ -86,7 +86,7 @@ both cfgA attrsA cfgB attrsB = do
 
 -- | Renders a single 'ElemA' at 'testBounds', resolving its @cfg@ from
 -- @attrs@ the same way every real widget built on 'control' does --
--- @attrs@ alone (e.g. 'isTabStop') is enough to configure it.
+-- @attrs@ alone (e.g. 'isFocusable') is enough to configure it.
 renderControl :: [Attr'] -> UI TestElement String ()
 renderControl attrs = control ElemA cfg attrs (pure ())
   where
@@ -174,15 +174,15 @@ spec = describe "Blink.Control" $ do
       resultMessages result `shouldBe` ["A lost", "B gained"]
 
     it "FocusTarget redirects focus to the named element instead of the clicker" $ do
-      let cfgA = TestConfig (defaultControlConfig (Class "test")) { ccIsTabStop = False, ccFocusOnClick = FocusTarget ElemB }
-          cfgB = TestConfig (defaultControlConfig (Class "test")) { ccIsTabStop = False }
+      let cfgA = TestConfig (defaultControlConfig (Class "test")) { ccIsFocusable = False, ccFocusOnClick = FocusTarget ElemB }
+          cfgB = TestConfig (defaultControlConfig (Class "test")) { ccIsFocusable = False }
           taggedA = [onFocusGained (const [OutMsg ("A gained" :: String)])]
           taggedB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
       result <- runInteractions testBounds seedCtx (both cfgA taggedA cfgB taggedB) [] [ClickAt onA, Wait 1]
       resultMessages result `shouldBe` ["B gained"]
 
     it "NoFocus leaves focus unchanged when clicked" $ do
-      let cfgA = TestConfig (defaultControlConfig (Class "test")) { ccIsTabStop = False, ccFocusOnClick = NoFocus }
+      let cfgA = TestConfig (defaultControlConfig (Class "test")) { ccIsFocusable = False, ccFocusOnClick = NoFocus }
           attrs :: [Attr']
           attrs = [onFocusGained (const [OutMsg ("gained" :: String)])]
       result <- runInteractions testBounds seedCtx (control ElemA cfgA attrs (pure ())) [] [ClickAt onA, Wait 1]
@@ -274,10 +274,10 @@ spec = describe "Blink.Control" $ do
       result <- runInteractions testBounds seedCtx nestedTree [Wait 1] [PressKey KeyTab [Ctrl]]
       resultMessages result `shouldBe` ["Inner lost", "OuterChildB gained"]
 
-    it "has no effect when the container isn't a tab stop -- its children participate directly in the enclosing sequence" $ do
-      let notTabStopCfg = TestConfig (defaultControlConfig (Class "test")) { ccIsTabStop = False, ccTabNavigation = Contained }
+    it "has no effect when the container isn't focusable -- its children participate directly in the enclosing sequence" $ do
+      let notFocusableCfg = TestConfig (defaultControlConfig (Class "test")) { ccIsFocusable = False, ccTabNavigation = Contained }
           tree = do
-            control Container notTabStopCfg (tag Container) $
+            control Container notFocusableCfg (tag Container) $
               mapM_ (\c -> control c defaultTestConfig (tag c) (pure ())) [ChildA, ChildB]
             control Sibling defaultTestConfig (tag Sibling) (pure ())
       entry <- runInteractions testBounds seedCtx tree [] []

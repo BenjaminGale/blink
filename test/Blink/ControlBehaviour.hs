@@ -18,7 +18,7 @@ import Control.Monad (when)
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Attributes (Attr, HasControlConfig, isEnabled, isTabStop)
+import Blink.Attributes (Attr, HasControlConfig, isEnabled, isFocusable)
 import Blink.Element (HasElementEvent)
 import Blink.ElementBehaviour (elementBehaviourSpec, tagged)
 import Blink.Generators (genPointIn)
@@ -33,7 +33,7 @@ import Blink.UI
 data ControlBehaviourConfig = ControlBehaviourConfig
   { cbcAutoClaims   :: Bool
     -- ^ Whether rendering first while nothing else is focused claims focus
-    -- for it. 'False' for a control that's permanently not a tab stop.
+    -- for it. 'False' for a control that's permanently not focusable.
   , cbcClickFocuses :: Bool
     -- ^ Whether clicking it grants it focus at all. 'False' for a control
     -- whose default click behaviour doesn't focus itself (e.g. a label
@@ -63,10 +63,10 @@ controlBehaviourSpec
 controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint render = do
   -- A control auto-claims focus the moment nothing else holds it, which
   -- would otherwise leak an incidental focus-gained event into every one
-  -- of these raw-fact checks. 'isTabStop' 'False' keeps the reused
+  -- of these raw-fact checks. 'isFocusable' 'False' keeps the reused
   -- contract about the same raw facts 'Blink.ElementSpec' checks, not
   -- about this control's own focus-claiming behaviour (covered below).
-  elementBehaviourSpec bounds ctx eid insideRect outsidePoint (\attrs -> render (isTabStop False : attrs))
+  elementBehaviourSpec bounds ctx eid insideRect outsidePoint (\attrs -> render (isFocusable False : attrs))
 
   describe "focus claiming" $ do
     it "claims focus by rendering first when nothing else is focused, exactly when it auto-claims" $ do
@@ -77,8 +77,8 @@ controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint rend
       result <- runInteractions bounds ctx (disableWhen True (render tagged)) [] []
       resultMessages result `shouldBe` []
 
-    it "raises nothing when it isn't a tab stop, even with nothing else focused" $ do
-      result <- runInteractions bounds ctx (render (isTabStop False : tagged)) [] []
+    it "raises nothing when it isn't focusable, even with nothing else focused" $ do
+      result <- runInteractions bounds ctx (render (isFocusable False : tagged)) [] []
       resultMessages result `shouldBe` []
 
     it "raises no focus lost event across further interactions that don't move focus away" $ monadicIO $ do
@@ -87,14 +87,14 @@ controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint rend
       assert (notElem "FocusLost" (resultMessages result))
 
   describe "click and keyboard focus" $ do
-    it "claims focus when clicked, exactly when a click grants it focus, even if it isn't a tab stop" $ monadicIO $ do
+    it "claims focus when clicked, exactly when a click grants it focus, even if it isn't focusable" $ monadicIO $ do
       p <- pick (genPointIn insideRect)
-      result <- run (runInteractions bounds ctx (render (isTabStop False : tagged)) [] [ClickAt p, Wait 1])
+      result <- run (runInteractions bounds ctx (render (isFocusable False : tagged)) [] [ClickAt p, Wait 1])
       assert (("FocusGained" `elem` resultMessages result) == cbcClickFocuses cfg)
 
     it "raises no focus gained event from a click while disabled" $ monadicIO $ do
       p <- pick (genPointIn insideRect)
-      result <- run (runInteractions bounds ctx (disableWhen True (render (isTabStop False : tagged))) [] [ClickAt p, Wait 1])
+      result <- run (runInteractions bounds ctx (disableWhen True (render (isFocusable False : tagged))) [] [ClickAt p, Wait 1])
       assert (notElem "FocusGained" (resultMessages result))
 
     -- Only meaningful for a control that can hold focus at all -- skipped
@@ -114,7 +114,7 @@ controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint rend
 
     it "raises no focus gained event from a click when disabled via the attribute" $ monadicIO $ do
       p <- pick (genPointIn insideRect)
-      result <- run (runInteractions bounds ctx (render (isEnabled False : isTabStop False : tagged)) [] [ClickAt p, Wait 1])
+      result <- run (runInteractions bounds ctx (render (isEnabled False : isFocusable False : tagged)) [] [ClickAt p, Wait 1])
       assert (notElem "FocusGained" (resultMessages result))
 
   describe "hit region" $ do
