@@ -23,11 +23,11 @@ module Blink.ProgressBar
   , onFocusLost
   ) where
 
-import Blink.Attributes
-  ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..)
-  , configAny, defaultControlConfig, configure, isEnabled, style
+import Blink.Attributes (Attr, configAny, configure)
+import Blink.Control
+  ( ControlConfig, FocusOnClick (NoFocus), HasControlConfig (..)
+  , control, defaultControlConfig, isEnabled, isFocusable, style
   )
-import Blink.Control (control)
 import Blink.Element
   ( ElementEvent
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
@@ -85,7 +85,7 @@ bandSpeed v = configAny $ \cfg -> cfg { progressBarConfigBandSpeed = v }
 -- reason to react to them. Never a tab stop, though: fixed behaviour, not
 -- a default, so passing @isFocusable@ in @attrs@ has no effect on it.
 progressBar :: Ord e => e -> [Attr e ElementEvent msg (ProgressBarConfig e)] -> UI e msg ()
-progressBar eid attrs = control eid cfg attrs $ do
+progressBar eid attrs = control eid NoFocus cfg attrs $ do
   s <- currentStyle
   r <- getBounds
   case progressBarConfigValue cfg of
@@ -103,5 +103,4 @@ progressBar eid attrs = control eid cfg attrs $ do
           left  = rectX r - bandW + (rectWidth r + bandW) * phase
       withBounds (r { rectX = left, rectWidth = bandW }) $ fillRect (styleTextColour s)
   where
-    cfg = fixFocusBehaviour (configure defaultProgressBarConfig attrs)
-    fixFocusBehaviour c = setControlConfig ((controlConfig c) { ccIsFocusable = False, ccFocusOnClick = FocusSelf }) c
+    cfg = configure defaultProgressBarConfig (attrs ++ [isFocusable False])

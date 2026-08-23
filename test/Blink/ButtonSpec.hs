@@ -4,20 +4,18 @@ module Blink.ButtonSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Attributes
-  (Attr, ControlConfig (..), FocusOnClick (..), HasControlConfig (..), configAny, isFocusable, text)
+import Blink.Attributes (Attr, text)
 import Blink.Button (ButtonConfig, ToggleButtonConfig, ToggleEvent, button, isSelected, toggleButton)
 import Blink.ButtonBehaviour (buttonBehaviourSpec)
 import Blink.ToggleBehaviour (toggleBehaviourSpec)
-import Blink.Element (ElementEvent, onFocusGained)
+import Blink.Element (ElementEvent)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
-import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 
-data TestElement = Ok | Other deriving (Eq, Ord, Show)
+data TestElement = Ok deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -65,9 +63,6 @@ noInput = InputState
   , inputTypedText      = []
   }
 
-onButton :: Point
-onButton = Point 50 50
-
 -- | The margin-inset hit area for a control rendered at 'testBounds' with
 -- the 10px margin every test style here uses.
 hitRect :: Rectangle
@@ -88,16 +83,6 @@ spec = describe "Blink.Button" $ do
   it "draws its text in the resolved style" $ do
     ctx <- start [text "OK"]
     getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "OK" testColour AlignCenter]
-
-  it "always takes focus on itself when clicked, even if ccFocusOnClick is forced directly on its own config" $ do
-    let attrs :: [Attr']
-        attrs =
-          [ isFocusable False
-          , configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccFocusOnClick = FocusTarget Other }) cfg
-          , onFocusGained (const [OutMsg ("gained" :: String)])
-          ]
-    result <- runInteractions testBounds seedCtx (button Ok attrs) [] [ClickAt onButton, Wait 1]
-    resultMessages result `shouldBe` ["gained"]
 
   describe "toggleButton" $ do
     toggleBehaviourSpec not testBounds toggleSeedCtx Ok (Point 5 5) hitRect (Point 200 200) (toggleButton Ok)

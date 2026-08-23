@@ -33,11 +33,11 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Blink.Attributes
-  ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
-  , configAny, defaultControlConfig, configure, isEnabled, fire, isFocusable, onEvent, style, text
+import Blink.Attributes (Attr, HasTextConfig (..), configAny, configure, fire, onEvent, text)
+import Blink.Control
+  ( ControlConfig, FocusOnClick (FocusSelf), HasControlConfig (..)
+  , control, defaultControlConfig, isEnabled, isFocusable, style
   )
-import Blink.Control (control)
 import Blink.Element
   ( ElementEvent, HasElementEvent (..)
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
@@ -267,7 +267,7 @@ textInput :: Ord e => e -> [Attr e TextInputEvent msg (TextInputConfig e)] -> UI
 textInput eid attrs = do
   wasFocused   <- isFocused eid
   wasCapturing <- isDragging eid
-  control eid cfg attrs $ do
+  control eid FocusSelf cfg attrs $ do
     s        <- currentStyle
     hasFocus <- isFocused eid
     disabled <- isDisabled
@@ -321,6 +321,5 @@ textInput eid attrs = do
 
     drawTextInputContent s bounds displayValue canEdit effectiveScrollX selFinal
   where
-    cfg          = fixFocusOnClick (configure defaultTextInputConfig attrs)
-    fixFocusOnClick c = setControlConfig ((controlConfig c) { ccFocusOnClick = FocusSelf }) c
+    cfg          = configure defaultTextInputConfig attrs
     currentValue = textInputConfigValue cfg

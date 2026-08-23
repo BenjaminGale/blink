@@ -18,7 +18,8 @@ import Control.Monad (when)
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Attributes (Attr, HasControlConfig, isEnabled, isFocusable)
+import Blink.Attributes (Attr)
+import Blink.Control (HasControlConfig, isEnabled, isFocusable)
 import Blink.Element (HasElementEvent)
 import Blink.ElementBehaviour (elementBehaviourSpec, tagged)
 import Blink.Generators (genPointIn)
@@ -87,10 +88,10 @@ controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint rend
       assert (notElem "FocusLost" (resultMessages result))
 
   describe "click and keyboard focus" $ do
-    it "claims focus when clicked, exactly when a click grants it focus, even if it isn't focusable" $ monadicIO $ do
+    it "never claims focus when clicked while isFocusable is False" $ monadicIO $ do
       p <- pick (genPointIn insideRect)
       result <- run (runInteractions bounds ctx (render (isFocusable False : tagged)) [] [ClickAt p, Wait 1])
-      assert (("FocusGained" `elem` resultMessages result) == cbcClickFocuses cfg)
+      assert (notElem "FocusGained" (resultMessages result))
 
     it "raises no focus gained event from a click while disabled" $ monadicIO $ do
       p <- pick (genPointIn insideRect)

@@ -28,7 +28,8 @@ module Blink.Button
   , toggleButton
   , toggleButtonStyleKey
   , ToggleEvent (..)
-  , ToggleConfig (..)
+  , ToggleConfig
+  , defaultToggleConfig
   , HasToggleConfig (..)
   , isSelected
   , onSelectedChanged
@@ -52,11 +53,11 @@ module Blink.Button
 import Control.Monad (when)
 import Data.Text (Text)
 
-import Blink.Attributes
-  ( Attr, ControlConfig (..), FocusOnClick (FocusSelf), HasControlConfig (..), HasTextConfig (..)
-  , configAny, defaultControlConfig, configure, isEnabled, fire, isFocusable, onEvent, reactionsTo, style, text
+import Blink.Attributes (Attr, HasTextConfig (..), configAny, configure, fire, onEvent, reactionsTo, text)
+import Blink.Control
+  ( ControlConfig, FocusOnClick (FocusSelf), HasControlConfig (..)
+  , control, defaultControlConfig, isEnabled, isFocusable, style
   )
-import Blink.Control (control)
 import Blink.Element
   ( ElementEvent (..), HasElementEvent (..)
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
@@ -76,14 +77,12 @@ import Blink.UI (Out, UI, currentStyle, drawText, getInput, getStyleSet, isDisab
 -- or turned off.
 buttonBase :: (Ord e, HasControlConfig e cfg, HasElementEvent ev) => e -> cfg -> [Attr e ev msg cfg] -> UI e msg () -> UI e msg ()
 buttonBase eid cfg attrs content = do
-  control eid cfg' attrs content
+  control eid FocusSelf cfg attrs content
   focused  <- isFocused eid
   disabled <- isDisabled
   input    <- getInput
   let pressedReturn = any (\ev -> key ev == KeyReturn) (inputKeyEvents input)
   when (not disabled && focused && pressedReturn) $ fire attrs [liftElementEvent Clicked]
-  where
-    cfg' = setControlConfig ((controlConfig cfg) { ccFocusOnClick = FocusSelf }) cfg
 
 -- | Configuration for 'button', set via 'text'. Defaults to @\"\"@.
 data ButtonConfig e = ButtonConfig
@@ -136,6 +135,7 @@ instance HasElementEvent ToggleEvent where
 -- 'HasControlConfig' already uses for 'ControlConfig'.
 newtype ToggleConfig = ToggleConfig { tcSelected :: Bool }
 
+-- | The default 'ToggleConfig': not selected.
 defaultToggleConfig :: ToggleConfig
 defaultToggleConfig = ToggleConfig { tcSelected = False }
 
@@ -169,14 +169,14 @@ onSelectedChanged reaction = onEvent $ \ev -> case ev of
 -- radio button share.
 toggleBase
   :: (Ord e, HasControlConfig e cfg, HasToggleConfig cfg)
-  => (Bool -> Bool) -> e -> cfg -> [Attr e ToggleEvent msg cfg] -> UI e msg () -> UI e msg ()
-toggleBase next eid cfg attrs content = buttonBase eid cfg (attrs ++ [derivedReaction]) content
+  => (Bool -> Bool) -> e -> cfg -> [Attr e ToggleEvent msg cfg] -> (Bool -> UI e msg ()) -> UI e msg ()
+toggleBase next eid cfg attrs content = buttonBase eid cfg (attrs ++ [derivedReaction]) (content wasSelected)
   where
-    tc          = toggleConfig cfg
-    newSelected = next (tcSelected tc)
+    wasSelected = tcSelected (toggleConfig cfg)
+    newSelected = next wasSelected
     derivedReaction
-      | newSelected == tcSelected tc = onClicked (const [])
-      | otherwise                    = onClicked (\() -> reactionsTo attrs (SelectedChanged newSelected))
+      | newSelected == wasSelected = onClicked (const [])
+      | otherwise                  = onClicked (\() -> reactionsTo attrs (SelectedChanged newSelected))
 
 -- | Configuration for 'toggleButton', set via 'text', 'isSelected', and
 -- 'onSelectedChanged'. Defaults to no text, not selected, and no reaction.
@@ -214,21 +214,25 @@ instance HasTextConfig (ToggleButtonConfig e) where
 -- flipping every time it's activated. Drawn in its pressed style while
 -- selected, even without being physically pressed, unless disabled.
 -- Activated the same way as 'button'; see 'onSelectedChanged' for reacting to it.
+--
+-- The pressed-while-selected look is always looked up by @eid@ directly
+-- (ignoring any 'style' override) -- see the "Pseudo states" entry in
+-- IDEAS.md; there's no general way yet for a control to borrow a specific
+-- 'Blink.Style.StyleSet' variant from whatever key it actually resolved to.
 toggleButton :: Ord e => e -> [Attr e ToggleEvent msg (ToggleButtonConfig e)] -> UI e msg ()
-toggleButton eid attrs = toggleBase not eid cfg attrs $ do
+toggleButton eid attrs = toggleBase not eid cfg attrs $ \selected -> do
   base <- currentStyle
-  s    <- toggleStyle styleKey base (tcSelected (toggleButtonConfigToggle cfg))
+  s    <- toggleStyle eid base selected
   drawText (styleTextColour s) (styleTextAlign s) (toggleButtonConfigText cfg)
   where
     cfg = configure defaultToggleButtonConfig attrs
-    styleKey = ccStyleKey (controlConfig cfg)
 
 -- | The resolved style for a toggle button given its ordinary resolved
 -- @base@ style (see 'currentStyle'): selected and enabled forces the
 -- pressed variant regardless of hover\/focus.
-toggleStyle :: Ord e => StyleKey e -> Style -> Bool -> UI e msg Style
-toggleStyle styleKey base selected = do
+toggleStyle :: Ord e => e -> Style -> Bool -> UI e msg Style
+toggleStyle eid base selected = do
   disabled <- isDisabled
   if disabled || not selected
     then pure base
-    else styleSetPressed <$> getStyleSet styleKey
+    else styleSetPressed <$> getStyleSet (ElementId eid)

@@ -13,7 +13,8 @@ module Blink.ToggleBehaviour
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Attributes (Attr, HasControlConfig)
+import Blink.Attributes (Attr)
+import Blink.Control (HasControlConfig)
 import Blink.Button (HasToggleConfig, ToggleEvent, isSelected, onSelectedChanged)
 import Blink.ButtonBehaviour (buttonBehaviourSpec)
 import Blink.ElementBehaviour (tagged)

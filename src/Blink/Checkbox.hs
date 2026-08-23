@@ -28,11 +28,12 @@ module Blink.Checkbox
 
 import Data.Text (Text)
 
-import Blink.Attributes
-  ( Attr, ControlConfig, HasControlConfig (..), HasTextConfig (..)
-  , defaultControlConfig, configure, isEnabled, isFocusable, style, text
+import Blink.Attributes (Attr, HasTextConfig (..), configure, text)
+import Blink.Control (ControlConfig, HasControlConfig (..), defaultControlConfig, isEnabled, isFocusable, style)
+import Blink.Button
+  ( HasToggleConfig (..), ToggleConfig, ToggleEvent (..)
+  , defaultToggleConfig, isSelected, onSelectedChanged, toggleBase
   )
-import Blink.Button (HasToggleConfig (..), ToggleConfig (..), ToggleEvent (..), isSelected, onSelectedChanged, toggleBase)
 import Blink.Element
   ( onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
@@ -57,7 +58,7 @@ checkboxStyleKey = Class "checkbox"
 defaultCheckboxConfig :: CheckboxConfig e
 defaultCheckboxConfig = CheckboxConfig
   { checkboxConfigControl = defaultControlConfig checkboxStyleKey
-  , checkboxConfigToggle  = ToggleConfig { tcSelected = False }
+  , checkboxConfigToggle  = defaultToggleConfig
   , checkboxConfigText    = ""
   }
 
@@ -86,12 +87,12 @@ checkboxGlyph False = "\9744" -- BALLOT BOX
 -- same as 'Blink.Button.toggleButton'. Flips every time it's activated;
 -- see 'onSelectedChanged' for reacting to it.
 checkbox :: Ord e => e -> [Attr e ToggleEvent msg (CheckboxConfig e)] -> UI e msg ()
-checkbox eid attrs = toggleBase not eid cfg attrs $ do
+checkbox eid attrs = toggleBase not eid cfg attrs $ \selected -> do
   s      <- currentStyle
   bounds <- getBounds
   let glyphRect = bounds { rectWidth = glyphWidth }
       textRect  = bounds { rectX = rectX bounds + glyphWidth, rectWidth = max 0 (rectWidth bounds - glyphWidth) }
-  withBounds glyphRect $ drawText (styleTextColour s) AlignCenter (checkboxGlyph (tcSelected (checkboxConfigToggle cfg)))
+  withBounds glyphRect $ drawText (styleTextColour s) AlignCenter (checkboxGlyph selected)
   withBounds textRect  $ drawText (styleTextColour s) (styleTextAlign s) (checkboxConfigText cfg)
   where
     cfg = configure defaultCheckboxConfig attrs

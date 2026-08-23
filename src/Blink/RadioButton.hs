@@ -28,11 +28,12 @@ module Blink.RadioButton
 
 import Data.Text (Text)
 
-import Blink.Attributes
-  ( Attr, ControlConfig, HasControlConfig (..), HasTextConfig (..)
-  , defaultControlConfig, configure, isEnabled, isFocusable, style, text
+import Blink.Attributes (Attr, HasTextConfig (..), configure, text)
+import Blink.Control (ControlConfig, HasControlConfig (..), defaultControlConfig, isEnabled, isFocusable, style)
+import Blink.Button
+  ( HasToggleConfig (..), ToggleConfig, ToggleEvent (..)
+  , defaultToggleConfig, isSelected, onSelectedChanged, toggleBase
   )
-import Blink.Button (HasToggleConfig (..), ToggleConfig (..), ToggleEvent (..), isSelected, onSelectedChanged, toggleBase)
 import Blink.Element
   ( onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
   )
@@ -57,7 +58,7 @@ radioButtonStyleKey = Class "radioButton"
 defaultRadioButtonConfig :: RadioButtonConfig e
 defaultRadioButtonConfig = RadioButtonConfig
   { radioConfigControl = defaultControlConfig radioButtonStyleKey
-  , radioConfigToggle  = ToggleConfig { tcSelected = False }
+  , radioConfigToggle  = defaultToggleConfig
   , radioConfigText    = ""
   }
 
@@ -89,12 +90,12 @@ radioGlyph False = "\9675" -- WHITE CIRCLE
 -- selection by a sibling in its group being selected instead, never by
 -- being clicked again itself. See 'onSelectedChanged' for reacting to it.
 radioButton :: Ord e => e -> [Attr e ToggleEvent msg (RadioButtonConfig e)] -> UI e msg ()
-radioButton eid attrs = toggleBase (const True) eid cfg attrs $ do
+radioButton eid attrs = toggleBase (const True) eid cfg attrs $ \selected -> do
   s      <- currentStyle
   bounds <- getBounds
   let glyphRect = bounds { rectWidth = glyphWidth }
       textRect  = bounds { rectX = rectX bounds + glyphWidth, rectWidth = max 0 (rectWidth bounds - glyphWidth) }
-  withBounds glyphRect $ drawText (styleTextColour s) AlignCenter (radioGlyph (tcSelected (radioConfigToggle cfg)))
+  withBounds glyphRect $ drawText (styleTextColour s) AlignCenter (radioGlyph selected)
   withBounds textRect  $ drawText (styleTextColour s) (styleTextAlign s) (radioConfigText cfg)
   where
     cfg = configure defaultRadioButtonConfig attrs

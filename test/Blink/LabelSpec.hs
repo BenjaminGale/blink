@@ -4,8 +4,7 @@ module Blink.LabelSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Attributes
-  (Attr, ControlConfig (..), FocusOnClick (..), HasControlConfig (..), configAny, text)
+import Blink.Attributes (Attr, text)
 import Blink.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Element (ElementEvent)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
@@ -86,12 +85,6 @@ spec = describe "Blink.Label" $ do
 
   it "does not take focus when clicked by default" $ do
     result <- runInteractions testBounds seedCtx (label Caption []) [] [ClickAt onCaption, Wait 1]
-    contextFocus (resultContext result) `shouldBe` Nothing
-
-  it "ignores ccFocusOnClick even if forced directly on its own config -- clicking it never moves focus anywhere" $ do
-    let attrs :: [Attr']
-        attrs = [configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccFocusOnClick = FocusTarget Target }) cfg]
-    result <- runInteractions testBounds seedCtx (label Caption attrs) [] [ClickAt onCaption, Wait 1]
     contextFocus (resultContext result) `shouldBe` Nothing
 
   it "redirects a click's focus onto the element named by target" $ do

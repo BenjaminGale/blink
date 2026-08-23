@@ -79,7 +79,7 @@ elapsedCtx = nextFrameContext testBounds noInput testTheme (mkAnimationState 0 1
 
 spec :: Spec
 spec = describe "Blink.ProgressBar" $ do
-  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = True })
+  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
     testBounds seedCtx Bar (Point 5 5) hitRect (Point 200 200) (progressBar Bar)
 
   describe "Progress" $ do

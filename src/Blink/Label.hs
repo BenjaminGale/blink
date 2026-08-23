@@ -23,11 +23,11 @@ module Blink.Label
 
 import Data.Text (Text)
 
-import Blink.Attributes
-  ( Attr, ControlConfig (..), HasControlConfig (..), HasTextConfig (..)
-  , FocusOnClick (..), configAny, defaultControlConfig, configure, isEnabled, style, text
+import Blink.Attributes (Attr, HasTextConfig (..), configAny, configure, text)
+import Blink.Control
+  ( ControlConfig, FocusOnClick (..), HasControlConfig (..)
+  , control, defaultControlConfig, isEnabled, isFocusable, style
   )
-import Blink.Control (control)
 import Blink.Element
   ( ElementEvent (..)
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed, onFocusGained, onFocusLost
@@ -76,15 +76,11 @@ target t = configAny $ \cfg -> cfg { labelConfigTarget = Just t }
 -- a click on a label affects focus at all is 'target', which redirects it
 -- to a different, named element.
 label :: Ord e => e -> [Attr e ElementEvent msg (LabelConfig e)] -> UI e msg ()
-label eid attrs = control eid cfg attrs $ do
+label eid attrs = control eid focusOnClick cfg attrs $ do
   s <- currentStyle
   drawText (styleTextColour s) (styleTextAlign s) (labelConfigText cfg)
   where
-    -- Applied after resolving attrs, so a caller can't override isFocusable\/
-    -- focusOnClick even by importing them directly from "Blink.Attributes"
-    -- -- 'target' is the only supported way to affect a label's focus
-    -- behaviour.
-    cfg = fixFocusBehaviour (configure defaultLabelConfig attrs)
-    fixFocusBehaviour c = setControlConfig
-      ((controlConfig c) { ccIsFocusable = False, ccFocusOnClick = maybe NoFocus FocusTarget (labelConfigTarget c) })
-      c
+    -- isFocusable appended last so a caller can't override it -- 'target'
+    -- is the only supported way to affect a label's focus behaviour.
+    cfg = configure defaultLabelConfig (attrs ++ [isFocusable False])
+    focusOnClick = maybe NoFocus FocusTarget (labelConfigTarget cfg)

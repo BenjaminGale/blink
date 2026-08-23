@@ -1,3 +1,4 @@
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 -- | The standard entry point for interactive controls: manages keyboard
 -- focus, reports raw mouse\/keyboard\/focus events to the given attrs, and
@@ -6,10 +7,7 @@
 -- Focus is claimed automatically when nothing else holds it (subject to
 -- 'isFocusable'), reaffirmed each frame while held, and given up on Tab. A
 -- click or Shift-Tab can also hand focus to a /different/ specific
--- element, per @ccFocusOnClick@ on the @cfg@ passed in -- set directly on
--- that config by whatever builds it (there is deliberately no public attr
--- for this: every ready-made widget fixes its own click-to-focus
--- behaviour rather than leaving it caller-configurable). That takes
+-- element, per the 'FocusOnClick' passed in. That takes
 -- effect the frame after it happens rather than immediately, so whichever
 -- element is gaining or losing focus reports it consistently regardless
 -- of render order -- see
@@ -45,6 +43,10 @@
 -- 'Blink.Style.ElementId' for a one-off, per-instance style.
 module Blink.Control
   ( control
+  , FocusOnClick (..)
+  , ControlConfig
+  , HasControlConfig (..)
+  , defaultControlConfig
   , isFocusable
   , isEnabled
   , tabNavigation
@@ -60,16 +62,100 @@ import Data.Functor (($>))
 import Data.List (find)
 import Data.Maybe (fromMaybe)
 
-import Blink.Attributes
-  ( Attr, fire
-  , HasControlConfig (..), ControlConfig (..), FocusOnClick (..), NavigationMode (..)
-  , autoClaimsFocus, isFocusable, isEnabled, tabNavigation, isArrowNavigationEnabled, style
-  )
+import Blink.Attributes (Attr, configAny, fire)
 import Blink.Element (ElementEvent (..), HasElementEvent (..), element, onClicked)
 import Blink.Geometry (Rectangle, insetRect, borderInsets)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..), StyleKey (..))
 import Blink.UI
+
+-- | How a control's children navigate via Tab\/Shift-Tab -- set with
+-- 'tabNavigation'.
+data NavigationMode
+  = Flatten
+    -- ^ Not a navigation container: this control's own slot (if it's a tab
+    -- stop) and its children all fold into the same Tab sequence as its
+    -- siblings, entering and leaving without any special trapping. The
+    -- default -- and, for a control with no navigable children at all,
+    -- indistinguishable from plain leaf behaviour.
+  | Contained
+    -- ^ Opens a focus scope for this control's children: Tab\/Shift-Tab
+    -- cycle within it forever, never escaping back out that way.
+    -- Ctrl+Tab\/Ctrl+Shift+Tab are the only way out, moving this control's
+    -- own slot to the next\/previous one at the enclosing level -- and, if
+    -- @ccIsArrowNavigationEnabled@ is set, the arrow keys also cycle within the
+    -- scope, same as Tab\/Shift-Tab.
+  deriving (Eq, Show)
+
+-- | Configuration shared by every control, regardless of that control's own
+-- @cfg@: whether Tab lands on it (@ccIsFocusable@), whether it responds to
+-- input at all (@ccIsEnabled@), how its children navigate via Tab
+-- (@ccTabNavigation@), and (only meaningful when @ccTabNavigation@ is
+-- 'Contained') whether the arrow keys also cycle within that same scope
+-- (@ccIsArrowNavigationEnabled@). Every control's own @cfg@ carries one of
+-- these, accessed uniformly via 'HasControlConfig'. Not exported: 'isFocusable'
+-- \/ 'isEnabled' \/ 'tabNavigation' \/ 'isArrowNavigationEnabled' \/ 'style'
+-- are the only way to build or change one.
+data ControlConfig e = ControlConfig
+  { ccIsFocusable          :: Bool
+  , ccIsEnabled            :: Bool
+  , ccTabNavigation        :: NavigationMode
+  , ccIsArrowNavigationEnabled :: Bool
+  , ccStyleKey             :: StyleKey e
+  }
+
+-- | The default 'ControlConfig': focusable, not a navigation container
+-- ('Flatten'), styled via @key@ unless overridden by 'style' -- what a
+-- plain interactive control wants unless it overrides one or more via
+-- 'isFocusable' \/ 'isEnabled' \/ 'tabNavigation' \/
+-- 'isArrowNavigationEnabled'. @key@ is normally a 'Class' named after the
+-- control being built, e.g. @Class \"button\"@.
+defaultControlConfig :: StyleKey e -> ControlConfig e
+defaultControlConfig styleKey = ControlConfig
+  { ccIsFocusable          = True
+  , ccIsEnabled            = True
+  , ccTabNavigation        = Flatten
+  , ccIsArrowNavigationEnabled = False
+  , ccStyleKey             = styleKey
+  }
+
+-- | Implemented by any control's own @cfg@ type to say how it carries a
+-- 'ControlConfig' -- lets 'isFocusable' and friends work uniformly across
+-- every control's differently-shaped @cfg@, the same pattern
+-- 'Blink.Controls.HasTextConfig' already uses for 'Blink.Controls.text'.
+class HasControlConfig e cfg | cfg -> e where
+  controlConfig    :: cfg -> ControlConfig e
+  setControlConfig :: ControlConfig e -> cfg -> cfg
+
+-- | Whether this control participates in keyboard focus at all: Tab\/
+-- Shift-Tab cycling onto it, and auto-claiming focus by rendering first
+-- while nothing else holds it. 'False' excludes it from both.
+isFocusable :: HasControlConfig e cfg => Bool -> Attr e ev msg cfg
+isFocusable b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccIsFocusable = b }) cfg
+
+-- | Whether the control responds to input at all. A disabled control still
+-- renders (in its disabled style) but ignores hover, clicks, key presses,
+-- and focus, and is skipped by Tab\/Shift-Tab. Defaults to 'True'.
+isEnabled :: HasControlConfig e cfg => Bool -> Attr e ev msg cfg
+isEnabled b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccIsEnabled = b }) cfg
+
+-- | How this control's children navigate via Tab\/Shift-Tab (and, since
+-- they ride along with the same scope, Ctrl+Tab\/Ctrl+Shift+Tab) -- see
+-- 'NavigationMode'. Defaults to 'Flatten'.
+tabNavigation :: HasControlConfig e cfg => NavigationMode -> Attr e ev msg cfg
+tabNavigation m = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccTabNavigation = m }) cfg
+
+-- | Whether the arrow keys also cycle within this control's focus scope,
+-- the same way Tab\/Shift-Tab do. Only meaningful when 'tabNavigation' is
+-- 'Contained'. Defaults to 'False'.
+isArrowNavigationEnabled :: HasControlConfig e cfg => Bool -> Attr e ev msg cfg
+isArrowNavigationEnabled b = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccIsArrowNavigationEnabled = b }) cfg
+
+-- | Which 'StyleKey' this control resolves its style from. Defaults to a
+-- 'Class' named after the control; pass 'ElementId' to theme this one
+-- instance differently, or a different 'Class' to group it with others.
+style :: HasControlConfig e cfg => StyleKey e -> Attr e ev msg cfg
+style k = configAny $ \cfg -> setControlConfig ((controlConfig cfg) { ccStyleKey = k }) cfg
 
 -- | The control-specific hit area: the current bounds inset by the
 -- element's margin -- the margin itself is never part of the control, so a
@@ -154,15 +240,34 @@ styledElement eid styleKey content = do
       Just c  -> withBorder c (styleBorderEdges s) inner
       Nothing -> inner
 
+-- | What clicking a control does to focus -- passed directly to 'control',
+-- not carried on @cfg@: every ready-made widget fixes its own
+-- click-to-focus behaviour rather than leaving it caller-configurable.
+data FocusOnClick e
+  = FocusSelf
+    -- ^ The control takes focus itself (the default for interactive controls).
+  | FocusTarget e
+    -- ^ The control hands focus to a different element instead of taking it
+    -- itself — e.g. a checkbox's label redirecting focus onto the checkbox.
+  | NoFocus
+    -- ^ Clicking the control has no effect on focus at all.
+  deriving (Eq, Show)
+
+-- | Whether a control is eligible to claim focus purely by rendering first
+-- while nothing else holds it: opted into keyboard focus at all
+-- (@ccIsFocusable@) and configured to take focus itself on click ('FocusSelf').
+autoClaimsFocus :: Eq e => FocusOnClick e -> ControlConfig e -> Bool
+autoClaimsFocus foc cc = ccIsFocusable cc && foc == FocusSelf
+
 -- | 'True' when this element should take focus with nothing having asked
 -- for it: opted into auto-claiming (per 'autoClaimsFocus'), nothing else is
 -- currently focused, and the mouse isn't contested by another element's
 -- drag.
-canAutoClaim :: (Ord e, HasControlConfig e cfg) => e -> cfg -> UI e msg Bool
-canAutoClaim eid cfg = do
+canAutoClaim :: (Ord e, HasControlConfig e cfg) => e -> FocusOnClick e -> cfg -> UI e msg Bool
+canAutoClaim eid foc cfg = do
   nothingIsFocused <- isNothingFocused <$> getFocus
   uncontested      <- isMouseFreeFor eid
-  pure (autoClaimsFocus (controlConfig cfg) && nothingIsFocused && uncontested)
+  pure (autoClaimsFocus foc (controlConfig cfg) && nothingIsFocused && uncontested)
 
 -- | Gives up focus immediately when @wasFocused@ and one of @advanceKeys@
 -- was just pressed; hands focus to the previous tab stop, one frame later,
@@ -192,13 +297,13 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
 -- same margin-inset hit area chrome resolution uses -- the margin itself
 -- never counts as "on" the control.
 --
--- When 'ccTabNavigation' is 'Contained' (and this control is itself a tab
+-- When @ccTabNavigation@ is 'Contained' (and this control is itself a tab
 -- stop -- see @withChildNavigation@), @content@ becomes a focus scope for
--- Tab\/Shift-Tab (and, if 'ccIsArrowNavigationEnabled', the arrow keys too);
+-- Tab\/Shift-Tab (and, if @ccIsArrowNavigationEnabled@, the arrow keys too);
 -- Ctrl+Tab\/Ctrl+Shift+Tab always escape it, moving this control's own
 -- slot to the next\/previous one at the enclosing level.
-control :: (Ord e, HasControlConfig e cfg, HasElementEvent ev) => e -> cfg -> [Attr e ev msg cfg] -> UI e msg () -> UI e msg ()
-control eid cfg attrs content = disableWhen (not (ccIsEnabled cc)) $ do
+control :: (Ord e, HasControlConfig e cfg, HasElementEvent ev) => e -> FocusOnClick e -> cfg -> [Attr e ev msg cfg] -> UI e msg () -> UI e msg ()
+control eid foc cfg attrs content = disableWhen (not (ccIsEnabled cc)) $ do
   wasFocused  <- isFocused eid
   currentScope <- getCurrentScope
   applySelfFocus
@@ -239,7 +344,7 @@ control eid cfg attrs content = disableWhen (not (ccIsEnabled cc)) $ do
     -- simultaneously eligible, only the first one to render claims focus.
     applySelfFocus = whenEnabled $ do
       isRetaining <- isFocused eid
-      auto        <- canAutoClaim eid cfg
+      auto        <- canAutoClaim eid foc cfg
       when (isRetaining || auto) $ setFocus eid
 
     -- This control's own reaction to whichever keys are currently ambient
@@ -257,7 +362,7 @@ control eid cfg attrs content = disableWhen (not (ccIsEnabled cc)) $ do
     -- themselves are trapped inside that scope.
     applyScopeEscape wasFocused = advanceOrRetreat wasFocused [(KeyTab, [Ctrl])] [(KeyTab, [Ctrl, Shift])]
 
-    -- Tab\/Shift-Tab (plus the arrow keys, if 'ccIsArrowNavigationEnabled') --
+    -- Tab\/Shift-Tab (plus the arrow keys, if @ccIsArrowNavigationEnabled@) --
     -- shared between the scope's own redefined navigation keys
     -- ('withChildNavigation') and 'reservedKeys' below.
     scopeAdvanceKeys, scopeRetreatKeys :: [(Key, [Modifier])]
@@ -276,14 +381,15 @@ control eid cfg attrs content = disableWhen (not (ccIsEnabled cc)) $ do
     -- scope was ambient when this control itself rendered (@currentScope@,
     -- read once up front), not always root, so this still works correctly
     -- from inside a 'Contained' container.
-    clickFocusReaction currentScope = case ccFocusOnClick cc of
-      FocusSelf     -> [onClicked (\() -> [OutUi (Focus currentScope eid)])]
+    clickFocusReaction currentScope = case foc of
+      FocusSelf     | ccIsFocusable cc -> [onClicked (\() -> [OutUi (Focus currentScope eid)])]
+                    | otherwise        -> []
       FocusTarget t -> [onClicked (\() -> [OutUi (Focus currentScope t)])]
       NoFocus       -> []
 
     -- Opens a focus scope for @content'@ exactly when this control does
     -- (see 'opensScope'), redefining the ambient navigation keys to Tab\/
-    -- Shift-Tab (plus the arrow keys, if 'ccIsArrowNavigationEnabled') so
+    -- Shift-Tab (plus the arrow keys, if @ccIsArrowNavigationEnabled@) so
     -- containment and cycling fall out of ordinary focus behaviour for
     -- whatever's inside, unchanged. 'applyScopeEscape' runs after this
     -- returns (see above), never inside it, so it always targets the
