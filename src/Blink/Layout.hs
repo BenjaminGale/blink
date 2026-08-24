@@ -103,22 +103,21 @@ module Blink.Layout
     --   @
     --
     --   An exact constraint can be computed the same way, rather than
-    --   hardcoded. A control's chrome (margin, border, padding — see
-    --   'Blink.Controls.Control.styledElement') is not known until render time
-    --   either, so sizing a slot tightly around a control's content plus
-    --   its own chrome means computing an 'Exactly' rather than writing
-    --   one down:
+    --   hardcoded. A caption's width is not known ahead of time either
+    --   (it depends on the text and the active font), so sizing a slot
+    --   tightly around it means computing an 'Exactly' from
+    --   'Blink.UI.measureText' rather than writing one down:
     --
     --   @
-    --   -- Sizes a button tightly around its label plus its own chrome,
-    --   -- instead of stretching to fill the parent.
-    --   tightButton :: Ord e => e -> Text -> [Attr e ButtonEvent msg ButtonConfig] -> UI e msg ()
-    --   tightButton eid txt attrs = do
-    --     (chromeW, chromeH) <- measureChrome eid
-    --     Size textW textH    <- measureText txt
-    --     let w = addLength chromeW (Exactly (realToFrac textW))
-    --         h = addLength chromeH (Exactly (realToFrac textH))
-    --     layoutWithConstraints (Layout w h TopLeft) (button eid (text txt : attrs))
+    --   -- Sizes a label column exactly as wide as its own caption,
+    --   -- instead of guessing a fixed width.
+    --   labelledRow :: Text -> UI Element msg () -> UI Element msg ()
+    --   labelledRow caption content = do
+    --     Size textW _ <- measureText caption
+    --     hBox defaultBoxConfig
+    --       [ (Layout (Exactly (realToFrac textW)) Fill MiddleLeft, label Label [text caption])
+    --       , (Layout Fill                         Fill TopLeft,    content)
+    --       ]
     --   @
     --
     --   The same pattern extends to a row of controls that must each be
