@@ -435,7 +435,8 @@ control eid attrs = disableWhen (not (ccIsEnabled cc)) $ do
   withBounds hitBounds $
     element eid (elementAttrs ++ clickFocusReaction currentScope)
   styledElement eid styleKey (ccContent cc)
-  when (ccIsFocusable cc) $ setPreviousTabStop eid
+  disabled <- isDisabled
+  when (ccIsFocusable cc && not disabled) $ setPreviousTabStop eid
   where
     cc = resolveControlConfig attrs
     styleKey = ccStyleKey cc

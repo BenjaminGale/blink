@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.ControlSpec (spec) where
 
@@ -6,7 +7,7 @@ import Test.Hspec
 
 import Blink.Control
   ( ControlAttrs, FocusOnClick (..)
-  , control, focusOnClick, isFocusable
+  , control, focusOnClick, isEnabled, isFocusable
   , onFocusGained, onFocusLost, onKeyPressed
   )
 import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
@@ -18,12 +19,13 @@ import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 
 data TestElement
-  = ElemA | ElemB
+  = ElemA | ElemB | ElemC
   deriving (Eq, Ord, Show)
 
-rectA, rectB :: Rectangle
+rectA, rectB, rectC :: Rectangle
 rectA = Rectangle 0 0 50 100
 rectB = Rectangle 50 0 50 100
+rectC = Rectangle 100 0 50 100
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -71,6 +73,12 @@ both focA attrsA focB attrsB = do
 -- same way every real widget built on 'control' does.
 renderControl :: [Attr'] -> UI TestElement String ()
 renderControl attrs = control ElemA attrs
+
+three :: [Attr'] -> [Attr'] -> [Attr'] -> UI TestElement String ()
+three attrsA attrsB attrsC = do
+  withBounds rectA (control ElemA attrsA)
+  withBounds rectB (control ElemB attrsB)
+  withBounds rectC (control ElemC attrsC)
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
@@ -149,3 +157,30 @@ spec = describe "Blink.Control" $ do
       let keyAttrs = [onKeyPressed (\k -> [OutMsg (show k)])]
       result <- runInteractions testBounds seedCtx (both FocusSelf keyAttrs FocusSelf []) [Wait 1] [ShiftTab]
       resultMessages result `shouldBe` []
+
+    describe "Shift-Tab past a disabled control" $ do
+      let tagged e = [onFocusGained (const [OutMsg (show e ++ " gained")]), onFocusLost (const [OutMsg (show e ++ " lost")])]
+          render = three (tagged ElemA) (isEnabled False : tagged ElemB) (tagged ElemC)
+
+      it "Tab from the first control skips the disabled middle one" $ do
+        result <- runInteractions testBounds seedCtx render [Wait 1] [Tab, Wait 1]
+        resultMessages result `shouldBe` ["ElemA lost", "ElemC gained"]
+
+      it "Shift-Tab back from the last control also skips the disabled middle one" $ do
+        result <- runInteractions testBounds seedCtx render [Wait 1, Tab, Wait 1] [ShiftTab, Wait 1]
+        resultMessages result `shouldBe` ["ElemA gained", "ElemC lost"]
+
+    describe "Shift-Tab past a control disabled via an ambient disableWhen" $ do
+      let tagged e = [onFocusGained (const [OutMsg (show e ++ " gained")]), onFocusLost (const [OutMsg (show e ++ " lost")])]
+          render = do
+            withBounds rectA (control ElemA (tagged ElemA))
+            disableWhen True (withBounds rectB (control ElemB (tagged ElemB)))
+            withBounds rectC (control ElemC (tagged ElemC))
+
+      it "Tab from the first control skips the ambiently-disabled middle one" $ do
+        result <- runInteractions testBounds seedCtx render [Wait 1] [Tab, Wait 1]
+        resultMessages result `shouldBe` ["ElemA lost", "ElemC gained"]
+
+      it "Shift-Tab back from the last control also skips the ambiently-disabled middle one" $ do
+        result <- runInteractions testBounds seedCtx render [Wait 1, Tab, Wait 1] [ShiftTab, Wait 1]
+        resultMessages result `shouldBe` ["ElemA gained", "ElemC lost"]
