@@ -49,9 +49,14 @@ Every 'App' is parameterised over three types:
                        queries. Start here when building views.
   * "Blink.Update"   — The Update monad: turns a message emitted by the view
                        into an updated application state.
-  * "Blink.Controls" — Ready-made controls: buttons, text inputs, checkboxes,
-                       progress bars, labels, sliders, scroll bars, viewports,
-                       and items\/selection primitives.
+  * "Blink.Control"  — The shared control primitive every ready-made widget
+                       is built from: focus, chrome, and events. Import
+                       alongside whichever of "Blink.Button",
+                       "Blink.Checkbox", "Blink.RadioButton",
+                       "Blink.TextInput", "Blink.ProgressBar", or
+                       "Blink.Label" a view actually uses — their
+                       overlapping attribute names (e.g. @text@) mean they
+                       aren't re-exported together here.
   * "Blink.Layout"   — Box layout and constraint-based sizing.
   * "Blink.Style"    — Themes and per-state styles.
   * "Blink.Rendering"— The draw command list produced each frame.
@@ -61,7 +66,6 @@ Every 'App' is parameterised over three types:
 -}
 module Blink
   ( module Blink.App
-  , module Blink.Controls
   , module Blink.Geometry
   , module Blink.Input
   , module Blink.Layout
@@ -72,7 +76,6 @@ module Blink
   ) where
 
 import Blink.App
-import Blink.Controls
 import Blink.Geometry
 import Blink.Input
 import Blink.Layout

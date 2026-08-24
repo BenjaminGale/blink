@@ -5,7 +5,6 @@ import qualified Blink.AppSpec as App
 import qualified Blink.ButtonSpec as Button
 import qualified Blink.CheckboxSpec as Checkbox
 import qualified Blink.ControlSpec as Control
-import qualified Blink.ControlsSpec as Controls
 import qualified Blink.ElementSpec as Element
 import qualified Blink.GeometrySpec as Geometry
 import qualified Blink.InteractionSpec as Interaction
@@ -36,5 +35,4 @@ main = hspec $ do
   ProgressBar.spec
   RadioButton.spec
   TextInput.spec
-  Controls.spec
   Interaction.spec

@@ -35,7 +35,6 @@ library
         Blink.Button
         Blink.Checkbox
         Blink.Control
-        Blink.Controls
         Blink.Element
         Blink.Label
         Blink.ProgressBar
@@ -77,8 +76,6 @@ test-suite blink-tests
         Blink.CheckboxSpec
         Blink.ControlBehaviour
         Blink.ControlSpec
-        Blink.ControlsSpec
-        Blink.ControlsTestSupport
         Blink.ElementBehaviour
         Blink.ElementSpec
         Blink.FixedFocusBehaviour
