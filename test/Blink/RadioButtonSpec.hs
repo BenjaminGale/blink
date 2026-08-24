@@ -83,4 +83,4 @@ spec = describe "Blink.RadioButton" $ do
 
   it "draws the selected glyph while selected" $ do
     ctx <- start [text "Option A", isSelected True]
-    getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 20 70) "\9673" testColour AlignCenter]
+    getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 20 70) "\9679" testColour AlignCenter]

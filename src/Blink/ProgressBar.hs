@@ -109,7 +109,7 @@ toProgressBarControlAttr a                        = translateCommon a
 -- a default -- 'progressBar' always appends its own 'isFocusable' 'False'
 -- last, so it wins regardless of what a caller passes.
 progressBar :: Ord e => e -> [ProgressBarAttributes e msg] -> UI e msg ()
-progressBar eid attrs = control eid (mapMaybe toProgressBarControlAttr attrs ++ [isFocusable False, focusOnClick NoFocus, content body])
+progressBar eid attrs = control eid (style progressBarStyleKey : mapMaybe toProgressBarControlAttr attrs ++ [isFocusable False, focusOnClick NoFocus, content body])
   where
     cfg = resolveProgressBarConfig attrs
     body = do

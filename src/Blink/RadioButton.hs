@@ -103,8 +103,12 @@ toRadioButtonControlAttr a                                = translateCommon a
 glyphWidth :: Double
 glyphWidth = 20
 
+-- | 'CIRCLED BULLET' (U+25C9) would read better but isn't in most UI
+-- fonts' coverage (including this project's demo font); 'BLACK CIRCLE' is
+-- near-universally supported and pairs the same way
+-- 'Blink.Checkbox.checkboxGlyph' pairs its squares.
 radioGlyph :: Bool -> Text
-radioGlyph True  = "\9673" -- CIRCLED BULLET
+radioGlyph True  = "\9679" -- BLACK CIRCLE
 radioGlyph False = "\9675" -- WHITE CIRCLE
 
 -- | A radio button: a glyph showing whether it's currently selected (see
@@ -117,7 +121,7 @@ radioGlyph False = "\9675" -- WHITE CIRCLE
 -- being clicked again itself. See 'onSelectedChanged' for reacting to it.
 radioButton :: Ord e => e -> [RadioButtonAttributes e msg] -> UI e msg ()
 radioButton eid attrs =
-  toggleBase (const True) eid (mapMaybe toRadioButtonControlAttr attrs) (rbcfgSelected cfg) (rbcfgOnSelectedChanged cfg) draw
+  toggleBase (const True) eid (style radioButtonStyleKey : mapMaybe toRadioButtonControlAttr attrs) (rbcfgSelected cfg) (rbcfgOnSelectedChanged cfg) draw
   where
     cfg = resolveRadioButtonConfig attrs
     draw selected = do

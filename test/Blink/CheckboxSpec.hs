@@ -6,7 +6,7 @@ import Test.Hspec
 
 import Blink.Checkbox (CheckboxAttributes, checkbox, isSelected)
 import Blink.Control (text)
-import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
+import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
@@ -54,7 +54,7 @@ noInput = InputState
 
 -- | The margin-inset hit area for a control rendered at 'testBounds' with
 -- the 10px margin every test style here uses -- covers both the checkbox's
--- glyph (x: 15-35) and caption (x: 35-85), so random points from within it
+-- glyph (x: 15-35) and caption (x: 41-85), so random points from within it
 -- exercise both halves.
 hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
@@ -71,13 +71,15 @@ spec :: Spec
 spec = describe "Blink.Checkbox" $ do
   toggleBehaviourSpec not testBounds seedCtx Remember (Point 5 5) hitRect (Point 200 200) (checkbox Remember)
 
-  it "draws the unchecked glyph and its caption while not selected" $ do
+  it "draws the box and its caption, with no tick, while not selected" $ do
     ctx <- start [text "Remember me"]
-    getDrawCommands ctx `shouldContain`
-      [ DrawText (Rectangle 15 15 20 70) "\9744" testColour AlignCenter
-      , DrawText (Rectangle 35 15 50 70) "Remember me" testColour AlignCenter
+    let cmds = getDrawCommands ctx
+    cmds `shouldContain`
+      [ StrokeBorder (Rectangle 16 41 18 18) testColour (uniformBorder 1)
+      , DrawText (Rectangle 41 15 44 70) "Remember me" testColour AlignCenter
       ]
+    cmds `shouldNotContain` [DrawText (Rectangle 16 41 18 18) "\10003" testColour AlignCenter]
 
-  it "draws the checked glyph while selected" $ do
+  it "draws a tick inside the box while selected" $ do
     ctx <- start [text "Remember me", isSelected True]
-    getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 20 70) "\9745" testColour AlignCenter]
+    getDrawCommands ctx `shouldContain` [DrawText (Rectangle 16 41 18 18) "\10003" testColour AlignCenter]

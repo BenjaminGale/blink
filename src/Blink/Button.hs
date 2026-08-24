@@ -133,7 +133,7 @@ toButtonControlAttr a              = translateCommon a
 -- | A clickable button labelled via 'text'. Fires every 'onClicked' handler
 -- -- when activated by a left-click or by pressing Enter while focused.
 button :: Ord e => e -> [ButtonAttributes e msg] -> UI e msg ()
-button eid attrs = buttonBase eid (mapMaybe toButtonControlAttr attrs) bodyContent
+button eid attrs = buttonBase eid (style buttonStyleKey : mapMaybe toButtonControlAttr attrs) bodyContent
   where
     cfg = resolveButtonConfig attrs
     bodyContent = do
@@ -261,7 +261,7 @@ toToggleButtonControlAttr a                                 = translateCommon a
 -- 'Blink.Style.StyleSet' variant from whatever key it actually resolved to.
 toggleButton :: Ord e => e -> [ToggleButtonAttributes e msg] -> UI e msg ()
 toggleButton eid attrs =
-  toggleBase not eid (mapMaybe toToggleButtonControlAttr attrs) (tbcfgSelected cfg) (tbcfgOnSelectedChanged cfg) draw
+  toggleBase not eid (style toggleButtonStyleKey : mapMaybe toToggleButtonControlAttr attrs) (tbcfgSelected cfg) (tbcfgOnSelectedChanged cfg) draw
   where
     cfg = resolveToggleButtonConfig attrs
     draw selected = do

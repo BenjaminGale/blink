@@ -191,7 +191,7 @@ toLabelControlAttr a               = translateCommon a
 -- label affects focus at all is 'target', which redirects it to a
 -- different, named element.
 label :: Ord e => e -> [LabelAttributes e msg] -> UI e msg ()
-label eid attrs = control eid (mapMaybe toLabelControlAttr attrs ++ [isFocusable False, focusOnClick focusTarget, Control.content (renderLabelContent cfg)])
+label eid attrs = control eid (style labelStyleKey : mapMaybe toLabelControlAttr attrs ++ [isFocusable False, focusOnClick focusTarget, Control.content (renderLabelContent cfg)])
   where
     (cfg, tgt) = resolveLabelConfig attrs
     focusTarget = maybe NoFocus FocusTarget tgt

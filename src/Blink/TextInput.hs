@@ -275,7 +275,7 @@ textInput :: Ord e => e -> [TextInputAttributes e msg] -> UI e msg ()
 textInput eid attrs = do
   wasFocused   <- isFocused eid
   wasCapturing <- isDragging eid
-  control eid (mapMaybe toTextInputControlAttr attrs ++ [focusOnClick FocusSelf, content (body wasFocused wasCapturing)])
+  control eid (style textInputStyleKey : mapMaybe toTextInputControlAttr attrs ++ [focusOnClick FocusSelf, content (body wasFocused wasCapturing)])
   where
     cfg          = resolveTextInputConfig attrs
     currentValue = ticfgValue cfg

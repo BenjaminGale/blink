@@ -26,16 +26,17 @@ module Blink.Checkbox
   , onFocusLost
   ) where
 
+import Control.Monad (when)
 import Data.List (foldl')
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 
 import Blink.Button (HasIsSelectedConfig (..), HasSelectedChangedEvents (..), isSelected, onSelectedChanged, toggleBase)
 import Blink.Control
-import Blink.Geometry (Rectangle (..))
+import Blink.Geometry (Rectangle (..), uniformBorder)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..))
-import Blink.UI (Out, UI, currentStyle, drawText, getBounds, withBounds)
+import Blink.UI (Out, UI, currentStyle, drawText, getBounds, strokeRect, withBounds)
 
 -- | 'Blink.Checkbox.checkbox'\'s own closed attrs type: the common
 -- capabilities every control has, plus 'text', 'isSelected', and
@@ -103,24 +104,42 @@ toCheckboxControlAttr a                             = translateCommon a
 glyphWidth :: Double
 glyphWidth = 20
 
-checkboxGlyph :: Bool -> Text
-checkboxGlyph True  = "\9745" -- BALLOT BOX WITH CHECK
-checkboxGlyph False = "\9744" -- BALLOT BOX
+-- | The gap between the glyph and the caption beside it.
+labelGap :: Double
+labelGap = 6
 
--- | A checkbox: a glyph showing whether it's currently selected (see
--- 'isSelected'), beside a caption set via 'text', toggled together as one
--- control -- clicking either the glyph or the caption activates it, the
--- same as 'Blink.Button.toggleButton'. Flips every time it's activated;
--- see 'onSelectedChanged' for reacting to it.
+-- | 'CHECK MARK' (U+2713) is near-universally supported, unlike the
+-- 'BALLOT BOX WITH CHECK' glyph (U+2611) that would otherwise draw the
+-- whole box-plus-tick in one character.
+checkTick :: Text
+checkTick = "\10003"
+
+-- | A checkbox: a small box drawn with 'strokeRect', a tick inside it while
+-- selected (see 'isSelected'), beside a caption set via 'text', toggled
+-- together as one control -- clicking either the box or the caption
+-- activates it, the same as 'Blink.Button.toggleButton'. Flips every time
+-- it's activated; see 'onSelectedChanged' for reacting to it.
 checkbox :: Ord e => e -> [CheckboxAttributes e msg] -> UI e msg ()
 checkbox eid attrs =
-  toggleBase not eid (mapMaybe toCheckboxControlAttr attrs) (ckcfgSelected cfg) (ckcfgOnSelectedChanged cfg) draw
+  toggleBase not eid (style checkboxStyleKey : mapMaybe toCheckboxControlAttr attrs) (ckcfgSelected cfg) (ckcfgOnSelectedChanged cfg) draw
   where
     cfg = resolveCheckboxConfig attrs
     draw selected = do
       s      <- currentStyle
       bounds <- getBounds
-      let glyphRect = bounds { rectWidth = glyphWidth }
-          textRect  = bounds { rectX = rectX bounds + glyphWidth, rectWidth = max 0 (rectWidth bounds - glyphWidth) }
-      withBounds glyphRect $ drawText (styleTextColour s) AlignCenter (checkboxGlyph selected)
-      withBounds textRect  $ drawText (styleTextColour s) (styleTextAlign s) (ckcfgText cfg)
+      let glyphRect  = bounds { rectWidth = glyphWidth }
+          boxSize    = max 0 (min glyphWidth (rectHeight bounds) - 2)
+          boxRect    = Rectangle
+            { rectX      = rectX glyphRect + (glyphWidth - boxSize) / 2
+            , rectY      = rectY glyphRect + (rectHeight glyphRect - boxSize) / 2
+            , rectWidth  = boxSize
+            , rectHeight = boxSize
+            }
+          textRect  = bounds
+            { rectX     = rectX bounds + glyphWidth + labelGap
+            , rectWidth = max 0 (rectWidth bounds - glyphWidth - labelGap)
+            }
+      withBounds boxRect $ do
+        strokeRect (styleTextColour s) (uniformBorder 1)
+        when selected $ drawText (styleTextColour s) AlignCenter checkTick
+      withBounds textRect $ drawText (styleTextColour s) (styleTextAlign s) (ckcfgText cfg)

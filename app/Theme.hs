@@ -1,46 +1,32 @@
+{-# LANGUAGE OverloadedStrings #-}
 -- | The sample app's theme.
 --
 -- = Style contract
 --
--- Every control here falls into one of two families, and every state
--- transition follows the same rule within its family:
+-- Buttons and text inputs are a bordered box in every state:
+-- 'styleBorderColour' is @Just@ even where nothing should be visibly drawn
+-- — see 'invisibleBorder'. States that shouldn't show a border use it
+-- instead of dropping the border outright, so a control's measured chrome
+-- never changes across states and it doesn't visibly resize ("jump") when
+-- hovered, focused, or disabled. Checkboxes and radio buttons
+-- ('mkFlatRowStyle') follow the same never-drop-the-border rule but are
+-- otherwise flat rows, not boxes, so they don't look like buttons.
 --
---   * __Bordered-box family__ (buttons, text inputs, the checkbox glyph,
---     scroll\/slider tracks, the checkbox\/radio row): 'styleBorderColour'
---     is @Just@ in /every/ state, never 'Nothing' — see 'invisibleBorder'.
---     States that shouldn't show a border use it instead of dropping the
---     border outright. Hover\/press\/focus are then communicated purely by
---     stepping the border colour (@invisible -> borderDefault ->
---     borderHover -> accent@ depending on the control), never by adding or
---     removing it. This is what keeps a control's measured chrome — and
---     therefore its on-screen size — identical across states; toggling
---     'styleBorderColour' to 'Nothing' changes the insets 'measureChrome'
---     \/ 'styledElement' report for that state alone, which is what causes a
---     control to visibly resize (\"jump\") the instant it's hovered,
---     focused, or disabled. Buttons are the one control whose *background*
---     also flips to a bold accent fill on press — they are a primary
---     action surface, so the pressed state should be unmissable. Other
---     bordered controls keep their normal background and vary only the
---     border, since a full fill would fight with the glyph\/text drawn on
---     top of them. The checkbox glyph is square and gets its own bordered
---     box; the radio glyph deliberately does not (radio buttons are round,
---     not square), so its row ('mkRadioRowStyle') tints its *background*
---     on hover\/press instead, to still give some feedback.
---   * __Flat-fill family__ (scroll\/slider thumbs, progress bars, labels,
---     the checkbox\/radio glyph's own label and mark text): border edges
---     are 'noBorder' (zero width) in every state, so there's no inset to
---     vary in the first place. Feedback, where there is any, comes
---     entirely from background colour.
---
--- Hover always uses the @*Hover@ palette entries; anything else is a
--- deviation from the contract above and should be treated as a bug.
+-- A control's /selected/ look (a pressed 'toggleButton', a checked
+-- checkbox, a picked radio button) is resolved by "Blink.Button" straight
+-- from this element's own 'ElementId', bypassing whatever 'Class' it
+-- otherwise styles from — see 'Blink.Button.toggleButton'. Since none of
+-- those controls gets its own 'ElementId' entry here, they all fall back to
+-- 'themeDefaultStyle', which is deliberately the same bordered-box style
+-- every control uses normally: one consistent "selected" look (an accent
+-- fill) for every toggle-style control in the app, with no per-instance
+-- styling needed.
 module Theme
   ( Element (..)
   , lightTheme
   , darkTheme
   ) where
 
-import Blink.Controls
 import Blink.Geometry
 import Blink.Rendering
 import Blink.Style
@@ -48,18 +34,16 @@ import qualified Data.Map.Strict as Map
 
 data Element = Label
              | StatusBar
-             | Btn Int
-             | NavBtn Int
-             | TextInput1
-             | NumberInput1
-             | PasswordInput1
-             | CheckboxN Int CheckboxPart
-             | ProgressBar1 | ProgressBar2
-             | Slider1 SliderPart
-             | ScrollRegion1 ViewportPart
-             | ScrollItem1 Int
-             | RadioSize RadioGroupPart
-             | RadioSizeNoTab RadioGroupPart
+             | DarkModeCheckbox
+             | EditingCheckbox
+             | ClickButton
+             | ResetButton
+             | ToggleCtl
+             | RadioCtl Int
+             | TextInputCtl
+             | PasswordInputCtl
+             | AnimateCheckbox
+             | ProgressCtl
   deriving (Eq, Ord)
 
 data Palette = Palette
@@ -124,22 +108,20 @@ controlMargin = uniform 3
 controlPadding :: Insets
 controlPadding = uniform 6
 
--- | An invisible border colour (zero alpha). 'measureChrome' \/
--- 'styledElement' only skip a border's *space* when 'styleBorderColour' is
--- 'Nothing' — a state that sets it to 'Nothing' while its siblings set it
--- to @Just@ reserves *less* space than they do, so a control resizes the
--- instant it enters that state (e.g. gaining focus, or going disabled).
--- Using this colour instead keeps the border's footprint constant across
--- every state; only its visibility changes, since 'Blink.UI.withBorder'
--- skips the actual stroke for a fully transparent colour (mirroring
--- 'Blink.UI.withBackground').
+-- | An invisible border colour (zero alpha) -- see the module header for why
+-- every bordered control keeps a border in every state instead of dropping
+-- it, using this colour to hide it without shrinking the control's chrome.
 invisibleBorder :: Colour
 invisibleBorder = RGBA 0 0 0 0
 
-mkBtnStyle :: Palette -> StyleSet
-mkBtnStyle p = StyleSet
-  { styleSetNormal   = base { styleBackground = palSurfaceButton p,         styleTextColour = palTextPrimary p,  styleBorderColour = Just (palBorderDefault p) }
-  , styleSetHovered  = base { styleBackground = palSurfaceButtonHover p,    styleTextColour = palTextPrimary p,  styleBorderColour = Just (palBorderHover p) }
+-- | A bordered-box control style: background/border step through
+-- hover/press/focus/disabled, with a bold accent fill on press (also used,
+-- via 'themeDefaultStyle', as every toggle-style control's forced
+-- "selected" look -- see the module header).
+mkControlStyle :: TextAlign -> Palette -> StyleSet
+mkControlStyle align p = StyleSet
+  { styleSetNormal   = base { styleBackground = palSurfaceButton p,         styleBorderColour = Just (palBorderDefault p) }
+  , styleSetHovered  = base { styleBackground = palSurfaceButtonHover p,    styleBorderColour = Just (palBorderHover p) }
   , styleSetPressed  = base { styleBackground = palAccent p,                styleTextColour = palTextOnAccent p, styleBorderColour = Just (palAccentDark p) }
   , styleSetFocused  = base { styleBackground = palAccentLight p,           styleTextColour = palTextPrimary p,  styleBorderColour = Just (palAccent p) }
   , styleSetDisabled = base { styleBackground = palSurfaceButtonDisabled p, styleTextColour = palTextMuted p,    styleBorderColour = Just (palBorderDefault p) }
@@ -147,10 +129,34 @@ mkBtnStyle p = StyleSet
   where
     base = Style
       { styleBackground   = RGBA 0 0 0 1
-      , styleTextColour   = RGBA 0 0 0 1
-      , styleTextAlign    = AlignCenter
+      , styleTextColour   = palTextPrimary p
+      , styleTextAlign    = align
       , styleMargin       = controlMargin
       , stylePadding      = controlPadding
+      , styleBorderColour = Just invisibleBorder
+      , styleBorderEdges  = uniformBorder 1
+      }
+
+-- | A flat, mostly-invisible row style for checkboxes\/radio buttons: no
+-- background or border normally, just a hover tint and a focus ring, so
+-- they read as plain rows rather than buttons -- their /selected/ look
+-- still comes from 'themeDefaultStyle' (see the module header), not from
+-- this style's own pressed variant.
+mkFlatRowStyle :: Palette -> StyleSet
+mkFlatRowStyle p = StyleSet
+  { styleSetNormal   = base
+  , styleSetHovered  = base { styleBackground = palSurfaceButtonHover p }
+  , styleSetPressed  = base { styleBackground = palSurfaceButtonHover p }
+  , styleSetFocused  = base { styleBorderColour = Just (palAccent p) }
+  , styleSetDisabled = base { styleTextColour = palTextMuted p }
+  }
+  where
+    base = Style
+      { styleBackground   = RGBA 0 0 0 0
+      , styleTextColour   = palTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleMargin       = uniform 2
+      , stylePadding      = uniform 4
       , styleBorderColour = Just invisibleBorder
       , styleBorderEdges  = uniformBorder 1
       }
@@ -193,123 +199,6 @@ mkProgressBarStyle p = StyleSet
       , styleBorderEdges  = noBorder
       }
 
--- | For a checkbox's glyph sub-part: the visible mark box (background and
--- border), filling its 20x20 slot with minimal inset so the checkmark
--- isn't squeezed. Checkboxes are conventionally square, so this is the one
--- glyph that gets its own bordered box — 'RadioGlyph' deliberately does
--- not (see 'mkCheckboxSubPartStyle'\/'mkRadioRowStyle').
---
--- Focused stays identical to normal: focus belongs to the outer row (see
--- 'mkCheckboxRowStyle'), and re-drawing it here too would double the ring.
-mkCheckboxGlyphStyle :: Palette -> StyleSet
-mkCheckboxGlyphStyle p = StyleSet
-  { styleSetNormal   = base { styleBackground = palSurfaceInput p,         styleBorderColour = Just (palBorderDefault p) }
-  , styleSetHovered  = base { styleBackground = palSurfaceInputHover p,    styleBorderColour = Just (palBorderHover p) }
-  , styleSetPressed  = base { styleBackground = palSurfaceInput p,         styleBorderColour = Just (palAccent p) }
-  , styleSetFocused  = base { styleBackground = palSurfaceInput p,         styleBorderColour = Just (palBorderDefault p) }
-  , styleSetDisabled = base { styleBackground = palSurfaceInputDisabled p, styleTextColour   = palTextMuted p, styleBorderColour = Just (palBorderDefault p) }
-  }
-  where
-    base = Style
-      { styleBackground   = RGBA 0 0 0 1
-      , styleTextColour   = palTextPrimary p
-      , styleTextAlign    = AlignCenter
-      , styleMargin       = uniform 0
-      , stylePadding      = uniform 2
-      , styleBorderColour = Just invisibleBorder
-      , styleBorderEdges  = uniformBorder 1
-      }
-
--- | For a checkbox's outer row (the whole clickable area spanning the
--- glyph and label together) and its label sub-part: invisible in every
--- state, so the glyph's own box\/border ('mkCheckboxGlyphStyle') is the
--- only permanent chrome visible — matching the pre-migration checkbox,
--- where only the mark itself was ever a bordered box, never the label or
--- the row as a whole. The row still gets a focus ring border, since
--- keyboard focus belongs to the row (the whole thing is one activation
--- target), not to the glyph alone.
---
--- The border is present (as 'invisibleBorder') in every state, not just
--- Focused, and padding leaves it a couple of pixels clear of the glyph\/
--- label: reserving the same chrome in every state means the row never
--- resizes when it gains or loses focus, and the couple of pixels of
--- padding keep the ring from touching the glyph's own border when it
--- does appear.
-mkCheckboxRowStyle :: Palette -> StyleSet
-mkCheckboxRowStyle p = StyleSet
-  { styleSetNormal   = base
-  , styleSetHovered  = base
-  , styleSetPressed  = base
-  , styleSetFocused  = base { styleBorderColour = Just (palAccent p) }
-  , styleSetDisabled = base
-  }
-  where
-    base = Style
-      { styleBackground   = RGBA 0 0 0 0
-      , styleTextColour   = palTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleMargin       = uniform 0
-      , stylePadding      = uniform 2
-      , styleBorderColour = Just invisibleBorder
-      , styleBorderEdges  = uniformBorder 1
-      }
-
--- | For a radio item's outer row: tints its background on hover\/press,
--- unlike 'mkCheckboxRowStyle'. A checkbox gets that feedback from its own
--- glyph box ('mkCheckboxGlyphStyle'); a radio glyph deliberately has no box
--- of its own (radio buttons are round, not square — see
--- 'mkCheckboxSubPartStyle'), so without this the row would give no hover\/
--- press feedback at all.
---
--- Unlike 'mkCheckboxRowStyle', this does /not/ reserve constant border\/
--- padding chrome: @rowRadioGroup@\/@rowRadioGroupNoTab@ in @app\/UI.hs@
--- give each radio row a hardcoded @Exactly 30@ height rather than computing
--- it from 'measureChrome' the way @rowCheckboxes@ does for the checkbox
--- row. Any nonzero chrome reserved here would eat straight into that fixed,
--- chrome-unaware budget and clip the label text — the background tint
--- costs nothing here since backgrounds don't add insets, but the border
--- must stay 'Nothing' except when focused.
-mkRadioRowStyle :: Palette -> StyleSet
-mkRadioRowStyle p = StyleSet
-  { styleSetNormal   = base
-  , styleSetHovered  = base { styleBackground = palSurfaceButtonHover p }
-  , styleSetPressed  = base { styleBackground = palAccentLight p }
-  , styleSetFocused  = base { styleBorderColour = Just (palAccent p) }
-  , styleSetDisabled = base
-  }
-  where
-    base = Style
-      { styleBackground   = RGBA 0 0 0 0
-      , styleTextColour   = palTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleMargin       = uniform 0
-      , stylePadding      = uniform 0
-      , styleBorderColour = Nothing
-      , styleBorderEdges  = uniformBorder 1
-      }
-
--- | For a checkbox's or radio button's label sub-part only: invisible in
--- every state (text colour aside), since the label never carries its own
--- chrome — see the style contract at the top of this module.
-mkCheckboxSubPartStyle :: Palette -> StyleSet
-mkCheckboxSubPartStyle p = StyleSet
-  { styleSetNormal   = base
-  , styleSetHovered  = base
-  , styleSetPressed  = base
-  , styleSetFocused  = base
-  , styleSetDisabled = base { styleTextColour = palTextMuted p }
-  }
-  where
-    base = Style
-      { styleBackground   = RGBA 0 0 0 0
-      , styleTextColour   = palTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleMargin       = uniform 0
-      , stylePadding      = uniform 0
-      , styleBorderColour = Nothing
-      , styleBorderEdges  = noBorder
-      }
-
 mkLabelStyle :: Palette -> StyleSet
 mkLabelStyle p = StyleSet
   { styleSetNormal   = base
@@ -325,47 +214,6 @@ mkLabelStyle p = StyleSet
       , styleTextAlign    = AlignLeft
       , styleMargin       = uniform 0
       , stylePadding      = controlPadding
-      , styleBorderColour = Nothing
-      , styleBorderEdges  = noBorder
-      }
-
--- | The border is present (as 'invisibleBorder') in every state, not just
--- Focused, so the track doesn't resize when it gains\/loses focus — see
--- 'invisibleBorder'.
-mkScrollTrackStyle :: Palette -> StyleSet
-mkScrollTrackStyle p = StyleSet
-  { styleSetNormal   = base
-  , styleSetHovered  = base
-  , styleSetPressed  = base
-  , styleSetFocused  = base { styleBorderColour = Just (palAccent p) }
-  , styleSetDisabled = base { styleBackground = palSurfaceButtonDisabled p }
-  }
-  where
-    base = Style
-      { styleBackground   = palProgressTrack p
-      , styleTextColour   = palTextPrimary p
-      , styleTextAlign    = AlignCenter
-      , styleMargin       = uniform 0
-      , stylePadding      = uniform 2
-      , styleBorderColour = Just invisibleBorder
-      , styleBorderEdges  = uniformBorder 1
-      }
-
-mkScrollThumbStyle :: Palette -> StyleSet
-mkScrollThumbStyle p = StyleSet
-  { styleSetNormal   = base { styleBackground = palAccent p }
-  , styleSetHovered  = base { styleBackground = palAccentDark p }
-  , styleSetPressed  = base { styleBackground = palAccentDark p }
-  , styleSetFocused  = base { styleBackground = palAccent p }
-  , styleSetDisabled = base { styleBackground = palTextMuted p }
-  }
-  where
-    base = Style
-      { styleBackground   = palAccent p
-      , styleTextColour   = palTextOnAccent p
-      , styleTextAlign    = AlignCenter
-      , styleMargin       = uniform 0
-      , stylePadding      = uniform 0
       , styleBorderColour = Nothing
       , styleBorderEdges  = noBorder
       }
@@ -391,38 +239,17 @@ mkStatusBarStyle p = StyleSet
 
 mkTheme :: Palette -> Theme Element
 mkTheme p = Theme
-  { themeElementStyles = Map.mapKeys ElementId . Map.fromList $
-      [ (Label,                     mkLabelStyle p)
-      , (StatusBar,                 mkStatusBarStyle p)
-      , (ProgressBar1,              mkProgressBarStyle p)
-      , (ProgressBar2,              mkProgressBarStyle p)
-      , (TextInput1,                mkTextInputStyle p)
-      , (NumberInput1,              mkTextInputStyle p)
-      , (PasswordInput1,            mkTextInputStyle p)
-      , (Slider1 SliderTrack,       mkScrollTrackStyle p)
-      , (Slider1 SliderThumb,       mkScrollThumbStyle p)
-      ] ++ [ (ScrollRegion1 (ViewportH ScrollTrack), mkScrollTrackStyle p)
-           , (ScrollRegion1 (ViewportH ScrollThumb), mkScrollThumbStyle p)
-           , (ScrollRegion1 (ViewportV ScrollTrack), mkScrollTrackStyle p)
-           , (ScrollRegion1 (ViewportV ScrollThumb), mkScrollThumbStyle p)
-           ]
-        ++ [ style
-           | i <- [1 .. 5]
-           , style <- [ (CheckboxN i CheckboxBox,   mkCheckboxRowStyle p)
-                      , (CheckboxN i CheckboxGlyph, mkCheckboxGlyphStyle p)
-                      , (CheckboxN i CheckboxLabel, mkCheckboxSubPartStyle p)
-                      ]
-           ]
-        ++ [ (RadioSize RadioGroup, mkRadioRowStyle p), (RadioSizeNoTab RadioGroup, mkRadioRowStyle p) ]
-        ++ [ style
-           | i <- [0 .. 2]
-           , mk <- [RadioSize, RadioSizeNoTab]
-           , style <- [ (mk (RadioItem i RadioBox),   mkRadioRowStyle p)
-                      , (mk (RadioItem i RadioGlyph), mkCheckboxSubPartStyle p)
-                      , (mk (RadioItem i RadioLabel), mkCheckboxSubPartStyle p)
-                      ]
-           ]
-  , themeDefaultStyle = mkBtnStyle p
+  { themeElementStyles = Map.fromList
+      [ (ElementId StatusBar,  mkStatusBarStyle p)
+      , (Class "button",       mkControlStyle AlignCenter p)
+      , (Class "toggleButton", mkControlStyle AlignCenter p)
+      , (Class "checkbox",     mkFlatRowStyle p)
+      , (Class "radioButton",  mkFlatRowStyle p)
+      , (Class "textInput",    mkTextInputStyle p)
+      , (Class "progressBar",  mkProgressBarStyle p)
+      , (Class "label",        mkLabelStyle p)
+      ]
+  , themeDefaultStyle = mkControlStyle AlignCenter p
   }
 
 lightTheme :: Theme Element
