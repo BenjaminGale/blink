@@ -48,8 +48,7 @@ module Blink.Controls.Element
 import Control.Monad (when)
 import Data.List (foldl')
 
-import Blink.Input (KeyEvent (..), InputState (..))
-import Blink.Mouse (ButtonState (..), Mouse (..), captureOf)
+import Blink.Input (ButtonState (..), InputState (..), KeyEvent (..), Mouse (..), captureOf)
 import Blink.UI
 
 -- * Elements

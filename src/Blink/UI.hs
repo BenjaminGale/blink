@@ -315,9 +315,9 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Blink.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..), TextMeasurer (..), noOpTextMeasurer)
 import Blink.Geometry (Point, Rectangle, Size, BorderEdges, containsPoint, intersectRect)
-import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
-import Blink.Mouse
-  ( MouseCapture (..), ButtonState (..), captureOf
+import Blink.Input
+  ( Key (..), KeyEvent (..), Modifier (..), InputState (..)
+  , MouseCapture (..), ButtonState (..), captureOf
   , HoverState (..), wasHit, nextHoverState
   , Mouse (..), emptyMouse, advanceHover, advanceButton
   )
@@ -470,7 +470,7 @@ isNothingFocused Nothing  = True
 isNothingFocused (Just _) = False
 
 -- 'MouseCapture', 'ButtonState', 'captureOf', 'HoverState', 'Mouse', and
--- their transition functions live in "Blink.Mouse" -- pure, no dependency on
+-- their transition functions live in "Blink.Input" -- pure, no dependency on
 -- this module's monad.
 
 -- | Per-frame keyboard-focus targeting state: which element has focus, and
@@ -558,7 +558,7 @@ data UIContext e msg = UIContext
   , ctxMouse           :: Mouse e
     -- ^ The left mouse button's state this frame (and which element, if
     -- any, holds mouse capture), plus per-element hover state. See
-    -- 'Blink.Mouse.Mouse'. Unlike focus, the button reading does not change
+    -- 'Blink.Input.Mouse'. Unlike focus, the button reading does not change
     -- on a re-render of the same frame — see 'rerenderContext'.
   , ctxElements        :: ElementState e
   , ctxOutputs         :: FrameOutputs e msg

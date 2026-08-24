@@ -1,9 +1,9 @@
-module Blink.MouseSpec (spec) where
+module Blink.InputSpec (spec) where
 
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Mouse
+import Blink.Input
 
 data Elem = ElemA | ElemB deriving (Eq, Ord, Show)
 

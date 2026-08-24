@@ -43,7 +43,6 @@ library
         Blink.Geometry
         Blink.Input
         Blink.Layout
-        Blink.Mouse
         Blink.Rendering
         Blink.Style
         Blink.UI
@@ -87,10 +86,10 @@ test-suite blink-tests
         Blink.Controls.ToggleBehaviour
         Blink.Generators
         Blink.GeometrySpec
+        Blink.InputSpec
         Blink.Interaction
         Blink.InteractionSpec
         Blink.LayoutSpec
-        Blink.MouseSpec
         Blink.UISpec
         Blink.UpdateSpec
     build-depends:
