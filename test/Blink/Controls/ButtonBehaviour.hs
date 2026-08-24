@@ -1,20 +1,20 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | The shared "activated by a click or by Enter while focused" contract
--- every 'Blink.Button.buttonBase'-based control must satisfy, on top of
+-- every 'Blink.Controls.Button.buttonBase'-based control must satisfy, on top of
 -- the raw-event\/focus\/hit-region contract every control already satisfies
--- (see 'Blink.ControlBehaviour.controlBehaviourSpec'). 'Blink.ButtonSpec'
--- runs this against 'Blink.Button.button'; 'toggleButton', 'checkbox', and
+-- (see 'Blink.Controls.ControlBehaviour.controlBehaviourSpec'). 'Blink.ButtonSpec'
+-- runs this against 'Blink.Controls.Button.button'; 'toggleButton', 'checkbox', and
 -- 'radioButton' reuse it too, on top of their own toggle-specific contract.
-module Blink.ButtonBehaviour
+module Blink.Controls.ButtonBehaviour
   ( buttonBehaviourSpec
   ) where
 
 import Test.Hspec
 
-import Blink.Control (HasControlConfig, HasElementEvents, isFocusable)
-import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.ElementBehaviour (tagged)
+import Blink.Controls.Control (HasControlConfig, HasElementEvents, isFocusable)
+import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
+import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Geometry (Point, Rectangle)
 import Blink.Input (Key (KeyReturn))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)

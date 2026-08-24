@@ -32,14 +32,14 @@ library
     exposed-modules:
         Blink
         Blink.App
-        Blink.Button
-        Blink.Checkbox
-        Blink.Control
-        Blink.Element
-        Blink.Label
-        Blink.ProgressBar
-        Blink.RadioButton
-        Blink.TextInput
+        Blink.Controls.Button
+        Blink.Controls.Checkbox
+        Blink.Controls.Control
+        Blink.Controls.Element
+        Blink.Controls.Label
+        Blink.Controls.ProgressBar
+        Blink.Controls.RadioButton
+        Blink.Controls.TextInput
         Blink.Geometry
         Blink.Input
         Blink.Layout
@@ -71,26 +71,26 @@ test-suite blink-tests
     main-is: Main.hs
     other-modules:
         Blink.AppSpec
-        Blink.ButtonBehaviour
-        Blink.ButtonSpec
-        Blink.CheckboxSpec
-        Blink.ControlBehaviour
-        Blink.ControlSpec
-        Blink.ElementBehaviour
-        Blink.ElementSpec
-        Blink.FixedFocusBehaviour
+        Blink.Controls.ButtonBehaviour
+        Blink.Controls.ButtonSpec
+        Blink.Controls.CheckboxSpec
+        Blink.Controls.ControlBehaviour
+        Blink.Controls.ControlSpec
+        Blink.Controls.ElementBehaviour
+        Blink.Controls.ElementSpec
+        Blink.Controls.FixedFocusBehaviour
+        Blink.Controls.LabelSpec
+        Blink.Controls.LabelledControlSpec
+        Blink.Controls.ProgressBarSpec
+        Blink.Controls.RadioButtonSpec
+        Blink.Controls.TextInputSpec
+        Blink.Controls.ToggleBehaviour
         Blink.Generators
         Blink.GeometrySpec
         Blink.Interaction
         Blink.InteractionSpec
-        Blink.LabelSpec
-        Blink.LabelledControlSpec
         Blink.LayoutSpec
         Blink.MouseSpec
-        Blink.ProgressBarSpec
-        Blink.RadioButtonSpec
-        Blink.TextInputSpec
-        Blink.ToggleBehaviour
         Blink.UISpec
         Blink.UpdateSpec
     build-depends:

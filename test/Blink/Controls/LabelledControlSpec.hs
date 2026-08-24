@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Blink.LabelledControlSpec (spec) where
+module Blink.Controls.LabelledControlSpec (spec) where
 
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
+import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
-import Blink.Label (DisplayMode (..), LabelledControlAttrs, content, displayMode, glyph, labelledControl, text)
+import Blink.Controls.Label (DisplayMode (..), LabelledControlAttrs, content, displayMode, glyph, labelledControl, text)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -70,7 +70,7 @@ start :: [Attr'] -> IO (UIContext TestElement String)
 start attrs = snd <$> runUI (labelledControl Widget attrs) seedCtx
 
 spec :: Spec
-spec = describe "Blink.Label.labelledControl" $ do
+spec = describe "Blink.Controls.Label.labelledControl" $ do
   controlBehaviourSpec defaultControlBehaviourConfig
     testBounds seedCtx Widget (Point 5 5) hitRect (Point 200 200) (labelledControl Widget)
 

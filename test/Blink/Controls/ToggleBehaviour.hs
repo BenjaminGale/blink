@@ -3,21 +3,21 @@
 -- | The shared "activating it changes its selected state and reports the
 -- new value" contract every toggle-style control must satisfy, on top of
 -- the activation contract every button-like control already satisfies (see
--- 'Blink.ButtonBehaviour.buttonBehaviourSpec'). 'Blink.Button.toggleButton',
--- 'Blink.Checkbox.checkbox', and 'Blink.RadioButton.radioButton' all reuse
+-- 'Blink.ButtonBehaviour.buttonBehaviourSpec'). 'Blink.Controls.Button.toggleButton',
+-- 'Blink.Controls.Checkbox.checkbox', and 'Blink.Controls.RadioButton.radioButton' all reuse
 -- this, each passing the function describing how activating it changes its
 -- own selected state (see 'toggleBehaviourSpec').
-module Blink.ToggleBehaviour
+module Blink.Controls.ToggleBehaviour
   ( toggleBehaviourSpec
   ) where
 
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Control (HasControlConfig, HasElementEvents)
-import Blink.Button (HasIsSelectedConfig, HasSelectedChangedEvents, isSelected, onSelectedChanged)
-import Blink.ButtonBehaviour (buttonBehaviourSpec)
-import Blink.ElementBehaviour (tagged)
+import Blink.Controls.Control (HasControlConfig, HasElementEvents)
+import Blink.Controls.Button (HasIsSelectedConfig, HasSelectedChangedEvents, isSelected, onSelectedChanged)
+import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec)
+import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)
 import Blink.Input (Key (KeyReturn))
@@ -31,7 +31,7 @@ taggedToggle = onSelectedChanged (\b -> [OutMsg ("SelectedChanged:" ++ show b)])
 
 -- | 'True' when @msgs@ reports activating a control starting at @current@
 -- the way @next@ says it should: the changed-to value when that's actually
--- a change (see 'Blink.Button.toggleBase'), or no 'SelectedChanged' at all
+-- a change (see 'Blink.Controls.Button.toggleBase'), or no 'SelectedChanged' at all
 -- when it isn't. Other tagged messages (hover, click, focus, ...) may
 -- freely appear alongside either way.
 reportsSelectedChange :: (Bool -> Bool) -> Bool -> [String] -> Bool

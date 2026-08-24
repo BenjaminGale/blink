@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | A progress indicator: a filled bar for a known 'Progress' value, or a
 -- continuously animating band while 'Indeterminate'.
-module Blink.ProgressBar
+module Blink.Controls.ProgressBar
   ( ProgressBarAttributes
   , ProgressBarConfig
   , ProgressValue (..)
@@ -27,7 +27,7 @@ module Blink.ProgressBar
 import Data.List (foldl')
 import Data.Maybe (mapMaybe)
 
-import Blink.Control
+import Blink.Controls.Control
 import Blink.Geometry (Rectangle (..))
 import Blink.Style (Style (..))
 import Blink.UI
@@ -40,11 +40,11 @@ data ProgressValue
     -- ^ Unknown progress: a band animates continuously across the bar.
   deriving (Eq, Show)
 
--- | 'Blink.ProgressBar.progressBar'\'s own closed attrs type: the common
+-- | 'Blink.Controls.ProgressBar.progressBar'\'s own closed attrs type: the common
 -- capabilities every control has, plus 'progress' and 'bandSpeed'. A
 -- progress bar is never a tab stop; this is fixed behaviour, not a default,
 -- so 'progressBar' always appends its own 'isFocusable' 'False' last,
--- overriding whatever a caller passes -- 'Blink.Control.isFocusable' still
+-- overriding whatever a caller passes -- 'Blink.Controls.Control.isFocusable' still
 -- typechecks against 'ProgressBarAttributes' (the 'HasControlConfig'
 -- instance is public, like every other widget's), it just never has any
 -- effect.

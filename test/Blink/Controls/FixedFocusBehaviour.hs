@@ -1,21 +1,21 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | The contract for a control whose 'Blink.Control.isFocusable' is fixed
+-- | The contract for a control whose 'Blink.Controls.Control.isFocusable' is fixed
 -- rather than a default -- it always appends its own value last, so nothing
--- a caller passes can change it (e.g. 'Blink.Label.label',
--- 'Blink.ProgressBar.progressBar'). 'Blink.ControlBehaviour.controlBehaviourSpec'
+-- a caller passes can change it (e.g. 'Blink.Controls.Label.label',
+-- 'Blink.Controls.ProgressBar.progressBar'). 'Blink.ControlBehaviour.controlBehaviourSpec'
 -- already covers the resulting behaviour with no 'isFocusable' passed at
 -- all; this adds the one case that doesn't: a caller explicitly passing
 -- 'isFocusable' 'True' still has no effect.
-module Blink.FixedFocusBehaviour
+module Blink.Controls.FixedFocusBehaviour
   ( fixedNotFocusableSpec
   ) where
 
 import Test.Hspec
 
-import Blink.Control (HasControlConfig, isFocusable)
-import Blink.Element (HasElementEvents)
-import Blink.ElementBehaviour (tagged)
+import Blink.Controls.Control (HasControlConfig, isFocusable)
+import Blink.Controls.Element (HasElementEvents)
+import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Geometry (Rectangle)
 import Blink.Interaction (InteractionResult (..), runInteractions)
 import Blink.UI

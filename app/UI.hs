@@ -2,13 +2,13 @@
 module UI (Element, AppState (..), demoApp) where
 
 import Blink.App
-import Blink.Button
-import Blink.Checkbox
-import Blink.RadioButton
-import Blink.TextInput
-import Blink.ProgressBar
-import Blink.Label (label)
-import qualified Blink.Label as Lbl
+import Blink.Controls.Button
+import Blink.Controls.Checkbox
+import Blink.Controls.RadioButton
+import Blink.Controls.TextInput
+import Blink.Controls.ProgressBar
+import Blink.Controls.Label (label)
+import qualified Blink.Controls.Label as Lbl
 import Blink.Geometry
 import Blink.Input
 import Blink.Layout

@@ -1,19 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Blink.TextInputSpec (spec) where
+module Blink.Controls.TextInputSpec (spec) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Data.Char (isDigit)
 import Test.Hspec
 
-import Blink.Control (text)
-import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
+import Blink.Controls.Control (text)
+import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
-import Blink.TextInput
+import Blink.Controls.TextInput
   (TextInputAttributes, displayFilter, inputFilter, onInput, onSubmit, textInput)
 import Blink.UI
 
@@ -105,7 +105,7 @@ unfocused :: [Attr'] -> UI TestElement String ()
 unfocused attrs = setFocus Other >> textInput Field attrs
 
 spec :: Spec
-spec = describe "Blink.TextInput" $ do
+spec = describe "Blink.Controls.TextInput" $ do
   controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx Field (Point 5 5) hitRect (Point 200 200) (textInput Field)
 
   describe "rendering" $ do

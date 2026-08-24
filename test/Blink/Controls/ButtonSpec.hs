@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Blink.ButtonSpec (spec) where
+module Blink.Controls.ButtonSpec (spec) where
 
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Button (ButtonAttributes, ToggleButtonAttributes, button, isSelected, toggleButton)
-import Blink.ButtonBehaviour (buttonBehaviourSpec)
-import Blink.Control (text)
-import Blink.ToggleBehaviour (toggleBehaviourSpec)
+import Blink.Controls.Button (ButtonAttributes, ToggleButtonAttributes, button, isSelected, toggleButton)
+import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec)
+import Blink.Controls.Control (text)
+import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -76,7 +76,7 @@ start :: [Attr'] -> IO (UIContext TestElement String)
 start attrs = snd <$> runUI (button Ok attrs) seedCtx
 
 spec :: Spec
-spec = describe "Blink.Button" $ do
+spec = describe "Blink.Controls.Button" $ do
   buttonBehaviourSpec testBounds seedCtx Ok (Point 5 5) hitRect (Point 200 200) (button Ok)
 
   it "draws its text in the resolved style" $ do

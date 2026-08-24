@@ -1,15 +1,15 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | The shared focus\/hit-region contract every 'Blink.Control.control'-based
+-- | The shared focus\/hit-region contract every 'Blink.Controls.Control.control'-based
 -- control must satisfy, on top of the raw-event contract every element
--- already satisfies (see 'Blink.ElementBehaviour.elementBehaviourSpec').
--- 'Blink.ControlSpec' runs this against 'Blink.Control.control' directly;
+-- already satisfies (see 'Blink.Controls.ElementBehaviour.elementBehaviourSpec').
+-- 'Blink.ControlSpec' runs this against 'Blink.Controls.Control.control' directly;
 -- any widget built on top reuses it to confirm the same focus\/hit-region
 -- behaviour still holds through its own attrs type -- a widget whose focus
--- behaviour genuinely differs (e.g. 'Blink.Label.label' never auto-claiming
+-- behaviour genuinely differs (e.g. 'Blink.Controls.Label.label' never auto-claiming
 -- or taking focus on a plain click) passes a 'ControlBehaviourConfig'
 -- reflecting that, rather than skipping this contract altogether.
-module Blink.ControlBehaviour
+module Blink.Controls.ControlBehaviour
   ( ControlBehaviourConfig (..)
   , defaultControlBehaviourConfig
   , controlBehaviourSpec
@@ -19,16 +19,16 @@ import Control.Monad (when)
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Control (HasControlConfig, isEnabled, isFocusable)
-import Blink.Element (HasElementEvents)
-import Blink.ElementBehaviour (elementBehaviourSpec, tagged)
+import Blink.Controls.Control (HasControlConfig, isEnabled, isFocusable)
+import Blink.Controls.Element (HasElementEvents)
+import Blink.Controls.ElementBehaviour (elementBehaviourSpec, tagged)
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.UI
 
 -- | The focus behaviour that varies between an ordinary control and a
--- special case like 'Blink.Label.label' or 'Blink.ProgressBar.progressBar'.
+-- special case like 'Blink.Controls.Label.label' or 'Blink.Controls.ProgressBar.progressBar'.
 -- Defaults (via 'defaultControlBehaviourConfig') to what every plain
 -- control does.
 data ControlBehaviourConfig = ControlBehaviourConfig
@@ -38,7 +38,7 @@ data ControlBehaviourConfig = ControlBehaviourConfig
   , cbcClickFocuses :: Bool
     -- ^ Whether clicking it grants it focus at all. 'False' for a control
     -- whose default click behaviour doesn't focus itself (e.g. a label
-    -- with no 'Blink.Label.target').
+    -- with no 'Blink.Controls.Label.target').
   }
 
 defaultControlBehaviourConfig :: ControlBehaviourConfig
@@ -49,7 +49,7 @@ defaultControlBehaviourConfig = ControlBehaviourConfig { cbcAutoClaims = True, c
 -- way @cfg@ says it should, and that its hit region respects its margin.
 -- Every check that involves a point inside the control's hit area picks
 -- one at random from @insideRect@ on each run -- see
--- 'Blink.ElementBehaviour.elementBehaviourSpec'.
+-- 'Blink.Controls.ElementBehaviour.elementBehaviourSpec'.
 controlBehaviourSpec
   :: (Ord e, Show e, HasControlConfig e cfg, HasElementEvents e String cfg)
   => ControlBehaviourConfig                      -- ^ how this control's focus behaviour deviates, if at all
@@ -65,7 +65,7 @@ controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint rend
   -- A control auto-claims focus the moment nothing else holds it, which
   -- would otherwise leak an incidental focus-gained event into every one
   -- of these raw-fact checks. 'isFocusable' 'False' keeps the reused
-  -- contract about the same raw facts 'Blink.ElementSpec' checks, not
+  -- contract about the same raw facts 'Blink.Controls.ElementSpec' checks, not
   -- about this control's own focus-claiming behaviour (covered below).
   elementBehaviourSpec bounds ctx eid insideRect outsidePoint (\attrs -> render (isFocusable False : attrs))
 
@@ -100,7 +100,7 @@ controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint rend
 
     -- Only meaningful for a control that can hold focus at all -- skipped
     -- entirely for one that neither auto-claims nor focuses on click (e.g.
-    -- 'Blink.Label.label' with no target).
+    -- 'Blink.Controls.Label.label' with no target).
     when (cbcAutoClaims cfg || cbcClickFocuses cfg) $
       it "raises a focus lost event when Tab is pressed while focused" $ monadicIO $ do
         p <- pick (genPointIn insideRect)

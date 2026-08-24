@@ -15,12 +15,12 @@
 -- effect the frame after it happens rather than immediately, so whichever
 -- element is gaining or losing focus reports it consistently regardless
 -- of render order -- see
--- 'Blink.Element.FocusGained'\/'Blink.Element.FocusLost'. A disabled
+-- 'Blink.Controls.Element.FocusGained'\/'Blink.Controls.Element.FocusLost'. A disabled
 -- control (per 'isEnabled') neither claims focus nor reacts to clicks or Tab.
 --
 -- = Building a widget
 --
--- Every ready-made widget ('Blink.Button.button', 'Blink.Label.label', ...)
+-- Every ready-made widget ('Blink.Controls.Button.button', 'Blink.Controls.Label.label', ...)
 -- is just 'control' with its own fixed list of 'ControlAttrs' behind a
 -- dedicated name -- see 'HasControlConfig'\/'HasElementEvents' for the
 -- capabilities a widget's own attrs type shares with 'control', and
@@ -34,12 +34,12 @@
 --
 -- A control resolves its 'Blink.Style.Style' by looking up a
 -- 'Blink.Style.StyleKey' in the active 'Blink.Style.Theme' -- normally
--- whatever 'Blink.Style.Class' a ready-made widget (e.g. 'Blink.Button.button')
+-- whatever 'Blink.Style.Class' a ready-made widget (e.g. 'Blink.Controls.Button.button')
 -- defaults to, so every instance of that widget picks up the same theme
 -- entry without registering each element id individually. 'style'
 -- overrides the key a specific @control@ call resolves against, e.g. to
 -- 'Blink.Style.ElementId' for a one-off, per-instance style.
-module Blink.Control
+module Blink.Controls.Control
   ( -- * Controls
     control
   , ControlAttrs
@@ -92,7 +92,7 @@ import Data.List (find, foldl')
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 
-import Blink.Element
+import Blink.Controls.Element
   ( ElementAttrs, ElementEvents, EventHandler, HasElementEvents (..), KeyEventHandler
   , element, fireClick, fireFocusChange, focusTransition, onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp
@@ -190,7 +190,7 @@ class HasTextConfig cfg where
 text :: HasTextConfig cfg => Text -> cfg
 text = configureText
 
--- | 'Blink.Control'\'s own closed attrs type: the shared
+-- | 'Blink.Controls.Control'\'s own closed attrs type: the shared
 -- 'ControlProperties' and 'ElementEvents', plus 'focusOnClick' and
 -- 'content'.
 data ControlAttrs e msg
@@ -219,10 +219,10 @@ instance HasContentConfig e msg (ControlAttrs e msg) where
   extractContent (ControlContent c) = Just c
   extractContent _ = Nothing
 
--- | Translates a 'ControlAttrs' down to "Blink.Element"'s own closed
--- 'ElementAttrs' -- @Nothing@ for every capability 'Blink.Element' has no
+-- | Translates a 'ControlAttrs' down to "Blink.Controls.Element"'s own closed
+-- 'ElementAttrs' -- @Nothing@ for every capability 'Blink.Controls.Element' has no
 -- concept of ('isFocusable', 'style', 'focusOnClick', 'content', ...). The
--- mechanism 'control' uses to call 'Blink.Element.element' with a concrete
+-- mechanism 'control' uses to call 'Blink.Controls.Element.element' with a concrete
 -- attrs list of the type it actually expects, the same way every widget's
 -- own @toXControlAttr@ calls 'control' with one of 'ControlAttrs'.
 toElementAttr :: ControlAttrs e msg -> Maybe (ElementAttrs e msg)
@@ -230,7 +230,7 @@ toElementAttr (ControlEvent c) = Just c
 toElementAttr _               = Nothing
 
 -- | Fires every 'onClicked' handler in @attrs@ directly, the same way a
--- real mouse click would -- for a widget (e.g. 'Blink.Button.buttonBase')
+-- real mouse click would -- for a widget (e.g. 'Blink.Controls.Button.buttonBase')
 -- that needs to re-fire the same reactions from a different trigger (Enter
 -- while focused) using the same, already-translated attrs list it passes
 -- to 'control', rather than resolving its own handler list on the side.
@@ -239,17 +239,17 @@ fireOnClick = fireClick . mapMaybe toElementAttr
 
 -- | Concatenates the 'Out's every handler in @hs@ produces for @a@, without
 -- dispatching any of them -- for composing a resolved handler list into a
--- single reaction, e.g. building the 'Blink.Element' attrs 'control' passes
+-- single reaction, e.g. building the 'Blink.Controls.Element' attrs 'control' passes
 -- down from a resolved 'ControlConfig', or a widget's derived reaction that
 -- itself becomes one more handler in another resolved list (see
--- 'Blink.Button.toggleBase').
+-- 'Blink.Controls.Button.toggleBase').
 resolveHandlers :: [a -> [Out e msg]] -> a -> [Out e msg]
 resolveHandlers hs a = concatMap ($ a) hs
 
 -- | Runs every handler in @hs@ against @a@, dispatching the resulting
 -- 'Out's -- for firing a resolved handler list directly, outside
--- 'Blink.Element.fire' (e.g. a button's Enter-key activation, which isn't
--- itself a raw 'Blink.Element.ElementEvent').
+-- 'Blink.Controls.Element.fire' (e.g. a button's Enter-key activation, which isn't
+-- itself a raw 'Blink.Controls.Element.ElementEvent').
 runHandlers :: [a -> [Out e msg]] -> a -> UI e msg ()
 runHandlers hs a = mapM_ dispatch (resolveHandlers hs a)
   where

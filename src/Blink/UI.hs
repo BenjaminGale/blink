@@ -553,7 +553,7 @@ data UIContext e msg = UIContext
     -- ^ The scope id currently ambient -- 'Nothing' for root, @'Just'
     -- scopeId@ while inside that scope's own 'withFocusScope' call. Lets
     -- an effect queued from deep inside a scope (a Shift-Tab retreat, a
-    -- click's 'Blink.Control.FocusTarget') address /that/ scope
+    -- click's 'Blink.Controls.Control.FocusTarget') address /that/ scope
     -- instead of always root. See 'getCurrentScope'.
   , ctxMouse           :: Mouse e
     -- ^ The left mouse button's state this frame (and which element, if
@@ -808,7 +808,7 @@ consumeKey k = modify $ \ctx ->
   in ctx { ctxInput = input { inputKeyEvents = filter (\e -> key e /= k) (inputKeyEvents input) } }
 
 -- | Hides the given key\/modifier combinations from 'getInput' -- and so
--- from anything reading raw key events, e.g. 'Blink.Element.onKeyPressed'
+-- from anything reading raw key events, e.g. 'Blink.Controls.Element.onKeyPressed'
 -- -- for the duration of @action@, restoring the real input once it
 -- completes. Unlike 'consumeKey', this doesn't affect what anyone else
 -- sees: a control that itself observes some keys as reserved navigation
@@ -852,7 +852,7 @@ getCurrentScope = gets ctxCurrentScope
 -- | The specific key\/modifier combinations that currently mean "give up
 -- focus here and let the next render claim it" ('navAdvance') or "return to
 -- whichever tab stop was previous" ('navRetreat'). Every
--- 'Blink.Control.control' consults this instead of a hardcoded Tab\/
+-- 'Blink.Controls.Control.control' consults this instead of a hardcoded Tab\/
 -- Shift-Tab, so a container can redefine it for its own children by
 -- opening a new ambient set around them with 'withNavigationKeys'.
 data NavigationKeys = NavigationKeys
@@ -1030,7 +1030,7 @@ isFocused eid = (== Just eid) <$> getFocus
 
 -- | The most recent focus change ('Focus'\/'ClearFocus') still visible to
 -- the currently ambient scope, if any. Single-hop against whichever scope is
--- ambient, exactly like 'isFocused'. A caller (see 'Blink.Element.element')
+-- ambient, exactly like 'isFocused'. A caller (see 'Blink.Controls.Element.element')
 -- compares the given element against both sides of the reported
 -- 'FocusChange' itself, rather than this function pre-deciding "gained or
 -- lost" on its behalf.

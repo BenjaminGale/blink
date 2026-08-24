@@ -49,12 +49,14 @@ Every 'App' is parameterised over three types:
                        queries. Start here when building views.
   * "Blink.Update"   — The Update monad: turns a message emitted by the view
                        into an updated application state.
-  * "Blink.Control"  — The shared control primitive every ready-made widget
-                       is built from: focus, chrome, and events. Import
-                       alongside whichever of "Blink.Button",
-                       "Blink.Checkbox", "Blink.RadioButton",
-                       "Blink.TextInput", "Blink.ProgressBar", or
-                       "Blink.Label" a view actually uses — their
+  * "Blink.Controls.Control" — The shared control primitive every
+                       ready-made widget is built from: focus, chrome, and
+                       events. Import alongside whichever of
+                       "Blink.Controls.Button", "Blink.Controls.Checkbox",
+                       "Blink.Controls.RadioButton",
+                       "Blink.Controls.TextInput",
+                       "Blink.Controls.ProgressBar", or
+                       "Blink.Controls.Label" a view actually uses — their
                        overlapping attribute names (e.g. @text@) mean they
                        aren't re-exported together here.
   * "Blink.Layout"   — Box layout and constraint-based sizing.

@@ -2,19 +2,19 @@ module Main (main) where
 
 import Test.Hspec
 import qualified Blink.AppSpec as App
-import qualified Blink.ButtonSpec as Button
-import qualified Blink.CheckboxSpec as Checkbox
-import qualified Blink.ControlSpec as Control
-import qualified Blink.ElementSpec as Element
+import qualified Blink.Controls.ButtonSpec as Button
+import qualified Blink.Controls.CheckboxSpec as Checkbox
+import qualified Blink.Controls.ControlSpec as Control
+import qualified Blink.Controls.ElementSpec as Element
+import qualified Blink.Controls.LabelSpec as Label
+import qualified Blink.Controls.LabelledControlSpec as LabelledControl
+import qualified Blink.Controls.ProgressBarSpec as ProgressBar
+import qualified Blink.Controls.RadioButtonSpec as RadioButton
+import qualified Blink.Controls.TextInputSpec as TextInput
 import qualified Blink.GeometrySpec as Geometry
 import qualified Blink.InteractionSpec as Interaction
-import qualified Blink.LabelSpec as Label
-import qualified Blink.LabelledControlSpec as LabelledControl
 import qualified Blink.LayoutSpec as Layout
 import qualified Blink.MouseSpec as Mouse
-import qualified Blink.ProgressBarSpec as ProgressBar
-import qualified Blink.RadioButtonSpec as RadioButton
-import qualified Blink.TextInputSpec as TextInput
 import qualified Blink.UISpec as UI
 import qualified Blink.UpdateSpec as Update
 

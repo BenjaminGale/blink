@@ -2,9 +2,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | A checkbox: a glyph and a caption toggled together as one control.
--- Built on 'toggleBase' -- see "Blink.Button" for how it and every other
+-- Built on 'toggleBase' -- see "Blink.Controls.Button" for how it and every other
 -- button-like control fit together.
-module Blink.Checkbox
+module Blink.Controls.Checkbox
   ( CheckboxAttributes
   , CheckboxConfig
   , checkbox
@@ -31,14 +31,14 @@ import Data.List (foldl')
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 
-import Blink.Button (HasIsSelectedConfig (..), HasSelectedChangedEvents (..), isSelected, onSelectedChanged, toggleBase)
-import Blink.Control
+import Blink.Controls.Button (HasIsSelectedConfig (..), HasSelectedChangedEvents (..), isSelected, onSelectedChanged, toggleBase)
+import Blink.Controls.Control
 import Blink.Geometry (Rectangle (..), uniformBorder)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..))
 import Blink.UI (Out, UI, currentStyle, drawText, getBounds, strokeRect, withBounds)
 
--- | 'Blink.Checkbox.checkbox'\'s own closed attrs type: the common
+-- | 'Blink.Controls.Checkbox.checkbox'\'s own closed attrs type: the common
 -- capabilities every control has, plus 'text', 'isSelected', and
 -- 'onSelectedChanged'.
 data CheckboxAttributes e msg
@@ -117,7 +117,7 @@ checkTick = "\10003"
 -- | A checkbox: a small box drawn with 'strokeRect', a tick inside it while
 -- selected (see 'isSelected'), beside a caption set via 'text', toggled
 -- together as one control -- clicking either the box or the caption
--- activates it, the same as 'Blink.Button.toggleButton'. Flips every time
+-- activates it, the same as 'Blink.Controls.Button.toggleButton'. Flips every time
 -- it's activated; see 'onSelectedChanged' for reacting to it.
 checkbox :: Ord e => e -> [CheckboxAttributes e msg] -> UI e msg ()
 checkbox eid attrs =

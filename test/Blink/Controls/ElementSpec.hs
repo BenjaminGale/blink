@@ -1,13 +1,13 @@
-module Blink.ElementSpec (spec) where
+module Blink.Controls.ElementSpec (spec) where
 
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Element
+import Blink.Controls.Element
   ( ElementAttrs
   , element, onClicked, onFocusGained, onFocusLost, onKeyPressed, onMouseDown, onMouseEntered, onMouseExited, onMouseUp
   )
-import Blink.ElementBehaviour (elementBehaviourSpec)
+import Blink.Controls.ElementBehaviour (elementBehaviourSpec)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Interaction (Interaction (DragTo, Wait), InteractionResult (..), runInteractions)
@@ -65,7 +65,7 @@ offBoth = Point 200 200
 onB     = Point 60 50
 
 -- | Every raw event a reaction built on 'element' can raise, tagged with
--- @e@ and a plain label naming which one it was -- 'Blink.Element' has no
+-- @e@ and a plain label naming which one it was -- 'Blink.Controls.Element' has no
 -- symbolic event type to tag with any more (each smart constructor reacts
 -- to exactly one event, so this lists all eight rather than reacting
 -- generically the way the old @onEvent@ escape hatch did).
@@ -98,7 +98,7 @@ seedBothCtx :: UIContext TestElement (TestElement, String)
 seedBothCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
 spec :: Spec
-spec = describe "Blink.Element" $ do
+spec = describe "Blink.Controls.Element" $ do
   elementBehaviourSpec testBounds seedCtx ElemA testBounds offBoth (element ElemA :: [ElementAttrs TestElement String] -> UI TestElement String ())
 
   describe "onKeyPressed" $

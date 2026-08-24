@@ -1,16 +1,16 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Blink.ControlSpec (spec) where
+module Blink.Controls.ControlSpec (spec) where
 
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Control
+import Blink.Controls.Control
   ( ControlAttrs, FocusOnClick (..)
   , control, focusOnClick, isEnabled, isFocusable
   , onFocusGained, onFocusLost, onKeyPressed
   )
-import Blink.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
+import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -91,7 +91,7 @@ hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
 spec :: Spec
-spec = describe "Blink.Control" $ do
+spec = describe "Blink.Controls.Control" $ do
   controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx ElemA (Point 5 5) hitRect (Point 200 200) renderControl
 
   describe "chrome" $
@@ -160,27 +160,27 @@ spec = describe "Blink.Control" $ do
 
     describe "Shift-Tab past a disabled control" $ do
       let tagged e = [onFocusGained (const [OutMsg (show e ++ " gained")]), onFocusLost (const [OutMsg (show e ++ " lost")])]
-          render = three (tagged ElemA) (isEnabled False : tagged ElemB) (tagged ElemC)
+          renderWithDisabledMiddle = three (tagged ElemA) (isEnabled False : tagged ElemB) (tagged ElemC)
 
       it "Tab from the first control skips the disabled middle one" $ do
-        result <- runInteractions testBounds seedCtx render [Wait 1] [Tab, Wait 1]
+        result <- runInteractions testBounds seedCtx renderWithDisabledMiddle [Wait 1] [Tab, Wait 1]
         resultMessages result `shouldBe` ["ElemA lost", "ElemC gained"]
 
       it "Shift-Tab back from the last control also skips the disabled middle one" $ do
-        result <- runInteractions testBounds seedCtx render [Wait 1, Tab, Wait 1] [ShiftTab, Wait 1]
+        result <- runInteractions testBounds seedCtx renderWithDisabledMiddle [Wait 1, Tab, Wait 1] [ShiftTab, Wait 1]
         resultMessages result `shouldBe` ["ElemA gained", "ElemC lost"]
 
     describe "Shift-Tab past a control disabled via an ambient disableWhen" $ do
       let tagged e = [onFocusGained (const [OutMsg (show e ++ " gained")]), onFocusLost (const [OutMsg (show e ++ " lost")])]
-          render = do
+          renderWithAmbientlyDisabledMiddle = do
             withBounds rectA (control ElemA (tagged ElemA))
             disableWhen True (withBounds rectB (control ElemB (tagged ElemB)))
             withBounds rectC (control ElemC (tagged ElemC))
 
       it "Tab from the first control skips the ambiently-disabled middle one" $ do
-        result <- runInteractions testBounds seedCtx render [Wait 1] [Tab, Wait 1]
+        result <- runInteractions testBounds seedCtx renderWithAmbientlyDisabledMiddle [Wait 1] [Tab, Wait 1]
         resultMessages result `shouldBe` ["ElemA lost", "ElemC gained"]
 
       it "Shift-Tab back from the last control also skips the ambiently-disabled middle one" $ do
-        result <- runInteractions testBounds seedCtx render [Wait 1, Tab, Wait 1] [ShiftTab, Wait 1]
+        result <- runInteractions testBounds seedCtx renderWithAmbientlyDisabledMiddle [Wait 1, Tab, Wait 1] [ShiftTab, Wait 1]
         resultMessages result `shouldBe` ["ElemA gained", "ElemC lost"]

@@ -13,9 +13,9 @@
 -- otherwise flat rows, not boxes, so they don't look like buttons.
 --
 -- A control's /selected/ look (a pressed 'toggleButton', a checked
--- checkbox, a picked radio button) is resolved by "Blink.Button" straight
+-- checkbox, a picked radio button) is resolved by "Blink.Controls.Button" straight
 -- from this element's own 'ElementId', bypassing whatever 'Class' it
--- otherwise styles from — see 'Blink.Button.toggleButton'. Since none of
+-- otherwise styles from — see 'Blink.Controls.Button.toggleButton'. Since none of
 -- those controls gets its own 'ElementId' entry here, they all fall back to
 -- 'themeDefaultStyle', which is deliberately the same bordered-box style
 -- every control uses normally: one consistent "selected" look (an accent

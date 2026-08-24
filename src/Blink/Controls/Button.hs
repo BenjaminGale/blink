@@ -7,7 +7,7 @@
 -- = The controls in this family
 --
 -- 'button' is a plain, momentary button. 'toggleButton',
--- 'Blink.Checkbox.checkbox', and 'Blink.RadioButton.radioButton' all track
+-- 'Blink.Controls.Checkbox.checkbox', and 'Blink.Controls.RadioButton.radioButton' all track
 -- a selected\/unselected state instead: 'toggleButton' flips every time
 -- it's clicked; a checkbox does too, drawing a checkmark glyph beside its
 -- caption; a radio button can only become selected, never unselected, by
@@ -17,10 +17,10 @@
 -- @
 -- control  --> buttonBase --> button
 --                         --> toggleBase --> toggleButton
---                                         --> checkbox     (see "Blink.Checkbox")
---                                         --> radioButton  (see "Blink.RadioButton")
+--                                         --> checkbox     (see "Blink.Controls.Checkbox")
+--                                         --> radioButton  (see "Blink.Controls.RadioButton")
 -- @
-module Blink.Button
+module Blink.Controls.Button
   ( ButtonAttributes
   , ButtonConfig
   , button
@@ -55,7 +55,7 @@ import Data.List (foldl')
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 
-import Blink.Control
+import Blink.Controls.Control
 import Blink.Input (Key (KeyReturn), KeyEvent (..), InputState (..))
 import Blink.Style (Style (..), StyleSet (..))
 import Blink.UI (Out, UI, currentStyle, drawText, getInput, getStyleSet, isDisabled, isFocused)
@@ -65,11 +65,11 @@ import Blink.UI (Out, UI, currentStyle, drawText, getInput, getStyleSet, isDisab
 -- already in @controlAttrs@ -- the same reactions a real mouse click fires
 -- via 'control' itself -- when Enter is pressed while it holds focus and it
 -- isn't disabled. The shape every button-like control ('button',
--- 'toggleButton', and 'Blink.Checkbox.checkbox'\/'Blink.RadioButton.radioButton')
+-- 'toggleButton', and 'Blink.Controls.Checkbox.checkbox'\/'Blink.Controls.RadioButton.radioButton')
 -- is built from.
 --
 -- Always takes focus when clicked -- fixed behaviour, not a default, so
--- unlike a plain "Blink.Control" control it can't be redirected elsewhere
+-- unlike a plain "Blink.Controls.Control" control it can't be redirected elsewhere
 -- or turned off.
 buttonBase :: Ord e => e -> [ControlAttrs e msg] -> UI e msg () -> UI e msg ()
 buttonBase eid controlAttrs body = do
@@ -80,9 +80,9 @@ buttonBase eid controlAttrs body = do
   let pressedReturn = any (\ev -> key ev == KeyReturn) (inputKeyEvents input)
   when (not disabled && focused && pressedReturn) $ fireOnClick controlAttrs
 
--- | 'Blink.Button.button'\'s own closed attrs type: the capabilities every
+-- | 'Blink.Controls.Button.button'\'s own closed attrs type: the capabilities every
 -- control has, plus 'text'. Doesn't implement 'HasFocusOnClickConfig'\/
--- 'HasContentConfig' -- see the "Blink.Control" module header for why
+-- 'HasContentConfig' -- see the "Blink.Controls.Control" module header for why
 -- @button eid [content ...]@ therefore fails to typecheck.
 data ButtonAttributes e msg
   = ButtonCommon (ControlProperties e)
@@ -187,7 +187,7 @@ toggleBase next eid controlAttrs wasSelected onSelectedChangedHandlers body =
       | newSelected == wasSelected = []
       | otherwise                  = resolveHandlers onSelectedChangedHandlers newSelected
 
--- | 'Blink.Button.toggleButton'\'s own closed attrs type: the same common
+-- | 'Blink.Controls.Button.toggleButton'\'s own closed attrs type: the same common
 -- capabilities as 'ButtonAttributes', plus 'text', 'isSelected', and
 -- 'onSelectedChanged'.
 data ToggleButtonAttributes e msg

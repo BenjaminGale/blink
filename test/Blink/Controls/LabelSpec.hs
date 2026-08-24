@@ -1,15 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Blink.LabelSpec (spec) where
+module Blink.Controls.LabelSpec (spec) where
 
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
-import Blink.FixedFocusBehaviour (fixedNotFocusableSpec)
+import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
+import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Label (DisplayMode (..), LabelAttributes, displayMode, glyph, label, target, text)
+import Blink.Controls.Label (DisplayMode (..), LabelAttributes, displayMode, glyph, label, target, text)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -70,7 +70,7 @@ start :: [Attr'] -> IO (UIContext TestElement String)
 start attrs = snd <$> runUI (label Caption attrs) seedCtx
 
 spec :: Spec
-spec = describe "Blink.Label" $ do
+spec = describe "Blink.Controls.Label" $ do
   controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
     testBounds seedCtx Caption (Point 5 5) hitRect (Point 200 200) (label Caption)
 

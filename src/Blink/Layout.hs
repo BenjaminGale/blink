@@ -103,8 +103,8 @@ module Blink.Layout
     --   @
     --
     --   An exact constraint can be computed the same way, rather than
-    --   hardcoded. A control's chrome (margin, border, padding — see the
-    --   Chrome section of "Blink.Controls") is not known until render time
+    --   hardcoded. A control's chrome (margin, border, padding — see
+    --   'Blink.Controls.Control.styledElement') is not known until render time
     --   either, so sizing a slot tightly around a control's content plus
     --   its own chrome means computing an 'Exactly' rather than writing
     --   one down:

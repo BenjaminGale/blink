@@ -4,7 +4,7 @@
 -- | A single-line text entry field: click-to-place cursor, drag selection,
 -- Shift+arrow extension, and selection-aware editing. Long text scrolls
 -- horizontally to keep the cursor visible.
-module Blink.TextInput
+module Blink.Controls.TextInput
   ( TextInputAttributes
   , TextInputConfig
   , textInput
@@ -34,14 +34,14 @@ import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Blink.Control
+import Blink.Controls.Control
 import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..))
 import Blink.UI
 
--- | 'Blink.TextInput.textInput'\'s own closed attrs type: the common
+-- | 'Blink.Controls.TextInput.textInput'\'s own closed attrs type: the common
 -- capabilities every control has, plus 'text' (the field's current value),
 -- 'inputFilter', 'displayFilter', 'onInput', and 'onSubmit'.
 data TextInputAttributes e msg

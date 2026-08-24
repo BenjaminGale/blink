@@ -9,7 +9,7 @@
 -- of) its own content -- see 'HasLabelledContent' for how a caller built on
 -- it places that label within whatever else it draws. The two don't derive
 -- from one another; they just share 'HasLabelConfig'.
-module Blink.Label
+module Blink.Controls.Label
   ( -- * Labels
     LabelAttributes
   , LabelConfig
@@ -49,8 +49,8 @@ import Data.List (foldl')
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 
-import Blink.Control hiding (content, text)
-import qualified Blink.Control as Control
+import Blink.Controls.Control hiding (content, text)
+import qualified Blink.Controls.Control as Control
 import Blink.Geometry (Rectangle (..))
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..))
@@ -69,7 +69,7 @@ data DisplayMode
 
 -- | One of the three capabilities shared by anything with 'HasLabelConfig'
 -- -- the single payload its attrs type carries one of, the same way
--- 'Blink.Control.ControlProperties' works for 'Blink.Control.HasControlConfig'.
+-- 'Blink.Controls.Control.ControlProperties' works for 'Blink.Controls.Control.HasControlConfig'.
 data LabelProperties
   = LabelPropText Text
   | LabelPropGlyph Text
@@ -130,12 +130,12 @@ renderLabelContent cfg = do
       withBounds glyphRect $ drawText (styleTextColour s) AlignCenter (lcfgGlyph cfg)
       withBounds textRect  $ drawText (styleTextColour s) (styleTextAlign s) (lcfgText cfg)
 
--- | 'Blink.Label.label'\'s own closed attrs type: the common capabilities
+-- | 'Blink.Controls.Label.label'\'s own closed attrs type: the common capabilities
 -- every control has, plus 'HasLabelConfig' and 'target'. A label never
 -- takes keyboard focus itself, whether by Tab or by being clicked; this is
 -- fixed behaviour, not a default, so 'label' always appends its own
 -- 'isFocusable' 'False' last, overriding whatever a caller passes --
--- 'Blink.Control.isFocusable' still typechecks against 'LabelAttributes'
+-- 'Blink.Controls.Control.isFocusable' still typechecks against 'LabelAttributes'
 -- (the 'HasControlConfig' instance is public, like every other widget's),
 -- it just never has any effect.
 data LabelAttributes e msg
@@ -263,7 +263,7 @@ resolveLabelledConfig = foldl' apply defaultResolvedLabelledConfig
 -- | Translates the capabilities 'control' itself understands down to
 -- 'ControlAttrs' -- @Nothing@ for 'HasLabelConfig'\/'HasLabelledContent',
 -- which 'control' has no concept of; 'labelledControl' folds those into
--- 'Blink.Control.content' itself instead (see below).
+-- 'Blink.Controls.Control.content' itself instead (see below).
 toLabelledControlAttr :: LabelledControlAttrs e msg -> Maybe (ControlAttrs e msg)
 toLabelledControlAttr (LabelledControlFocusOnClick f) = Just (focusOnClick f)
 toLabelledControlAttr (LabelledControlProp _)         = Nothing

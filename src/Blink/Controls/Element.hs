@@ -2,14 +2,14 @@
 {-# LANGUAGE FunctionalDependencies #-}
 -- | An element is anything on screen that responds to the mouse or
 -- keyboard: a button, a checkbox, a slider, a menu item. Every widget in
--- "Blink.Control" is built out of one or more elements.
+-- "Blink.Controls.Control" is built out of one or more elements.
 --
 -- Given an id and a list of handlers, 'element' watches whether the
 -- pointer is over that element, whether a mouse button is pressed or
 -- released on it, whether a full click happens on it, what keys are typed
 -- while it holds focus, and whether focus moves onto or off of it -- and
 -- calls the matching handler in @attrs@ for each.
-module Blink.Element
+module Blink.Controls.Element
   ( -- * Elements
     element
 
@@ -151,7 +151,7 @@ class HasElementEvents e msg cfg | cfg -> e msg where
   extractElementEvent :: cfg -> Maybe (ElementEvents e msg)
 
 -- | The plain attrs type for an element: nothing but its event handlers.
--- Widgets in "Blink.Control" build their own richer attrs types on
+-- Widgets in "Blink.Controls.Control" build their own richer attrs types on
 -- 'HasElementEvents' instead.
 type ElementAttrs e msg = ElementEvents e msg
 
