@@ -15,7 +15,7 @@ import Data.Maybe (catMaybes)
 import Blink.Attribute (Attribute (..), resolve)
 import Blink.Geometry (Alignment (..))
 import Blink.Layout.Box (children, hBox, vBox)
-import Blink.Layout.Core (Layout (..), Length (..))
+import Blink.Layout.Constraints (Layout (..), Length (..))
 import Blink.UI (UI)
 
 -- | Every capability 'borderLayout' resolves: its up to five named panels.

@@ -20,7 +20,7 @@ import qualified Data.IntMap.Strict as IntMap
 
 import Blink.Attribute (Attribute (..), resolve)
 import Blink.Geometry (Alignment (..), Rectangle (..), alignRect, insetRect, uniform)
-import Blink.Layout.Core (Layout (..), Length (..), layoutWithConstraints)
+import Blink.Layout.Constraints (Layout (..), Length (..), layoutWithConstraints)
 import Blink.UI (UI, clipToCurrent, getBounds, withBounds)
 
 -- | Every capability 'hBox'\/'vBox' resolve: spacing, margin, alignment of

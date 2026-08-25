@@ -12,7 +12,7 @@ By default, a 'Blink.UI.UI' action fills the full space it is given by its paren
 >  |                                          |
 >  +------------------------------------------+
 
-This module is a barrel over "Blink.Layout.Core" (single-child sizing and
+This module is a barrel over "Blink.Layout.Constraints" (single-child sizing and
 positioning), "Blink.Layout.Box" (arranging several children along an
 axis), and "Blink.Layout.Border" (dividing space into named regions) --
 combinators that allow more control over layout, in order of increasing
@@ -143,5 +143,5 @@ import Blink.Layout.Border
   (BorderContent, borderLayout, bottom, centre, emptyBorderContent, left, right, top)
 import Blink.Layout.Box
   (BoxConfig, alignment, boxTotalSpacing, children, defaultBoxConfig, hBox, margin, spacing, stretch, vBox)
-import Blink.Layout.Core
+import Blink.Layout.Constraints
   (AddLength (..), Layout (..), Length (..), MaxLength (..), addLength, layoutWithConstraints, maxLength, preferredSize)

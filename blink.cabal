@@ -47,7 +47,7 @@ library
         Blink.Layout
         Blink.Layout.Border
         Blink.Layout.Box
-        Blink.Layout.Core
+        Blink.Layout.Constraints
         Blink.Rendering
         Blink.Style
         Blink.UI

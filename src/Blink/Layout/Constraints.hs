@@ -3,7 +3,7 @@
 -- position, 'layoutWithConstraints' applies one to a single action, and
 -- the 'AddLength'\/'MaxLength' monoids let a caller compute a 'Length'
 -- from several others rather than only ever writing one down by hand.
-module Blink.Layout.Core
+module Blink.Layout.Constraints
   ( Length (..)
   , Layout (..)
   , layoutWithConstraints
