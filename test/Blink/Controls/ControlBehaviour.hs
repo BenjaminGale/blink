@@ -20,7 +20,7 @@ import Control.Monad (when)
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Controls.Control (Attr, HasControlConfig, HasElementConfig, isEnabled, isFocusable)
+import Blink.Controls.Control (Attribute, HasControlConfig, HasElementConfig, isEnabled, isFocusable)
 import Blink.Controls.ElementBehaviour (elementBehaviourSpec, tagged)
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)
@@ -59,7 +59,7 @@ controlBehaviourSpec
   -> Point                                         -- ^ a point inside its margin (not part of its hit area)
   -> Rectangle                                     -- ^ the region making up its margin-inset hit area
   -> Point                                         -- ^ a point outside its bounds entirely
-  -> ([Attr cfg] -> UI e String ())                -- ^ render the control under test with these attrs
+  -> ([Attribute cfg] -> UI e String ())                -- ^ render the control under test with these attrs
   -> Spec
 controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint render = do
   -- A control auto-claims focus the moment nothing else holds it, which

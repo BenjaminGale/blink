@@ -18,7 +18,7 @@ import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
 import Blink.Controls.Button (ToggleConfig, isSelected, onSelectedChanged)
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec)
-import Blink.Controls.Element (Attr)
+import Blink.Controls.Element (Attribute)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)
@@ -28,7 +28,7 @@ import Blink.UI
 
 -- | Every raw\/activation reaction, plus a tagged reaction to
 -- 'onSelectedChanged' naming the value it changed to.
-taggedToggle :: [Attr (ToggleConfig e String)]
+taggedToggle :: [Attribute (ToggleConfig e String)]
 taggedToggle = onSelectedChanged (\b -> [OutMsg ("SelectedChanged:" ++ show b)]) : tagged
 
 -- | 'True' when @msgs@ reports activating a control starting at @current@
@@ -57,7 +57,7 @@ toggleBehaviourSpec
   -> Point                                         -- ^ a point inside its margin (not part of its hit area)
   -> Rectangle                                     -- ^ the region making up its margin-inset hit area
   -> Point                                         -- ^ a point outside its bounds entirely
-  -> ([Attr (ToggleConfig e String)] -> UI e String ()) -- ^ render the control under test with these attrs
+  -> ([Attribute (ToggleConfig e String)] -> UI e String ()) -- ^ render the control under test with these attrs
   -> Spec
 toggleBehaviourSpec next bounds ctx eid marginPoint insideRect outsidePoint render = do
   buttonBehaviourSpec bounds ctx eid marginPoint insideRect outsidePoint (\attrs -> render (isSelected False : attrs))

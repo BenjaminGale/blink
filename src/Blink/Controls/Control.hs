@@ -17,7 +17,7 @@
 -- a direct 'UiEffect', not a handler call.
 module Blink.Controls.Control
   ( -- * Re-exported from Blink.Controls.Element
-    Attr (..)
+    Attribute (..)
   , resolve
   , EventHandler
   , KeyEventHandler
@@ -116,31 +116,31 @@ data ControlInteraction e msg = ControlInteraction
 -- gives every such config an 'HasElementConfig' instance for free, one hop
 -- further in through 'ccEvents'.
 class HasControlConfig e msg cfg | cfg -> e msg where
-  overControl :: Attr (ControlConfig e msg) -> Attr cfg
+  overControl :: Attribute (ControlConfig e msg) -> Attribute cfg
 
 instance HasControlConfig e msg (ControlConfig e msg) where
   overControl = id
 
 instance HasElementConfig e msg (ControlConfig e msg) where
-  overElement (Attr f) = Attr (\cc -> cc { ccEvents = f (ccEvents cc) })
+  overElement (Attribute f) = Attribute (\cc -> cc { ccEvents = f (ccEvents cc) })
 
 -- | Whether this control participates in keyboard focus at all: Tab\/
 -- Shift-Tab cycling onto it, and auto-claiming focus by rendering first
 -- while nothing else holds it. 'False' excludes it from both.
-isFocusable :: HasControlConfig e msg cfg => Bool -> Attr cfg
-isFocusable b = overControl (Attr (\cc -> cc { ccIsFocusable = b }))
+isFocusable :: HasControlConfig e msg cfg => Bool -> Attribute cfg
+isFocusable b = overControl (Attribute (\cc -> cc { ccIsFocusable = b }))
 
 -- | Whether the control responds to input at all. A disabled control still
 -- renders (in its disabled style) but ignores hover, clicks, key presses,
 -- and focus, and is skipped by Tab\/Shift-Tab. Defaults to 'True'.
-isEnabled :: HasControlConfig e msg cfg => Bool -> Attr cfg
-isEnabled b = overControl (Attr (\cc -> cc { ccIsEnabled = b }))
+isEnabled :: HasControlConfig e msg cfg => Bool -> Attribute cfg
+isEnabled b = overControl (Attribute (\cc -> cc { ccIsEnabled = b }))
 
 -- | Which 'StyleKey' this control resolves its style from. Defaults to a
 -- 'Class' named after the control; pass 'ElementId' to theme this one
 -- instance differently, or a different 'Class' to group it with others.
-style :: HasControlConfig e msg cfg => StyleKey e -> Attr cfg
-style k = overControl (Attr (\cc -> cc { ccStyleKey = k }))
+style :: HasControlConfig e msg cfg => StyleKey e -> Attribute cfg
+style k = overControl (Attribute (\cc -> cc { ccStyleKey = k }))
 
 -- | Which way, if any, focus just moved, for 'controlBase's own immediate
 -- self-claim\/self-give-up notifications -- distinct from the deferred

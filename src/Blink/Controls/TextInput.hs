@@ -61,14 +61,14 @@ defaultTextInputConfig = TextInputConfig
   }
 
 instance HasElementConfig e msg (TextInputConfig e msg) where
-  overElement attr = Attr (\tc -> tc { ticControl = runAttr (overElement attr) (ticControl tc) })
+  overElement attr = Attribute (\tc -> tc { ticControl = runAttribute (overElement attr) (ticControl tc) })
 
 instance HasControlConfig e msg (TextInputConfig e msg) where
-  overControl attr = Attr (\tc -> tc { ticControl = runAttr attr (ticControl tc) })
+  overControl attr = Attribute (\tc -> tc { ticControl = runAttribute attr (ticControl tc) })
 
 -- | Sets the field's current value. Defaults to @\"\"@ when not given.
-value :: Text -> Attr (TextInputConfig e msg)
-value t = Attr (\tc -> tc { ticValue = t })
+value :: Text -> Attribute (TextInputConfig e msg)
+value t = Attribute (\tc -> tc { ticValue = t })
 
 -- | Applied to newly typed text before it's inserted, letting callers
 -- restrict which keystrokes are accepted (e.g. @T.filter isDigit@ for a
@@ -76,8 +76,8 @@ value t = Attr (\tc -> tc { ticValue = t })
 -- punctuation as the user types) is an application concern, not this
 -- control's -- do it in an 'onInput' handler and pass the already-formatted
 -- value back in on the next frame. Defaults to 'id'.
-inputFilter :: (Text -> Text) -> Attr (TextInputConfig e msg)
-inputFilter f = Attr (\tc -> tc { ticInputFilter = f })
+inputFilter :: (Text -> Text) -> Attribute (TextInputConfig e msg)
+inputFilter f = Attribute (\tc -> tc { ticInputFilter = f })
 
 -- | Applied to the value everywhere it is measured or drawn -- the rendered
 -- text, and every character-offset calculation used for cursor placement,
@@ -86,16 +86,16 @@ inputFilter f = Attr (\tc -> tc { ticInputFilter = f })
 -- (e.g. @T.map (const '\8226')@ to mask each character of a password); the
 -- underlying value edited by 'inputFilter'\/'onInput' is never affected by
 -- it. Defaults to 'id'.
-displayFilter :: (Text -> Text) -> Attr (TextInputConfig e msg)
-displayFilter f = Attr (\tc -> tc { ticDisplayFilter = f })
+displayFilter :: (Text -> Text) -> Attribute (TextInputConfig e msg)
+displayFilter f = Attribute (\tc -> tc { ticDisplayFilter = f })
 
 -- | Reacts with the new value whenever a keystroke changes it.
-onInput :: (Text -> [Out e msg]) -> Attr (TextInputConfig e msg)
-onInput f = Attr (\tc -> tc { ticOnInput = ticOnInput tc ++ [f] })
+onInput :: (Text -> [Out e msg]) -> Attribute (TextInputConfig e msg)
+onInput f = Attribute (\tc -> tc { ticOnInput = ticOnInput tc ++ [f] })
 
 -- | Reacts when Enter is pressed while the field is focused and enabled.
-onSubmit :: EventHandler e msg -> Attr (TextInputConfig e msg)
-onSubmit f = Attr (\tc -> tc { ticOnSubmit = ticOnSubmit tc ++ [f] })
+onSubmit :: EventHandler e msg -> Attribute (TextInputConfig e msg)
+onSubmit f = Attribute (\tc -> tc { ticOnSubmit = ticOnSubmit tc ++ [f] })
 
 -- | Click sets both selection ends at the clicked character; dragging
 -- extends only the active end, keeping the anchor from before the drag
@@ -236,7 +236,7 @@ drawTextInputContent s bounds displayValue canEdit ox sel@(Selection _ active) =
 -- position and selection are control state, not application data --
 -- 'textInput' reads and writes them itself via 'getSelection' and
 -- 'getScrollState', keyed by the element ID.
-textInput :: Ord e => e -> [Attr (TextInputConfig e msg)] -> UI e msg ()
+textInput :: Ord e => e -> [Attribute (TextInputConfig e msg)] -> UI e msg ()
 textInput eid attrs = do
   wasFocused   <- isFocused eid
   wasCapturing <- isDragging eid

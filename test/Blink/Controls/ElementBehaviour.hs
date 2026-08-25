@@ -17,7 +17,7 @@ import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
 import Blink.Controls.Element
-  ( Attr, HasElementConfig
+  ( Attribute, HasElementConfig
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed
   , onFocusGained, onFocusLost
   )
@@ -31,7 +31,7 @@ import Blink.UI
 -- can raise with a plain label naming it, discarding any payload -- enough
 -- to assert "this fired" declaratively without a bespoke message type per
 -- caller.
-tagged :: HasElementConfig e String cfg => [Attr cfg]
+tagged :: HasElementConfig e String cfg => [Attribute cfg]
 tagged =
   [ onMouseEntered (const [OutMsg "MouseEntered"])
   , onMouseExited  (const [OutMsg "MouseExited"])
@@ -58,7 +58,7 @@ elementBehaviourSpec
   -> e                                             -- ^ element id under test
   -> Rectangle                                     -- ^ the region making up its hit area
   -> Point                                         -- ^ a point outside its bounds
-  -> ([Attr cfg] -> UI e String ())                -- ^ render the thing under test with these attrs
+  -> ([Attribute cfg] -> UI e String ())                -- ^ render the thing under test with these attrs
   -> Spec
 elementBehaviourSpec bounds ctx eid insideRect outside render = do
   describe "hover" $ do

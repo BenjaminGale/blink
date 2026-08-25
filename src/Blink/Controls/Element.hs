@@ -1,15 +1,11 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
--- | The attribute mechanism every widget in "Blink.Controls" is built on,
--- and the lowest of the two building-block layers -- see
--- "Blink.Controls.Control" for the one above it.
+-- | The lowest of the two building-block layers every widget in
+-- "Blink.Controls" is built on -- see "Blink.Controls.Control" for the one
+-- above it. Re-exports "Blink.Attribute"'s 'Attribute'\/'resolve' mechanism, which
+-- every layer here (and "Blink.Layout.Box") is configured through.
 --
 -- = The attribute mechanism
---
--- An attribute is @'Attr' cfg@: a function @cfg -> cfg@, wrapped in a
--- newtype so it can be given its own instances. 'resolve' folds a list of
--- them over a starting config left to right, so a later attribute setting
--- the same field overrides an earlier one.
 --
 -- Each layer's own config type gets a one-method typeclass
 -- (@HasElementConfig@, 'Blink.Controls.Control.HasControlConfig') so an
@@ -31,7 +27,7 @@
 -- every flag has been computed.
 module Blink.Controls.Element
   ( -- * Attributes
-    Attr (..)
+    Attribute (..)
   , resolve
 
     -- * Element
@@ -61,20 +57,10 @@ module Blink.Controls.Element
   ) where
 
 import Control.Monad (when)
-import Data.List (foldl')
 
+import Blink.Attribute (Attribute (..), resolve)
 import Blink.Input (ButtonState (..), InputState (..), KeyEvent (..), Mouse (..), captureOf)
 import Blink.UI
-
--- * Attributes
-
--- | A single field update on @cfg@, applied by 'resolve'.
-newtype Attr cfg = Attr { runAttr :: cfg -> cfg }
-
--- | Folds a list of attributes over a starting config, left to right -- a
--- later attribute setting the same field overrides an earlier one.
-resolve :: cfg -> [Attr cfg] -> cfg
-resolve = foldl' (\cfg (Attr f) -> f cfg)
 
 -- * Element
 
@@ -121,48 +107,48 @@ data ElementInteraction = ElementInteraction
 -- an element attribute (e.g. 'onClicked') be applied to it directly. Every
 -- instance but the base case delegates one hop into its own nested field.
 class HasElementConfig e msg cfg | cfg -> e msg where
-  overElement :: Attr (ElementConfig e msg) -> Attr cfg
+  overElement :: Attribute (ElementConfig e msg) -> Attribute cfg
 
 instance HasElementConfig e msg (ElementConfig e msg) where
   overElement = id
 
 -- | Reacts when the pointer starts being over the element this frame.
-onMouseEntered :: HasElementConfig e msg cfg => EventHandler e msg -> Attr cfg
-onMouseEntered f = overElement (Attr (\ec -> ec { ecOnMouseEntered = ecOnMouseEntered ec ++ [f] }))
+onMouseEntered :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onMouseEntered f = overElement (Attribute (\ec -> ec { ecOnMouseEntered = ecOnMouseEntered ec ++ [f] }))
 
 -- | Reacts when the pointer stops being over the element this frame.
-onMouseExited :: HasElementConfig e msg cfg => EventHandler e msg -> Attr cfg
-onMouseExited f = overElement (Attr (\ec -> ec { ecOnMouseExited = ecOnMouseExited ec ++ [f] }))
+onMouseExited :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onMouseExited f = overElement (Attribute (\ec -> ec { ecOnMouseExited = ecOnMouseExited ec ++ [f] }))
 
 -- | Reacts when the mouse button goes down while the element is hit.
-onMouseDown :: HasElementConfig e msg cfg => EventHandler e msg -> Attr cfg
-onMouseDown f = overElement (Attr (\ec -> ec { ecOnMouseDown = ecOnMouseDown ec ++ [f] }))
+onMouseDown :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onMouseDown f = overElement (Attribute (\ec -> ec { ecOnMouseDown = ecOnMouseDown ec ++ [f] }))
 
 -- | Reacts when the mouse button comes up while the element is hit, even
 -- if the press started elsewhere. See 'onClicked' for the click-only
 -- version.
-onMouseUp :: HasElementConfig e msg cfg => EventHandler e msg -> Attr cfg
-onMouseUp f = overElement (Attr (\ec -> ec { ecOnMouseUp = ecOnMouseUp ec ++ [f] }))
+onMouseUp :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onMouseUp f = overElement (Attribute (\ec -> ec { ecOnMouseUp = ecOnMouseUp ec ++ [f] }))
 
 -- | Reacts when the element is clicked: the mouse button pressed and
 -- released on it without leaving. Mouse-only -- see
--- 'Blink.Controls.Attributes.onActivated' for the event that also fires on
+-- 'Blink.Controls.Button.onActivated' for the event that also fires on
 -- Enter while a button-like control holds focus.
-onClicked :: HasElementConfig e msg cfg => EventHandler e msg -> Attr cfg
-onClicked f = overElement (Attr (\ec -> ec { ecOnClicked = ecOnClicked ec ++ [f] }))
+onClicked :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onClicked f = overElement (Attribute (\ec -> ec { ecOnClicked = ecOnClicked ec ++ [f] }))
 
 -- | Reacts to a key event while the element holds focus, with the
 -- triggering 'KeyEvent'.
-onKeyPressed :: HasElementConfig e msg cfg => KeyEventHandler e msg -> Attr cfg
-onKeyPressed f = overElement (Attr (\ec -> ec { ecOnKeyPressed = ecOnKeyPressed ec ++ [f] }))
+onKeyPressed :: HasElementConfig e msg cfg => KeyEventHandler e msg -> Attribute cfg
+onKeyPressed f = overElement (Attribute (\ec -> ec { ecOnKeyPressed = ecOnKeyPressed ec ++ [f] }))
 
 -- | Reacts when the element is named the winner of a focus transfer.
-onFocusGained :: HasElementConfig e msg cfg => EventHandler e msg -> Attr cfg
-onFocusGained f = overElement (Attr (\ec -> ec { ecOnFocusGained = ecOnFocusGained ec ++ [f] }))
+onFocusGained :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onFocusGained f = overElement (Attribute (\ec -> ec { ecOnFocusGained = ecOnFocusGained ec ++ [f] }))
 
 -- | Reacts when the element loses focus, whether to a transfer or a clear.
-onFocusLost :: HasElementConfig e msg cfg => EventHandler e msg -> Attr cfg
-onFocusLost f = overElement (Attr (\ec -> ec { ecOnFocusLost = ecOnFocusLost ec ++ [f] }))
+onFocusLost :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onFocusLost f = overElement (Attribute (\ec -> ec { ecOnFocusLost = ecOnFocusLost ec ++ [f] }))
 
 -- | Runs every handler in @hs@ on @a@, dispatching the resulting 'Out's.
 runHandlers :: [a -> [Out e msg]] -> a -> UI e msg ()

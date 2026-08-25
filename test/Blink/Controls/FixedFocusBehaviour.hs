@@ -13,7 +13,7 @@ module Blink.Controls.FixedFocusBehaviour
 
 import Test.Hspec
 
-import Blink.Controls.Control (Attr, HasControlConfig, HasElementConfig, isFocusable)
+import Blink.Controls.Control (Attribute, HasControlConfig, HasElementConfig, isFocusable)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Geometry (Rectangle)
 import Blink.Interaction (InteractionResult (..), runInteractions)
@@ -26,7 +26,7 @@ fixedNotFocusableSpec
   :: (Ord e, HasControlConfig e String cfg, HasElementConfig e String cfg)
   => Rectangle                          -- ^ bounds the control renders at
   -> UIContext e String                 -- ^ starting context (theme\/measurer already set up)
-  -> ([Attr cfg] -> UI e String ())     -- ^ render the control under test with these attrs
+  -> ([Attribute cfg] -> UI e String ())     -- ^ render the control under test with these attrs
   -> Spec
 fixedNotFocusableSpec bounds ctx render =
   it "still never claims focus when isFocusable True is explicitly passed" $ do

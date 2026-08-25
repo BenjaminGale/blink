@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Control
-  ( Attr, ControlConfig (..), FocusOnClick (..)
+  ( Attribute, ControlConfig (..), FocusOnClick (..)
   , controlBase, defaultControlConfig, isEnabled, isFocusable
   , onFocusGained, onFocusLost, onKeyPressed, resolve
   )
@@ -70,33 +70,33 @@ onA, onB :: Point
 onA = Point 10 50
 onB = Point 60 50
 
-type Attr' = Attr (ControlConfig TestElement String)
+type Attribute' = Attribute (ControlConfig TestElement String)
 
 -- | Renders a single control at whatever bounds are current, with its
 -- attrs resolved against 'defaultControlConfig'.
-renderAt :: TestElement -> [Attr'] -> UI TestElement String ()
+renderAt :: TestElement -> [Attribute'] -> UI TestElement String ()
 renderAt eid attrs = () <$ controlBase eid (resolve defaultControlConfig attrs)
 
 -- | Renders a single control the same way, but with 'ccFocusOnClick'
 -- overridden afterward -- there's no @focusOnClick@ attribute any more (see
 -- "Blink.Controls.Control"), so a spec that wants to vary it constructs the
 -- config directly instead of resolving it as an attr.
-renderFoc :: FocusOnClick TestElement -> TestElement -> [Attr'] -> UI TestElement String ()
+renderFoc :: FocusOnClick TestElement -> TestElement -> [Attribute'] -> UI TestElement String ()
 renderFoc foc eid attrs = () <$ controlBase eid (resolve defaultControlConfig attrs) { ccFocusOnClick = foc }
 
 -- | Renders 'ElemA' at 'rectA' and 'ElemB' at 'rectB' with the given
 -- per-element 'FocusOnClick' and attrs.
-both :: FocusOnClick TestElement -> [Attr'] -> FocusOnClick TestElement -> [Attr'] -> UI TestElement String ()
+both :: FocusOnClick TestElement -> [Attribute'] -> FocusOnClick TestElement -> [Attribute'] -> UI TestElement String ()
 both focA attrsA focB attrsB = do
   withBounds rectA (renderFoc focA ElemA attrsA)
   withBounds rectB (renderFoc focB ElemB attrsB)
 
 -- | Renders a single 'ElemA' at 'testBounds' with the given attrs -- the
 -- same way every real widget built on 'controlBase' does.
-renderControl :: [Attr'] -> UI TestElement String ()
+renderControl :: [Attribute'] -> UI TestElement String ()
 renderControl = renderAt ElemA
 
-three :: [Attr'] -> [Attr'] -> [Attr'] -> UI TestElement String ()
+three :: [Attribute'] -> [Attribute'] -> [Attribute'] -> UI TestElement String ()
 three attrsA attrsB attrsC = do
   withBounds rectA (renderAt ElemA attrsA)
   withBounds rectB (renderAt ElemB attrsB)
@@ -157,7 +157,7 @@ spec = describe "Blink.Controls.Control.controlBase" $ do
       resultMessages result `shouldBe` ["B gained"]
 
     it "NoFocus leaves focus unchanged when clicked" $ do
-      let attrs :: [Attr']
+      let attrs :: [Attribute']
           attrs = [isFocusable False, onFocusGained (const [OutMsg ("gained" :: String)])]
       result <- runInteractions testBounds seedCtx (renderFoc NoFocus ElemA attrs) [] [ClickAt onA, Wait 1]
       resultMessages result `shouldBe` []

@@ -6,7 +6,7 @@ import qualified Data.Text as T
 import Data.Char (isDigit)
 import Test.Hspec
 
-import Blink.Controls.Element (Attr)
+import Blink.Controls.Element (Attribute)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), Modifier (..))
@@ -85,7 +85,7 @@ hitRect = insetRect (uniform 10) testBounds
 cursorRectAt :: Double -> DrawCommand
 cursorRectAt x = FillRect (Rectangle x 15 1 70) testColour
 
-type Attr' = Attr (TextInputConfig TestElement String)
+type Attribute' = Attribute (TextInputConfig TestElement String)
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpMeasurer
@@ -101,7 +101,7 @@ seedWith = emptyUIContext testBounds noInput testTheme
 
 -- | 'Field' run alongside a second, already-focused element, so 'Field'
 -- itself never gains focus.
-unfocused :: [Attr'] -> UI TestElement String ()
+unfocused :: [Attribute'] -> UI TestElement String ()
 unfocused attrs = setFocus Other >> textInput Field attrs
 
 spec :: Spec

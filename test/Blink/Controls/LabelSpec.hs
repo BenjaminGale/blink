@@ -4,7 +4,7 @@ module Blink.Controls.LabelSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Element (Attr)
+import Blink.Controls.Element (Attribute)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
@@ -62,12 +62,12 @@ onCaption = Point 50 50
 hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
-type Attr' = Attr (LabelConfig TestElement String)
+type Attribute' = Attribute (LabelConfig TestElement String)
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
-start :: [Attr'] -> IO (UIContext TestElement String)
+start :: [Attribute'] -> IO (UIContext TestElement String)
 start attrs = snd <$> runUI (label Caption attrs) seedCtx
 
 spec :: Spec

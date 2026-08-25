@@ -6,7 +6,7 @@ import Test.Hspec
 
 import Blink.Controls.Button (ToggleConfig, isSelected)
 import Blink.Controls.Checkbox (checkbox)
-import Blink.Controls.Element (Attr)
+import Blink.Controls.Element (Attribute)
 import Blink.Controls.Label (text)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..))
@@ -61,12 +61,12 @@ noInput = InputState
 hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
-type Attr' = Attr (ToggleConfig TestElement String)
+type Attribute' = Attribute (ToggleConfig TestElement String)
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
-start :: [Attr'] -> IO (UIContext TestElement String)
+start :: [Attribute'] -> IO (UIContext TestElement String)
 start attrs = snd <$> runUI (checkbox Remember attrs) seedCtx
 
 spec :: Spec

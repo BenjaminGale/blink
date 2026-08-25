@@ -51,14 +51,14 @@ defaultLabelledConfig = LabelledConfig { lcText = "" }
 -- | Implemented by any config type that nests a 'LabelledConfig', letting
 -- 'text' be applied to it directly.
 class HasLabelledConfig e msg cfg | cfg -> e msg where
-  overLabelled :: Attr (LabelledConfig e msg) -> Attr cfg
+  overLabelled :: Attribute (LabelledConfig e msg) -> Attribute cfg
 
 instance HasLabelledConfig e msg (LabelledConfig e msg) where
   overLabelled = id
 
 -- | Sets the text displayed. Defaults to @\"\"@ when not given.
-text :: HasLabelledConfig e msg cfg => Text -> Attr cfg
-text t = overLabelled (Attr (\lc -> lc { lcText = t }))
+text :: HasLabelledConfig e msg cfg => Text -> Attribute cfg
+text t = overLabelled (Attribute (\lc -> lc { lcText = t }))
 
 -- | Draws @cfg@'s text into the current bounds, in the resolved style's
 -- text colour and alignment.
@@ -93,20 +93,20 @@ labelStyleKey :: StyleKey e
 labelStyleKey = Class "label"
 
 instance HasElementConfig e msg (LabelConfig e msg) where
-  overElement attr = Attr (\c -> c { lcControl = runAttr (overElement attr) (lcControl c) })
+  overElement attr = Attribute (\c -> c { lcControl = runAttribute (overElement attr) (lcControl c) })
 
 instance HasControlConfig e msg (LabelConfig e msg) where
-  overControl attr = Attr (\c -> c { lcControl = runAttr attr (lcControl c) })
+  overControl attr = Attribute (\c -> c { lcControl = runAttribute attr (lcControl c) })
 
 instance HasLabelledConfig e msg (LabelConfig e msg) where
-  overLabelled attr = Attr (\c -> c { lcLabelled = runAttr attr (lcLabelled c) })
+  overLabelled attr = Attribute (\c -> c { lcLabelled = runAttribute attr (lcLabelled c) })
 
 -- | Names the element a click on the label should focus instead of the
 -- label itself -- e.g. a caption redirecting a click onto the input beside
 -- it. Unset by default, in which case clicking the label does nothing to
 -- focus.
-target :: e -> Attr (LabelConfig e msg)
-target t = Attr (\c -> c { lcTarget = Just t })
+target :: e -> Attribute (LabelConfig e msg)
+target t = Attribute (\c -> c { lcTarget = Just t })
 
 -- | Displays text (see 'text'). Unlike every other control built on
 -- 'controlBase', a label never takes keyboard focus itself, whether by Tab
@@ -114,7 +114,7 @@ target t = Attr (\c -> c { lcTarget = Just t })
 -- always overrides 'isFocusable' to 'False' itself, so it wins regardless
 -- of what a caller passes. The only way a click on a label affects focus
 -- at all is 'target', which redirects it to a different, named element.
-label :: Ord e => e -> [Attr (LabelConfig e msg)] -> UI e msg ()
+label :: Ord e => e -> [Attribute (LabelConfig e msg)] -> UI e msg ()
 label eid attrs = do
   let cfg   = resolve defaultLabelConfig attrs
       focus = maybe NoFocus FocusTarget (lcTarget cfg)

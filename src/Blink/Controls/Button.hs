@@ -77,18 +77,18 @@ buttonStyleKey :: StyleKey e
 buttonStyleKey = Class "button"
 
 instance HasElementConfig e msg (ButtonConfig e msg) where
-  overElement attr = Attr (\bc -> bc { bcControl = runAttr (overElement attr) (bcControl bc) })
+  overElement attr = Attribute (\bc -> bc { bcControl = runAttribute (overElement attr) (bcControl bc) })
 
 instance HasControlConfig e msg (ButtonConfig e msg) where
-  overControl attr = Attr (\bc -> bc { bcControl = runAttr attr (bcControl bc) })
+  overControl attr = Attribute (\bc -> bc { bcControl = runAttribute attr (bcControl bc) })
 
 instance HasLabelledConfig e msg (ButtonConfig e msg) where
-  overLabelled attr = Attr (\bc -> bc { bcLabelled = runAttr attr (bcLabelled bc) })
+  overLabelled attr = Attribute (\bc -> bc { bcLabelled = runAttribute attr (bcLabelled bc) })
 
 -- | Implemented by any config type that nests a 'ButtonConfig', letting
 -- 'onActivated' be applied to it directly.
 class HasButtonConfig e msg cfg | cfg -> e msg where
-  overButton :: Attr (ButtonConfig e msg) -> Attr cfg
+  overButton :: Attribute (ButtonConfig e msg) -> Attribute cfg
 
 instance HasButtonConfig e msg (ButtonConfig e msg) where
   overButton = id
@@ -98,8 +98,8 @@ instance HasButtonConfig e msg (ButtonConfig e msg) where
 -- 'Blink.Controls.RadioButton.radioButton' actually want callers to bind for "the control was
 -- activated" -- see 'onClicked' for the mouse-only, element-level event
 -- this is split from.
-onActivated :: HasButtonConfig e msg cfg => EventHandler e msg -> Attr cfg
-onActivated f = overButton (Attr (\bc -> bc { bcOnActivated = bcOnActivated bc ++ [f] }))
+onActivated :: HasButtonConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onActivated f = overButton (Attribute (\bc -> bc { bcOnActivated = bcOnActivated bc ++ [f] }))
 
 -- | What 'buttonBase' reports back: the wrapped control's own
 -- 'ControlInteraction', and whether it was activated this frame.
@@ -127,7 +127,7 @@ buttonBase eid cfg = do
 -- handler when activated by a left-click or by pressing Enter while
 -- focused. Always takes focus when clicked -- fixed behaviour, not a
 -- default.
-button :: Ord e => e -> [Attr (ButtonConfig e msg)] -> UI e msg ()
+button :: Ord e => e -> [Attribute (ButtonConfig e msg)] -> UI e msg ()
 button eid attrs = do
   let cfg  = resolve defaultButtonConfig attrs
       ctrl = (bcControl cfg) { ccContent = renderLabelledContent (bcLabelled cfg) }
@@ -136,15 +136,15 @@ button eid attrs = do
 -- * Toggle
 
 -- | Whether the control is currently selected.
-isSelected :: Bool -> Attr (ToggleConfig e msg)
-isSelected b = Attr (\cfg -> cfg { tgcSelected = b })
+isSelected :: Bool -> Attribute (ToggleConfig e msg)
+isSelected b = Attribute (\cfg -> cfg { tgcSelected = b })
 
 -- | Reacts when activating the control (a click or Enter while focused)
 -- moves its selected state to a new value, with the value it changed to.
 -- It's up to the reaction to actually store the new value and pass it back
 -- in via 'isSelected' next frame.
-onSelectedChanged :: (Bool -> [Out e msg]) -> Attr (ToggleConfig e msg)
-onSelectedChanged f = Attr (\cfg -> cfg { tgcOnSelectedChanged = tgcOnSelectedChanged cfg ++ [f] })
+onSelectedChanged :: (Bool -> [Out e msg]) -> Attribute (ToggleConfig e msg)
+onSelectedChanged f = Attribute (\cfg -> cfg { tgcOnSelectedChanged = tgcOnSelectedChanged cfg ++ [f] })
 
 -- | Every capability 'toggleButton' (and any checkbox\/radio button) shares:
 -- the wrapped 'ButtonConfig', how activating the control changes its
@@ -176,16 +176,16 @@ toggleButtonStyleKey :: StyleKey e
 toggleButtonStyleKey = Class "toggleButton"
 
 instance HasElementConfig e msg (ToggleConfig e msg) where
-  overElement attr = Attr (\tc -> tc { tgcButton = runAttr (overElement attr) (tgcButton tc) })
+  overElement attr = Attribute (\tc -> tc { tgcButton = runAttribute (overElement attr) (tgcButton tc) })
 
 instance HasControlConfig e msg (ToggleConfig e msg) where
-  overControl attr = Attr (\tc -> tc { tgcButton = runAttr (overControl attr) (tgcButton tc) })
+  overControl attr = Attribute (\tc -> tc { tgcButton = runAttribute (overControl attr) (tgcButton tc) })
 
 instance HasLabelledConfig e msg (ToggleConfig e msg) where
-  overLabelled attr = Attr (\tc -> tc { tgcButton = runAttr (overLabelled attr) (tgcButton tc) })
+  overLabelled attr = Attribute (\tc -> tc { tgcButton = runAttribute (overLabelled attr) (tgcButton tc) })
 
 instance HasButtonConfig e msg (ToggleConfig e msg) where
-  overButton attr = Attr (\tc -> tc { tgcButton = runAttr attr (tgcButton tc) })
+  overButton attr = Attribute (\tc -> tc { tgcButton = runAttribute attr (tgcButton tc) })
 
 -- | What 'toggleBase' reports back: the wrapped button's own
 -- 'ButtonInteraction', and the selected state after this frame's
@@ -231,7 +231,7 @@ toggleStyle eid base selected = do
 -- selected, even without being physically pressed, unless disabled.
 -- Activated the same way as 'button'; see 'onSelectedChanged' for reacting
 -- to it.
-toggleButton :: Ord e => e -> [Attr (ToggleConfig e msg)] -> UI e msg ()
+toggleButton :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> UI e msg ()
 toggleButton eid attrs = do
   let cfg      = resolve defaultToggleButtonConfig attrs
       btn      = tgcButton cfg

@@ -4,7 +4,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Element
-  ( Attr, ElementConfig
+  ( Attribute, ElementConfig
   , defaultElementConfig, elementBase, onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, resolve
   )
@@ -68,7 +68,7 @@ onB     = Point 60 50
 -- | Runs 'elementBase' with @attrs@ resolved against 'defaultElementConfig',
 -- discarding the 'Blink.Controls.Element.ElementInteraction' it returns -- the
 -- render function every behaviour spec in this module drives.
-render :: Ord e => e -> [Attr (ElementConfig e msg)] -> UI e msg ()
+render :: Ord e => e -> [Attribute (ElementConfig e msg)] -> UI e msg ()
 render eid attrs = () <$ elementBase eid (resolve defaultElementConfig attrs)
 
 -- | Every raw event a reaction built on 'elementBase' can raise, tagged
@@ -76,7 +76,7 @@ render eid attrs = () <$ elementBase eid (resolve defaultElementConfig attrs)
 -- has no symbolic event type to tag with (each smart constructor reacts to
 -- exactly one event, so this lists all eight rather than reacting
 -- generically the way an old @onEvent@ escape hatch once did).
-tagAll :: TestElement -> [Attr (ElementConfig TestElement (TestElement, String))]
+tagAll :: TestElement -> [Attribute (ElementConfig TestElement (TestElement, String))]
 tagAll e =
   [ onMouseEntered (const [OutMsg (e, "MouseEntered")])
   , onMouseExited  (const [OutMsg (e, "MouseExited")])
@@ -110,7 +110,7 @@ spec = describe "Blink.Controls.Element.elementBase" $ do
 
   describe "onKeyPressed" $
     it "reacts with the triggering KeyEvent" $ do
-      let attrs :: [Attr (ElementConfig TestElement KeyEvent)]
+      let attrs :: [Attribute (ElementConfig TestElement KeyEvent)]
           attrs = [onKeyPressed (\k -> [OutMsg k])]
       ctx0 <- snd <$> runUI (setFocus ElemA) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
       ctx  <- snd <$> runUI (render ElemA attrs) (advance (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0)

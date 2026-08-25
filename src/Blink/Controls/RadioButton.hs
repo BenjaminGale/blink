@@ -54,7 +54,7 @@ defaultRadioButtonConfig = defaultToggleButtonConfig
 -- gives up selection by a sibling in its group being selected instead,
 -- never by being clicked again itself. See
 -- 'Blink.Controls.Button.onSelectedChanged' for reacting to it.
-radioButton :: Ord e => e -> [Attr (ToggleConfig e msg)] -> UI e msg ()
+radioButton :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> UI e msg ()
 radioButton eid attrs = do
   let cfg      = resolve defaultRadioButtonConfig attrs
       btn      = tgcButton cfg

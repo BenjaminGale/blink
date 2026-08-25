@@ -51,7 +51,7 @@ defaultCheckboxConfig = defaultToggleButtonConfig
 -- together as one control -- clicking either the box or the caption
 -- activates it, the same as 'Blink.Controls.Button.toggleButton'. Flips
 -- every time it's activated; see 'Blink.Controls.Button.onSelectedChanged' for reacting to it.
-checkbox :: Ord e => e -> [Attr (ToggleConfig e msg)] -> UI e msg ()
+checkbox :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> UI e msg ()
 checkbox eid attrs = do
   let cfg      = resolve defaultCheckboxConfig attrs
       btn      = tgcButton cfg

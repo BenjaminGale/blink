@@ -3,8 +3,10 @@ module UI (Element, AppState (..), demoApp) where
 
 import Blink.App
 import Blink.Controls
-import Blink.Controls.Attributes
-import Blink.Controls.TextInput (value)
+import Blink.Controls.Button (isSelected, onActivated, onSelectedChanged)
+import Blink.Controls.Label (text)
+import Blink.Controls.ProgressBar (ProgressValue (..), progress)
+import Blink.Controls.TextInput (displayFilter, onInput, value)
 import Blink.Geometry
 import Blink.Input
 import Blink.Layout
@@ -114,7 +116,7 @@ rowEditing s =
 
 rowButtons :: AppState -> DemoUI ()
 rowButtons s =
-  hBox (defaultBoxConfig { boxSpacing = 8 })
+  hBox [boxSpacing 8]
     [ (Layout (Exactly 100) Fill TopLeft, button ClickButton [text "Click me", onActivated (post AddClick)])
     , (Layout (Exactly 100) Fill TopLeft, button ResetButton [text "Reset", onActivated (post ResetClicks)])
     , (Layout Fill Fill MiddleLeft, caption ("Clicks: " <> T.pack (show (clickCount s))))
@@ -122,7 +124,7 @@ rowButtons s =
 
 rowToggle :: AppState -> DemoUI ()
 rowToggle s =
-  hBox (defaultBoxConfig { boxSpacing = 8 })
+  hBox [boxSpacing 8]
     [ (Layout (Exactly 160) Fill TopLeft,
          toggleButton ToggleCtl [text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle)])
     , (Layout Fill Fill MiddleLeft, caption (if toggleOn s then "On" else "Off"))
@@ -133,7 +135,7 @@ radioOptions = ["Small", "Medium", "Large"]
 
 rowRadio :: AppState -> DemoUI ()
 rowRadio s =
-  hBox (defaultBoxConfig { boxSpacing = 16 })
+  hBox [boxSpacing 16]
     [ (Layout (Exactly 100) Fill MiddleLeft, radioOption i opt)
     | (i, opt) <- zip [0 ..] radioOptions
     ]
@@ -144,7 +146,7 @@ rowRadio s =
 
 rowTextInput :: AppState -> DemoUI ()
 rowTextInput s =
-  hBox (defaultBoxConfig { boxSpacing = 8, boxAlignment = Center })
+  hBox [boxSpacing 8, boxAlignment Center]
     [ (Layout (Exactly 120) Fill MiddleLeft, caption "Text input")
     , (Layout Fill Fill TopLeft,
          textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText)])
@@ -152,7 +154,7 @@ rowTextInput s =
 
 rowPasswordInput :: AppState -> DemoUI ()
 rowPasswordInput s =
-  hBox (defaultBoxConfig { boxSpacing = 8, boxAlignment = Center })
+  hBox [boxSpacing 8, boxAlignment Center]
     [ (Layout (Exactly 120) Fill MiddleLeft, caption "Password input")
     , (Layout Fill Fill TopLeft,
          textInput PasswordInputCtl
@@ -186,7 +188,7 @@ footer s (winW, winH) = do
                       else ""
       keyText    = "Last Key Press: "
                 <> if T.null (lastInput s) then "none" else lastInput s <> countSuffix
-  hBox (defaultBoxConfig { boxSpacing = 24, boxMargin = 4, boxAlignment = Center })
+  hBox [boxSpacing 24, boxMargin 4, boxAlignment Center]
     [ (Layout (Exactly 160) Fill MiddleLeft, caption winText)
     , (Layout (Exactly 160) Fill MiddleLeft, caption mouseText)
     , (Layout (Exactly 160) Fill MiddleLeft, caption buttonText)
@@ -218,7 +220,7 @@ demoView s = do
 
 mainList :: AppState -> DemoUI ()
 mainList s =
-  vBox (defaultBoxConfig { boxSpacing = 8, boxMargin = 12 })
+  vBox [boxSpacing 8, boxMargin 12]
     [ (Layout Fill (Exactly 24) TopLeft, caption "Blink controls demo")
     , (Layout Fill rowHeight    TopLeft, rowDarkMode s)
     , (Layout Fill rowHeight    TopLeft, rowEditing s)

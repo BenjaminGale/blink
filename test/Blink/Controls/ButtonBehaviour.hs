@@ -14,7 +14,7 @@ module Blink.Controls.ButtonBehaviour
 import Test.Hspec
 
 import Blink.Controls.Button (HasButtonConfig, onActivated)
-import Blink.Controls.Control (Attr, HasControlConfig, HasElementConfig, isFocusable)
+import Blink.Controls.Control (Attribute, HasControlConfig, HasElementConfig, isFocusable)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Geometry (Point, Rectangle)
@@ -24,7 +24,7 @@ import Blink.UI
 
 -- | Every raw\/focus reaction (including 'Blink.Controls.Element.onClicked',
 -- via 'tagged'), plus a tagged reaction to 'onActivated'.
-taggedActivated :: (HasElementConfig e String cfg, HasButtonConfig e String cfg) => [Attr cfg]
+taggedActivated :: (HasElementConfig e String cfg, HasButtonConfig e String cfg) => [Attribute cfg]
 taggedActivated = onActivated (const [OutMsg "Activated"]) : tagged
 
 -- | The activation contract: given how to render the control under test
@@ -41,7 +41,7 @@ buttonBehaviourSpec
   -> Point                                         -- ^ a point inside its margin (not part of its hit area)
   -> Rectangle                                     -- ^ the region making up its margin-inset hit area
   -> Point                                         -- ^ a point outside its bounds entirely
-  -> ([Attr cfg] -> UI e String ())                -- ^ render the control under test with these attrs
+  -> ([Attribute cfg] -> UI e String ())                -- ^ render the control under test with these attrs
   -> Spec
 buttonBehaviourSpec bounds ctx eid marginPoint insideRect outsidePoint render = do
   controlBehaviourSpec defaultControlBehaviourConfig bounds ctx eid marginPoint insideRect outsidePoint render

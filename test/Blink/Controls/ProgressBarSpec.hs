@@ -4,7 +4,7 @@ module Blink.Controls.ProgressBarSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Element (Attr)
+import Blink.Controls.Element (Attribute)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
@@ -62,12 +62,12 @@ hitRect = insetRect (uniform 10) testBounds
 contentRect :: Rectangle
 contentRect = Rectangle 15 15 70 70
 
-type Attr' = Attr (ProgressBarConfig TestElement String)
+type Attribute' = Attribute (ProgressBarConfig TestElement String)
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
-run :: [Attr'] -> IO (UIContext TestElement String)
+run :: [Attribute'] -> IO (UIContext TestElement String)
 run attrs = snd <$> runUI (progressBar Bar attrs) seedCtx
 
 -- | A context whose animation clock reads one elapsed second -- 'runUI'

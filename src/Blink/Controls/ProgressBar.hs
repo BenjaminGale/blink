@@ -53,20 +53,20 @@ defaultProgressBarConfig = ProgressBarConfig
   }
 
 instance HasElementConfig e msg (ProgressBarConfig e msg) where
-  overElement attr = Attr (\pc -> pc { pbControl = runAttr (overElement attr) (pbControl pc) })
+  overElement attr = Attribute (\pc -> pc { pbControl = runAttribute (overElement attr) (pbControl pc) })
 
 instance HasControlConfig e msg (ProgressBarConfig e msg) where
-  overControl attr = Attr (\pc -> pc { pbControl = runAttr attr (pbControl pc) })
+  overControl attr = Attribute (\pc -> pc { pbControl = runAttribute attr (pbControl pc) })
 
 -- | Sets the bar to 'Progress' (determinate) or 'Indeterminate'. Defaults
 -- to @'Progress' 0@.
-progress :: ProgressValue -> Attr (ProgressBarConfig e msg)
-progress v = Attr (\pc -> pc { pbValue = v })
+progress :: ProgressValue -> Attribute (ProgressBarConfig e msg)
+progress v = Attribute (\pc -> pc { pbValue = v })
 
 -- | How fast the band sweeps across an 'Indeterminate' bar, in bar-widths
 -- per second. Defaults to 0.5.
-bandSpeed :: Double -> Attr (ProgressBarConfig e msg)
-bandSpeed v = Attr (\pc -> pc { pbBandSpeed = v })
+bandSpeed :: Double -> Attribute (ProgressBarConfig e msg)
+bandSpeed v = Attribute (\pc -> pc { pbBandSpeed = v })
 
 -- | A progress indicator, set via 'progress' to 'Progress' for a
 -- determinate bar or 'Indeterminate' for a continuously animating band. A
@@ -75,7 +75,7 @@ bandSpeed v = Attr (\pc -> pc { pbBandSpeed = v })
 -- reason to react to them. Never a tab stop, though: fixed behaviour, not
 -- a default -- 'progressBar' always overrides 'isFocusable' to 'False'
 -- itself, so it wins regardless of what a caller passes.
-progressBar :: Ord e => e -> [Attr (ProgressBarConfig e msg)] -> UI e msg ()
+progressBar :: Ord e => e -> [Attribute (ProgressBarConfig e msg)] -> UI e msg ()
 progressBar eid attrs = do
   let cfg  = resolve defaultProgressBarConfig attrs
       ctrl = (pbControl cfg)
