@@ -56,6 +56,16 @@ testStyleSet = StyleSet
 testTheme :: Theme TestElement
 testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = testStyleSet }
 
+pressedColour :: Colour
+pressedColour = RGBA 1 1 1 1
+
+-- | Like 'testTheme', but with a 'styleSetPressed' background distinct
+-- from every other variant, so a test can tell whether the pressed style
+-- was actually the one drawn.
+pressedTestTheme :: Theme TestElement
+pressedTestTheme = testTheme
+  { themeDefaultStyle = testStyleSet { styleSetPressed = testStyle { styleBackground = pressedColour } } }
+
 onA, onB :: Point
 onA = Point 10 50
 onB = Point 60 50
@@ -97,6 +107,11 @@ seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
   where
     noInput = InputState (Point 200 200) False [] []
 
+pressedSeedCtx :: UIContext TestElement String
+pressedSeedCtx = emptyUIContext testBounds noInput pressedTestTheme noOpTextMeasurer
+  where
+    noInput = InputState (Point 200 200) False [] []
+
 -- | The margin-inset hit area for a control rendered at 'testBounds' with
 -- the 10px margin every test style here uses.
 hitRect :: Rectangle
@@ -106,10 +121,14 @@ spec :: Spec
 spec = describe "Blink.Controls.Control.controlBase" $ do
   controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx ElemA (Point 5 5) hitRect (Point 200 200) renderControl
 
-  describe "chrome" $
+  describe "chrome" $ do
     it "draws background via renderStyled, inset by margin" $ do
       ctx <- snd <$> runUI (renderControl []) seedCtx
       getDrawCommands ctx `shouldContain` [FillRect (insetRect (uniform 10) testBounds) testColour]
+
+    it "draws in its pressed style while the mouse is held down over it" $ do
+      result <- runInteractions testBounds pressedSeedCtx (renderControl []) [] [MouseDown (Point 50 50)]
+      getDrawCommands (resultContext result) `shouldContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
 
   describe "auto-claim" $
     it "raises a focus gained event for only the first of several simultaneously-eligible controls" $ do
