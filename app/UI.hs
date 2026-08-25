@@ -117,7 +117,7 @@ rowEditing s =
 rowButtons :: AppState -> DemoUI ()
 rowButtons s =
   hBox
-    [ boxSpacing 8
+    [ spacing 8
     , children
         [ (Layout (Exactly 100) Fill TopLeft, button ClickButton [text "Click me", onActivated (post AddClick)])
         , (Layout (Exactly 100) Fill TopLeft, button ResetButton [text "Reset", onActivated (post ResetClicks)])
@@ -128,7 +128,7 @@ rowButtons s =
 rowToggle :: AppState -> DemoUI ()
 rowToggle s =
   hBox
-    [ boxSpacing 8
+    [ spacing 8
     , children
         [ (Layout (Exactly 160) Fill TopLeft,
              toggleButton ToggleCtl [text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle)])
@@ -142,7 +142,7 @@ radioOptions = ["Small", "Medium", "Large"]
 rowRadio :: AppState -> DemoUI ()
 rowRadio s =
   hBox
-    [ boxSpacing 16
+    [ spacing 16
     , children
         [ (Layout (Exactly 100) Fill MiddleLeft, radioOption i opt)
         | (i, opt) <- zip [0 ..] radioOptions
@@ -156,7 +156,7 @@ rowRadio s =
 rowTextInput :: AppState -> DemoUI ()
 rowTextInput s =
   hBox
-    [ boxSpacing 8, boxAlignment Center
+    [ spacing 8, alignment Center
     , children
         [ (Layout (Exactly 120) Fill MiddleLeft, caption "Text input")
         , (Layout Fill Fill TopLeft,
@@ -167,7 +167,7 @@ rowTextInput s =
 rowPasswordInput :: AppState -> DemoUI ()
 rowPasswordInput s =
   hBox
-    [ boxSpacing 8, boxAlignment Center
+    [ spacing 8, alignment Center
     , children
         [ (Layout (Exactly 120) Fill MiddleLeft, caption "Password input")
         , (Layout Fill Fill TopLeft,
@@ -204,7 +204,7 @@ footer s (winW, winH) = do
       keyText    = "Last Key Press: "
                 <> if T.null (lastInput s) then "none" else lastInput s <> countSuffix
   hBox
-    [ boxSpacing 24, boxMargin 4, boxAlignment Center
+    [ spacing 24, margin 4, alignment Center
     , children
         [ (Layout (Exactly 160) Fill MiddleLeft, caption winText)
         , (Layout (Exactly 160) Fill MiddleLeft, caption mouseText)
@@ -222,7 +222,7 @@ demoView s = do
   win   <- getBounds
   let winSize = (round (rectWidth win) :: Int, round (rectHeight win) :: Int)
   when (darkMode s) $ fillRect (RGBA 0.082 0.102 0.129 1)
-  borderLayout [centrePanel (mainList s), bottomPanel 36 (footer s winSize)]
+  borderLayout [centre (mainList s), bottom 36 (footer s winSize)]
   anyHov <- isAnyMouseOver
   let typed   = T.concat (inputTypedText input)
       keyName = case inputKeyEvents input of
@@ -236,7 +236,7 @@ demoView s = do
 mainList :: AppState -> DemoUI ()
 mainList s =
   vBox
-    [ boxSpacing 8, boxMargin 12
+    [ spacing 8, margin 12
     , children
         [ (Layout Fill (Exactly 24) TopLeft, caption "Blink controls demo")
         , (Layout Fill rowHeight    TopLeft, rowDarkMode s)

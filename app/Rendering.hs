@@ -106,8 +106,8 @@ pushClip renderer clipRef r = do
   stack <- readIORef clipRef
   let new     = toSDLRect r
       clipped = case stack of
-        []        -> new
-        (top : _) -> intersectSDLRect top new
+        []            -> new
+        (topClip : _) -> intersectSDLRect topClip new
   writeIORef clipRef (clipped : stack)
   SDL.rendererClipRect renderer $= Just clipped
 
@@ -117,8 +117,8 @@ popClip renderer clipRef = do
   let rest = tail stack
   writeIORef clipRef rest
   case rest of
-    []        -> SDL.rendererClipRect renderer $= Nothing
-    (top : _) -> SDL.rendererClipRect renderer $= Just top
+    []            -> SDL.rendererClipRect renderer $= Nothing
+    (topClip : _) -> SDL.rendererClipRect renderer $= Just topClip
 
 submitDrawCommand :: SDL.Renderer -> Font.Font -> TextureCache -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
 submitDrawCommand renderer _ _ _        (FillRect r color)            = renderFill   renderer r color

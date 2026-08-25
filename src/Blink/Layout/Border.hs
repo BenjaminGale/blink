@@ -3,11 +3,11 @@ module Blink.Layout.Border
   ( borderLayout
   , BorderContent
   , emptyBorderContent
-  , topPanel
-  , bottomPanel
-  , leftPanel
-  , rightPanel
-  , centrePanel
+  , top
+  , bottom
+  , left
+  , right
+  , centre
   ) where
 
 import Data.Maybe (catMaybes)
@@ -30,7 +30,7 @@ data BorderContent e msg = BorderContent
 -- | All panels absent. Override only the ones you need:
 --
 -- @
--- borderLayout [topPanel 3 header, centrePanel body]
+-- borderLayout [top 3 header, centre body]
 -- @
 emptyBorderContent :: BorderContent e msg
 emptyBorderContent = BorderContent
@@ -42,24 +42,24 @@ emptyBorderContent = BorderContent
   }
 
 -- | A fixed-height panel spanning the full width at the top.
-topPanel :: Double -> UI e msg () -> Attribute (BorderContent e msg)
-topPanel h ui = Attribute (\bc -> bc { bcTop = Just (h, ui) })
+top :: Double -> UI e msg () -> Attribute (BorderContent e msg)
+top h ui = Attribute (\bc -> bc { bcTop = Just (h, ui) })
 
 -- | A fixed-height panel spanning the full width at the bottom.
-bottomPanel :: Double -> UI e msg () -> Attribute (BorderContent e msg)
-bottomPanel h ui = Attribute (\bc -> bc { bcBottom = Just (h, ui) })
+bottom :: Double -> UI e msg () -> Attribute (BorderContent e msg)
+bottom h ui = Attribute (\bc -> bc { bcBottom = Just (h, ui) })
 
 -- | A fixed-width panel on the left of the middle row.
-leftPanel :: Double -> UI e msg () -> Attribute (BorderContent e msg)
-leftPanel w ui = Attribute (\bc -> bc { bcLeft = Just (w, ui) })
+left :: Double -> UI e msg () -> Attribute (BorderContent e msg)
+left w ui = Attribute (\bc -> bc { bcLeft = Just (w, ui) })
 
 -- | A fixed-width panel on the right of the middle row.
-rightPanel :: Double -> UI e msg () -> Attribute (BorderContent e msg)
-rightPanel w ui = Attribute (\bc -> bc { bcRight = Just (w, ui) })
+right :: Double -> UI e msg () -> Attribute (BorderContent e msg)
+right w ui = Attribute (\bc -> bc { bcRight = Just (w, ui) })
 
 -- | A panel filling whatever space is left in the middle row.
-centrePanel :: UI e msg () -> Attribute (BorderContent e msg)
-centrePanel ui = Attribute (\bc -> bc { bcCentre = Just ui })
+centre :: UI e msg () -> Attribute (BorderContent e msg)
+centre ui = Attribute (\bc -> bc { bcCentre = Just ui })
 
 -- | Divides the available space into up to five named regions.
 --
@@ -73,10 +73,10 @@ centrePanel ui = Attribute (\bc -> bc { bcCentre = Just ui })
 -- >  |                  bottom                  |
 -- >  +------------------------------------------+
 --
--- 'topPanel' and 'bottomPanel' each take a fixed height and span the full
--- width. 'leftPanel' and 'rightPanel' each take a fixed width within the
--- middle row. 'centrePanel' fills whatever space is left. Any panel may be
--- omitted, in which case the remaining panels expand to fill the gap.
+-- 'top' and 'bottom' each take a fixed height and span the full width.
+-- 'left' and 'right' each take a fixed width within the middle row.
+-- 'centre' fills whatever space is left. Any panel may be omitted, in
+-- which case the remaining panels expand to fill the gap.
 --
 -- No spacing or margin is applied. Clipping follows 'Blink.Layout.Box.vBox' and
 -- 'Blink.Layout.Box.hBox': the top, middle, and bottom rows are clipped as a

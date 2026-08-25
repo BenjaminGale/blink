@@ -5,10 +5,10 @@ module Blink.Layout.Box
   , vBox
   , BoxConfig
   , defaultBoxConfig
-  , boxSpacing
-  , boxMargin
-  , boxAlignment
-  , boxFillCross
+  , spacing
+  , margin
+  , alignment
+  , stretch
   , children
   , boxTotalSpacing
   ) where
@@ -34,12 +34,12 @@ data BoxConfig e msg = BoxConfig
   , bxChildren   :: [(Layout, UI e msg ())]
   }
 
--- | No spacing, no margin, 'TopLeft' alignment, cross-axis fill enabled,
+-- | No spacing, no margin, 'TopLeft' alignment, cross-axis stretch enabled,
 -- and no children. Override only the attributes you need:
 --
 -- @
 -- hBox
---   [ boxSpacing 8, boxMargin 4
+--   [ spacing 8, margin 4
 --   , children
 --       [ (Layout (Exactly 80) Fill TopLeft, sidebar)
 --       , (Layout Fill         Fill TopLeft, content)
@@ -56,13 +56,13 @@ defaultBoxConfig = BoxConfig
   }
 
 -- | Gap in pixels between consecutive children on the main axis. Defaults to @0@.
-boxSpacing :: Double -> Attribute (BoxConfig e msg)
-boxSpacing v = Attribute (\c -> c { bxSpacing = v })
+spacing :: Double -> Attribute (BoxConfig e msg)
+spacing v = Attribute (\c -> c { bxSpacing = v })
 
 -- | Uniform inset applied to all four sides of the panel before layout.
 -- Defaults to @0@.
-boxMargin :: Double -> Attribute (BoxConfig e msg)
-boxMargin v = Attribute (\c -> c { bxMargin = v })
+margin :: Double -> Attribute (BoxConfig e msg)
+margin v = Attribute (\c -> c { bxMargin = v })
 
 -- | Positions the content block within the content area on the main axis.
 -- Controls where whitespace falls when children are smaller than the
@@ -99,13 +99,13 @@ boxMargin v = Attribute (\c -> c { bxMargin = v })
 -- >  |                  <-- children (too wide) |
 -- >  +------------------------------------------+
 -- >  BottomRight: the right edge is anchored, left side clips
-boxAlignment :: Alignment -> Attribute (BoxConfig e msg)
-boxAlignment v = Attribute (\c -> c { bxAlignment = v })
+alignment :: Alignment -> Attribute (BoxConfig e msg)
+alignment v = Attribute (\c -> c { bxAlignment = v })
 
 -- | Whether children stretch to fill the full cross-axis extent. Defaults
 -- to 'True'.
-boxFillCross :: Bool -> Attribute (BoxConfig e msg)
-boxFillCross v = Attribute (\c -> c { bxFillCross = v })
+stretch :: Bool -> Attribute (BoxConfig e msg)
+stretch v = Attribute (\c -> c { bxFillCross = v })
 
 -- | The children to arrange, each paired with the 'Layout' governing its
 -- size and alignment within its slot (see 'hBox'\/'vBox'). Defaults to
@@ -117,9 +117,9 @@ children cs = Attribute (\c -> c { bxChildren = cs })
 -- | Total space consumed by all gaps between @n@ children -- the sum of
 --   @(n - 1)@ spacings.
 --
--- >>> boxTotalSpacing (resolve defaultBoxConfig [boxSpacing 8]) 3
+-- >>> boxTotalSpacing (resolve defaultBoxConfig [spacing 8]) 3
 -- 16.0
--- >>> boxTotalSpacing (resolve defaultBoxConfig [boxSpacing 8]) 1
+-- >>> boxTotalSpacing (resolve defaultBoxConfig [spacing 8]) 1
 -- 0.0
 boxTotalSpacing :: BoxConfig e msg -> Int -> Double
 boxTotalSpacing cfg n = bxSpacing cfg * fromIntegral (max 0 (n - 1))
@@ -167,7 +167,7 @@ vertical = Axis
   }
 
 -- | Arranges children left-to-right. Each child (see 'children') carries a
---   'Layout' governing its width and, when 'boxFillCross' is 'False', its
+--   'Layout' governing its width and, when 'stretch' is 'False', its
 --   height and vertical alignment. If a margin is set, children are laid
 --   out within that inset.
 --
@@ -190,7 +190,7 @@ vertical = Axis
 --     it takes only its maximum and the remainder is shared among the
 --     others.
 --   * The group is aligned within the content area according to
---     'boxAlignment'. When children are smaller than the content area this
+--     'alignment'. When children are smaller than the content area this
 --     controls where the whitespace goes. When they overflow it controls
 --     which side clips.
 --   * Once each child's space is allocated, it is positioned and aligned
@@ -204,7 +204,7 @@ vertical = Axis
 --
 -- @
 -- hBox
---   [ boxSpacing 4
+--   [ spacing 4
 --   , children
 --       [ (Layout (Exactly 80) Fill TopLeft, button Btn1 [text "Back"])
 --       , (Layout Fill         Fill TopLeft, button Btn2 [text "Title"])
@@ -222,7 +222,7 @@ vertical = Axis
 -- >  |  80px  |                Fill                |  80px  |
 -- >  +--------+------------------------------------+--------+
 --
--- 'boxFillCross' (default 'True') controls the cross axis, which is height
+-- 'stretch' (default 'True') controls the cross axis, which is height
 -- in this example. When 'True', each child is stretched to the panel's full
 -- height, as in the diagram above. When 'False', each child keeps its own
 -- height (here, 'TopLeft'-aligned), leaving the rest of the panel blank.
@@ -236,13 +236,13 @@ hBox :: [Attribute (BoxConfig e msg)] -> UI e msg ()
 hBox attrs = box horizontal (resolve defaultBoxConfig attrs)
 
 -- | Arranges children top-to-bottom. Each child (see 'children') carries a
---   'Layout' governing its height and, when 'boxFillCross' is 'False', its
+--   'Layout' governing its height and, when 'stretch' is 'False', its
 --   width and horizontal alignment. Uses the same algorithm as 'hBox' with
 --   the axes swapped. See its documentation for the full behaviour.
 --
 -- @
 -- vBox
---   [ boxSpacing 1
+--   [ spacing 1
 --   , children
 --       [ (Layout Fill (Exactly 3) TopLeft, header)
 --       , (Layout Fill Fill        TopLeft, body)

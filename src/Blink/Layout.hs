@@ -28,21 +28,21 @@ module Blink.Layout
   , vBox
   , BoxConfig
   , defaultBoxConfig
-  , boxSpacing
-  , boxMargin
-  , boxAlignment
-  , boxFillCross
+  , spacing
+  , margin
+  , alignment
+  , stretch
   , children
   , boxTotalSpacing
     -- * Border layout
   , borderLayout
   , BorderContent
   , emptyBorderContent
-  , topPanel
-  , bottomPanel
-  , leftPanel
-  , rightPanel
-  , centrePanel
+  , top
+  , bottom
+  , left
+  , right
+  , centre
     -- * Utilities
   , preferredSize
   , AddLength (..)
@@ -140,8 +140,8 @@ module Blink.Layout
   ) where
 
 import Blink.Layout.Border
-  (BorderContent, borderLayout, bottomPanel, centrePanel, emptyBorderContent, leftPanel, rightPanel, topPanel)
+  (BorderContent, borderLayout, bottom, centre, emptyBorderContent, left, right, top)
 import Blink.Layout.Box
-  (BoxConfig, boxAlignment, boxFillCross, boxMargin, boxSpacing, boxTotalSpacing, children, defaultBoxConfig, hBox, vBox)
+  (BoxConfig, alignment, boxTotalSpacing, children, defaultBoxConfig, hBox, margin, spacing, stretch, vBox)
 import Blink.Layout.Core
   (AddLength (..), Layout (..), Length (..), MaxLength (..), addLength, layoutWithConstraints, maxLength, preferredSize)

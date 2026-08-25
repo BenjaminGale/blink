@@ -68,8 +68,8 @@ runLayout bounds ui = do
 cfg :: [Attribute (BoxConfig () ())]
 cfg = []
 
-margin :: Gen Double
-margin = fromIntegral <$> (choose (0, 49) :: Gen Int)
+marginGen :: Gen Double
+marginGen = fromIntegral <$> (choose (0, 49) :: Gen Int)
 
 runHBox :: Rectangle -> [Attribute (BoxConfig () ())] -> [Layout] -> IO [Rectangle]
 runHBox bounds c rcs = runLayout bounds $ hBox (c ++ [children [(r, fill) | r <- rcs]])
@@ -194,9 +194,9 @@ spec = describe "layout" $ do
             , ( "BottomRight places the child at the bottom-right"
               , BottomRight,  Rectangle 120 60 80 40 )
             ]
-      forM_ cases $ \(desc, alignment, expected) ->
+      forM_ cases $ \(desc, align, expected) ->
         it desc $ do
-          result <- run (rc (Exactly 80) (Exactly 40) alignment)
+          result <- run (rc (Exactly 80) (Exactly 40) align)
           result `shouldBe` [expected]
 
   describe "hBox" $ do
@@ -222,14 +222,14 @@ spec = describe "layout" $ do
         result `shouldBe` [Rectangle 0 0 60 100, Rectangle 60 0 140 100]
 
       it "spacing separates children" $ do
-        result <- runHBox hBounds [boxSpacing 10] [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
+        result <- runHBox hBounds [spacing 10] [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
         result `shouldBe` [Rectangle 0 0 95 100, Rectangle 105 0 95 100]
 
     describe "content area" $ do
       prop "a Fill child fills the margin-inset content area" $
-        forAll margin $ \m ->
+        forAll marginGen $ \m ->
           ioProperty $ do
-            result <- runHBox hBounds [boxMargin m] [rc Fill Fill TopLeft]
+            result <- runHBox hBounds [margin m] [rc Fill Fill TopLeft]
             pure $ result == [Rectangle m m (200 - 2*m) (100 - 2*m)]
 
     describe "cross axis (height)" $ do
@@ -242,20 +242,20 @@ spec = describe "layout" $ do
             , ("Center aligns the child to the middle",  Center,     Rectangle 0 30 200 40)
             , ("BottomLeft aligns the child to the bottom", BottomLeft, Rectangle 0 60 200 40)
             ]
-      forM_ cases $ \(desc, alignment, expected) ->
+      forM_ cases $ \(desc, align, expected) ->
         it desc $ do
-          result <- runHBox hBounds [boxFillCross False] [rc Fill (Exactly 40) alignment]
+          result <- runHBox hBounds [stretch False] [rc Fill (Exactly 40) align]
           result `shouldBe` [expected]
 
-    describe "boxAlignment" $ do
+    describe "alignment" $ do
       let threeExact = [rc (Exactly 40) Fill TopLeft, rc (Exactly 40) Fill TopLeft, rc (Exactly 40) Fill TopLeft]
 
       it "Center centres the content block horizontally" $ do
-        result <- runHBox hBounds [boxAlignment Center] threeExact
+        result <- runHBox hBounds [alignment Center] threeExact
         result `shouldBe` [Rectangle 40 0 40 100, Rectangle 80 0 40 100, Rectangle 120 0 40 100]
 
       it "MiddleRight aligns the content block to the right" $ do
-        result <- runHBox hBounds [boxAlignment MiddleRight] threeExact
+        result <- runHBox hBounds [alignment MiddleRight] threeExact
         result `shouldBe` [Rectangle 80 0 40 100, Rectangle 120 0 40 100, Rectangle 160 0 40 100]
 
     prop "no slot exceeds the upper bound of its width constraint" $ \constraints ->
@@ -285,14 +285,14 @@ spec = describe "layout" $ do
         result `shouldBe` [Rectangle 0 0 100 60, Rectangle 0 60 100 140]
 
       it "spacing separates children" $ do
-        result <- runVBox vBounds [boxSpacing 10] [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
+        result <- runVBox vBounds [spacing 10] [rc Fill Fill TopLeft, rc Fill Fill TopLeft]
         result `shouldBe` [Rectangle 0 0 100 95, Rectangle 0 105 100 95]
 
     describe "content area" $ do
       prop "a Fill child fills the margin-inset content area" $
-        forAll margin $ \m ->
+        forAll marginGen $ \m ->
           ioProperty $ do
-            result <- runVBox vBounds [boxMargin m] [rc Fill Fill TopLeft]
+            result <- runVBox vBounds [margin m] [rc Fill Fill TopLeft]
             pure $ result == [Rectangle m m (100 - 2*m) (200 - 2*m)]
 
     describe "cross axis (width)" $ do
@@ -305,20 +305,20 @@ spec = describe "layout" $ do
             , ("Center aligns the child to the centre",     Center,   Rectangle 20 0 60 200)
             , ("TopRight aligns the child to the right",    TopRight, Rectangle 40 0 60 200)
             ]
-      forM_ cases $ \(desc, alignment, expected) ->
+      forM_ cases $ \(desc, align, expected) ->
         it desc $ do
-          result <- runVBox vBounds [boxFillCross False] [rc (Exactly 60) Fill alignment]
+          result <- runVBox vBounds [stretch False] [rc (Exactly 60) Fill align]
           result `shouldBe` [expected]
 
-    describe "boxAlignment" $ do
+    describe "alignment" $ do
       let threeExact = [rc Fill (Exactly 40) TopLeft, rc Fill (Exactly 40) TopLeft, rc Fill (Exactly 40) TopLeft]
 
       it "Center centres the content block vertically" $ do
-        result <- runVBox vBounds [boxAlignment Center] threeExact
+        result <- runVBox vBounds [alignment Center] threeExact
         result `shouldBe` [Rectangle 0 40 100 40, Rectangle 0 80 100 40, Rectangle 0 120 100 40]
 
       it "BottomLeft aligns the content block to the bottom" $ do
-        result <- runVBox vBounds [boxAlignment BottomLeft] threeExact
+        result <- runVBox vBounds [alignment BottomLeft] threeExact
         result `shouldBe` [Rectangle 0 80 100 40, Rectangle 0 120 100 40, Rectangle 0 160 100 40]
 
   describe "borderLayout" $ do
@@ -331,36 +331,36 @@ spec = describe "layout" $ do
       result `shouldBe` []
 
     it "top panel occupies the full width at the top" $ do
-      result <- runBorder [topPanel 30 fill]
+      result <- runBorder [top 30 fill]
       result `shouldBe` [Rectangle 0 0 300 30]
 
     it "bottom panel occupies the full width at its fixed height" $ do
-      result <- runBorder [bottomPanel 20 fill]
+      result <- runBorder [bottom 20 fill]
       result `shouldBe` [Rectangle 0 0 300 20]
 
     it "left panel occupies the full height on the left" $ do
-      result <- runBorder [leftPanel 50 fill]
+      result <- runBorder [left 50 fill]
       result `shouldBe` [Rectangle 0 0 50 200]
 
     it "right panel occupies the full height at its fixed width" $ do
-      result <- runBorder [rightPanel 40 fill]
+      result <- runBorder [right 40 fill]
       result `shouldBe` [Rectangle 0 0 40 200]
 
     it "centre panel fills all available space when alone" $ do
-      result <- runBorder [centrePanel fill]
+      result <- runBorder [centre fill]
       result `shouldBe` [Rectangle 0 0 300 200]
 
     it "top and bottom panels stack when no middle content is present" $ do
-      result <- runBorder [topPanel 30 fill, bottomPanel 20 fill]
+      result <- runBorder [top 30 fill, bottom 20 fill]
       result `shouldBe` [Rectangle 0 0 300 30, Rectangle 0 30 300 20]
 
     it "all five panels occupy their correct regions" $ do
       result <- runBorder
-        [ topPanel 30 fill
-        , bottomPanel 20 fill
-        , leftPanel 50 fill
-        , rightPanel 40 fill
-        , centrePanel fill
+        [ top 30 fill
+        , bottom 20 fill
+        , left 50 fill
+        , right 40 fill
+        , centre fill
         ]
       result `shouldBe`
         [ Rectangle 0   0   300  30   -- top
