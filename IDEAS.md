@@ -20,11 +20,11 @@ Description — what it is, why it'd help, or what it'd take.
 ## Controls
 
 ### Pseudo states
-`Blink.Control`'s style resolution picks one of five fixed variants per
+`Blink.Controls.Control`'s style resolution picks one of five fixed variants per
 `StyleKey` (normal/hovered/pressed/focused/disabled) based on real
 interaction state. There's no way for a control to say "resolve as if in
 some other state" for a reason that isn't one of those five — e.g.
-`Blink.Button.toggleButton` wants to show its *pressed* variant while
+`Blink.Controls.Button.toggleButton` wants to show its *pressed* variant while
 *selected*, even when nothing is physically pressed. Today it does this by
 looking up `styleSetPressed` for `ElementId eid` directly, ignoring
 whatever `StyleKey` the control actually resolved to via `style` — so a
@@ -47,20 +47,6 @@ Two ways to fix this were considered and set aside for now:
   but `StyleSet` is a public record with no field defaults, so this is a
   breaking change to every `Theme` any application using Blink has already
   defined — not something to do as a side effect of fixing one widget.
-
-### Clamped (non-wrapping) arrow-key navigation for a future list widget
-Depends on: Scope-aware container support (implemented; see `ccTabNavigation`/`ccIsArrowNavigationEnabled` on `Blink.Control.ControlConfig`)
-
-`control`'s `Contained` arrow-key navigation always wraps (same mechanism
-as Tab), since it works purely off render order with no notion of "am I
-the first/last item" — deliberately, to avoid tracking extra state the
-core mechanism doesn't otherwise need. The old `Blink.Controls.radioGroup`
-convention was to clamp instead ("Down clamps at the last item instead of
-wrapping"). A future data-driven list\/selection widget built on top of
-`Contained` would have its own real item index to check against, so
-clamp-vs-wrap belongs there as a property of that widget's own selection
-logic, not as something the generic container mechanism needs to grow
-position-awareness to support.
 
 ### Label mnemonics
 A label could name a mnemonic key (e.g. Alt+F) that redirects focus to its
@@ -94,7 +80,7 @@ it's given, rather than clipping or overflowing:
   layout bounds each frame rather than being cached
 
 ### Disable-aware panel control
-Building on the `enabled` attribute every widget in the new `Blink.Control`
+Building on the `enabled` attribute every widget in the `Blink.Controls.Control`
 stack already has: a higher-level panel control that, when disabled,
 automatically disables its content — every child control nested inside it
 — rather than requiring each child to be disabled individually. This would
@@ -263,7 +249,7 @@ own `UI` action.
 
 ## Architecture
 
-### Split `Blink.UI` into topic modules; move control-building code under `Blink.Controls.*`
+### Split `Blink.UI` into topic modules
 `Blink.UI` bundles several disjoint concerns that only live together because
 they all need `UIContext`'s internals — the monad itself, mouse/button
 accessors, focus/scope handling, scroll/selection, drawing primitives,
@@ -277,18 +263,9 @@ The idea: an internal `Blink.UI.Context` (or similar) holding `UI`/
 re-exporting shell — the same shape the top-level `Blink` module guide
 already has.
 
-Separately, move the control-building layer under a `Blink.Controls.*`
-namespace: today's `Blink.Element` → `Blink.Controls.Element`,
-`Blink.Control` → `Blink.Controls.Control`. Once that shared core is cleanly factored out,
-splitting the ready-made widgets one-per-module (`Blink.Controls.Button`,
-`.Checkbox`, ...) becomes more justified than it would be today, since each
-would be thin and self-contained rather than fighting over shared machinery.
-
 Treat as its own dedicated, mostly-mechanical pass (bounded but real risk —
 re-checking import cycles across the split) rather than interleaving with
-feature work. New foundation modules are being kept flat for now (e.g.
-`Blink.Control`, singular, not `Blink.Controls.Control`) to avoid a rename
-thrash before this happens.
+feature work.
 
 ### `scrollIntoView`
 No such function currently exists. The idea is a helper that, given a
