@@ -2,32 +2,20 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | A progress indicator: a filled bar for a known 'Progress' value, or a
--- continuously animating band while 'Indeterminate'.
+-- continuously animating band while 'Indeterminate'. A leaf, built
+-- directly on 'controlBase' -- nothing derives from it, and it displays no
+-- label, so it has no 'Blink.Controls.Labelled.LabelledConfig' either.
 module Blink.Controls.ProgressBar
-  ( ProgressBarAttributes
-  , ProgressBarConfig
+  ( ProgressBarConfig (..)
   , ProgressValue (..)
-  , progressBar
+  , defaultProgressBarConfig
   , progressBarStyleKey
+  , progressBar
   , progress
   , bandSpeed
-  , isEnabled
-  , style
-  , StyleKey (..)
-  , onMouseEntered
-  , onMouseExited
-  , onMouseDown
-  , onMouseUp
-  , onClicked
-  , onKeyPressed
-  , onFocusGained
-  , onFocusLost
   ) where
 
-import Data.List (foldl')
-import Data.Maybe (mapMaybe)
-
-import Blink.Controls.Control
+import Blink.Controls.Core
 import Blink.Geometry (Rectangle (..))
 import Blink.Style (Style (..))
 import Blink.UI
@@ -40,45 +28,12 @@ data ProgressValue
     -- ^ Unknown progress: a band animates continuously across the bar.
   deriving (Eq, Show)
 
--- | 'Blink.Controls.ProgressBar.progressBar'\'s own closed attrs type: the common
--- capabilities every control has, plus 'progress' and 'bandSpeed'. A
--- progress bar is never a tab stop; this is fixed behaviour, not a default,
--- so 'progressBar' always appends its own 'isFocusable' 'False' last,
--- overriding whatever a caller passes -- 'Blink.Controls.Control.isFocusable' still
--- typechecks against 'ProgressBarAttributes' (the 'HasControlConfig'
--- instance is public, like every other widget's), it just never has any
--- effect.
-data ProgressBarAttributes e msg
-  = ProgressBarCommon (ControlProperties e)
-  | ProgressBarEvent (ElementEvents e msg)
-  | ProgressBarProgress ProgressValue
-  | ProgressBarBandSpeed Double
-
-instance HasControlConfig e (ProgressBarAttributes e msg) where
-  configureControlCapability = ProgressBarCommon
-  extractControlCapability (ProgressBarCommon c) = Just c
-  extractControlCapability _ = Nothing
-
-instance HasElementEvents e msg (ProgressBarAttributes e msg) where
-  configureElementEvent = ProgressBarEvent
-  extractElementEvent (ProgressBarEvent c) = Just c
-  extractElementEvent _ = Nothing
-
--- | Sets the bar to 'Progress' (determinate) or 'Indeterminate'. Defaults
--- to @'Progress' 0@.
-progress :: ProgressValue -> ProgressBarAttributes e msg
-progress = ProgressBarProgress
-
--- | How fast the band sweeps across an 'Indeterminate' bar, in bar-widths
--- per second. Defaults to 0.5.
-bandSpeed :: Double -> ProgressBarAttributes e msg
-bandSpeed = ProgressBarBandSpeed
-
--- | Configuration for 'progressBar', resolved from a
--- @['ProgressBarAttributes' e msg]@.
-data ProgressBarConfig = ProgressBarConfig
-  { pbcfgValue     :: ProgressValue
-  , pbcfgBandSpeed :: Double
+-- | Every capability 'progressBar' resolves: the wrapped 'ControlConfig',
+-- its value, and its band speed while indeterminate.
+data ProgressBarConfig e msg = ProgressBarConfig
+  { pbControl   :: ControlConfig e msg
+  , pbValue     :: ProgressValue
+  , pbBandSpeed :: Double
   }
 
 -- | The 'StyleKey' 'progressBar' resolves its style from unless overridden
@@ -86,36 +41,52 @@ data ProgressBarConfig = ProgressBarConfig
 progressBarStyleKey :: StyleKey e
 progressBarStyleKey = Class "progressBar"
 
-defaultProgressBarConfig :: ProgressBarConfig
-defaultProgressBarConfig = ProgressBarConfig { pbcfgValue = Progress 0, pbcfgBandSpeed = 0.5 }
+-- | 'defaultControlConfig' (styled via 'progressBarStyleKey'), @'Progress' 0@,
+-- and a band speed of 0.5.
+defaultProgressBarConfig :: ProgressBarConfig e msg
+defaultProgressBarConfig = ProgressBarConfig
+  { pbControl   = defaultControlConfig { ccStyleKey = progressBarStyleKey }
+  , pbValue     = Progress 0
+  , pbBandSpeed = 0.5
+  }
 
-resolveProgressBarConfig :: [ProgressBarAttributes e msg] -> ProgressBarConfig
-resolveProgressBarConfig = foldl' apply defaultProgressBarConfig
-  where
-    apply cfg (ProgressBarProgress v)  = cfg { pbcfgValue = v }
-    apply cfg (ProgressBarBandSpeed v) = cfg { pbcfgBandSpeed = v }
-    apply cfg _                        = cfg
+instance HasElementConfig e msg (ProgressBarConfig e msg) where
+  overElement attr = Attr (\pc -> pc { pbControl = runAttr (overElement attr) (pbControl pc) })
 
-toProgressBarControlAttr :: ProgressBarAttributes e msg -> Maybe (ControlAttrs e msg)
-toProgressBarControlAttr (ProgressBarProgress _)  = Nothing
-toProgressBarControlAttr (ProgressBarBandSpeed _) = Nothing
-toProgressBarControlAttr a                        = translateCommon a
+instance HasControlConfig e msg (ProgressBarConfig e msg) where
+  overControl attr = Attr (\pc -> pc { pbControl = runAttr attr (pbControl pc) })
+
+-- | Sets the bar to 'Progress' (determinate) or 'Indeterminate'. Defaults
+-- to @'Progress' 0@.
+progress :: ProgressValue -> Attr (ProgressBarConfig e msg)
+progress v = Attr (\pc -> pc { pbValue = v })
+
+-- | How fast the band sweeps across an 'Indeterminate' bar, in bar-widths
+-- per second. Defaults to 0.5.
+bandSpeed :: Double -> Attr (ProgressBarConfig e msg)
+bandSpeed v = Attr (\pc -> pc { pbBandSpeed = v })
 
 -- | A progress indicator, set via 'progress' to 'Progress' for a
 -- determinate bar or 'Indeterminate' for a continuously animating band. A
--- full 'control' like any other -- it reports hover\/click\/focus events
--- the same way every other control does, even though a caller has no real
+-- full control like any other -- it reports hover\/click\/focus events the
+-- same way every other control does, even though a caller has no real
 -- reason to react to them. Never a tab stop, though: fixed behaviour, not
--- a default -- 'progressBar' always appends its own 'isFocusable' 'False'
--- last, so it wins regardless of what a caller passes.
-progressBar :: Ord e => e -> [ProgressBarAttributes e msg] -> UI e msg ()
-progressBar eid attrs = control eid (style progressBarStyleKey : mapMaybe toProgressBarControlAttr attrs ++ [isFocusable False, focusOnClick NoFocus, content body])
+-- a default -- 'progressBar' always overrides 'isFocusable' to 'False'
+-- itself, so it wins regardless of what a caller passes.
+progressBar :: Ord e => e -> [Attr (ProgressBarConfig e msg)] -> UI e msg ()
+progressBar eid attrs = do
+  let cfg  = resolve defaultProgressBarConfig attrs
+      ctrl = (pbControl cfg)
+        { ccIsFocusable  = False
+        , ccFocusOnClick = NoFocus
+        , ccContent      = body cfg
+        }
+  () <$ controlBase eid ctrl
   where
-    cfg = resolveProgressBarConfig attrs
-    body = do
+    body cfg = do
       s <- currentStyle
       r <- getBounds
-      case pbcfgValue cfg of
+      case pbValue cfg of
         Progress value -> do
           let clamped   = max 0 (min 1 value)
               fillRect' = r { rectWidth = rectWidth r * clamped }
@@ -123,7 +94,7 @@ progressBar eid attrs = control eid (style progressBarStyleKey : mapMaybe toProg
         Indeterminate -> do
           requiresAnimation
           elapsed <- getAnimElapsed
-          let speed = pbcfgBandSpeed cfg
+          let speed = pbBandSpeed cfg
               t     = realToFrac elapsed * speed
               phase = t - fromIntegral (floor t :: Int)
               bandW = rectWidth r * 0.3

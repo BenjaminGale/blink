@@ -4,10 +4,12 @@ module Blink.Controls.RadioButtonSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Control (text)
+import Blink.Controls.Button (ToggleConfig, isSelected)
+import Blink.Controls.Core (Attr)
+import Blink.Controls.Labelled (text)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
-import Blink.Controls.RadioButton (RadioButtonAttributes, isSelected, radioButton)
+import Blink.Controls.RadioButton (radioButton)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
@@ -59,7 +61,7 @@ noInput = InputState
 hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
-type Attr' = RadioButtonAttributes TestElement String
+type Attr' = Attr (ToggleConfig TestElement String)
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer

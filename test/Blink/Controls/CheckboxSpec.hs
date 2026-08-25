@@ -4,8 +4,10 @@ module Blink.Controls.CheckboxSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Checkbox (CheckboxAttributes, checkbox, isSelected)
-import Blink.Controls.Control (text)
+import Blink.Controls.Button (ToggleConfig, isSelected)
+import Blink.Controls.Checkbox (checkbox)
+import Blink.Controls.Core (Attr)
+import Blink.Controls.Labelled (text)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -59,7 +61,7 @@ noInput = InputState
 hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
-type Attr' = CheckboxAttributes TestElement String
+type Attr' = Attr (ToggleConfig TestElement String)
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer

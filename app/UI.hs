@@ -2,13 +2,9 @@
 module UI (Element, AppState (..), demoApp) where
 
 import Blink.App
-import Blink.Controls.Button
-import Blink.Controls.Checkbox
-import Blink.Controls.RadioButton
-import Blink.Controls.TextInput
-import Blink.Controls.ProgressBar
-import Blink.Controls.Label (label)
-import qualified Blink.Controls.Label as Lbl
+import Blink.Controls
+import Blink.Controls.Attrs
+import Blink.Controls.TextInput (value)
 import Blink.Geometry
 import Blink.Input
 import Blink.Layout
@@ -101,7 +97,7 @@ type DemoUI = UI Element Msg
 
 -- | Plain, non-interactive text under the shared 'Label' element ID.
 caption :: Text -> DemoUI ()
-caption t = label Label [Lbl.text t]
+caption t = label Label [text t]
 
 rowHeight :: Length
 rowHeight = Exactly 40
@@ -119,8 +115,8 @@ rowEditing s =
 rowButtons :: AppState -> DemoUI ()
 rowButtons s =
   hBox (defaultBoxConfig { boxSpacing = 8 })
-    [ (Layout (Exactly 100) Fill TopLeft, button ClickButton [text "Click me", onClicked (post AddClick)])
-    , (Layout (Exactly 100) Fill TopLeft, button ResetButton [text "Reset", onClicked (post ResetClicks)])
+    [ (Layout (Exactly 100) Fill TopLeft, button ClickButton [text "Click me", onActivated (post AddClick)])
+    , (Layout (Exactly 100) Fill TopLeft, button ResetButton [text "Reset", onActivated (post ResetClicks)])
     , (Layout Fill Fill MiddleLeft, caption ("Clicks: " <> T.pack (show (clickCount s))))
     ]
 
@@ -151,7 +147,7 @@ rowTextInput s =
   hBox (defaultBoxConfig { boxSpacing = 8, boxAlignment = Center })
     [ (Layout (Exactly 120) Fill MiddleLeft, caption "Text input")
     , (Layout Fill Fill TopLeft,
-         textInput TextInputCtl [text (inputText s), onInput (postWith SetInputText)])
+         textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText)])
     ]
 
 rowPasswordInput :: AppState -> DemoUI ()
@@ -160,7 +156,7 @@ rowPasswordInput s =
     [ (Layout (Exactly 120) Fill MiddleLeft, caption "Password input")
     , (Layout Fill Fill TopLeft,
          textInput PasswordInputCtl
-           [text (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)])
+           [value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)])
     ]
 
 rowAnimate :: AppState -> DemoUI ()

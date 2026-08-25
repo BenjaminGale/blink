@@ -4,12 +4,14 @@ module Blink.Controls.LabelSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
+import Blink.Controls.Core (Attr)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Controls.Label (DisplayMode (..), LabelAttributes, displayMode, glyph, label, target, text)
+import Blink.Controls.Label (LabelConfig, label, target)
+import Blink.Controls.Labelled (text)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -61,7 +63,7 @@ onCaption = Point 50 50
 hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
-type Attr' = LabelAttributes TestElement String
+type Attr' = Attr (LabelConfig TestElement String)
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
@@ -79,17 +81,6 @@ spec = describe "Blink.Controls.Label" $ do
   it "draws its text in the resolved style" $ do
     ctx <- start [text "Hello"]
     getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "Hello" testColour AlignCenter]
-
-  it "draws just its glyph, filling the content area, in GlyphOnly mode" $ do
-    ctx <- start [glyph "*", displayMode GlyphOnly]
-    getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "*" testColour AlignCenter]
-
-  it "draws its glyph in a fixed-width column followed by its text in TextAndGlyph mode" $ do
-    ctx <- start [text "Hello", glyph "*", displayMode TextAndGlyph]
-    getDrawCommands ctx `shouldContain`
-      [ DrawText (Rectangle 15 15 20 70) "*" testColour AlignCenter
-      , DrawText (Rectangle 35 15 50 70) "Hello" testColour AlignCenter
-      ]
 
   it "never claims focus, even with nothing else focused" $ do
     result <- runInteractions testBounds seedCtx (label Caption []) [] []

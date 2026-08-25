@@ -5,10 +5,10 @@ module Blink.Controls.ControlSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Control
-  ( ControlAttrs, FocusOnClick (..)
-  , control, focusOnClick, isEnabled, isFocusable
-  , onFocusGained, onFocusLost, onKeyPressed
+import Blink.Controls.Core
+  ( Attr, ControlConfig (..), FocusOnClick (..)
+  , controlBase, defaultControlConfig, isEnabled, isFocusable
+  , onFocusGained, onFocusLost, onKeyPressed, resolve
   )
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
@@ -60,25 +60,37 @@ onA, onB :: Point
 onA = Point 10 50
 onB = Point 60 50
 
-type Attr' = ControlAttrs TestElement String
+type Attr' = Attr (ControlConfig TestElement String)
+
+-- | Renders a single control at whatever bounds are current, with its
+-- attrs resolved against 'defaultControlConfig'.
+renderAt :: TestElement -> [Attr'] -> UI TestElement String ()
+renderAt eid attrs = () <$ controlBase eid (resolve defaultControlConfig attrs)
+
+-- | Renders a single control the same way, but with 'ccFocusOnClick'
+-- overridden afterward -- there's no @focusOnClick@ attribute any more (see
+-- "Blink.Controls.Core"), so a spec that wants to vary it constructs the
+-- config directly instead of resolving it as an attr.
+renderFoc :: FocusOnClick TestElement -> TestElement -> [Attr'] -> UI TestElement String ()
+renderFoc foc eid attrs = () <$ controlBase eid (resolve defaultControlConfig attrs) { ccFocusOnClick = foc }
 
 -- | Renders 'ElemA' at 'rectA' and 'ElemB' at 'rectB' with the given
 -- per-element 'FocusOnClick' and attrs.
 both :: FocusOnClick TestElement -> [Attr'] -> FocusOnClick TestElement -> [Attr'] -> UI TestElement String ()
 both focA attrsA focB attrsB = do
-  withBounds rectA (control ElemA (focusOnClick focA : attrsA))
-  withBounds rectB (control ElemB (focusOnClick focB : attrsB))
+  withBounds rectA (renderFoc focA ElemA attrsA)
+  withBounds rectB (renderFoc focB ElemB attrsB)
 
 -- | Renders a single 'ElemA' at 'testBounds' with the given attrs -- the
--- same way every real widget built on 'control' does.
+-- same way every real widget built on 'controlBase' does.
 renderControl :: [Attr'] -> UI TestElement String ()
-renderControl attrs = control ElemA attrs
+renderControl = renderAt ElemA
 
 three :: [Attr'] -> [Attr'] -> [Attr'] -> UI TestElement String ()
 three attrsA attrsB attrsC = do
-  withBounds rectA (control ElemA attrsA)
-  withBounds rectB (control ElemB attrsB)
-  withBounds rectC (control ElemC attrsC)
+  withBounds rectA (renderAt ElemA attrsA)
+  withBounds rectB (renderAt ElemB attrsB)
+  withBounds rectC (renderAt ElemC attrsC)
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
@@ -91,11 +103,11 @@ hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
 spec :: Spec
-spec = describe "Blink.Controls.Control" $ do
+spec = describe "Blink.Controls.Core.controlBase" $ do
   controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx ElemA (Point 5 5) hitRect (Point 200 200) renderControl
 
   describe "chrome" $
-    it "draws background via styledElement, inset by margin" $ do
+    it "draws background via renderStyled, inset by margin" $ do
       ctx <- snd <$> runUI (renderControl []) seedCtx
       getDrawCommands ctx `shouldContain` [FillRect (insetRect (uniform 10) testBounds) testColour]
 
@@ -128,7 +140,7 @@ spec = describe "Blink.Controls.Control" $ do
     it "NoFocus leaves focus unchanged when clicked" $ do
       let attrs :: [Attr']
           attrs = [isFocusable False, onFocusGained (const [OutMsg ("gained" :: String)])]
-      result <- runInteractions testBounds seedCtx (control ElemA (focusOnClick NoFocus : attrs)) [] [ClickAt onA, Wait 1]
+      result <- runInteractions testBounds seedCtx (renderFoc NoFocus ElemA attrs) [] [ClickAt onA, Wait 1]
       resultMessages result `shouldBe` []
 
   describe "keyboard navigation" $ do
@@ -173,9 +185,9 @@ spec = describe "Blink.Controls.Control" $ do
     describe "Shift-Tab past a control disabled via an ambient disableWhen" $ do
       let tagged e = [onFocusGained (const [OutMsg (show e ++ " gained")]), onFocusLost (const [OutMsg (show e ++ " lost")])]
           renderWithAmbientlyDisabledMiddle = do
-            withBounds rectA (control ElemA (tagged ElemA))
-            disableWhen True (withBounds rectB (control ElemB (tagged ElemB)))
-            withBounds rectC (control ElemC (tagged ElemC))
+            withBounds rectA (renderAt ElemA (tagged ElemA))
+            disableWhen True (withBounds rectB (renderAt ElemB (tagged ElemB)))
+            withBounds rectC (renderAt ElemC (tagged ElemC))
 
       it "Tab from the first control skips the ambiently-disabled middle one" $ do
         result <- runInteractions testBounds seedCtx renderWithAmbientlyDisabledMiddle [Wait 1] [Tab, Wait 1]

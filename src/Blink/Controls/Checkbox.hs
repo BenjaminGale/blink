@@ -1,104 +1,25 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | A checkbox: a glyph and a caption toggled together as one control.
--- Built on 'toggleBase' -- see "Blink.Controls.Button" for how it and every other
--- button-like control fit together.
+-- Built on 'toggleBase' -- see "Blink.Controls.Button" for how it and every
+-- other button-like control fit together. A leaf: nothing derives from it,
+-- so it has no 'Blink.Controls.Core.ControlConfig'\/'Blink.Controls.Core.ControlInteraction'-style pair of its own
+-- beyond 'ToggleConfig'\/'Blink.Controls.Button.ToggleInteraction', which already have every field
+-- it needs.
 module Blink.Controls.Checkbox
-  ( CheckboxAttributes
-  , CheckboxConfig
-  , checkbox
+  ( checkbox
   , checkboxStyleKey
-  , text
-  , isSelected
-  , onSelectedChanged
-  , isFocusable
-  , isEnabled
-  , style
-  , StyleKey (..)
-  , onMouseEntered
-  , onMouseExited
-  , onMouseDown
-  , onMouseUp
-  , onClicked
-  , onKeyPressed
-  , onFocusGained
-  , onFocusLost
   ) where
 
 import Control.Monad (when)
-import Data.List (foldl')
-import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 
-import Blink.Controls.Button (HasIsSelectedConfig (..), HasSelectedChangedEvents (..), isSelected, onSelectedChanged, toggleBase)
-import Blink.Controls.Control
+import Blink.Controls.Button (ButtonConfig (..), ToggleConfig (..), defaultToggleButtonConfig, toggleBase)
+import Blink.Controls.Core
+import Blink.Controls.Labelled (renderLabelledContent)
 import Blink.Geometry (Rectangle (..), uniformBorder)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..))
-import Blink.UI (Out, UI, currentStyle, drawText, getBounds, strokeRect, withBounds)
-
--- | 'Blink.Controls.Checkbox.checkbox'\'s own closed attrs type: the common
--- capabilities every control has, plus 'text', 'isSelected', and
--- 'onSelectedChanged'.
-data CheckboxAttributes e msg
-  = CheckboxCommon (ControlProperties e)
-  | CheckboxEvent (ElementEvents e msg)
-  | CheckboxText Text
-  | CheckboxIsSelected Bool
-  | CheckboxOnSelectedChanged (Bool -> [Out e msg])
-
-instance HasControlConfig e (CheckboxAttributes e msg) where
-  configureControlCapability = CheckboxCommon
-  extractControlCapability (CheckboxCommon c) = Just c
-  extractControlCapability _ = Nothing
-
-instance HasElementEvents e msg (CheckboxAttributes e msg) where
-  configureElementEvent = CheckboxEvent
-  extractElementEvent (CheckboxEvent c) = Just c
-  extractElementEvent _ = Nothing
-
-instance HasTextConfig (CheckboxAttributes e msg) where
-  configureText = CheckboxText
-  extractText (CheckboxText t) = Just t
-  extractText _ = Nothing
-
-instance HasIsSelectedConfig (CheckboxAttributes e msg) where
-  configureIsSelected = CheckboxIsSelected
-
-instance HasSelectedChangedEvents e msg (CheckboxAttributes e msg) where
-  configureOnSelectedChanged = CheckboxOnSelectedChanged
-
--- | Configuration for 'checkbox', resolved from a
--- @['CheckboxAttributes' e msg]@.
-data CheckboxConfig e msg = CheckboxConfig
-  { ckcfgText              :: Text
-  , ckcfgSelected          :: Bool
-  , ckcfgOnSelectedChanged :: [Bool -> [Out e msg]]
-  }
-
--- | The 'StyleKey' 'checkbox' resolves its style from unless overridden via
--- 'style'.
-checkboxStyleKey :: StyleKey e
-checkboxStyleKey = Class "checkbox"
-
-defaultCheckboxConfig :: CheckboxConfig e msg
-defaultCheckboxConfig = CheckboxConfig
-  { ckcfgText = "", ckcfgSelected = False, ckcfgOnSelectedChanged = [] }
-
-resolveCheckboxConfig :: [CheckboxAttributes e msg] -> CheckboxConfig e msg
-resolveCheckboxConfig = foldl' apply defaultCheckboxConfig
-  where
-    apply cfg (CheckboxText t)              = cfg { ckcfgText = t }
-    apply cfg (CheckboxIsSelected b)        = cfg { ckcfgSelected = b }
-    apply cfg (CheckboxOnSelectedChanged f) = cfg { ckcfgOnSelectedChanged = ckcfgOnSelectedChanged cfg ++ [f] }
-    apply cfg _                             = cfg
-
-toCheckboxControlAttr :: CheckboxAttributes e msg -> Maybe (ControlAttrs e msg)
-toCheckboxControlAttr (CheckboxText _)              = Nothing
-toCheckboxControlAttr (CheckboxIsSelected _)        = Nothing
-toCheckboxControlAttr (CheckboxOnSelectedChanged _) = Nothing
-toCheckboxControlAttr a                             = translateCommon a
+import Blink.UI (UI, currentStyle, drawText, getBounds, strokeRect, withBounds)
 
 -- | The fixed width reserved for the glyph, on the left of the caption.
 glyphWidth :: Double
@@ -114,32 +35,49 @@ labelGap = 6
 checkTick :: Text
 checkTick = "\10003"
 
+-- | The 'StyleKey' 'checkbox' resolves its style from unless overridden via
+-- 'style'.
+checkboxStyleKey :: StyleKey e
+checkboxStyleKey = Class "checkbox"
+
+defaultCheckboxConfig :: ToggleConfig e msg
+defaultCheckboxConfig = defaultToggleButtonConfig
+  { tgcButton = (tgcButton defaultToggleButtonConfig)
+      { bcControl = (bcControl (tgcButton defaultToggleButtonConfig)) { ccStyleKey = checkboxStyleKey } }
+  }
+
 -- | A checkbox: a small box drawn with 'strokeRect', a tick inside it while
--- selected (see 'isSelected'), beside a caption set via 'text', toggled
+-- selected (see 'Blink.Controls.Button.isSelected'), beside a caption set via 'Blink.Controls.Labelled.text', toggled
 -- together as one control -- clicking either the box or the caption
--- activates it, the same as 'Blink.Controls.Button.toggleButton'. Flips every time
--- it's activated; see 'onSelectedChanged' for reacting to it.
-checkbox :: Ord e => e -> [CheckboxAttributes e msg] -> UI e msg ()
-checkbox eid attrs =
-  toggleBase not eid (style checkboxStyleKey : mapMaybe toCheckboxControlAttr attrs) (ckcfgSelected cfg) (ckcfgOnSelectedChanged cfg) draw
-  where
-    cfg = resolveCheckboxConfig attrs
-    draw selected = do
-      s      <- currentStyle
-      bounds <- getBounds
-      let glyphRect  = bounds { rectWidth = glyphWidth }
-          boxSize    = max 0 (min glyphWidth (rectHeight bounds) - 2)
-          boxRect    = Rectangle
-            { rectX      = rectX glyphRect + (glyphWidth - boxSize) / 2
-            , rectY      = rectY glyphRect + (rectHeight glyphRect - boxSize) / 2
-            , rectWidth  = boxSize
-            , rectHeight = boxSize
-            }
-          textRect  = bounds
-            { rectX     = rectX bounds + glyphWidth + labelGap
-            , rectWidth = max 0 (rectWidth bounds - glyphWidth - labelGap)
-            }
-      withBounds boxRect $ do
-        strokeRect (styleTextColour s) (uniformBorder 1)
-        when selected $ drawText (styleTextColour s) AlignCenter checkTick
-      withBounds textRect $ drawText (styleTextColour s) (styleTextAlign s) (ckcfgText cfg)
+-- activates it, the same as 'Blink.Controls.Button.toggleButton'. Flips
+-- every time it's activated; see 'Blink.Controls.Button.onSelectedChanged' for reacting to it.
+checkbox :: Ord e => e -> [Attr (ToggleConfig e msg)] -> UI e msg ()
+checkbox eid attrs = do
+  let cfg      = resolve defaultCheckboxConfig attrs
+      btn      = tgcButton cfg
+      selected = tgcSelected cfg
+      glyphContent = do
+        s      <- currentStyle
+        bounds <- getBounds
+        let glyphRect = bounds { rectWidth = glyphWidth }
+            boxSize   = max 0 (min glyphWidth (rectHeight bounds) - 2)
+            boxRect   = Rectangle
+              { rectX      = rectX glyphRect + (glyphWidth - boxSize) / 2
+              , rectY      = rectY glyphRect + (rectHeight glyphRect - boxSize) / 2
+              , rectWidth  = boxSize
+              , rectHeight = boxSize
+              }
+            textRect  = bounds
+              { rectX     = rectX bounds + glyphWidth + labelGap
+              , rectWidth = max 0 (rectWidth bounds - glyphWidth - labelGap)
+              }
+        withBounds boxRect $ do
+          strokeRect (styleTextColour s) (uniformBorder 1)
+          when selected $ drawText (styleTextColour s) AlignCenter checkTick
+        withBounds textRect $ renderLabelledContent (bcLabelled btn)
+      ctrl = (bcControl btn) { ccContent = glyphContent }
+      cfg' = cfg
+        { tgcNext   = not
+        , tgcButton = btn { bcControl = ctrl }
+        }
+  () <$ toggleBase eid cfg'

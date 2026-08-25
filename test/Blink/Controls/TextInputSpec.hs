@@ -6,7 +6,7 @@ import qualified Data.Text as T
 import Data.Char (isDigit)
 import Test.Hspec
 
-import Blink.Controls.Control (text)
+import Blink.Controls.Core (Attr)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), Modifier (..))
@@ -14,7 +14,7 @@ import Blink.Interaction (Interaction (..), InteractionResult (..), runInteracti
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.Controls.TextInput
-  (TextInputAttributes, displayFilter, inputFilter, onInput, onSubmit, textInput)
+  (TextInputConfig, displayFilter, inputFilter, onInput, onSubmit, value, textInput)
 import Blink.UI
 
 data TestElement = Field | Other deriving (Eq, Ord, Show)
@@ -85,7 +85,7 @@ hitRect = insetRect (uniform 10) testBounds
 cursorRectAt :: Double -> DrawCommand
 cursorRectAt x = FillRect (Rectangle x 15 1 70) testColour
 
-type Attr' = TextInputAttributes TestElement String
+type Attr' = Attr (TextInputConfig TestElement String)
 
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpMeasurer
@@ -110,39 +110,39 @@ spec = describe "Blink.Controls.TextInput" $ do
 
   describe "rendering" $ do
     it "displays the value without a cursor when unfocused" $ do
-      result <- runInteractions testBounds seedCtx (unfocused [text "hello"]) [] []
+      result <- runInteractions testBounds seedCtx (unfocused [value "hello"]) [] []
       resultDraws result `shouldContain` [DrawText contentRect "hello" testColour AlignLeft]
       resultDraws result `shouldNotContain` [cursorRectAt 15]
 
     it "displays the value with a cursor when focused" $ do
-      result <- runInteractions testBounds seedCtx (textInput Field [text "hello"]) [] [ClickAt focusPt]
+      result <- runInteractions testBounds seedCtx (textInput Field [value "hello"]) [] [ClickAt focusPt]
       resultDraws result `shouldContain` [DrawText contentRect "hello" testColour AlignLeft]
       resultDraws result `shouldContain` [cursorRectAt 15]
 
   describe "text editing" $ do
     it "appends typed characters to the value and fires onInput" $ do
-      let attrs = [text "hello", onInput (\t -> [OutMsg (T.unpack t)])]
+      let attrs = [value "hello", onInput (\t -> [OutMsg (T.unpack t)])]
       result <- runInteractions testBounds seedCtx (textInput Field attrs) [] [TypeText "!"]
       resultMessages result `shouldBe` ["hello!"]
 
     it "removes the last character on backspace" $ do
-      let attrs = [text "hello", onInput (\t -> [OutMsg (T.unpack t)])]
+      let attrs = [value "hello", onInput (\t -> [OutMsg (T.unpack t)])]
       result <- runInteractions testBounds seedCtx (textInput Field attrs) [] [PressKey KeyBackspace []]
       resultMessages result `shouldBe` ["hell"]
 
     it "does not fire onInput when there is no input" $ do
-      let attrs = [text "hello", onInput (\t -> [OutMsg (T.unpack t)])]
+      let attrs = [value "hello", onInput (\t -> [OutMsg (T.unpack t)])]
       result <- runInteractions testBounds seedCtx (textInput Field attrs) [] []
       resultMessages result `shouldBe` []
 
     it "does not process input when a different element is focused" $ do
-      let attrs = [text "hello", onInput (\t -> [OutMsg (T.unpack t)])]
+      let attrs = [value "hello", onInput (\t -> [OutMsg (T.unpack t)])]
       result <- runInteractions testBounds seedCtx (unfocused attrs) [] [PressKey KeyBackspace []]
       resultMessages result `shouldBe` []
 
   describe "disabled" $
     it "does not process input when disabled" $ do
-      let attrs = [text "hello", onInput (\t -> [OutMsg (T.unpack t)])]
+      let attrs = [value "hello", onInput (\t -> [OutMsg (T.unpack t)])]
       focused <- runInteractions testBounds seedCtx (textInput Field attrs) [] [ClickAt focusPt]
       result  <- runInteractions testBounds (resultContext focused) (disableWhen True (textInput Field attrs)) [] [TypeText "!"]
       resultMessages result `shouldBe` []
@@ -153,11 +153,11 @@ spec = describe "Blink.Controls.TextInput" $ do
     -- all, not exactly where; see the digit-width tests elsewhere for real
     -- offset math.
     it "sets the cursor to the clicked position on mouse press" $ do
-      result <- runInteractions testBounds seedCtx (textInput Field [text "hello"]) [] [ClickAt focusPt]
+      result <- runInteractions testBounds seedCtx (textInput Field [value "hello"]) [] [ClickAt focusPt]
       contextSelections Field (resultContext result) `shouldBe` [Selection 0 0]
 
     it "extends the active end on drag while keeping the anchor" $ do
-      result <- runInteractions testBounds seedCtx (textInput Field [text "hello"]) []
+      result <- runInteractions testBounds seedCtx (textInput Field [value "hello"]) []
                   [MouseDown (Point 15 50), DragTo (Point 55 50)]
       case contextSelections Field (resultContext result) of
         [Selection a _] -> a `shouldBe` 0
@@ -165,48 +165,48 @@ spec = describe "Blink.Controls.TextInput" $ do
 
   describe "arrow navigation" $ do
     let seeded a v = do
-          focused <- runInteractions testBounds seedCtx (textInput Field [text "hello"]) [] [ClickAt focusPt]
+          focused <- runInteractions testBounds seedCtx (textInput Field [value "hello"]) [] [ClickAt focusPt]
           settled <- runInteractions testBounds (resultContext focused) (emitUi (SetSelectionAt Field (Selection a v))) [] []
           pure (resultContext settled)
 
     it "moves the cursor left with Left" $ do
       base   <- seeded 3 3
-      result <- runInteractions testBounds base (textInput Field [text "hello"]) [] [PressKey KeyLeft []]
+      result <- runInteractions testBounds base (textInput Field [value "hello"]) [] [PressKey KeyLeft []]
       contextSelections Field (resultContext result) `shouldBe` [Selection 2 2]
 
     it "moves the cursor right with Right" $ do
       base   <- seeded 2 2
-      result <- runInteractions testBounds base (textInput Field [text "hello"]) [] [PressKey KeyRight []]
+      result <- runInteractions testBounds base (textInput Field [value "hello"]) [] [PressKey KeyRight []]
       contextSelections Field (resultContext result) `shouldBe` [Selection 3 3]
 
     it "collapses an existing selection to its low end on plain Left" $ do
       base   <- seeded 1 3
-      result <- runInteractions testBounds base (textInput Field [text "hello"]) [] [PressKey KeyLeft []]
+      result <- runInteractions testBounds base (textInput Field [value "hello"]) [] [PressKey KeyLeft []]
       contextSelections Field (resultContext result) `shouldBe` [Selection 1 1]
 
     it "collapses an existing selection to its high end on plain Right" $ do
       base   <- seeded 1 3
-      result <- runInteractions testBounds base (textInput Field [text "hello"]) [] [PressKey KeyRight []]
+      result <- runInteractions testBounds base (textInput Field [value "hello"]) [] [PressKey KeyRight []]
       contextSelections Field (resultContext result) `shouldBe` [Selection 3 3]
 
     it "extends the selection left with Shift+Left" $ do
       base   <- seeded 3 3
-      result <- runInteractions testBounds base (textInput Field [text "hello"]) [] [PressKey KeyLeft [Shift]]
+      result <- runInteractions testBounds base (textInput Field [value "hello"]) [] [PressKey KeyLeft [Shift]]
       contextSelections Field (resultContext result) `shouldBe` [Selection 3 2]
 
     it "extends the selection right with Shift+Right" $ do
       base   <- seeded 3 3
-      result <- runInteractions testBounds base (textInput Field [text "hello"]) [] [PressKey KeyRight [Shift]]
+      result <- runInteractions testBounds base (textInput Field [value "hello"]) [] [PressKey KeyRight [Shift]]
       contextSelections Field (resultContext result) `shouldBe` [Selection 3 4]
 
     it "does not move the cursor past the beginning" $ do
       base   <- seeded 0 0
-      result <- runInteractions testBounds base (textInput Field [text "hello"]) [] [PressKey KeyLeft []]
+      result <- runInteractions testBounds base (textInput Field [value "hello"]) [] [PressKey KeyLeft []]
       contextSelections Field (resultContext result) `shouldBe` [Selection 0 0]
 
     it "does not move the cursor past the end" $ do
       base   <- seeded 5 5
-      result <- runInteractions testBounds base (textInput Field [text "hello"]) [] [PressKey KeyRight []]
+      result <- runInteractions testBounds base (textInput Field [value "hello"]) [] [PressKey KeyRight []]
       contextSelections Field (resultContext result) `shouldBe` [Selection 5 5]
 
   describe "selection editing" $ do
@@ -216,63 +216,63 @@ spec = describe "Blink.Controls.TextInput" $ do
           pure (resultContext settled)
 
     it "deletes the selected range on backspace" $ do
-      let attrs = [text "hello", onInput (\t -> [OutMsg (T.unpack t)])]
+      let attrs = [value "hello", onInput (\t -> [OutMsg (T.unpack t)])]
       base   <- seeded 1 3 attrs
       result <- runInteractions testBounds base (textInput Field attrs) [] [PressKey KeyBackspace []]
       resultMessages result `shouldBe` ["hlo"]
 
     it "replaces the selected range with typed text" $ do
-      let attrs = [text "hello", onInput (\t -> [OutMsg (T.unpack t)])]
+      let attrs = [value "hello", onInput (\t -> [OutMsg (T.unpack t)])]
       base   <- seeded 1 3 attrs
       result <- runInteractions testBounds base (textInput Field attrs) [] [TypeText "X"]
       resultMessages result `shouldBe` ["hXlo"]
 
     it "collapses the cursor to the insertion point after replacing a selection" $ do
-      let attrs = [text "hello"]
+      let attrs = [value "hello"]
       base   <- seeded 1 3 attrs
       result <- runInteractions testBounds base (textInput Field attrs) [] [TypeText "XY"]
       contextSelections Field (resultContext result) `shouldBe` [Selection 3 3]
 
   describe "inputFilter" $ do
     it "inserts only the characters the filter accepts" $ do
-      let attrs = [text "12", inputFilter (T.filter isDigit), onInput (\t -> [OutMsg (T.unpack t)])]
+      let attrs = [value "12", inputFilter (T.filter isDigit), onInput (\t -> [OutMsg (T.unpack t)])]
       result <- runInteractions testBounds seedCtx (textInput Field attrs) [] [TypeText "a3b"]
       resultMessages result `shouldBe` ["123"]
 
     it "does not fire onInput when every typed character is rejected" $ do
-      let attrs = [text "12", inputFilter (T.filter isDigit), onInput (\t -> [OutMsg (T.unpack t)])]
+      let attrs = [value "12", inputFilter (T.filter isDigit), onInput (\t -> [OutMsg (T.unpack t)])]
       result <- runInteractions testBounds seedCtx (textInput Field attrs) [] [TypeText "!"]
       resultMessages result `shouldBe` []
 
     it "still allows backspace regardless of the filter" $ do
-      let attrs = [text "12", inputFilter (T.filter isDigit), onInput (\t -> [OutMsg (T.unpack t)])]
+      let attrs = [value "12", inputFilter (T.filter isDigit), onInput (\t -> [OutMsg (T.unpack t)])]
       result <- runInteractions testBounds seedCtx (textInput Field attrs) [] [PressKey KeyBackspace []]
       resultMessages result `shouldBe` ["1"]
 
   describe "displayFilter" $ do
     it "displays a filtered value instead of the real one" $ do
-      let attrs = [text "hunter2", displayFilter (T.map (const '*'))]
+      let attrs = [value "hunter2", displayFilter (T.map (const '*'))]
       result <- runInteractions testBounds seedCtx (textInput Field attrs) [] [ClickAt focusPt]
       resultDraws result `shouldContain` [DrawText contentRect "*******" testColour AlignLeft]
       resultDraws result `shouldNotContain` [DrawText contentRect "hunter2" testColour AlignLeft]
 
     it "still edits and reports the real (unfiltered) value" $ do
-      let attrs = [text "hunter2", displayFilter (T.map (const '*')), onInput (\t -> [OutMsg (T.unpack t)])]
+      let attrs = [value "hunter2", displayFilter (T.map (const '*')), onInput (\t -> [OutMsg (T.unpack t)])]
       result <- runInteractions testBounds seedCtx (textInput Field attrs) [] [TypeText "!"]
       resultMessages result `shouldBe` ["hunter2!"]
 
     it "places the cursor using offsets measured against the masked text, not the real value" $ do
-      let attrs = [text "hunter2", displayFilter (T.map (const '*'))]
+      let attrs = [value "hunter2", displayFilter (T.map (const '*'))]
       result <- runInteractions testBounds (seedWith fixedCharWidth) (textInput Field attrs) [] [ClickAt (Point 35 50)]
       contextSelections Field (resultContext result) `shouldBe` [Selection 1 1]
 
   describe "onSubmit" $ do
     it "fires when Enter is pressed while focused" $ do
-      let attrs = [text "hello", onSubmit (const [OutMsg ("submitted" :: String)])]
+      let attrs = [value "hello", onSubmit (const [OutMsg ("submitted" :: String)])]
       result <- runInteractions testBounds seedCtx (textInput Field attrs) [] [PressKey KeyReturn []]
       resultMessages result `shouldBe` ["submitted"]
 
     it "does not fire when a different element is focused" $ do
-      let attrs = [text "hello", onSubmit (const [OutMsg ("submitted" :: String)])]
+      let attrs = [value "hello", onSubmit (const [OutMsg ("submitted" :: String)])]
       result <- runInteractions testBounds seedCtx (unfocused attrs) [] [PressKey KeyReturn []]
       resultMessages result `shouldBe` []

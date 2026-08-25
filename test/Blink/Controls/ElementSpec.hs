@@ -3,9 +3,10 @@ module Blink.Controls.ElementSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Element
-  ( ElementAttrs
-  , element, onClicked, onFocusGained, onFocusLost, onKeyPressed, onMouseDown, onMouseEntered, onMouseExited, onMouseUp
+import Blink.Controls.Core
+  ( Attr, ElementConfig
+  , defaultElementConfig, elementBase, onClicked, onFocusGained, onFocusLost, onKeyPressed
+  , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, resolve
   )
 import Blink.Controls.ElementBehaviour (elementBehaviourSpec)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
@@ -64,12 +65,18 @@ onA     = Point 10 50
 offBoth = Point 200 200
 onB     = Point 60 50
 
--- | Every raw event a reaction built on 'element' can raise, tagged with
--- @e@ and a plain label naming which one it was -- 'Blink.Controls.Element' has no
--- symbolic event type to tag with any more (each smart constructor reacts
--- to exactly one event, so this lists all eight rather than reacting
--- generically the way the old @onEvent@ escape hatch did).
-tagAll :: TestElement -> [ElementAttrs TestElement (TestElement, String)]
+-- | Runs 'elementBase' with @attrs@ resolved against 'defaultElementConfig',
+-- discarding the 'Blink.Controls.Core.ElementInteraction' it returns -- the
+-- render function every behaviour spec in this module drives.
+render :: Ord e => e -> [Attr (ElementConfig e msg)] -> UI e msg ()
+render eid attrs = () <$ elementBase eid (resolve defaultElementConfig attrs)
+
+-- | Every raw event a reaction built on 'elementBase' can raise, tagged
+-- with @e@ and a plain label naming which one it was -- "Blink.Controls.Core"
+-- has no symbolic event type to tag with (each smart constructor reacts to
+-- exactly one event, so this lists all eight rather than reacting
+-- generically the way an old @onEvent@ escape hatch once did).
+tagAll :: TestElement -> [Attr (ElementConfig TestElement (TestElement, String))]
 tagAll e =
   [ onMouseEntered (const [OutMsg (e, "MouseEntered")])
   , onMouseExited  (const [OutMsg (e, "MouseExited")])
@@ -85,8 +92,8 @@ tagAll e =
 -- tagged message naming which element raised which raw event.
 both :: UI TestElement (TestElement, String) ()
 both = do
-  withBounds rectA $ element ElemA (tagAll ElemA)
-  withBounds rectB $ element ElemB (tagAll ElemB)
+  withBounds rectA $ render ElemA (tagAll ElemA)
+  withBounds rectB $ render ElemB (tagAll ElemB)
 
 advance :: Ord e => InputState -> UIContext e msg -> UIContext e msg
 advance input ctx = nextFrameContext testBounds input (contextTheme ctx) (contextAnimation ctx) ctx
@@ -98,15 +105,15 @@ seedBothCtx :: UIContext TestElement (TestElement, String)
 seedBothCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
 spec :: Spec
-spec = describe "Blink.Controls.Element" $ do
-  elementBehaviourSpec testBounds seedCtx ElemA testBounds offBoth (element ElemA :: [ElementAttrs TestElement String] -> UI TestElement String ())
+spec = describe "Blink.Controls.Core.elementBase" $ do
+  elementBehaviourSpec testBounds seedCtx ElemA testBounds offBoth (render ElemA)
 
   describe "onKeyPressed" $
     it "reacts with the triggering KeyEvent" $ do
-      let attrs :: [ElementAttrs TestElement KeyEvent]
+      let attrs :: [Attr (ElementConfig TestElement KeyEvent)]
           attrs = [onKeyPressed (\k -> [OutMsg k])]
       ctx0 <- snd <$> runUI (setFocus ElemA) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
-      ctx  <- snd <$> runUI (element ElemA attrs) (advance (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0)
+      ctx  <- snd <$> runUI (render ElemA attrs) (advance (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0)
       getMessages ctx `shouldBe` [KeyEvent KeyReturn []]
 
   describe "cross-element interaction" $ do

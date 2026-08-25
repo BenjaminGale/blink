@@ -3,70 +3,72 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | A single-line text entry field: click-to-place cursor, drag selection,
 -- Shift+arrow extension, and selection-aware editing. Long text scrolls
--- horizontally to keep the cursor visible.
+-- horizontally to keep the cursor visible. A leaf, built directly on
+-- 'controlBase'. Its own value isn't a 'Blink.Controls.Labelled.LabelledConfig'
+-- field -- it's edited, not just displayed -- so it has its own 'value'
+-- attribute rather than "Blink.Controls.Labelled"'s 'Blink.Controls.Labelled.text'.
 module Blink.Controls.TextInput
-  ( TextInputAttributes
-  , TextInputConfig
-  , textInput
+  ( TextInputConfig (..)
+  , defaultTextInputConfig
   , textInputStyleKey
-  , text
+  , textInput
+  , value
   , inputFilter
   , displayFilter
   , onInput
   , onSubmit
-  , isFocusable
-  , isEnabled
-  , style
-  , StyleKey (..)
-  , onMouseEntered
-  , onMouseExited
-  , onMouseDown
-  , onMouseUp
-  , onClicked
-  , onKeyPressed
-  , onFocusGained
-  , onFocusLost
   ) where
 
 import Control.Monad (forM_, when)
-import Data.List (foldl')
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Blink.Controls.Control
+import Blink.Controls.Core
 import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..))
 import Blink.UI
 
--- | 'Blink.Controls.TextInput.textInput'\'s own closed attrs type: the common
--- capabilities every control has, plus 'text' (the field's current value),
--- 'inputFilter', 'displayFilter', 'onInput', and 'onSubmit'.
-data TextInputAttributes e msg
-  = TextInputCommon (ControlProperties e)
-  | TextInputEvent (ElementEvents e msg)
-  | TextInputText Text
-  | TextInputInputFilter (Text -> Text)
-  | TextInputDisplayFilter (Text -> Text)
-  | TextInputOnInput (Text -> [Out e msg])
-  | TextInputOnSubmit (EventHandler e msg)
+-- | Every capability 'textInput' resolves: the wrapped 'ControlConfig',
+-- its current value, 'inputFilter'\/'displayFilter', and its
+-- 'onInput'\/'onSubmit' reactions.
+data TextInputConfig e msg = TextInputConfig
+  { ticControl       :: ControlConfig e msg
+  , ticValue         :: Text
+  , ticInputFilter   :: Text -> Text
+  , ticDisplayFilter :: Text -> Text
+  , ticOnInput       :: [Text -> [Out e msg]]
+  , ticOnSubmit      :: [EventHandler e msg]
+  }
 
-instance HasControlConfig e (TextInputAttributes e msg) where
-  configureControlCapability = TextInputCommon
-  extractControlCapability (TextInputCommon c) = Just c
-  extractControlCapability _ = Nothing
+-- | The 'StyleKey' 'textInput' resolves its style from unless overridden
+-- via 'style'.
+textInputStyleKey :: StyleKey e
+textInputStyleKey = Class "textInput"
 
-instance HasElementEvents e msg (TextInputAttributes e msg) where
-  configureElementEvent = TextInputEvent
-  extractElementEvent (TextInputEvent c) = Just c
-  extractElementEvent _ = Nothing
+-- | 'defaultControlConfig' (styled via 'textInputStyleKey'), an empty
+-- value, identity filters, and no 'onInput'\/'onSubmit' reactions.
+defaultTextInputConfig :: TextInputConfig e msg
+defaultTextInputConfig = TextInputConfig
+  { ticControl       = defaultControlConfig { ccStyleKey = textInputStyleKey }
+  , ticValue         = ""
+  , ticInputFilter   = id
+  , ticDisplayFilter = id
+  , ticOnInput       = []
+  , ticOnSubmit      = []
+  }
 
-instance HasTextConfig (TextInputAttributes e msg) where
-  configureText = TextInputText
-  extractText (TextInputText t) = Just t
-  extractText _ = Nothing
+instance HasElementConfig e msg (TextInputConfig e msg) where
+  overElement attr = Attr (\tc -> tc { ticControl = runAttr (overElement attr) (ticControl tc) })
+
+instance HasControlConfig e msg (TextInputConfig e msg) where
+  overControl attr = Attr (\tc -> tc { ticControl = runAttr attr (ticControl tc) })
+
+-- | Sets the field's current value. Defaults to @\"\"@ when not given.
+value :: Text -> Attr (TextInputConfig e msg)
+value t = Attr (\tc -> tc { ticValue = t })
 
 -- | Applied to newly typed text before it's inserted, letting callers
 -- restrict which keystrokes are accepted (e.g. @T.filter isDigit@ for a
@@ -74,8 +76,8 @@ instance HasTextConfig (TextInputAttributes e msg) where
 -- punctuation as the user types) is an application concern, not this
 -- control's -- do it in an 'onInput' handler and pass the already-formatted
 -- value back in on the next frame. Defaults to 'id'.
-inputFilter :: (Text -> Text) -> TextInputAttributes e msg
-inputFilter = TextInputInputFilter
+inputFilter :: (Text -> Text) -> Attr (TextInputConfig e msg)
+inputFilter f = Attr (\tc -> tc { ticInputFilter = f })
 
 -- | Applied to the value everywhere it is measured or drawn -- the rendered
 -- text, and every character-offset calculation used for cursor placement,
@@ -84,53 +86,16 @@ inputFilter = TextInputInputFilter
 -- (e.g. @T.map (const '\8226')@ to mask each character of a password); the
 -- underlying value edited by 'inputFilter'\/'onInput' is never affected by
 -- it. Defaults to 'id'.
-displayFilter :: (Text -> Text) -> TextInputAttributes e msg
-displayFilter = TextInputDisplayFilter
+displayFilter :: (Text -> Text) -> Attr (TextInputConfig e msg)
+displayFilter f = Attr (\tc -> tc { ticDisplayFilter = f })
 
 -- | Reacts with the new value whenever a keystroke changes it.
-onInput :: (Text -> [Out e msg]) -> TextInputAttributes e msg
-onInput = TextInputOnInput
+onInput :: (Text -> [Out e msg]) -> Attr (TextInputConfig e msg)
+onInput f = Attr (\tc -> tc { ticOnInput = ticOnInput tc ++ [f] })
 
 -- | Reacts when Enter is pressed while the field is focused and enabled.
-onSubmit :: (EventHandler e msg) -> TextInputAttributes e msg
-onSubmit = TextInputOnSubmit
-
--- | Configuration for 'textInput', resolved from a
--- @['TextInputAttributes' e msg]@.
-data TextInputConfig e msg = TextInputConfig
-  { ticfgValue         :: Text
-  , ticfgInputFilter   :: Text -> Text
-  , ticfgDisplayFilter :: Text -> Text
-  , ticfgOnInput       :: [Text -> [Out e msg]]
-  , ticfgOnSubmit      :: [EventHandler e msg]
-  }
-
--- | The 'StyleKey' 'textInput' resolves its style from unless overridden
--- via 'style'.
-textInputStyleKey :: StyleKey e
-textInputStyleKey = Class "textInput"
-
-defaultTextInputConfig :: TextInputConfig e msg
-defaultTextInputConfig = TextInputConfig
-  { ticfgValue = "", ticfgInputFilter = id, ticfgDisplayFilter = id, ticfgOnInput = [], ticfgOnSubmit = [] }
-
-resolveTextInputConfig :: [TextInputAttributes e msg] -> TextInputConfig e msg
-resolveTextInputConfig = foldl' apply defaultTextInputConfig
-  where
-    apply cfg (TextInputText t)           = cfg { ticfgValue = t }
-    apply cfg (TextInputInputFilter f)    = cfg { ticfgInputFilter = f }
-    apply cfg (TextInputDisplayFilter f)  = cfg { ticfgDisplayFilter = f }
-    apply cfg (TextInputOnInput f)        = cfg { ticfgOnInput = ticfgOnInput cfg ++ [f] }
-    apply cfg (TextInputOnSubmit f)       = cfg { ticfgOnSubmit = ticfgOnSubmit cfg ++ [f] }
-    apply cfg _                           = cfg
-
-toTextInputControlAttr :: TextInputAttributes e msg -> Maybe (ControlAttrs e msg)
-toTextInputControlAttr (TextInputText _)          = Nothing
-toTextInputControlAttr (TextInputInputFilter _)   = Nothing
-toTextInputControlAttr (TextInputDisplayFilter _) = Nothing
-toTextInputControlAttr (TextInputOnInput _)       = Nothing
-toTextInputControlAttr (TextInputOnSubmit _)      = Nothing
-toTextInputControlAttr a                          = translateCommon a
+onSubmit :: EventHandler e msg -> Attr (TextInputConfig e msg)
+onSubmit f = Attr (\tc -> tc { ticOnSubmit = ticOnSubmit tc ++ [f] })
 
 -- | Click sets both selection ends at the clicked character; dragging
 -- extends only the active end, keeping the anchor from before the drag
@@ -271,16 +236,19 @@ drawTextInputContent s bounds displayValue canEdit ox sel@(Selection _ active) =
 -- position and selection are control state, not application data --
 -- 'textInput' reads and writes them itself via 'getSelection' and
 -- 'getScrollState', keyed by the element ID.
-textInput :: Ord e => e -> [TextInputAttributes e msg] -> UI e msg ()
+textInput :: Ord e => e -> [Attr (TextInputConfig e msg)] -> UI e msg ()
 textInput eid attrs = do
   wasFocused   <- isFocused eid
   wasCapturing <- isDragging eid
-  control eid (style textInputStyleKey : mapMaybe toTextInputControlAttr attrs ++ [focusOnClick FocusSelf, content (body wasFocused wasCapturing)])
+  let cfg  = resolve defaultTextInputConfig attrs
+      ctrl = (ticControl cfg)
+        { ccFocusOnClick = FocusSelf
+        , ccContent      = body cfg wasFocused wasCapturing
+        }
+  () <$ controlBase eid ctrl
   where
-    cfg          = resolveTextInputConfig attrs
-    currentValue = ticfgValue cfg
-
-    body wasFocused wasCapturing = do
+    body cfg wasFocused wasCapturing = do
+      let currentValue = ticValue cfg
       s        <- currentStyle
       hasFocus <- isFocused eid
       disabled <- isDisabled
@@ -289,7 +257,7 @@ textInput eid attrs = do
       sel      <- getSelection eid
       frac     <- getScrollState eid
 
-      let displayValue = ticfgDisplayFilter cfg currentValue
+      let displayValue = ticDisplayFilter cfg currentValue
           w           = rectWidth bounds
           selInit     = fromMaybe (cursor (T.length currentValue)) sel
           -- Focus was gained by a click this frame (e.g. clicking from
@@ -310,13 +278,13 @@ textInput eid attrs = do
       let selAfterKeys = resolveKeyboardSelection canEdit (inputKeyEvents input) (T.length currentValue) selAfterMouse
 
           (selFinal, edited)
-            | canEdit   = applyEdit (ticfgInputFilter cfg) currentValue input selAfterKeys
+            | canEdit   = applyEdit (ticInputFilter cfg) currentValue input selAfterKeys
             | otherwise = (selAfterKeys, Nothing)
 
           submitted = canEdit && any (\e -> key e == KeyReturn) (inputKeyEvents input)
 
-      when submitted $ runHandlers (ticfgOnSubmit cfg) ()
-      forM_ edited $ \t -> runHandlers (ticfgOnInput cfg) t
+      when submitted $ runHandlers (ticOnSubmit cfg) ()
+      forM_ edited $ \t -> runHandlers (ticOnInput cfg) t
 
       when canEdit $ emitUi (SetSelectionAt eid selFinal)
 

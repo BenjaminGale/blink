@@ -1,14 +1,15 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | The shared focus\/hit-region contract every 'Blink.Controls.Control.control'-based
+-- | The shared focus\/hit-region contract every 'Blink.Controls.Core.controlBase'-based
 -- control must satisfy, on top of the raw-event contract every element
 -- already satisfies (see 'Blink.Controls.ElementBehaviour.elementBehaviourSpec').
--- 'Blink.ControlSpec' runs this against 'Blink.Controls.Control.control' directly;
--- any widget built on top reuses it to confirm the same focus\/hit-region
--- behaviour still holds through its own attrs type -- a widget whose focus
--- behaviour genuinely differs (e.g. 'Blink.Controls.Label.label' never auto-claiming
--- or taking focus on a plain click) passes a 'ControlBehaviourConfig'
--- reflecting that, rather than skipping this contract altogether.
+-- 'Blink.Controls.ControlSpec' runs this against 'Blink.Controls.Core.controlBase'
+-- directly; any widget built on top reuses it to confirm the same
+-- focus\/hit-region behaviour still holds through its own config type -- a
+-- widget whose focus behaviour genuinely differs (e.g.
+-- 'Blink.Controls.Label.label' never auto-claiming or taking focus on a
+-- plain click) passes a 'ControlBehaviourConfig' reflecting that, rather
+-- than skipping this contract altogether.
 module Blink.Controls.ControlBehaviour
   ( ControlBehaviourConfig (..)
   , defaultControlBehaviourConfig
@@ -19,8 +20,7 @@ import Control.Monad (when)
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Controls.Control (HasControlConfig, isEnabled, isFocusable)
-import Blink.Controls.Element (HasElementEvents)
+import Blink.Controls.Core (Attr, HasControlConfig, HasElementConfig, isEnabled, isFocusable)
 import Blink.Controls.ElementBehaviour (elementBehaviourSpec, tagged)
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)
@@ -51,7 +51,7 @@ defaultControlBehaviourConfig = ControlBehaviourConfig { cbcAutoClaims = True, c
 -- one at random from @insideRect@ on each run -- see
 -- 'Blink.Controls.ElementBehaviour.elementBehaviourSpec'.
 controlBehaviourSpec
-  :: (Ord e, Show e, HasControlConfig e cfg, HasElementEvents e String cfg)
+  :: (Ord e, Show e, HasControlConfig e String cfg, HasElementConfig e String cfg)
   => ControlBehaviourConfig                      -- ^ how this control's focus behaviour deviates, if at all
   -> Rectangle                                   -- ^ bounds the control renders at
   -> UIContext e String                          -- ^ starting context (theme\/measurer already set up)
@@ -59,7 +59,7 @@ controlBehaviourSpec
   -> Point                                         -- ^ a point inside its margin (not part of its hit area)
   -> Rectangle                                     -- ^ the region making up its margin-inset hit area
   -> Point                                         -- ^ a point outside its bounds entirely
-  -> ([cfg] -> UI e String ())                     -- ^ render the control under test with these attrs
+  -> ([Attr cfg] -> UI e String ())                -- ^ render the control under test with these attrs
   -> Spec
 controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint render = do
   -- A control auto-claims focus the moment nothing else holds it, which

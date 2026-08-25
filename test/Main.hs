@@ -7,7 +7,6 @@ import qualified Blink.Controls.CheckboxSpec as Checkbox
 import qualified Blink.Controls.ControlSpec as Control
 import qualified Blink.Controls.ElementSpec as Element
 import qualified Blink.Controls.LabelSpec as Label
-import qualified Blink.Controls.LabelledControlSpec as LabelledControl
 import qualified Blink.Controls.ProgressBarSpec as ProgressBar
 import qualified Blink.Controls.RadioButtonSpec as RadioButton
 import qualified Blink.Controls.TextInputSpec as TextInput
@@ -29,7 +28,6 @@ main = hspec $ do
   Element.spec
   Control.spec
   Label.spec
-  LabelledControl.spec
   Button.spec
   Checkbox.spec
   ProgressBar.spec
