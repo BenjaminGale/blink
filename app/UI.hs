@@ -116,18 +116,24 @@ rowEditing s =
 
 rowButtons :: AppState -> DemoUI ()
 rowButtons s =
-  hBox [boxSpacing 8]
-    [ (Layout (Exactly 100) Fill TopLeft, button ClickButton [text "Click me", onActivated (post AddClick)])
-    , (Layout (Exactly 100) Fill TopLeft, button ResetButton [text "Reset", onActivated (post ResetClicks)])
-    , (Layout Fill Fill MiddleLeft, caption ("Clicks: " <> T.pack (show (clickCount s))))
+  hBox
+    [ boxSpacing 8
+    , children
+        [ (Layout (Exactly 100) Fill TopLeft, button ClickButton [text "Click me", onActivated (post AddClick)])
+        , (Layout (Exactly 100) Fill TopLeft, button ResetButton [text "Reset", onActivated (post ResetClicks)])
+        , (Layout Fill Fill MiddleLeft, caption ("Clicks: " <> T.pack (show (clickCount s))))
+        ]
     ]
 
 rowToggle :: AppState -> DemoUI ()
 rowToggle s =
-  hBox [boxSpacing 8]
-    [ (Layout (Exactly 160) Fill TopLeft,
-         toggleButton ToggleCtl [text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle)])
-    , (Layout Fill Fill MiddleLeft, caption (if toggleOn s then "On" else "Off"))
+  hBox
+    [ boxSpacing 8
+    , children
+        [ (Layout (Exactly 160) Fill TopLeft,
+             toggleButton ToggleCtl [text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle)])
+        , (Layout Fill Fill MiddleLeft, caption (if toggleOn s then "On" else "Off"))
+        ]
     ]
 
 radioOptions :: [Text]
@@ -135,9 +141,12 @@ radioOptions = ["Small", "Medium", "Large"]
 
 rowRadio :: AppState -> DemoUI ()
 rowRadio s =
-  hBox [boxSpacing 16]
-    [ (Layout (Exactly 100) Fill MiddleLeft, radioOption i opt)
-    | (i, opt) <- zip [0 ..] radioOptions
+  hBox
+    [ boxSpacing 16
+    , children
+        [ (Layout (Exactly 100) Fill MiddleLeft, radioOption i opt)
+        | (i, opt) <- zip [0 ..] radioOptions
+        ]
     ]
   where
     radioOption i opt =
@@ -146,19 +155,25 @@ rowRadio s =
 
 rowTextInput :: AppState -> DemoUI ()
 rowTextInput s =
-  hBox [boxSpacing 8, boxAlignment Center]
-    [ (Layout (Exactly 120) Fill MiddleLeft, caption "Text input")
-    , (Layout Fill Fill TopLeft,
-         textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText)])
+  hBox
+    [ boxSpacing 8, boxAlignment Center
+    , children
+        [ (Layout (Exactly 120) Fill MiddleLeft, caption "Text input")
+        , (Layout Fill Fill TopLeft,
+             textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText)])
+        ]
     ]
 
 rowPasswordInput :: AppState -> DemoUI ()
 rowPasswordInput s =
-  hBox [boxSpacing 8, boxAlignment Center]
-    [ (Layout (Exactly 120) Fill MiddleLeft, caption "Password input")
-    , (Layout Fill Fill TopLeft,
-         textInput PasswordInputCtl
-           [value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)])
+  hBox
+    [ boxSpacing 8, boxAlignment Center
+    , children
+        [ (Layout (Exactly 120) Fill MiddleLeft, caption "Password input")
+        , (Layout Fill Fill TopLeft,
+             textInput PasswordInputCtl
+               [value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)])
+        ]
     ]
 
 rowAnimate :: AppState -> DemoUI ()
@@ -188,12 +203,15 @@ footer s (winW, winH) = do
                       else ""
       keyText    = "Last Key Press: "
                 <> if T.null (lastInput s) then "none" else lastInput s <> countSuffix
-  hBox [boxSpacing 24, boxMargin 4, boxAlignment Center]
-    [ (Layout (Exactly 160) Fill MiddleLeft, caption winText)
-    , (Layout (Exactly 160) Fill MiddleLeft, caption mouseText)
-    , (Layout (Exactly 160) Fill MiddleLeft, caption buttonText)
-    , (Layout (Exactly 100) Fill MiddleLeft, caption hoverText)
-    , (Layout Fill          Fill MiddleLeft, caption keyText)
+  hBox
+    [ boxSpacing 24, boxMargin 4, boxAlignment Center
+    , children
+        [ (Layout (Exactly 160) Fill MiddleLeft, caption winText)
+        , (Layout (Exactly 160) Fill MiddleLeft, caption mouseText)
+        , (Layout (Exactly 160) Fill MiddleLeft, caption buttonText)
+        , (Layout (Exactly 100) Fill MiddleLeft, caption hoverText)
+        , (Layout Fill          Fill MiddleLeft, caption keyText)
+        ]
     ]
 
 -- Top-level view
@@ -204,10 +222,7 @@ demoView s = do
   win   <- getBounds
   let winSize = (round (rectWidth win) :: Int, round (rectHeight win) :: Int)
   when (darkMode s) $ fillRect (RGBA 0.082 0.102 0.129 1)
-  borderLayout emptyBorderContent
-    { centrePanel = Just (mainList s)
-    , bottomPanel = Just (36, footer s winSize)
-    }
+  borderLayout [centrePanel (mainList s), bottomPanel 36 (footer s winSize)]
   anyHov <- isAnyMouseOver
   let typed   = T.concat (inputTypedText input)
       keyName = case inputKeyEvents input of
@@ -220,15 +235,18 @@ demoView s = do
 
 mainList :: AppState -> DemoUI ()
 mainList s =
-  vBox [boxSpacing 8, boxMargin 12]
-    [ (Layout Fill (Exactly 24) TopLeft, caption "Blink controls demo")
-    , (Layout Fill rowHeight    TopLeft, rowDarkMode s)
-    , (Layout Fill rowHeight    TopLeft, rowEditing s)
-    , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowButtons s))
-    , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowToggle s))
-    , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowRadio s))
-    , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowTextInput s))
-    , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowPasswordInput s))
-    , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowAnimate s))
-    , (Layout Fill rowHeight    TopLeft, rowProgress s)
+  vBox
+    [ boxSpacing 8, boxMargin 12
+    , children
+        [ (Layout Fill (Exactly 24) TopLeft, caption "Blink controls demo")
+        , (Layout Fill rowHeight    TopLeft, rowDarkMode s)
+        , (Layout Fill rowHeight    TopLeft, rowEditing s)
+        , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowButtons s))
+        , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowToggle s))
+        , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowRadio s))
+        , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowTextInput s))
+        , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowPasswordInput s))
+        , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowAnimate s))
+        , (Layout Fill rowHeight    TopLeft, rowProgress s)
+        ]
     ]

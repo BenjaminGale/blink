@@ -65,17 +65,17 @@ runLayout bounds ui = do
 
 -- hBox / vBox helpers
 
-cfg :: [Attribute BoxConfig]
+cfg :: [Attribute (BoxConfig () ())]
 cfg = []
 
 margin :: Gen Double
 margin = fromIntegral <$> (choose (0, 49) :: Gen Int)
 
-runHBox :: Rectangle -> [Attribute BoxConfig] -> [Layout] -> IO [Rectangle]
-runHBox bounds c rcs = runLayout bounds $ hBox c [(r, fill) | r <- rcs]
+runHBox :: Rectangle -> [Attribute (BoxConfig () ())] -> [Layout] -> IO [Rectangle]
+runHBox bounds c rcs = runLayout bounds $ hBox (c ++ [children [(r, fill) | r <- rcs]])
 
-runVBox :: Rectangle -> [Attribute BoxConfig] -> [Layout] -> IO [Rectangle]
-runVBox bounds c rcs = runLayout bounds $ vBox c [(r, fill) | r <- rcs]
+runVBox :: Rectangle -> [Attribute (BoxConfig () ())] -> [Layout] -> IO [Rectangle]
+runVBox bounds c rcs = runLayout bounds $ vBox (c ++ [children [(r, fill) | r <- rcs]])
 
 rc :: Length -> Length -> Alignment -> Layout
 rc = Layout
@@ -324,47 +324,44 @@ spec = describe "layout" $ do
   describe "borderLayout" $ do
     let bounds = Rectangle 0 0 300 200
 
-    let runBorder bc = runLayout bounds (borderLayout bc)
+    let runBorder attrs = runLayout bounds (borderLayout attrs)
 
     it "produces no output when all panels are absent" $ do
-      result <- runBorder emptyBorderContent
+      result <- runBorder []
       result `shouldBe` []
 
     it "top panel occupies the full width at the top" $ do
-      result <- runBorder emptyBorderContent { topPanel = Just (30, fill) }
+      result <- runBorder [topPanel 30 fill]
       result `shouldBe` [Rectangle 0 0 300 30]
 
     it "bottom panel occupies the full width at its fixed height" $ do
-      result <- runBorder emptyBorderContent { bottomPanel = Just (20, fill) }
+      result <- runBorder [bottomPanel 20 fill]
       result `shouldBe` [Rectangle 0 0 300 20]
 
     it "left panel occupies the full height on the left" $ do
-      result <- runBorder emptyBorderContent { leftPanel = Just (50, fill) }
+      result <- runBorder [leftPanel 50 fill]
       result `shouldBe` [Rectangle 0 0 50 200]
 
     it "right panel occupies the full height at its fixed width" $ do
-      result <- runBorder emptyBorderContent { rightPanel = Just (40, fill) }
+      result <- runBorder [rightPanel 40 fill]
       result `shouldBe` [Rectangle 0 0 40 200]
 
     it "centre panel fills all available space when alone" $ do
-      result <- runBorder emptyBorderContent { centrePanel = Just fill }
+      result <- runBorder [centrePanel fill]
       result `shouldBe` [Rectangle 0 0 300 200]
 
     it "top and bottom panels stack when no middle content is present" $ do
-      result <- runBorder emptyBorderContent
-        { topPanel    = Just (30, fill)
-        , bottomPanel = Just (20, fill)
-        }
+      result <- runBorder [topPanel 30 fill, bottomPanel 20 fill]
       result `shouldBe` [Rectangle 0 0 300 30, Rectangle 0 30 300 20]
 
     it "all five panels occupy their correct regions" $ do
-      result <- runBorder BorderContent
-        { topPanel    = Just (30, fill)
-        , bottomPanel = Just (20, fill)
-        , leftPanel   = Just (50, fill)
-        , rightPanel  = Just (40, fill)
-        , centrePanel = Just fill
-        }
+      result <- runBorder
+        [ topPanel 30 fill
+        , bottomPanel 20 fill
+        , leftPanel 50 fill
+        , rightPanel 40 fill
+        , centrePanel fill
+        ]
       result `shouldBe`
         [ Rectangle 0   0   300  30   -- top
         , Rectangle 0   30  50   150  -- left

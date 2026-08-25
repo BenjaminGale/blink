@@ -32,11 +32,17 @@ module Blink.Layout
   , boxMargin
   , boxAlignment
   , boxFillCross
+  , children
   , boxTotalSpacing
     -- * Border layout
   , borderLayout
-  , BorderContent (..)
+  , BorderContent
   , emptyBorderContent
+  , topPanel
+  , bottomPanel
+  , leftPanel
+  , rightPanel
+  , centrePanel
     -- * Utilities
   , preferredSize
   , AddLength (..)
@@ -74,12 +80,12 @@ module Blink.Layout
     --   contextual state = do
     --     bounds <- getBounds
     --     if appCompactMode state || rectWidth bounds < 600
-    --       then vBox [] [ (Layout Fill (Exactly 200) TopLeft, sidebar)
-    --                     , (Layout Fill Fill        TopLeft, content)
-    --                     ]
-    --       else hBox [] [ (Layout (Exactly 200) Fill TopLeft, sidebar)
-    --                     , (Layout Fill         Fill TopLeft, content)
-    --                     ]
+    --       then vBox [children [ (Layout Fill (Exactly 200) TopLeft, sidebar)
+    --                            , (Layout Fill Fill        TopLeft, content)
+    --                            ]]
+    --       else hBox [children [ (Layout (Exactly 200) Fill TopLeft, sidebar)
+    --                            , (Layout Fill         Fill TopLeft, content)
+    --                            ]]
     --   @
     --
     --   Both branches use ordinary 'hBox'\/'vBox' — only the choice of
@@ -101,10 +107,11 @@ module Blink.Layout
     --   @
     --   -- A sidebar that shrinks with the window but never drops below a
     --   -- readable width, alongside content that takes whatever is left.
-    --   hBox []
-    --     [ (Layout (AtLeast 180) Fill TopLeft, sidebar)
-    --     , (Layout Fill          Fill TopLeft, content)
-    --     ]
+    --   hBox
+    --     [children
+    --       [ (Layout (AtLeast 180) Fill TopLeft, sidebar)
+    --       , (Layout Fill          Fill TopLeft, content)
+    --       ]]
     --   @
     --
     --   An exact constraint can be computed the same way, rather than
@@ -119,10 +126,11 @@ module Blink.Layout
     --   labelledRow :: Text -> UI Element msg () -> UI Element msg ()
     --   labelledRow caption content = do
     --     Size textW _ <- measureText caption
-    --     hBox []
-    --       [ (Layout (Exactly (realToFrac textW)) Fill MiddleLeft, label Label [text caption])
-    --       , (Layout Fill                         Fill TopLeft,    content)
-    --       ]
+    --     hBox
+    --       [children
+    --         [ (Layout (Exactly (realToFrac textW)) Fill MiddleLeft, label Label [text caption])
+    --         , (Layout Fill                         Fill TopLeft,    content)
+    --         ]]
     --   @
     --
     --   The same pattern extends to a row of controls that must each be
@@ -131,8 +139,9 @@ module Blink.Layout
     --   of a fixed 'Layout' for every slot.
   ) where
 
-import Blink.Layout.Border (BorderContent (..), borderLayout, emptyBorderContent)
+import Blink.Layout.Border
+  (BorderContent, borderLayout, bottomPanel, centrePanel, emptyBorderContent, leftPanel, rightPanel, topPanel)
 import Blink.Layout.Box
-  (BoxConfig, boxAlignment, boxFillCross, boxMargin, boxSpacing, boxTotalSpacing, defaultBoxConfig, hBox, vBox)
+  (BoxConfig, boxAlignment, boxFillCross, boxMargin, boxSpacing, boxTotalSpacing, children, defaultBoxConfig, hBox, vBox)
 import Blink.Layout.Core
   (AddLength (..), Layout (..), Length (..), MaxLength (..), addLength, layoutWithConstraints, maxLength, preferredSize)

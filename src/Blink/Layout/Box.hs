@@ -9,6 +9,7 @@ module Blink.Layout.Box
   , boxMargin
   , boxAlignment
   , boxFillCross
+  , children
   , boxTotalSpacing
   ) where
 
@@ -23,38 +24,44 @@ import Blink.Layout.Core (Layout (..), Length (..), layoutWithConstraints)
 import Blink.UI (UI, clipToCurrent, getBounds, withBounds)
 
 -- | Every capability 'hBox'\/'vBox' resolve: spacing, margin, alignment of
--- the content block, and whether children stretch to fill the cross axis.
-data BoxConfig = BoxConfig
+-- the content block, whether children stretch to fill the cross axis, and
+-- the children themselves (see 'children').
+data BoxConfig e msg = BoxConfig
   { bxSpacing    :: Double
   , bxMargin     :: Double
   , bxAlignment  :: Alignment
   , bxFillCross  :: Bool
+  , bxChildren   :: [(Layout, UI e msg ())]
   }
 
--- | No spacing, no margin, 'TopLeft' alignment, and cross-axis fill
--- enabled. Override only the attributes you need:
+-- | No spacing, no margin, 'TopLeft' alignment, cross-axis fill enabled,
+-- and no children. Override only the attributes you need:
 --
 -- @
--- hBox [boxSpacing 8, boxMargin 4]
---   [ (Layout (Exactly 80) Fill TopLeft, sidebar)
---   , (Layout Fill         Fill TopLeft, content)
+-- hBox
+--   [ boxSpacing 8, boxMargin 4
+--   , children
+--       [ (Layout (Exactly 80) Fill TopLeft, sidebar)
+--       , (Layout Fill         Fill TopLeft, content)
+--       ]
 --   ]
 -- @
-defaultBoxConfig :: BoxConfig
+defaultBoxConfig :: BoxConfig e msg
 defaultBoxConfig = BoxConfig
   { bxSpacing   = 0
   , bxMargin    = 0
   , bxAlignment = TopLeft
   , bxFillCross = True
+  , bxChildren  = []
   }
 
 -- | Gap in pixels between consecutive children on the main axis. Defaults to @0@.
-boxSpacing :: Double -> Attribute BoxConfig
+boxSpacing :: Double -> Attribute (BoxConfig e msg)
 boxSpacing v = Attribute (\c -> c { bxSpacing = v })
 
 -- | Uniform inset applied to all four sides of the panel before layout.
 -- Defaults to @0@.
-boxMargin :: Double -> Attribute BoxConfig
+boxMargin :: Double -> Attribute (BoxConfig e msg)
 boxMargin v = Attribute (\c -> c { bxMargin = v })
 
 -- | Positions the content block within the content area on the main axis.
@@ -92,13 +99,20 @@ boxMargin v = Attribute (\c -> c { bxMargin = v })
 -- >  |                  <-- children (too wide) |
 -- >  +------------------------------------------+
 -- >  BottomRight: the right edge is anchored, left side clips
-boxAlignment :: Alignment -> Attribute BoxConfig
+boxAlignment :: Alignment -> Attribute (BoxConfig e msg)
 boxAlignment v = Attribute (\c -> c { bxAlignment = v })
 
 -- | Whether children stretch to fill the full cross-axis extent. Defaults
 -- to 'True'.
-boxFillCross :: Bool -> Attribute BoxConfig
+boxFillCross :: Bool -> Attribute (BoxConfig e msg)
 boxFillCross v = Attribute (\c -> c { bxFillCross = v })
+
+-- | The children to arrange, each paired with the 'Layout' governing its
+-- size and alignment within its slot (see 'hBox'\/'vBox'). Defaults to
+-- @[]@; a later 'children' attribute replaces an earlier one rather than
+-- adding to it, the same as every other attribute here.
+children :: [(Layout, UI e msg ())] -> Attribute (BoxConfig e msg)
+children cs = Attribute (\c -> c { bxChildren = cs })
 
 -- | Total space consumed by all gaps between @n@ children -- the sum of
 --   @(n - 1)@ spacings.
@@ -107,7 +121,7 @@ boxFillCross v = Attribute (\c -> c { bxFillCross = v })
 -- 16.0
 -- >>> boxTotalSpacing (resolve defaultBoxConfig [boxSpacing 8]) 1
 -- 0.0
-boxTotalSpacing :: BoxConfig -> Int -> Double
+boxTotalSpacing :: BoxConfig e msg -> Int -> Double
 boxTotalSpacing cfg n = bxSpacing cfg * fromIntegral (max 0 (n - 1))
 
 -- | Abstracts over the two layout orientations so that 'box' can be written
@@ -152,10 +166,10 @@ vertical = Axis
   , fillCross      = \rc -> rc { layoutWidth = Fill }
   }
 
--- | Arranges children left-to-right. Each child is paired with a 'Layout'
---   governing its width and, when 'boxFillCross' is 'False', its height and
---   vertical alignment. If a margin is set, children are laid out within
---   that inset.
+-- | Arranges children left-to-right. Each child (see 'children') carries a
+--   'Layout' governing its width and, when 'boxFillCross' is 'False', its
+--   height and vertical alignment. If a margin is set, children are laid
+--   out within that inset.
 --
 --   The axis along which children are stacked (here, horizontal) is called
 --   the /main axis/, and the perpendicular axis is the /cross axis/. 'vBox'
@@ -189,10 +203,13 @@ vertical = Axis
 --     is only cut off once it reaches the edge of the panel itself.
 --
 -- @
--- hBox [boxSpacing 4]
---   [ (Layout (Exactly 80) Fill TopLeft, button Btn1 [text "Back"])
---   , (Layout Fill         Fill TopLeft, button Btn2 [text "Title"])
---   , (Layout (Exactly 80) Fill TopLeft, button Btn3 [text "Next"])
+-- hBox
+--   [ boxSpacing 4
+--   , children
+--       [ (Layout (Exactly 80) Fill TopLeft, button Btn1 [text "Back"])
+--       , (Layout Fill         Fill TopLeft, button Btn2 [text "Title"])
+--       , (Layout (Exactly 80) Fill TopLeft, button Btn3 [text "Next"])
+--       ]
 --   ]
 -- @
 --
@@ -215,19 +232,22 @@ vertical = Axis
 -- >  +------------+--------------+------------+
 -- >  |                                        |
 -- >  +----------------------------------------+
-hBox :: [Attribute BoxConfig] -> [(Layout, UI e msg ())] -> UI e msg ()
+hBox :: [Attribute (BoxConfig e msg)] -> UI e msg ()
 hBox attrs = box horizontal (resolve defaultBoxConfig attrs)
 
--- | Arranges children top-to-bottom. Each child is paired with a 'Layout'
---   governing its height and, when 'boxFillCross' is 'False', its width and
---   horizontal alignment. Uses the same algorithm as 'hBox' with the axes
---   swapped. See its documentation for the full behaviour.
+-- | Arranges children top-to-bottom. Each child (see 'children') carries a
+--   'Layout' governing its height and, when 'boxFillCross' is 'False', its
+--   width and horizontal alignment. Uses the same algorithm as 'hBox' with
+--   the axes swapped. See its documentation for the full behaviour.
 --
 -- @
--- vBox [boxSpacing 1]
---   [ (Layout Fill (Exactly 3) TopLeft, header)
---   , (Layout Fill Fill        TopLeft, body)
---   , (Layout Fill (Exactly 3) TopLeft, footer)
+-- vBox
+--   [ boxSpacing 1
+--   , children
+--       [ (Layout Fill (Exactly 3) TopLeft, header)
+--       , (Layout Fill Fill        TopLeft, body)
+--       , (Layout Fill (Exactly 3) TopLeft, footer)
+--       ]
 --   ]
 -- @
 --
@@ -243,16 +263,17 @@ hBox attrs = box horizontal (resolve defaultBoxConfig attrs)
 -- >  +------------------------------------------+
 -- >  |           Footer (Exactly 3px)           |
 -- >  +------------------------------------------+
-vBox :: [Attribute BoxConfig] -> [(Layout, UI e msg ())] -> UI e msg ()
+vBox :: [Attribute (BoxConfig e msg)] -> UI e msg ()
 vBox attrs = box vertical (resolve defaultBoxConfig attrs)
 
-box :: Axis -> BoxConfig -> [(Layout, UI e msg ())] -> UI e msg ()
-box ax cfg children = do
+box :: Axis -> BoxConfig e msg -> UI e msg ()
+box ax cfg = do
   r <- getBounds
-  let contentArea  = insetRect (uniform (bxMargin cfg)) r
-      totalSpacing = boxTotalSpacing cfg (length children)
+  let kids         = bxChildren cfg
+      contentArea  = insetRect (uniform (bxMargin cfg)) r
+      totalSpacing = boxTotalSpacing cfg (length kids)
       availSpace   = mainLength ax contentArea - totalSpacing
-      slotSizes    = preferredSizes availSpace (map (mainConstraint ax . fst) children)
+      slotSizes    = preferredSizes availSpace (map (mainConstraint ax . fst) kids)
       crossOrig    = crossOrigin ax contentArea
       crossLen     = crossLength ax contentArea
       contentBlock = alignRect (bxAlignment cfg) contentArea
@@ -265,7 +286,7 @@ box ax cfg children = do
           let slotRect    = makeSlot ax slotOrigin crossOrig slotSize crossLen
               effectiveRc = if bxFillCross cfg then fillCross ax rc else rc
           in withBounds slotRect $ layoutWithConstraints effectiveRc ui)
-        slotOrigins slotSizes children
+        slotOrigins slotSizes kids
 
 preferredSizes :: Double -> [Length] -> [Double]
 preferredSizes available constraints =
