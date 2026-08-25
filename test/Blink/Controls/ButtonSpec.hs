@@ -7,7 +7,7 @@ import Test.Hspec
 import Blink.Controls.Button (ButtonConfig, ToggleConfig, button, isSelected, toggleButton)
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec)
 import Blink.Controls.Element (Attr)
-import Blink.Controls.Labelled (text)
+import Blink.Controls.Label (text)
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))

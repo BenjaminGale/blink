@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | The upper of the two building-block layers every widget in
 -- "Blink.Controls" is built from -- see "Blink.Controls.Element" for the
@@ -52,7 +51,7 @@ module Blink.Controls.Control
   , StyleKey (..)
   ) where
 
-import Control.Monad (forM_, guard, when)
+import Control.Monad (forM_, guard, void, when)
 import Data.Foldable (asum)
 import Data.Functor (($>))
 import Data.List (find)
@@ -289,7 +288,7 @@ controlBase eid cc = disableWhen (not (ccIsEnabled cc)) $ do
     -- redefined them).
     applyNavigationKeys wasFocused = do
       keys <- getNavigationKeys
-      () <$ advanceOrRetreat wasFocused (navAdvance keys) (navRetreat keys)
+      void (advanceOrRetreat wasFocused (navAdvance keys) (navRetreat keys))
 
     -- A click hands focus to whichever element FocusOnClick names, taking
     -- effect one frame later (see 'elementBase's own deferred detection via

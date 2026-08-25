@@ -4,9 +4,9 @@
 -- | A single-line text entry field: click-to-place cursor, drag selection,
 -- Shift+arrow extension, and selection-aware editing. Long text scrolls
 -- horizontally to keep the cursor visible. A leaf, built directly on
--- 'controlBase'. Its own value isn't a 'Blink.Controls.Labelled.LabelledConfig'
+-- 'controlBase'. Its own value isn't a 'Blink.Controls.Label.LabelledConfig'
 -- field -- it's edited, not just displayed -- so it has its own 'value'
--- attribute rather than "Blink.Controls.Labelled"'s 'Blink.Controls.Labelled.text'.
+-- attribute rather than 'Blink.Controls.Label.text'.
 module Blink.Controls.TextInput
   ( TextInputConfig (..)
   , defaultTextInputConfig
@@ -19,7 +19,7 @@ module Blink.Controls.TextInput
   , onSubmit
   ) where
 
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, void, when)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -245,7 +245,7 @@ textInput eid attrs = do
         { ccFocusOnClick = FocusSelf
         , ccContent      = body cfg wasFocused wasCapturing
         }
-  () <$ controlBase eid ctrl
+  void (controlBase eid ctrl)
   where
     body cfg wasFocused wasCapturing = do
       let currentValue = ticValue cfg

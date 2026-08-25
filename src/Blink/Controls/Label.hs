@@ -1,23 +1,73 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | Text drawn in the resolved style, with no interactive behaviour of its
--- own -- see 'HasLabelledConfig' via "Blink.Controls.Labelled" for 'text'.
--- A leaf, built directly on 'controlBase'; needs its own 'LabelConfig' only
--- because 'target' is a label-only capability
--- "Blink.Controls.Labelled"'s 'Blink.Controls.Labelled.LabelledConfig' has
--- no concept of.
+-- own. 'LabelledConfig' is the reusable fragment behind 'text': not a
+-- 'Blink.Controls.Element.elementBase'\/'Blink.Controls.Control.controlBase'-style
+-- layer itself (nothing calls into it the way a @Base@ primitive is called
+-- into), just a nested field plus a rendering helper, the same category as
+-- 'Blink.Controls.Element.ElementConfig'\/'Blink.Controls.Control.ControlConfig'.
+-- Anything that wants a caption nests a 'LabelledConfig' field, declares
+-- 'HasLabelledConfig', and calls 'renderLabelledContent' itself when
+-- building its own content.
+--
+-- 'label' is a leaf, built directly on 'controlBase'; it needs its own
+-- 'LabelConfig' only because 'target' is a label-only capability
+-- 'LabelledConfig' has no concept of.
 module Blink.Controls.Label
-  ( LabelConfig (..)
+  ( -- * Caption fragment
+    LabelledConfig (..)
+  , HasLabelledConfig (..)
+  , defaultLabelledConfig
+  , text
+  , renderLabelledContent
+
+    -- * Label
+  , LabelConfig (..)
   , defaultLabelConfig
   , labelStyleKey
   , label
   , target
   ) where
 
+import Control.Monad (void)
+import Data.Text (Text)
+
 import Blink.Controls.Control
-import Blink.Controls.Labelled
-import Blink.UI (UI)
+import Blink.Style (Style (..))
+import Blink.UI (UI, currentStyle, drawText)
+
+-- * Caption fragment
+
+-- | A displayed caption.
+newtype LabelledConfig e msg = LabelledConfig
+  { lcText :: Text
+  }
+
+-- | @\"\"@.
+defaultLabelledConfig :: LabelledConfig e msg
+defaultLabelledConfig = LabelledConfig { lcText = "" }
+
+-- | Implemented by any config type that nests a 'LabelledConfig', letting
+-- 'text' be applied to it directly.
+class HasLabelledConfig e msg cfg | cfg -> e msg where
+  overLabelled :: Attr (LabelledConfig e msg) -> Attr cfg
+
+instance HasLabelledConfig e msg (LabelledConfig e msg) where
+  overLabelled = id
+
+-- | Sets the text displayed. Defaults to @\"\"@ when not given.
+text :: HasLabelledConfig e msg cfg => Text -> Attr cfg
+text t = overLabelled (Attr (\lc -> lc { lcText = t }))
+
+-- | Draws @cfg@'s text into the current bounds, in the resolved style's
+-- text colour and alignment.
+renderLabelledContent :: LabelledConfig e msg -> UI e msg ()
+renderLabelledContent cfg = do
+  s <- currentStyle
+  drawText (styleTextColour s) (styleTextAlign s) (lcText cfg)
+
+-- * Label
 
 -- | Every capability 'label' resolves: the wrapped 'ControlConfig', its
 -- caption, and the element a click on it should redirect focus to (see
@@ -73,4 +123,4 @@ label eid attrs = do
         , ccFocusOnClick = focus
         , ccContent      = renderLabelledContent (lcLabelled cfg)
         }
-  () <$ controlBase eid ctrl
+  void (controlBase eid ctrl)

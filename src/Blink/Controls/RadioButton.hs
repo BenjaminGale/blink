@@ -10,11 +10,12 @@ module Blink.Controls.RadioButton
   , radioButtonStyleKey
   ) where
 
+import Control.Monad (void)
 import Data.Text (Text)
 
 import Blink.Controls.Button (ButtonConfig (..), ToggleConfig (..), defaultToggleButtonConfig, toggleBase)
 import Blink.Controls.Control
-import Blink.Controls.Labelled (renderLabelledContent)
+import Blink.Controls.Label (renderLabelledContent)
 import Blink.Geometry (Rectangle (..))
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..))
@@ -45,7 +46,7 @@ defaultRadioButtonConfig = defaultToggleButtonConfig
 
 -- | A radio button: a glyph showing whether it's currently selected (see
 -- 'Blink.Controls.Button.isSelected'), beside a caption set via
--- 'Blink.Controls.Labelled.text', selected together as one control --
+-- 'Blink.Controls.Label.text', selected together as one control --
 -- clicking either the glyph or the caption activates it, the same as
 -- 'Blink.Controls.Button.toggleButton'. Unlike a 'Blink.Controls.Button.toggleButton'
 -- or 'Blink.Controls.Checkbox.checkbox', activating it never deselects it
@@ -70,4 +71,4 @@ radioButton eid attrs = do
         { tgcNext   = const True
         , tgcButton = btn { bcControl = ctrl }
         }
-  () <$ toggleBase eid cfg'
+  void (toggleBase eid cfg')

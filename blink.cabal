@@ -39,7 +39,6 @@ library
         Blink.Controls.Control
         Blink.Controls.Element
         Blink.Controls.Label
-        Blink.Controls.Labelled
         Blink.Controls.ProgressBar
         Blink.Controls.RadioButton
         Blink.Controls.TextInput

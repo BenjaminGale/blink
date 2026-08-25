@@ -10,12 +10,12 @@ module Blink.Controls.Checkbox
   , checkboxStyleKey
   ) where
 
-import Control.Monad (when)
+import Control.Monad (void, when)
 import Data.Text (Text)
 
 import Blink.Controls.Button (ButtonConfig (..), ToggleConfig (..), defaultToggleButtonConfig, toggleBase)
 import Blink.Controls.Control
-import Blink.Controls.Labelled (renderLabelledContent)
+import Blink.Controls.Label (renderLabelledContent)
 import Blink.Geometry (Rectangle (..), uniformBorder)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..))
@@ -47,7 +47,7 @@ defaultCheckboxConfig = defaultToggleButtonConfig
   }
 
 -- | A checkbox: a small box drawn with 'strokeRect', a tick inside it while
--- selected (see 'Blink.Controls.Button.isSelected'), beside a caption set via 'Blink.Controls.Labelled.text', toggled
+-- selected (see 'Blink.Controls.Button.isSelected'), beside a caption set via 'Blink.Controls.Label.text', toggled
 -- together as one control -- clicking either the box or the caption
 -- activates it, the same as 'Blink.Controls.Button.toggleButton'. Flips
 -- every time it's activated; see 'Blink.Controls.Button.onSelectedChanged' for reacting to it.
@@ -80,4 +80,4 @@ checkbox eid attrs = do
         { tgcNext   = not
         , tgcButton = btn { bcControl = ctrl }
         }
-  () <$ toggleBase eid cfg'
+  void (toggleBase eid cfg')

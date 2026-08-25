@@ -4,7 +4,7 @@
 -- | A progress indicator: a filled bar for a known 'Progress' value, or a
 -- continuously animating band while 'Indeterminate'. A leaf, built
 -- directly on 'controlBase' -- nothing derives from it, and it displays no
--- label, so it has no 'Blink.Controls.Labelled.LabelledConfig' either.
+-- label, so it has no 'Blink.Controls.Label.LabelledConfig' either.
 module Blink.Controls.ProgressBar
   ( ProgressBarConfig (..)
   , ProgressValue (..)
@@ -14,6 +14,8 @@ module Blink.Controls.ProgressBar
   , progress
   , bandSpeed
   ) where
+
+import Control.Monad (void)
 
 import Blink.Controls.Control
 import Blink.Geometry (Rectangle (..))
@@ -81,7 +83,7 @@ progressBar eid attrs = do
         , ccFocusOnClick = NoFocus
         , ccContent      = body cfg
         }
-  () <$ controlBase eid ctrl
+  void (controlBase eid ctrl)
   where
     body cfg = do
       s <- currentStyle

@@ -6,7 +6,7 @@ import Test.Hspec
 
 import Blink.Controls.Button (ToggleConfig, isSelected)
 import Blink.Controls.Element (Attr)
-import Blink.Controls.Labelled (text)
+import Blink.Controls.Label (text)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Controls.RadioButton (radioButton)

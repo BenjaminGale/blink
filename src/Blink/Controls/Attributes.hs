@@ -53,7 +53,6 @@ import Blink.Controls.Control
   , isEnabled, isFocusable, style
   , onClicked, onFocusGained, onFocusLost, onKeyPressed, onMouseDown, onMouseEntered, onMouseExited, onMouseUp
   )
-import Blink.Controls.Label (target)
-import Blink.Controls.Labelled (text)
+import Blink.Controls.Label (target, text)
 import Blink.Controls.ProgressBar (ProgressValue (..), bandSpeed, progress)
 import Blink.Controls.TextInput (displayFilter, inputFilter, onInput, onSubmit)

@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 -- | The attribute mechanism every widget in "Blink.Controls" is built on,
 -- and the lowest of the two building-block layers -- see
 -- "Blink.Controls.Control" for the one above it.

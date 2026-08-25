@@ -7,7 +7,7 @@ import Test.Hspec
 import Blink.Controls.Button (ToggleConfig, isSelected)
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Element (Attr)
-import Blink.Controls.Labelled (text)
+import Blink.Controls.Label (text)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))

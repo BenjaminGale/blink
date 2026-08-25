@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | Buttons and button-like controls: activated by a click or by pressing
 -- Enter while focused.
@@ -43,10 +42,10 @@ module Blink.Controls.Button
   , onSelectedChanged
   ) where
 
-import Control.Monad (when)
+import Control.Monad (void, when)
 
 import Blink.Controls.Control
-import Blink.Controls.Labelled
+import Blink.Controls.Label (HasLabelledConfig (..), LabelledConfig (..), defaultLabelledConfig, renderLabelledContent)
 import Blink.Input (Key (KeyReturn), KeyEvent (..))
 import Blink.Style (Style (..), StyleSet (..))
 import Blink.UI (Out, UI, currentStyle, drawText, getStyleSet, isDisabled)
@@ -54,7 +53,7 @@ import Blink.UI (Out, UI, currentStyle, drawText, getStyleSet, isDisabled)
 -- * Button
 
 -- | Every capability 'button' (and anything built on 'buttonBase') resolves:
--- the wrapped 'ControlConfig', its caption (see 'Blink.Controls.Labelled'),
+-- the wrapped 'ControlConfig', its caption (see 'Blink.Controls.Label'),
 -- and its 'onActivated' reactions. No content field and no override slot --
 -- 'buttonBase' doesn't decide content, so it needs neither.
 data ButtonConfig e msg = ButtonConfig
@@ -124,7 +123,7 @@ buttonBase eid cfg = do
   when activated $ runHandlers (bcOnActivated cfg) ()
   pure (ButtonInteraction r activated)
 
--- | A clickable button labelled via 'text'. Fires every 'onActivated'
+-- | A clickable button labelled via 'Blink.Controls.Label.text'. Fires every 'onActivated'
 -- handler when activated by a left-click or by pressing Enter while
 -- focused. Always takes focus when clicked -- fixed behaviour, not a
 -- default.
@@ -132,7 +131,7 @@ button :: Ord e => e -> [Attr (ButtonConfig e msg)] -> UI e msg ()
 button eid attrs = do
   let cfg  = resolve defaultButtonConfig attrs
       ctrl = (bcControl cfg) { ccContent = renderLabelledContent (bcLabelled cfg) }
-  () <$ buttonBase eid cfg { bcControl = ctrl }
+  void (buttonBase eid cfg { bcControl = ctrl })
 
 -- * Toggle
 
@@ -226,7 +225,7 @@ toggleStyle eid base selected = do
     then pure base
     else styleSetPressed <$> getStyleSet (ElementId eid)
 
--- | A button labelled via 'text' that tracks an external selected\/unselected
+-- | A button labelled via 'Blink.Controls.Label.text' that tracks an external selected\/unselected
 -- state (see 'isSelected') instead of only ever being momentarily pressed,
 -- flipping every time it's activated. Drawn in its pressed style while
 -- selected, even without being physically pressed, unless disabled.
@@ -242,4 +241,4 @@ toggleButton eid attrs = do
         s    <- toggleStyle eid base selected
         drawText (styleTextColour s) (styleTextAlign s) (lcText (bcLabelled btn))
       ctrl = (bcControl btn) { ccContent = draw }
-  () <$ toggleBase eid cfg { tgcNext = not, tgcButton = btn { bcControl = ctrl } }
+  void (toggleBase eid cfg { tgcNext = not, tgcButton = btn { bcControl = ctrl } })
