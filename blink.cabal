@@ -24,8 +24,8 @@ common defaults
     default-language: Haskell2010
     build-depends:
         base ^>=4.18.3.0,
-        containers,
-        text
+        containers ^>=0.6.7,
+        text ^>=2.0.2
 
 library
     import: defaults
@@ -62,8 +62,8 @@ executable demo
         Rendering
     build-depends:
         blink,
-        sdl2,
-        sdl2-ttf
+        sdl2 ^>=2.5.5,
+        sdl2-ttf ^>=2.1.3
     hs-source-dirs: app
 
 test-suite blink-tests
@@ -96,5 +96,5 @@ test-suite blink-tests
         Blink.UpdateSpec
     build-depends:
         blink,
-        hspec,
-        QuickCheck
+        hspec ^>=2.11.17,
+        QuickCheck ^>=2.18.0.0
