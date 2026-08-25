@@ -3,7 +3,7 @@ module UI (Element, AppState (..), demoApp) where
 
 import Blink.App
 import Blink.Controls
-import Blink.Controls.Attrs
+import Blink.Controls.Attributes
 import Blink.Controls.TextInput (value)
 import Blink.Geometry
 import Blink.Input

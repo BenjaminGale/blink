@@ -6,7 +6,7 @@ import qualified Data.Text as T
 import Data.Char (isDigit)
 import Test.Hspec
 
-import Blink.Controls.Core (Attr)
+import Blink.Controls.Element (Attr)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), Modifier (..))

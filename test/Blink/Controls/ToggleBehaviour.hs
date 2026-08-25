@@ -18,7 +18,7 @@ import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
 import Blink.Controls.Button (ToggleConfig, isSelected, onSelectedChanged)
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec)
-import Blink.Controls.Core (Attr)
+import Blink.Controls.Element (Attr)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)

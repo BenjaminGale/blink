@@ -3,10 +3,10 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | A small reusable config fragment for anything that displays a caption
--- -- not a 'Blink.Controls.Core.elementBase'\/'Blink.Controls.Core.controlBase'-style
+-- -- not a 'Blink.Controls.Element.elementBase'\/'Blink.Controls.Control.controlBase'-style
 -- layer itself (nothing calls into it the way a @Base@ primitive is called
 -- into), just a nested field plus a rendering helper, the same category as
--- 'Blink.Controls.Core.ElementConfig'\/'Blink.Controls.Core.ControlConfig'.
+-- 'Blink.Controls.Element.ElementConfig'\/'Blink.Controls.Control.ControlConfig'.
 --
 -- Anything that wants a caption nests a 'LabelledConfig' field, declares
 -- 'HasLabelledConfig', and calls 'renderLabelledContent' itself when
@@ -21,7 +21,7 @@ module Blink.Controls.Labelled
 
 import Data.Text (Text)
 
-import Blink.Controls.Core (Attr (..))
+import Blink.Controls.Element (Attr (..))
 import Blink.Style (Style (..))
 import Blink.UI (UI, currentStyle, drawText)
 

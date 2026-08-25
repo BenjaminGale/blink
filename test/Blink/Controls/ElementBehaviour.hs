@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 -- | The shared "raises the right raw event for the right interaction"
--- contract every 'Blink.Controls.Core.elementBase'-based primitive must
+-- contract every 'Blink.Controls.Element.elementBase'-based primitive must
 -- satisfy. 'Blink.Controls.ElementSpec' runs this against
--- 'Blink.Controls.Core.elementBase' directly; anything built on top (a
+-- 'Blink.Controls.Element.elementBase' directly; anything built on top (a
 -- control, and every widget built on that) reuses it to confirm the same
 -- raw facts still surface through its own config type, on top of whatever
 -- that layer adds.
@@ -16,7 +16,7 @@ import Test.Hspec
 
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Controls.Core
+import Blink.Controls.Element
   ( Attr, HasElementConfig
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed
   , onFocusGained, onFocusLost
@@ -27,7 +27,7 @@ import Blink.Input (Key (KeySpace))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.UI
 
--- | Tags every raw event a reaction built on 'Blink.Controls.Core.elementBase'
+-- | Tags every raw event a reaction built on 'Blink.Controls.Element.elementBase'
 -- can raise with a plain label naming it, discarding any payload -- enough
 -- to assert "this fired" declaratively without a bespoke message type per
 -- caller.

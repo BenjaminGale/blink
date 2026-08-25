@@ -24,7 +24,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Blink.Controls.Core
+import Blink.Controls.Control
 import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..))

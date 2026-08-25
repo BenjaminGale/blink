@@ -1,9 +1,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | The shared focus\/hit-region contract every 'Blink.Controls.Core.controlBase'-based
+-- | The shared focus\/hit-region contract every 'Blink.Controls.Control.controlBase'-based
 -- control must satisfy, on top of the raw-event contract every element
 -- already satisfies (see 'Blink.Controls.ElementBehaviour.elementBehaviourSpec').
--- 'Blink.Controls.ControlSpec' runs this against 'Blink.Controls.Core.controlBase'
+-- 'Blink.Controls.ControlSpec' runs this against 'Blink.Controls.Control.controlBase'
 -- directly; any widget built on top reuses it to confirm the same
 -- focus\/hit-region behaviour still holds through its own config type -- a
 -- widget whose focus behaviour genuinely differs (e.g.
@@ -20,7 +20,7 @@ import Control.Monad (when)
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Controls.Core (Attr, HasControlConfig, HasElementConfig, isEnabled, isFocusable)
+import Blink.Controls.Control (Attr, HasControlConfig, HasElementConfig, isEnabled, isFocusable)
 import Blink.Controls.ElementBehaviour (elementBehaviourSpec, tagged)
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)

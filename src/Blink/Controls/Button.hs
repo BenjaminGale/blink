@@ -45,7 +45,7 @@ module Blink.Controls.Button
 
 import Control.Monad (when)
 
-import Blink.Controls.Core
+import Blink.Controls.Control
 import Blink.Controls.Labelled
 import Blink.Input (Key (KeyReturn), KeyEvent (..))
 import Blink.Style (Style (..), StyleSet (..))

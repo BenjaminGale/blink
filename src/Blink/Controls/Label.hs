@@ -15,7 +15,7 @@ module Blink.Controls.Label
   , target
   ) where
 
-import Blink.Controls.Core
+import Blink.Controls.Control
 import Blink.Controls.Labelled
 import Blink.UI (UI)
 

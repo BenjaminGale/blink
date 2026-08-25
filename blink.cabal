@@ -33,10 +33,11 @@ library
         Blink
         Blink.App
         Blink.Controls
-        Blink.Controls.Attrs
+        Blink.Controls.Attributes
         Blink.Controls.Button
         Blink.Controls.Checkbox
-        Blink.Controls.Core
+        Blink.Controls.Control
+        Blink.Controls.Element
         Blink.Controls.Label
         Blink.Controls.Labelled
         Blink.Controls.ProgressBar

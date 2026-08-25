@@ -15,7 +15,7 @@ module Blink.Controls.ProgressBar
   , bandSpeed
   ) where
 
-import Blink.Controls.Core
+import Blink.Controls.Control
 import Blink.Geometry (Rectangle (..))
 import Blink.Style (Style (..))
 import Blink.UI

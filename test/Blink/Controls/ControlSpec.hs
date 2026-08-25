@@ -5,7 +5,7 @@ module Blink.Controls.ControlSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Core
+import Blink.Controls.Control
   ( Attr, ControlConfig (..), FocusOnClick (..)
   , controlBase, defaultControlConfig, isEnabled, isFocusable
   , onFocusGained, onFocusLost, onKeyPressed, resolve
@@ -69,7 +69,7 @@ renderAt eid attrs = () <$ controlBase eid (resolve defaultControlConfig attrs)
 
 -- | Renders a single control the same way, but with 'ccFocusOnClick'
 -- overridden afterward -- there's no @focusOnClick@ attribute any more (see
--- "Blink.Controls.Core"), so a spec that wants to vary it constructs the
+-- "Blink.Controls.Control"), so a spec that wants to vary it constructs the
 -- config directly instead of resolving it as an attr.
 renderFoc :: FocusOnClick TestElement -> TestElement -> [Attr'] -> UI TestElement String ()
 renderFoc foc eid attrs = () <$ controlBase eid (resolve defaultControlConfig attrs) { ccFocusOnClick = foc }
@@ -103,7 +103,7 @@ hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
 spec :: Spec
-spec = describe "Blink.Controls.Core.controlBase" $ do
+spec = describe "Blink.Controls.Control.controlBase" $ do
   controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx ElemA (Point 5 5) hitRect (Point 200 200) renderControl
 
   describe "chrome" $

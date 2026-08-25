@@ -2,7 +2,7 @@
 -- | A radio button: a glyph and a caption selected together as one control.
 -- Built on 'toggleBase' -- see "Blink.Controls.Button" for how it and every
 -- other button-like control fit together. A leaf: nothing derives from it,
--- so it has no 'Blink.Controls.Core.ControlConfig'\/'Blink.Controls.Core.ControlInteraction'-style pair of its own
+-- so it has no 'Blink.Controls.Control.ControlConfig'\/'Blink.Controls.Control.ControlInteraction'-style pair of its own
 -- beyond 'ToggleConfig'\/'Blink.Controls.Button.ToggleInteraction', which already have every field
 -- it needs.
 module Blink.Controls.RadioButton
@@ -13,7 +13,7 @@ module Blink.Controls.RadioButton
 import Data.Text (Text)
 
 import Blink.Controls.Button (ButtonConfig (..), ToggleConfig (..), defaultToggleButtonConfig, toggleBase)
-import Blink.Controls.Core
+import Blink.Controls.Control
 import Blink.Controls.Labelled (renderLabelledContent)
 import Blink.Geometry (Rectangle (..))
 import Blink.Rendering (TextAlign (..))

@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Button (ToggleConfig, isSelected)
-import Blink.Controls.Core (Attr)
+import Blink.Controls.Element (Attr)
 import Blink.Controls.Labelled (text)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))

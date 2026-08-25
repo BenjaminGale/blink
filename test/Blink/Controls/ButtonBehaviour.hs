@@ -14,7 +14,7 @@ module Blink.Controls.ButtonBehaviour
 import Test.Hspec
 
 import Blink.Controls.Button (HasButtonConfig, onActivated)
-import Blink.Controls.Core (Attr, HasControlConfig, HasElementConfig, isFocusable)
+import Blink.Controls.Control (Attr, HasControlConfig, HasElementConfig, isFocusable)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Geometry (Point, Rectangle)
@@ -22,7 +22,7 @@ import Blink.Input (Key (KeyReturn))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.UI
 
--- | Every raw\/focus reaction (including 'Blink.Controls.Core.onClicked',
+-- | Every raw\/focus reaction (including 'Blink.Controls.Element.onClicked',
 -- via 'tagged'), plus a tagged reaction to 'onActivated'.
 taggedActivated :: (HasElementConfig e String cfg, HasButtonConfig e String cfg) => [Attr cfg]
 taggedActivated = onActivated (const [OutMsg "Activated"]) : tagged
@@ -31,7 +31,7 @@ taggedActivated = onActivated (const [OutMsg "Activated"]) : tagged
 -- with a given attrs list, asserts it's activated by Enter while focused
 -- the same way it's activated by a click -- and not while unfocused or
 -- disabled -- and that Enter raises 'onActivated' only, never
--- 'Blink.Controls.Core.onClicked' (mouse-only, per the split between the
+-- 'Blink.Controls.Element.onClicked' (mouse-only, per the split between the
 -- two).
 buttonBehaviourSpec
   :: (Ord e, Show e, HasControlConfig e String cfg, HasElementConfig e String cfg, HasButtonConfig e String cfg)
