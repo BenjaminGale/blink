@@ -14,6 +14,7 @@ import qualified Blink.GeometrySpec as Geometry
 import qualified Blink.InputSpec as Input
 import qualified Blink.InteractionSpec as Interaction
 import qualified Blink.LayoutSpec as Layout
+import qualified Blink.Style.DefaultsSpec as StyleDefaults
 import qualified Blink.UISpec as UI
 import qualified Blink.UpdateSpec as Update
 
@@ -34,3 +35,4 @@ main = hspec $ do
   RadioButton.spec
   TextInput.spec
   Interaction.spec
+  StyleDefaults.spec

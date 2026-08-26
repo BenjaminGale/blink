@@ -50,6 +50,7 @@ library
         Blink.Layout.Constraints
         Blink.Rendering
         Blink.Style
+        Blink.Style.Defaults
         Blink.UI
         Blink.Update
     hs-source-dirs: src
@@ -94,6 +95,7 @@ test-suite blink-tests
         Blink.Interaction
         Blink.InteractionSpec
         Blink.LayoutSpec
+        Blink.Style.DefaultsSpec
         Blink.UISpec
         Blink.UpdateSpec
     build-depends:
