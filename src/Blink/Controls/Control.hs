@@ -49,6 +49,10 @@ module Blink.Controls.Control
   , isEnabled
   , style
   , StyleKey (..)
+
+    -- * Measurement
+  , chromeInsets
+  , measureChrome
   ) where
 
 import Control.Monad (forM_, void, when)
@@ -58,10 +62,12 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import Blink.Controls.Element
-import Blink.Geometry (Rectangle, borderInsets, insetRect)
+import Blink.Geometry (Insets (..), Orientation (..), Rectangle, Size, borderInsets, inflate, insetRect)
 import Blink.Input (InputState (..), Key, KeyEvent (..), Modifier)
-import Blink.Style (Metrics (..), Style (..), StyleKey (..), VisualState (..), resolveStyle)
+import Blink.Layout.Constraints (MeasureCtx (..), shrink)
+import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), VisualState (..), resolveStyle)
 import Blink.UI
+import Blink.UI.Element (Element (..))
 
 -- * Control
 
@@ -217,6 +223,42 @@ renderStyled m s body = do
     case styleBorderColour s of
       Just c  -> withBorder c (metricsBorderEdges m) inner
       Nothing -> inner
+
+-- | The combined margin\/border\/padding a control's chrome occupies,
+-- outside-in. Shared by @renderStyled@ (which insets by it) and
+-- 'measureChrome' (which inflates by it), so the two can never drift.
+-- Border only contributes space when 'styleBorderColour' is set -- an
+-- unset border draws (and occupies) nothing, same as @renderStyled@.
+chromeInsets :: Metrics -> Style -> Insets
+chromeInsets m s = metricsMargin m
+  <> (case styleBorderColour s of
+        Just _  -> borderInsets (metricsBorderEdges m)
+        Nothing -> mempty)
+  <> metricsPadding m
+
+-- | Measures a control wrapping a single child: offers @child@ the
+-- interior left over after its chrome (so it wraps within the padding, not
+-- across it), then inflates the answer back out by that same chrome.
+--
+-- Always resolves chrome from 'styleBase' -- the un-overridden style --
+-- never the active interaction-state variant: themes don't vary geometry by
+-- state, and resolving the active variant would make a control's size
+-- depend on hover\/press\/focus (a button that grows when the pointer
+-- touches it, or reflows its row when clicked).
+measureChrome :: Ord e => StyleKey e -> Element e msg -> MeasureCtx -> UI e msg Size
+measureChrome k child ctx = do
+  (m, styleSet) <- getStyleSet k
+  let insets = chromeInsets m (styleBase styleSet)
+  sz <- elMeasure child ctx
+    { measureMain  = shrink (axisInset (measureAxis ctx) insets) (measureMain ctx)
+    , measureCross = shrink (axisInset (otherAxis (measureAxis ctx)) insets) (measureCross ctx)
+    }
+  pure (inflate insets sz)
+  where
+    axisInset Horizontal ins = leftInset ins + rightInset ins
+    axisInset Vertical   ins = topInset ins + bottomInset ins
+    otherAxis Horizontal = Vertical
+    otherAxis Vertical   = Horizontal
 
 -- | Whether a control is eligible to claim focus purely by rendering first
 -- while nothing else holds it: opted into keyboard focus at all

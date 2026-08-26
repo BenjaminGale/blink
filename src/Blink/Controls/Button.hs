@@ -51,9 +51,12 @@ import qualified Data.Set as Set
 
 import Blink.Controls.Control
 import Blink.Controls.Label (HasLabelledConfig (..), LabelledConfig (..), defaultLabelledConfig, renderLabelledContent)
+import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input (Key (KeyReturn), KeyEvent (..))
+import Blink.Layout.Constraints (Layout (..), Length (..))
 import Blink.Style (Style (..), VisualState (..))
-import Blink.UI (Out, UI, currentStyle, drawText)
+import Blink.UI (Out, UI, currentStyle, drawText, measureText)
+import Blink.UI.Element (Element (..))
 
 -- * Button
 
@@ -131,12 +134,27 @@ buttonBase eid cfg = do
 -- | A clickable button labelled via 'Blink.Controls.Label.text'. Fires every 'onActivated'
 -- handler when activated by a left-click or by pressing Enter while
 -- focused. Always takes focus when clicked -- fixed behaviour, not a
--- default.
-button :: Ord e => e -> [Attribute (ButtonConfig e msg)] -> UI e msg ()
-button eid attrs = do
-  let cfg  = resolve defaultButtonConfig attrs
-      ctrl = (bcControl cfg) { ccContent = renderLabelledContent (bcLabelled cfg) }
-  void (buttonBase eid cfg { bcControl = ctrl })
+-- default. Defaults to filling the width it's given and sizing its height
+-- to its own chrome-wrapped caption.
+button :: Ord e => e -> [Attribute (ButtonConfig e msg)] -> Element e msg
+button eid attrs = Element
+  { elLayout  = Layout Fill FitContent TopLeft
+  , elMeasure = measureChrome (ccStyleKey (bcControl cfg)) (captionElement (lcText (bcLabelled cfg)))
+  , elRun     = void (buttonBase eid cfg { bcControl = ctrl })
+  }
+  where
+    cfg  = resolve defaultButtonConfig attrs
+    ctrl = (bcControl cfg) { ccContent = renderLabelledContent (bcLabelled cfg) }
+
+-- | A minimal, non-wrapping caption measure -- stand-in for a proper
+-- @textBlock@ primitive, which doesn't exist yet. Reports the caption's
+-- unwrapped single-line size on both axes.
+captionElement :: Text -> Element e msg
+captionElement t = Element
+  { elLayout  = Layout Fill FitContent TopLeft
+  , elMeasure = const (measureText t)
+  , elRun     = pure ()
+  }
 
 -- * Toggle
 

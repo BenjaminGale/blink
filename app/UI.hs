@@ -12,7 +12,7 @@ import Blink.Input
 import Blink.Layout
 import Blink.Rendering
 import Blink.UI
-import Blink.UI.Element (elementWithLayout, runElement)
+import Blink.UI.Element (elLayout, elementWithLayout, runElement)
 import Blink.Update
 import Theme (Element (..), lightTheme, darkTheme)
 import Control.Monad (when)
@@ -120,8 +120,8 @@ rowButtons s =
   runElement $ hBox
     [ spacing 8
     , children
-        [ elementWithLayout (Layout (Exactly 100) Fill TopLeft) (button ClickButton [text "Click me", onActivated (post AddClick)])
-        , elementWithLayout (Layout (Exactly 100) Fill TopLeft) (button ResetButton [text "Reset", onActivated (post ResetClicks)])
+        [ (button ClickButton [text "Click me", onActivated (post AddClick)]) { elLayout = Layout (Exactly 100) Fill TopLeft }
+        , (button ResetButton [text "Reset", onActivated (post ResetClicks)]) { elLayout = Layout (Exactly 100) Fill TopLeft }
         , elementWithLayout (Layout Fill Fill MiddleLeft) (caption ("Clicks: " <> T.pack (show (clickCount s))))
         ]
     ]

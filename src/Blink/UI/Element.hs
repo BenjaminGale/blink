@@ -10,9 +10,9 @@ module Blink.UI.Element
   , resolveLength
   ) where
 
-import Blink.Geometry (Alignment (TopLeft), Orientation (..), Size (..))
+import Blink.Geometry (Alignment (TopLeft), Orientation (..), Rectangle (..), Size (..))
 import Blink.Layout.Constraints (Available (..), Layout (..), Length (..), MeasureCtx (..), layoutWithConstraints)
-import Blink.UI (UI)
+import Blink.UI (UI, getBounds)
 
 -- | The layout-facing pairing of a component's size request, its measure,
 -- and its frame action. A container consumes a list of these to arrange a
@@ -35,9 +35,20 @@ data Element e msg = Element
 
 -- | Applies an element's own size request within the current bounds and
 -- runs it. Used at the root of a view, and by a composite laying out
--- children it has already built.
+-- children it has already built. Resolves any content-dependent request
+-- ('FitContent', 'AtLeast', 'Between') against the current bounds first --
+-- unlike a box, which already knows the exact slot it is placing a child
+-- into, the root has nothing narrower to offer than its own bounds on
+-- either axis.
 runElement :: Element e msg -> UI e msg ()
-runElement el = layoutWithConstraints (elLayout el) (elRun el)
+runElement el = do
+  r <- getBounds
+  let avail = \o -> case o of
+        Horizontal -> Bounded (rectWidth r)
+        Vertical   -> Bounded (rectHeight r)
+  w <- resolveLength Horizontal layoutWidth  (avail Horizontal) (avail Vertical)   el
+  h <- resolveLength Vertical   layoutHeight (avail Vertical)   (avail Horizontal) el
+  layoutWithConstraints (elLayout el) { layoutWidth = w, layoutHeight = h } (elRun el)
 
 -- | For elements with no intrinsic size: whatever the parent can spare
 -- along the axis being measured, or zero when the parent is itself sizing
