@@ -8,42 +8,39 @@ module Blink.Layout.Box
   , spacing
   , margin
   , alignment
-  , stretch
   , children
   , boxTotalSpacing
   ) where
 
-import Data.List (foldl', scanl', sortBy)
-import Data.Ord  (comparing)
+import Control.Monad (forM_)
+import Data.List     (foldl', scanl', sortBy)
+import Data.Ord      (comparing)
 
 import qualified Data.IntMap.Strict as IntMap
 
 import Blink.Attribute (Attribute (..), resolve)
-import Blink.Geometry (Alignment (..), Rectangle (..), alignRect, insetRect, uniform)
-import Blink.Layout.Constraints (Layout (..), Length (..), layoutWithConstraints)
+import Blink.Geometry (Alignment (..), Orientation (..), Rectangle (..), Size (..), alignRect, insetRect, uniform)
+import Blink.Layout.Constraints
+  (Available (..), Layout (..), Length (..), MeasureCtx (..), layoutWithConstraints, shrink)
 import Blink.UI (UI, clipToCurrent, getBounds, withBounds)
+import Blink.UI.Element (Element (..), resolveLength)
 
 -- | Every capability 'hBox'\/'vBox' resolve: spacing, margin, alignment of
--- the content block, whether children stretch to fill the cross axis, and
--- the children themselves (see 'children').
+-- the content block, and the children themselves (see 'children').
 data BoxConfig e msg = BoxConfig
   { bxSpacing    :: Double
   , bxMargin     :: Double
   , bxAlignment  :: Alignment
-  , bxFillCross  :: Bool
-  , bxChildren   :: [(Layout, UI e msg ())]
+  , bxChildren   :: [Element e msg]
   }
 
--- | No spacing, no margin, 'TopLeft' alignment, cross-axis stretch enabled,
--- and no children. Override only the attributes you need:
+-- | No spacing, no margin, 'TopLeft' alignment, and no children. Override
+-- only the attributes you need:
 --
 -- @
 -- hBox
 --   [ spacing 8, margin 4
---   , children
---       [ (Layout (Exactly 80) Fill TopLeft, sidebar)
---       , (Layout Fill         Fill TopLeft, content)
---       ]
+--   , children [ sidebarElement, contentElement ]
 --   ]
 -- @
 defaultBoxConfig :: BoxConfig e msg
@@ -51,7 +48,6 @@ defaultBoxConfig = BoxConfig
   { bxSpacing   = 0
   , bxMargin    = 0
   , bxAlignment = TopLeft
-  , bxFillCross = True
   , bxChildren  = []
   }
 
@@ -102,16 +98,14 @@ margin v = Attribute (\c -> c { bxMargin = v })
 alignment :: Alignment -> Attribute (BoxConfig e msg)
 alignment v = Attribute (\c -> c { bxAlignment = v })
 
--- | Whether children stretch to fill the full cross-axis extent. Defaults
--- to 'True'.
-stretch :: Bool -> Attribute (BoxConfig e msg)
-stretch v = Attribute (\c -> c { bxFillCross = v })
-
--- | The children to arrange, each paired with the 'Layout' governing its
--- size and alignment within its slot (see 'hBox'\/'vBox'). Defaults to
--- @[]@; a later 'children' attribute replaces an earlier one rather than
--- adding to it, the same as every other attribute here.
-children :: [(Layout, UI e msg ())] -> Attribute (BoxConfig e msg)
+-- | The children to arrange. Each carries its own size request (see
+-- 'Blink.UI.Element.Element'), including how it behaves on the cross axis:
+-- a 'Fill' cross request expands to the box's full cross extent, anything
+-- else keeps its own size and is positioned within the row\/column by its
+-- own alignment. Defaults to @[]@; a later 'children' attribute replaces an
+-- earlier one rather than adding to it, the same as every other attribute
+-- here.
+children :: [Element e msg] -> Attribute (BoxConfig e msg)
 children cs = Attribute (\c -> c { bxChildren = cs })
 
 -- | Total space consumed by all gaps between @n@ children -- the sum of
@@ -128,48 +122,69 @@ boxTotalSpacing cfg n = bxSpacing cfg * fromIntegral (max 0 (n - 1))
 --   once. Each field encodes the axis-specific behaviour; 'horizontal' and
 --   'vertical' are the only two values.
 data Axis = Axis
-  { mainConstraint :: Layout -> Length
+  { axisOrientation :: Orientation
+    -- ^ Which of the element's two axes is this box's main axis.
+  , mainConstraint  :: Layout -> Length
     -- ^ Extracts the child's constraint along the main axis.
-  , mainLength     :: Rectangle -> Double
+  , crossConstraint :: Layout -> Length
+    -- ^ Extracts the child's constraint along the cross axis.
+  , mainLength      :: Rectangle -> Double
     -- ^ Length of a rectangle along the main axis.
-  , crossLength    :: Rectangle -> Double
+  , crossLength     :: Rectangle -> Double
     -- ^ Length of a rectangle along the cross axis.
-  , mainOrigin     :: Rectangle -> Double
+  , mainOrigin      :: Rectangle -> Double
     -- ^ Origin of a rectangle along the main axis.
-  , crossOrigin    :: Rectangle -> Double
+  , crossOrigin     :: Rectangle -> Double
     -- ^ Origin of a rectangle along the cross axis.
-  , makeSlot       :: Double -> Double -> Double -> Double -> Rectangle
+  , makeSlot        :: Double -> Double -> Double -> Double -> Rectangle
     -- ^ Builds a slot rectangle from @(mainOrigin, crossOrigin, mainLen, crossLen)@.
-  , fillCross      :: Layout -> Layout
-    -- ^ Overrides the child's cross-axis constraint with 'Fill'.
+  , makeSize        :: Double -> Double -> Size
+    -- ^ Builds a 'Size' from @(mainLen, crossLen)@.
+  , setMain         :: Length -> Layout -> Layout
+    -- ^ Sets the main-axis constraint on a 'Layout'.
+  , setCross        :: Length -> Layout -> Layout
+    -- ^ Sets the cross-axis constraint on a 'Layout'.
   }
 
 horizontal :: Axis
 horizontal = Axis
-  { mainConstraint = layoutWidth
-  , mainLength     = rectWidth
-  , crossLength    = rectHeight
-  , mainOrigin     = rectX
-  , crossOrigin    = rectY
-  , makeSlot       = Rectangle
-  , fillCross      = \rc -> rc { layoutHeight = Fill }
+  { axisOrientation = Horizontal
+  , mainConstraint  = layoutWidth
+  , crossConstraint = layoutHeight
+  , mainLength      = rectWidth
+  , crossLength     = rectHeight
+  , mainOrigin      = rectX
+  , crossOrigin     = rectY
+  , makeSlot        = Rectangle
+  , makeSize        = Size
+  , setMain         = \l rc -> rc { layoutWidth = l }
+  , setCross        = \l rc -> rc { layoutHeight = l }
   }
 
 vertical :: Axis
 vertical = Axis
-  { mainConstraint = layoutHeight
-  , mainLength     = rectHeight
-  , crossLength    = rectWidth
-  , mainOrigin     = rectY
-  , crossOrigin    = rectX
-  , makeSlot       = \mo co ms cs -> Rectangle co mo cs ms
-  , fillCross      = \rc -> rc { layoutWidth = Fill }
+  { axisOrientation = Vertical
+  , mainConstraint  = layoutHeight
+  , crossConstraint = layoutWidth
+  , mainLength      = rectHeight
+  , crossLength     = rectWidth
+  , mainOrigin      = rectY
+  , crossOrigin     = rectX
+  , makeSlot        = \mo co ms cs -> Rectangle co mo cs ms
+  , makeSize        = \m c -> Size c m
+  , setMain         = \l rc -> rc { layoutHeight = l }
+  , setCross        = \l rc -> rc { layoutWidth = l }
   }
 
--- | Arranges children left-to-right. Each child (see 'children') carries a
---   'Layout' governing its width and, when 'stretch' is 'False', its
---   height and vertical alignment. If a margin is set, children are laid
---   out within that inset.
+crossOrientation :: Axis -> Orientation
+crossOrientation ax = case axisOrientation ax of
+  Horizontal -> Vertical
+  Vertical   -> Horizontal
+
+-- | Arranges children left-to-right. Each child (see 'children') carries its
+--   own 'Blink.Layout.Layout' governing its width and, on the cross axis
+--   (height), whether it stretches to fill the row or keeps its own size.
+--   If a margin is set, children are laid out within that inset.
 --
 --   The axis along which children are stacked (here, horizontal) is called
 --   the /main axis/, and the perpendicular axis is the /cross axis/. 'vBox'
@@ -194,10 +209,9 @@ vertical = Axis
 --     controls where the whitespace goes. When they overflow it controls
 --     which side clips.
 --   * Once each child's space is allocated, it is positioned and aligned
---     within its slot according to its own 'Layout'.
---   * By default children are stretched to fill the panel on the cross axis,
---     but this can be disabled to let each child control its own size on
---     that axis.
+--     within its slot according to its own 'Blink.Layout.Layout' -- a 'Fill'
+--     cross-axis request expands to the row's full height, anything else
+--     keeps the child's own size, aligned per its own request.
 --   * Children are clipped to the panel's content area as a group, not
 --     individually. An oversized child can still overlap its neighbours; it
 --     is only cut off once it reaches the edge of the panel itself.
@@ -206,47 +220,37 @@ vertical = Axis
 -- hBox
 --   [ spacing 4
 --   , children
---       [ (Layout (Exactly 80) Fill TopLeft, button Btn1 [text "Back"])
---       , (Layout Fill         Fill TopLeft, button Btn2 [text "Title"])
---       , (Layout (Exactly 80) Fill TopLeft, button Btn3 [text "Next"])
+--       [ elementWithLayout (Layout (Exactly 80) Fill TopLeft) (button Btn1 [text "Back"])
+--       , elementWithLayout (Layout Fill         Fill TopLeft) (button Btn2 [text "Title"])
+--       , elementWithLayout (Layout (Exactly 80) Fill TopLeft) (button Btn3 [text "Next"])
 --       ]
 --   ]
 -- @
 --
 -- Here the two outer buttons are fixed at 80px wide. The centre button
 -- expands to fill whatever space remains. The 'Fill' height constraint in
--- each child means height is determined by the panel, not the child.
+-- each child means it stretches to the panel's full height.
 --
 -- >  +--------+------------------------------------+--------+
 -- >  |  Back  |               Title                |  Next  |
 -- >  |  80px  |                Fill                |  80px  |
 -- >  +--------+------------------------------------+--------+
---
--- 'stretch' (default 'True') controls the cross axis, which is height
--- in this example. When 'True', each child is stretched to the panel's full
--- height, as in the diagram above. When 'False', each child keeps its own
--- height (here, 'TopLeft'-aligned), leaving the rest of the panel blank.
---
--- >  +------------+--------------+------------+
--- >  |     A      |      B       |     C      |
--- >  +------------+--------------+------------+
--- >  |                                        |
--- >  +----------------------------------------+
-hBox :: [Attribute (BoxConfig e msg)] -> UI e msg ()
+hBox :: [Attribute (BoxConfig e msg)] -> Element e msg
 hBox attrs = box horizontal (resolve defaultBoxConfig attrs)
 
--- | Arranges children top-to-bottom. Each child (see 'children') carries a
---   'Layout' governing its height and, when 'stretch' is 'False', its
---   width and horizontal alignment. Uses the same algorithm as 'hBox' with
---   the axes swapped. See its documentation for the full behaviour.
+-- | Arranges children top-to-bottom. Each child (see 'children') carries its
+--   own 'Blink.Layout.Layout' governing its height and, on the cross axis
+--   (width), whether it stretches to fill the column or keeps its own size.
+--   Uses the same algorithm as 'hBox' with the axes swapped. See its
+--   documentation for the full behaviour.
 --
 -- @
 -- vBox
 --   [ spacing 1
 --   , children
---       [ (Layout Fill (Exactly 3) TopLeft, header)
---       , (Layout Fill Fill        TopLeft, body)
---       , (Layout Fill (Exactly 3) TopLeft, footer)
+--       [ elementWithLayout (Layout Fill (Exactly 3) TopLeft) header
+--       , elementWithLayout (Layout Fill Fill        TopLeft) body
+--       , elementWithLayout (Layout Fill (Exactly 3) TopLeft) footer
 --       ]
 --   ]
 -- @
@@ -263,30 +267,93 @@ hBox attrs = box horizontal (resolve defaultBoxConfig attrs)
 -- >  +------------------------------------------+
 -- >  |           Footer (Exactly 3px)           |
 -- >  +------------------------------------------+
-vBox :: [Attribute (BoxConfig e msg)] -> UI e msg ()
+vBox :: [Attribute (BoxConfig e msg)] -> Element e msg
 vBox attrs = box vertical (resolve defaultBoxConfig attrs)
 
-box :: Axis -> BoxConfig e msg -> UI e msg ()
-box ax cfg = do
+-- | Builds the box 'Element': its own size request is to fill whatever
+-- space it is given, its measure sums (main axis) or maxes (cross axis) its
+-- resolved children, and its run arranges them exactly as its measure
+-- assumed.
+box :: Axis -> BoxConfig e msg -> Element e msg
+box ax cfg = Element
+  { elLayout  = Layout Fill Fill TopLeft
+  , elMeasure = boxMeasure ax cfg
+  , elRun     = runBox ax cfg
+  }
+
+-- | Resolves each child's main-axis constraint into a concrete slot size,
+-- given the box's /content/ extent -- margin already excluded by the
+-- caller (see 'boxMeasure' and 'runBox'), leaving only the gaps between
+-- children to account for here. When the content extent is @Bounded@,
+-- finite space is distributed exactly as a fixed-size box always has been.
+-- When the box is itself sizing to content ('Unbounded'), there is no space
+-- to distribute, and each resolved length is taken at face value via
+-- 'naturalLength'.
+boxSlots :: Axis -> BoxConfig e msg -> MeasureCtx -> UI e msg [Double]
+boxSlots ax cfg ctx = do
+  let kids = bxChildren cfg
+      gaps = boxTotalSpacing cfg (length kids)
+      main = shrink gaps (measureMain ctx)
+  lengths <- mapM (resolveLength (axisOrientation ax) (mainConstraint ax) main (measureCross ctx)) kids
+  pure $ case main of
+    Bounded avail -> preferredSizes avail lengths
+    Unbounded     -> map naturalLength lengths
+
+-- | The box's own preferred size: the sum of its resolved children (plus
+-- gaps and margin) on the main axis, and the largest resolved child (plus
+-- margin) on the cross axis. Excludes the margin from what it offers its
+-- children (they only ever see the content extent) and adds it back once,
+-- here, to each axis's total.
+boxMeasure :: Axis -> BoxConfig e msg -> MeasureCtx -> UI e msg Size
+boxMeasure ax cfg ctx = do
+  let inset      = 2 * bxMargin cfg
+      contentCtx = ctx
+        { measureMain  = shrink inset (measureMain ctx)
+        , measureCross = shrink inset (measureCross ctx)
+        }
+  slots <- boxSlots ax cfg contentCtx
+  let mainTotal = foldl' (+) 0 slots + boxTotalSpacing cfg (length slots) + inset
+  crossTotal <- (+ inset) <$> measureCrossExtent ax cfg contentCtx
+  pure (makeSize ax mainTotal crossTotal)
+
+-- | The largest of the children's resolved cross-axis sizes, given the
+-- box's content extent -- margin already excluded by the caller, same as
+-- 'boxSlots'.
+measureCrossExtent :: Axis -> BoxConfig e msg -> MeasureCtx -> UI e msg Double
+measureCrossExtent ax cfg ctx = do
+  lengths <- mapM (resolveLength (crossOrientation ax) (crossConstraint ax) (measureCross ctx) (measureMain ctx))
+                   (bxChildren cfg)
+  pure $ case map naturalLength lengths of
+    [] -> 0
+    xs -> maximum xs
+
+runBox :: Axis -> BoxConfig e msg -> UI e msg ()
+runBox ax cfg = do
   r <- getBounds
-  let kids         = bxChildren cfg
-      contentArea  = insetRect (uniform (bxMargin cfg)) r
-      totalSpacing = boxTotalSpacing cfg (length kids)
-      availSpace   = mainLength ax contentArea - totalSpacing
-      slotSizes    = preferredSizes availSpace (map (mainConstraint ax . fst) kids)
-      crossOrig    = crossOrigin ax contentArea
-      crossLen     = crossLength ax contentArea
+  let kids        = bxChildren cfg
+      contentArea = insetRect (uniform (bxMargin cfg)) r
+      crossOrig   = crossOrigin ax contentArea
+      crossLen    = crossLength ax contentArea
+      -- Already margin-inset, so this is the box's content extent -- the
+      -- same thing 'boxMeasure' builds via 'shrink' -- keeping the two
+      -- callers of 'boxSlots' on the same contract.
+      contentCtx  = MeasureCtx
+        { measureAxis  = axisOrientation ax
+        , measureMain  = Bounded (mainLength ax contentArea)
+        , measureCross = Bounded crossLen
+        }
+  slotSizes <- boxSlots ax cfg contentCtx
+  let totalSpacing = boxTotalSpacing cfg (length kids)
       contentBlock = alignRect (bxAlignment cfg) contentArea
                        (makeSlot ax 0 0 (foldl' (+) 0 slotSizes + totalSpacing) crossLen)
       slotOrigins  = scanl' (\o s -> o + s + bxSpacing cfg) (mainOrigin ax contentBlock) slotSizes
-  withBounds contentArea $ do
-    clipToCurrent $ do
-      sequence_ $ zipWith3
-        (\slotOrigin slotSize (rc, ui) ->
-          let slotRect    = makeSlot ax slotOrigin crossOrig slotSize crossLen
-              effectiveRc = if bxFillCross cfg then fillCross ax rc else rc
-          in withBounds slotRect $ layoutWithConstraints effectiveRc ui)
-        slotOrigins slotSizes kids
+  withBounds contentArea $ clipToCurrent $
+    forM_ (zip3 slotOrigins slotSizes kids) $ \(slotOrigin, slotSize, kid) -> do
+      resolvedCross <- resolveLength (crossOrientation ax) (crossConstraint ax)
+                          (Bounded crossLen) (Bounded slotSize) kid
+      let slotRect = makeSlot ax slotOrigin crossOrig slotSize crossLen
+          rc       = setCross ax resolvedCross (setMain ax (Exactly slotSize) (elLayout kid))
+      withBounds slotRect $ layoutWithConstraints rc (elRun kid)
 
 preferredSizes :: Double -> [Length] -> [Double]
 preferredSizes available constraints =
@@ -302,6 +369,21 @@ minLength (AtMost _)     = 0
 minLength (Between l _)  = l
 minLength FitContent     = 0
   -- Unreachable in practice: see Blink.Layout.Constraints.preferredSize.
+
+-- | The size a resolved 'Length' takes when there is no space to
+-- distribute -- used for a box that is itself sizing to content. Every
+-- constructor that depends on measurement ('FitContent', 'AtLeast',
+-- 'Between') has already been turned into an 'Exactly' by 'resolveLength'
+-- before reaching here.
+naturalLength :: Length -> Double
+naturalLength (Exactly w)   = w
+naturalLength (AtLeast w)   = w
+naturalLength (AtMost w)    = w
+naturalLength (Between l _) = l
+naturalLength Fill          = 0
+  -- Degenerate: see the spec's note on Fill inside a content-sized box.
+naturalLength FitContent    = 0
+  -- Unreachable: resolveLength never leaves a FitContent unresolved.
 
 canExpand :: Length -> Bool
 canExpand (Exactly _) = False

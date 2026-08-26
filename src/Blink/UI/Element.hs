@@ -6,6 +6,7 @@ module Blink.UI.Element
   , runElement
   , noIntrinsicSize
   , spacer
+  , elementWithLayout
   , resolveLength
   ) where
 
@@ -52,6 +53,14 @@ noIntrinsicSize ctx = pure $ case measureAxis ctx of
 -- | An element that draws nothing and takes whatever share it is given.
 spacer :: Element e msg
 spacer = Element (Layout Fill Fill TopLeft) noIntrinsicSize (pure ())
+
+-- | Pairs a plain 'UI' action with an explicit size request, for use as a
+-- container child before it reports its own 'Layout' (see "Blink.Controls").
+-- Reports 'noIntrinsicSize', so @layout@ must not name a content-dependent
+-- rule ('FitContent', 'AtLeast', or 'Between') -- there is nothing behind it
+-- to measure.
+elementWithLayout :: Layout -> UI e msg () -> Element e msg
+elementWithLayout layout ui = Element layout noIntrinsicSize ui
 
 -- | Turns a possibly content-dependent 'Length' into a pure one by
 -- measuring the element when its request names 'FitContent', 'AtLeast', or
