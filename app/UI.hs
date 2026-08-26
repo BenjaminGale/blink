@@ -100,7 +100,7 @@ type DemoUI = UI Element Msg
 
 -- | Plain, non-interactive text under the shared 'Label' element ID.
 caption :: Text -> DemoUI ()
-caption t = label Label [text t]
+caption t = runElement (label Label [text t])
 
 rowHeight :: Length
 rowHeight = Exactly 40

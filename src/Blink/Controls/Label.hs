@@ -21,6 +21,7 @@ module Blink.Controls.Label
   , defaultLabelledConfig
   , text
   , renderLabelledContent
+  , captionElement
 
     -- * Label
   , LabelConfig (..)
@@ -34,8 +35,11 @@ import Control.Monad (void)
 import Data.Text (Text)
 
 import Blink.Controls.Control
+import Blink.Geometry (Alignment (TopLeft))
+import Blink.Layout.Constraints (Layout (..), Length (..))
 import Blink.Style (Style (..))
-import Blink.UI (UI, currentStyle, drawText)
+import Blink.UI (UI, currentStyle, drawText, measureText)
+import Blink.UI.Element (Element (..))
 
 -- * Caption fragment
 
@@ -66,6 +70,17 @@ renderLabelledContent :: LabelledConfig e msg -> UI e msg ()
 renderLabelledContent cfg = do
   s <- currentStyle
   drawText (styleTextColour s) (styleTextAlign s) (lcText cfg)
+
+-- | A minimal, non-wrapping caption measure -- stand-in for a proper
+-- @textBlock@ primitive, which doesn't exist yet. Reports the caption's
+-- unwrapped single-line size on both axes. Shared by every control whose
+-- content is a plain caption (see 'Blink.Controls.Button.button', 'label').
+captionElement :: Text -> Element e msg
+captionElement t = Element
+  { elLayout  = Layout Fill FitContent TopLeft
+  , elMeasure = const (measureText t)
+  , elRun     = pure ()
+  }
 
 -- * Label
 
@@ -114,13 +129,21 @@ target t = Attribute (\c -> c { lcTarget = Just t })
 -- always overrides 'isFocusable' to 'False' itself, so it wins regardless
 -- of what a caller passes. The only way a click on a label affects focus
 -- at all is 'target', which redirects it to a different, named element.
-label :: Ord e => e -> [Attribute (LabelConfig e msg)] -> UI e msg ()
-label eid attrs = do
-  let cfg   = resolve defaultLabelConfig attrs
-      focus = maybe NoFocus FocusTarget (lcTarget cfg)
-      ctrl  = (lcControl cfg)
-        { ccIsFocusable  = False
-        , ccFocusOnClick = focus
-        , ccContent      = renderLabelledContent (lcLabelled cfg)
-        }
-  void (controlBase eid ctrl)
+-- Defaults to sizing itself to its own chrome-wrapped caption on both axes
+-- -- unlike 'Blink.Controls.Button.button', a label is often placed beside
+-- other content in a row (a field name next to its input) rather than
+-- spanning it alone, so it shouldn't claim the whole row by default.
+label :: Ord e => e -> [Attribute (LabelConfig e msg)] -> Element e msg
+label eid attrs = Element
+  { elLayout  = Layout FitContent FitContent TopLeft
+  , elMeasure = measureChrome (ccStyleKey (lcControl cfg)) (captionElement (lcText (lcLabelled cfg)))
+  , elRun     = void (controlBase eid ctrl)
+  }
+  where
+    cfg   = resolve defaultLabelConfig attrs
+    focus = maybe NoFocus FocusTarget (lcTarget cfg)
+    ctrl  = (lcControl cfg)
+      { ccIsFocusable  = False
+      , ccFocusOnClick = focus
+      , ccContent      = renderLabelledContent (lcLabelled cfg)
+      }

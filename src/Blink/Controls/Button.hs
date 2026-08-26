@@ -50,12 +50,13 @@ import Data.Text (Text)
 import qualified Data.Set as Set
 
 import Blink.Controls.Control
-import Blink.Controls.Label (HasLabelledConfig (..), LabelledConfig (..), defaultLabelledConfig, renderLabelledContent)
+import Blink.Controls.Label
+  (HasLabelledConfig (..), LabelledConfig (..), captionElement, defaultLabelledConfig, renderLabelledContent)
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input (Key (KeyReturn), KeyEvent (..))
 import Blink.Layout.Constraints (Layout (..), Length (..))
 import Blink.Style (Style (..), VisualState (..))
-import Blink.UI (Out, UI, currentStyle, drawText, measureText)
+import Blink.UI (Out, UI, currentStyle, drawText)
 import Blink.UI.Element (Element (..))
 
 -- * Button
@@ -145,16 +146,6 @@ button eid attrs = Element
   where
     cfg  = resolve defaultButtonConfig attrs
     ctrl = (bcControl cfg) { ccContent = renderLabelledContent (bcLabelled cfg) }
-
--- | A minimal, non-wrapping caption measure -- stand-in for a proper
--- @textBlock@ primitive, which doesn't exist yet. Reports the caption's
--- unwrapped single-line size on both axes.
-captionElement :: Text -> Element e msg
-captionElement t = Element
-  { elLayout  = Layout Fill FitContent TopLeft
-  , elMeasure = const (measureText t)
-  , elRun     = pure ()
-  }
 
 -- * Toggle
 
