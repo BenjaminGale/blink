@@ -15,11 +15,13 @@ import Data.Text (Text)
 
 import Blink.Controls.Button (ButtonConfig (..), ToggleConfig (..), defaultToggleButtonConfig, toggleBase)
 import Blink.Controls.Control
-import Blink.Controls.Label (renderLabelledContent)
-import Blink.Geometry (Rectangle (..))
+import Blink.Controls.Label (lcText, renderLabelledContent)
+import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..))
+import Blink.Layout.Constraints (Layout (..), Length (..))
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..))
-import Blink.UI (UI, currentStyle, drawText, getBounds, withBounds)
+import Blink.UI (currentStyle, drawText, getBounds, measureText, withBounds)
+import Blink.UI.Element (Element (..))
 
 -- | The fixed width reserved for the glyph, on the left of the caption.
 glyphWidth :: Double
@@ -53,22 +55,40 @@ defaultRadioButtonConfig = defaultToggleButtonConfig
 -- -- only ever moves it from unselected to selected, since a radio button
 -- gives up selection by a sibling in its group being selected instead,
 -- never by being clicked again itself. See
--- 'Blink.Controls.Button.onSelectedChanged' for reacting to it.
-radioButton :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> UI e msg ()
-radioButton eid attrs = do
-  let cfg      = resolve defaultRadioButtonConfig attrs
-      btn      = tgcButton cfg
-      selected = tgcSelected cfg
-      glyphContent = do
-        s      <- currentStyle
-        bounds <- getBounds
-        let glyphRect = bounds { rectWidth = glyphWidth }
-            textRect  = bounds { rectX = rectX bounds + glyphWidth, rectWidth = max 0 (rectWidth bounds - glyphWidth) }
-        withBounds glyphRect $ drawText (styleTextColour s) AlignCenter (radioGlyph selected)
-        withBounds textRect  $ renderLabelledContent (bcLabelled btn)
-      ctrl = (bcControl btn) { ccContent = glyphContent }
-      cfg' = cfg
-        { tgcNext   = const True
-        , tgcButton = btn { bcControl = ctrl }
-        }
-  void (toggleBase eid cfg')
+-- 'Blink.Controls.Button.onSelectedChanged' for reacting to it. Defaults to
+-- sizing itself to its own glyph-plus-caption content on both axes, the
+-- same as 'Blink.Controls.Label.label'.
+radioButton :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> Element e msg
+radioButton eid attrs = Element
+  { elLayout  = Layout FitContent FitContent TopLeft
+  , elMeasure = measureChrome (ccStyleKey ctrl) (radioContentElement (lcText (bcLabelled btn)))
+  , elRun     = void (toggleBase eid cfg')
+  }
+  where
+    cfg      = resolve defaultRadioButtonConfig attrs
+    btn      = tgcButton cfg
+    selected = tgcSelected cfg
+    glyphContent = do
+      s      <- currentStyle
+      bounds <- getBounds
+      let glyphRect = bounds { rectWidth = glyphWidth }
+          textRect  = bounds { rectX = rectX bounds + glyphWidth, rectWidth = max 0 (rectWidth bounds - glyphWidth) }
+      withBounds glyphRect $ drawText (styleTextColour s) AlignCenter (radioGlyph selected)
+      withBounds textRect  $ renderLabelledContent (bcLabelled btn)
+    ctrl = (bcControl btn) { ccContent = glyphContent }
+    cfg' = cfg
+      { tgcNext   = const True
+      , tgcButton = btn { bcControl = ctrl }
+      }
+
+-- | The glyph-plus-caption content's own preferred size: the glyph's fixed
+-- width plus the caption's unwrapped single-line width; the taller of the
+-- glyph's width (it's drawn as a square) and the caption's line height.
+radioContentElement :: Text -> Element e msg
+radioContentElement t = Element
+  { elLayout  = Layout Fill FitContent TopLeft
+  , elMeasure = const $ do
+      capSize <- measureText t
+      pure (Size (glyphWidth + sizeWidth capSize) (max glyphWidth (sizeHeight capSize)))
+  , elRun     = pure ()
+  }

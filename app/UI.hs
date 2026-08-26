@@ -109,11 +109,12 @@ rowHeight = Exactly 40
 
 rowDarkMode :: AppState -> DemoUI ()
 rowDarkMode s =
-  checkbox DarkModeCheckbox [text "Dark mode", isSelected (darkMode s), onSelectedChanged (postWith SetDarkMode)]
+  runElement $ checkbox DarkModeCheckbox [text "Dark mode", isSelected (darkMode s), onSelectedChanged (postWith SetDarkMode)]
 
 rowEditing :: AppState -> DemoUI ()
 rowEditing s =
-  checkbox EditingCheckbox [text "Enable editing", isSelected (editingEnabled s), onSelectedChanged (postWith SetEditingEnabled)]
+  runElement $
+    checkbox EditingCheckbox [text "Enable editing", isSelected (editingEnabled s), onSelectedChanged (postWith SetEditingEnabled)]
 
 rowButtons :: AppState -> DemoUI ()
 rowButtons s =
@@ -131,8 +132,8 @@ rowToggle s =
   runElement $ hBox
     [ spacing 8
     , children
-        [ elementWithLayout (Layout (Exactly 160) Fill TopLeft)
-             (toggleButton ToggleCtl [text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle)])
+        [ (toggleButton ToggleCtl [text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle)])
+             { elLayout = Layout (Exactly 160) Fill TopLeft }
         , elementWithLayout (Layout Fill Fill MiddleLeft) (caption (if toggleOn s then "On" else "Off"))
         ]
     ]
@@ -145,7 +146,7 @@ rowRadio s =
   runElement $ hBox
     [ spacing 16
     , children
-        [ elementWithLayout (Layout (Exactly 100) Fill MiddleLeft) (radioOption i opt)
+        [ (radioOption i opt) { elLayout = Layout (Exactly 100) Fill MiddleLeft }
         | (i, opt) <- zip [0 ..] radioOptions
         ]
     ]
@@ -179,7 +180,8 @@ rowPasswordInput s =
 
 rowAnimate :: AppState -> DemoUI ()
 rowAnimate s =
-  checkbox AnimateCheckbox [text "Animate progress bar", isSelected (animating s), onSelectedChanged (postWith SetAnimating)]
+  runElement $
+    checkbox AnimateCheckbox [text "Animate progress bar", isSelected (animating s), onSelectedChanged (postWith SetAnimating)]
 
 rowProgress :: AppState -> DemoUI ()
 rowProgress s =

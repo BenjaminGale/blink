@@ -256,13 +256,19 @@ toggleBase eid cfg = do
 -- flipping every time it's activated. Drawn with 'toggleChecked' active
 -- while selected -- see "Blink.Style" for how a theme gives that a
 -- distinct look. Activated the same way as 'button'; see
--- 'onSelectedChanged' for reacting to it.
-toggleButton :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> UI e msg ()
-toggleButton eid attrs = do
-  let cfg  = resolve defaultToggleButtonConfig attrs
-      btn  = tgcButton cfg
-      draw = do
-        s <- currentStyle
-        drawText (styleTextColour s) (styleTextAlign s) (lcText (bcLabelled btn))
-      ctrl = (bcControl btn) { ccContent = draw }
-  void (toggleBase eid cfg { tgcNext = not, tgcButton = btn { bcControl = ctrl } })
+-- 'onSelectedChanged' for reacting to it. Defaults to filling the width
+-- it's given and sizing its height to its own chrome-wrapped caption, the
+-- same as 'button'.
+toggleButton :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> Element e msg
+toggleButton eid attrs = Element
+  { elLayout  = Layout Fill FitContent TopLeft
+  , elMeasure = measureChrome (ccStyleKey (bcControl btn)) (captionElement (lcText (bcLabelled btn)))
+  , elRun     = void (toggleBase eid cfg { tgcNext = not, tgcButton = btn { bcControl = ctrl } })
+  }
+  where
+    cfg  = resolve defaultToggleButtonConfig attrs
+    btn  = tgcButton cfg
+    draw = do
+      s <- currentStyle
+      drawText (styleTextColour s) (styleTextAlign s) (lcText (bcLabelled btn))
+    ctrl = (bcControl btn) { ccContent = draw }

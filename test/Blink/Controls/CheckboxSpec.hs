@@ -8,12 +8,14 @@ import Blink.Controls.Button (ToggleConfig, isSelected)
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Element (Attribute)
 import Blink.Controls.Label (text)
-import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..))
+import Blink.Layout.Constraints (Layout (..), Length (Fill))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.UI
+import Blink.UI.Element (elLayout, runElement)
 
 data TestElement = Remember deriving (Eq, Ord, Show)
 
@@ -64,12 +66,21 @@ type Attribute' = Attribute (ToggleConfig TestElement String)
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
+-- | The behaviour contracts below are about interaction, not sizing --
+-- they're written against a checkbox that fills its given bounds entirely,
+-- as every control did before controls reported their own 'Layout'.
+-- 'checkbox' now defaults to sizing itself to its own content, so these
+-- tests ask for the old full-size behaviour explicitly, the same way any
+-- other caller would.
+fullSize :: [Attribute'] -> UI TestElement String ()
+fullSize attrs = runElement (checkbox Remember attrs) { elLayout = Layout Fill Fill TopLeft }
+
 start :: [Attribute'] -> IO (UIContext TestElement String)
-start attrs = snd <$> runUI (checkbox Remember attrs) seedCtx
+start attrs = snd <$> runUI (fullSize attrs) seedCtx
 
 spec :: Spec
 spec = describe "Blink.Controls.Checkbox" $ do
-  toggleBehaviourSpec not testBounds seedCtx Remember (Point 5 5) hitRect (Point 200 200) (checkbox Remember)
+  toggleBehaviourSpec not testBounds seedCtx Remember (Point 5 5) hitRect (Point 200 200) fullSize
 
   it "draws the box and its caption, with no tick, while not selected" $ do
     ctx <- start [text "Remember me"]
