@@ -143,7 +143,7 @@ mkControlStyle align p = StyleSet
       { styleBackground   = paletteSurface (apBase p)
       , styleTextColour   = paletteTextPrimary (apBase p)
       , styleTextAlign    = align
-      , styleBorderColour = Just invisibleBorder
+      , styleBorderColour = Just (paletteBorder (apBase p))
       }
   , styleOverrides = Map.fromList
       [ (CommonMouseOver, \s -> s { styleBackground = paletteSurfaceHover (apBase p), styleBorderColour = Just (paletteBorderHover (apBase p)) })
@@ -181,7 +181,7 @@ mkTextInputStyle p = StyleSet
       { styleBackground   = apSurfaceInput p
       , styleTextColour   = paletteTextPrimary (apBase p)
       , styleTextAlign    = AlignLeft
-      , styleBorderColour = Just invisibleBorder
+      , styleBorderColour = Just (paletteBorder (apBase p))
       }
   , styleOverrides = Map.fromList
       [ (CommonMouseOver, \s -> s { styleBackground = apSurfaceInputHover p, styleBorderColour = Just (paletteBorderHover (apBase p)) })
