@@ -50,9 +50,9 @@ intersectSDLRect (SDL.Rectangle (SDL.P (SDL.V2 x1 y1)) (SDL.V2 w1 h1))
   in SDL.Rectangle (SDL.P (SDL.V2 x y)) (SDL.V2 (max 0 (r - x)) (max 0 (b - y)))
 
 alignedTextRect :: Rectangle -> TextAlign -> CInt -> CInt -> SDL.Rectangle CInt
-alignedTextRect r align tw th =
+alignedTextRect r textAlign tw th =
   let cy = round (rectY r + (rectHeight r - fromIntegral th) / 2)
-      cx = case align of
+      cx = case textAlign of
         AlignLeft   -> round (rectX r)
         AlignCenter -> round (rectX r + (rectWidth r - fromIntegral tw) / 2)
         AlignRight  -> round (rectX r + rectWidth r) - tw
@@ -86,7 +86,7 @@ renderBorder renderer r color edges = do
   when (ri > 0) $ SDL.fillRect renderer (Just (mkRect (x + w - ri) (y + t) ri (h - t - b)))
 
 renderText :: SDL.Renderer -> Font.Font -> TextureCache -> Rectangle -> Text -> Colour -> TextAlign -> IO ()
-renderText renderer font cache r txt color align = do
+renderText renderer font cache r txt color textAlign = do
   let sdlColor = toSDLColor color
       cacheKey = (txt, sdlColor)
   m <- readIORef cache
@@ -99,7 +99,7 @@ renderText renderer font cache r txt color align = do
       (SDL.TextureInfo _ _ w h) <- SDL.queryTexture tex
       writeIORef cache (Map.insert cacheKey (tex, w, h) m)
       pure (tex, w, h)
-  SDL.copy renderer texture Nothing (Just (alignedTextRect r align (fromIntegral tw) (fromIntegral th)))
+  SDL.copy renderer texture Nothing (Just (alignedTextRect r textAlign (fromIntegral tw) (fromIntegral th)))
 
 pushClip :: SDL.Renderer -> IORef [SDL.Rectangle CInt] -> Rectangle -> IO ()
 pushClip renderer clipRef r = do
@@ -124,7 +124,7 @@ submitDrawCommand :: SDL.Renderer -> Font.Font -> TextureCache -> IORef [SDL.Rec
 submitDrawCommand renderer _ _ _        (FillRect r color)            = renderFill   renderer r color
 submitDrawCommand renderer _ _ _        (StrokeBorder r color edges)  = renderBorder renderer r color edges
 submitDrawCommand _ _ _ _               (DrawText _ txt _ _) | T.null txt = pure ()
-submitDrawCommand renderer font cache _ (DrawText r txt color align) = renderText   renderer font cache r txt color align
+submitDrawCommand renderer font cache _ (DrawText r txt color textAlign) = renderText renderer font cache r txt color textAlign
 submitDrawCommand renderer _ _ clipRef  (PushClip r)                  = pushClip     renderer clipRef r
 submitDrawCommand renderer _ _ clipRef   PopClip                      = popClip      renderer clipRef
 

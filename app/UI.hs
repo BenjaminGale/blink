@@ -12,7 +12,7 @@ import Blink.Input
 import Blink.Layout
 import Blink.Rendering
 import Blink.UI
-import Blink.UI.Element (elLayout, elementWithLayout, runElement)
+import Blink.UI.Element (elementWithLayout, runElement)
 import Blink.Update
 import Theme (Element (..), lightTheme, darkTheme)
 import Control.Monad (when)
@@ -121,8 +121,8 @@ rowButtons s =
   runElement $ hBox
     [ spacing 8
     , children
-        [ (button ClickButton [text "Click me", onActivated (post AddClick)]) { elLayout = Layout (Exactly 100) Fill TopLeft }
-        , (button ResetButton [text "Reset", onActivated (post ResetClicks)]) { elLayout = Layout (Exactly 100) Fill TopLeft }
+        [ button ClickButton [text "Click me", onActivated (post AddClick), width (Exactly 100), height Fill]
+        , button ResetButton [text "Reset", onActivated (post ResetClicks), width (Exactly 100), height Fill]
         , elementWithLayout (Layout Fill Fill MiddleLeft) (caption ("Clicks: " <> T.pack (show (clickCount s))))
         ]
     ]
@@ -132,8 +132,8 @@ rowToggle s =
   runElement $ hBox
     [ spacing 8
     , children
-        [ (toggleButton ToggleCtl [text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle)])
-             { elLayout = Layout (Exactly 160) Fill TopLeft }
+        [ toggleButton ToggleCtl
+            [text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle), width (Exactly 160), height Fill]
         , elementWithLayout (Layout Fill Fill MiddleLeft) (caption (if toggleOn s then "On" else "Off"))
         ]
     ]
@@ -146,14 +146,16 @@ rowRadio s =
   runElement $ hBox
     [ spacing 16
     , children
-        [ (radioOption i opt) { elLayout = Layout (Exactly 100) Fill MiddleLeft }
+        [ radioOption i opt
         | (i, opt) <- zip [0 ..] radioOptions
         ]
     ]
   where
     radioOption i opt =
       radioButton (RadioCtl i)
-        [text opt, isSelected (radioChoice s == Just opt), onSelectedChanged (\_ -> [OutMsg (PickRadio opt)])]
+        [ text opt, isSelected (radioChoice s == Just opt), onSelectedChanged (\_ -> [OutMsg (PickRadio opt)])
+        , width (Exactly 100), height Fill, align MiddleLeft
+        ]
 
 rowTextInput :: AppState -> DemoUI ()
 rowTextInput s =
@@ -161,8 +163,7 @@ rowTextInput s =
     [ spacing 8, alignment Center
     , children
         [ elementWithLayout (Layout (Exactly 120) Fill MiddleLeft) (caption "Text input")
-        , (textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText)])
-             { elLayout = Layout Fill Fill TopLeft }
+        , textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText), height Fill]
         ]
     ]
 
@@ -172,9 +173,8 @@ rowPasswordInput s =
     [ spacing 8, alignment Center
     , children
         [ elementWithLayout (Layout (Exactly 120) Fill MiddleLeft) (caption "Password input")
-        , (textInput PasswordInputCtl
-               [value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)])
-             { elLayout = Layout Fill Fill TopLeft }
+        , textInput PasswordInputCtl
+            [value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText), height Fill]
         ]
     ]
 

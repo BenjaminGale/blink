@@ -28,7 +28,7 @@ import Blink.Controls.Control
 import Blink.Controls.Label (captionElement)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
-import Blink.Layout.Constraints (Layout (..), Length (..))
+import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), Length (..))
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..))
 import Blink.UI
@@ -44,6 +44,7 @@ data TextInputConfig e msg = TextInputConfig
   , ticDisplayFilter :: Text -> Text
   , ticOnInput       :: [Text -> [Out e msg]]
   , ticOnSubmit      :: [EventHandler e msg]
+  , ticLayout        :: Layout
   }
 
 -- | The 'StyleKey' 'textInput' resolves its style from unless overridden
@@ -52,7 +53,8 @@ textInputStyleKey :: StyleKey e
 textInputStyleKey = Class "textInput"
 
 -- | 'defaultControlConfig' (styled via 'textInputStyleKey'), an empty
--- value, identity filters, and no 'onInput'\/'onSubmit' reactions.
+-- value, identity filters, no 'onInput'\/'onSubmit' reactions, and
+-- @Layout Fill FitContent TopLeft@ (see 'textInput').
 defaultTextInputConfig :: TextInputConfig e msg
 defaultTextInputConfig = TextInputConfig
   { ticControl       = defaultControlConfig { ccStyleKey = textInputStyleKey }
@@ -61,6 +63,7 @@ defaultTextInputConfig = TextInputConfig
   , ticDisplayFilter = id
   , ticOnInput       = []
   , ticOnSubmit      = []
+  , ticLayout        = Layout Fill FitContent TopLeft
   }
 
 instance HasElementConfig e msg (TextInputConfig e msg) where
@@ -68,6 +71,9 @@ instance HasElementConfig e msg (TextInputConfig e msg) where
 
 instance HasControlConfig e msg (TextInputConfig e msg) where
   overControl attr = Attribute (\tc -> tc { ticControl = runAttribute attr (ticControl tc) })
+
+instance HasLayoutConfig (TextInputConfig e msg) where
+  overLayout attr = Attribute (\tc -> tc { ticLayout = runAttribute attr (ticLayout tc) })
 
 -- | Sets the field's current value. Defaults to @\"\"@ when not given.
 value :: Text -> Attribute (TextInputConfig e msg)
@@ -241,10 +247,10 @@ drawTextInputContent s bounds displayValue canEdit ox sel@(Selection _ active) =
 -- 'getScrollState', keyed by the element ID. Defaults to filling the width
 -- it's given and sizing its height to one line of text plus chrome -- never
 -- its own value's width, which would make the field resize as it's typed
--- into.
+-- into. Override with 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/'Blink.Layout.Constraints.align'.
 textInput :: Ord e => e -> [Attribute (TextInputConfig e msg)] -> Element e msg
 textInput eid attrs = Element
-  { elLayout  = Layout Fill FitContent TopLeft
+  { elLayout  = ticLayout cfg
   , elMeasure = measureChrome (ccStyleKey (ticControl cfg)) (lineHeightElement (ticValue cfg))
   , elRun     = do
       wasFocused   <- isFocused eid

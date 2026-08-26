@@ -45,7 +45,9 @@ checkboxStyleKey = Class "checkbox"
 defaultCheckboxConfig :: ToggleConfig e msg
 defaultCheckboxConfig = defaultToggleButtonConfig
   { tgcButton = (tgcButton defaultToggleButtonConfig)
-      { bcControl = (bcControl (tgcButton defaultToggleButtonConfig)) { ccStyleKey = checkboxStyleKey } }
+      { bcControl = (bcControl (tgcButton defaultToggleButtonConfig)) { ccStyleKey = checkboxStyleKey }
+      , bcLayout  = Layout FitContent FitContent TopLeft
+      }
   }
 
 -- | A checkbox: a small box drawn with 'strokeRect', a tick inside it while
@@ -54,10 +56,11 @@ defaultCheckboxConfig = defaultToggleButtonConfig
 -- activates it, the same as 'Blink.Controls.Button.toggleButton'. Flips
 -- every time it's activated; see 'Blink.Controls.Button.onSelectedChanged' for reacting to it.
 -- Defaults to sizing itself to its own glyph-plus-caption content on both
--- axes, the same as 'Blink.Controls.Label.label'.
+-- axes, the same as 'Blink.Controls.Label.label'; override with
+-- 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/'Blink.Layout.Constraints.align'.
 checkbox :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> Element e msg
 checkbox eid attrs = Element
-  { elLayout  = Layout FitContent FitContent TopLeft
+  { elLayout  = bcLayout btn
   , elMeasure = measureChrome (ccStyleKey ctrl) (checkboxContentElement (lcText (bcLabelled btn)))
   , elRun     = void (toggleBase eid cfg')
   }

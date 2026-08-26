@@ -9,8 +9,14 @@ module Blink.Layout.Constraints
   , Available (..)
   , MeasureCtx (..)
   , shrink
+    -- * Layout attributes
+  , HasLayoutConfig (..)
+  , width
+  , height
+  , align
   ) where
 
+import Blink.Attribute (Attribute (..))
 import Blink.Geometry (Alignment (..), Orientation (..), Rectangle (..), alignRect)
 import Blink.UI (UI, getBounds, withBounds)
 
@@ -182,3 +188,30 @@ data MeasureCtx = MeasureCtx
 shrink :: Double -> Available -> Available
 shrink n (Bounded d) = Bounded (max 0 (d - n))
 shrink _ Unbounded   = Unbounded
+
+-- | Implemented by any config type that nests a 'Layout', letting 'width'\/
+-- 'height'\/'align' be applied to it directly -- the same delegation
+-- pattern as 'Blink.Controls.Control.HasControlConfig'\/
+-- 'Blink.Controls.Element.HasElementConfig', minus the @e@\/@msg@
+-- functional dependency those need and this doesn't: a 'Layout' is pure
+-- geometry, with no element-identity or message type of its own to fix.
+class HasLayoutConfig cfg where
+  overLayout :: Attribute Layout -> Attribute cfg
+
+instance HasLayoutConfig Layout where
+  overLayout = id
+
+-- | Sets the size request's width. See 'Length' for the available
+-- constraints, and each control's own haddock for its default.
+width :: HasLayoutConfig cfg => Length -> Attribute cfg
+width l = overLayout (Attribute (\lay -> lay { layoutWidth = l }))
+
+-- | Sets the size request's height. See 'Length' for the available
+-- constraints, and each control's own haddock for its default.
+height :: HasLayoutConfig cfg => Length -> Attribute cfg
+height l = overLayout (Attribute (\lay -> lay { layoutHeight = l }))
+
+-- | Sets how the control is positioned within its slot when it does not
+-- fill the slot on one or both axes. Defaults to 'TopLeft'.
+align :: HasLayoutConfig cfg => Alignment -> Attribute cfg
+align a = overLayout (Attribute (\lay -> lay { layoutAlignment = a }))

@@ -43,7 +43,9 @@ radioButtonStyleKey = Class "radioButton"
 defaultRadioButtonConfig :: ToggleConfig e msg
 defaultRadioButtonConfig = defaultToggleButtonConfig
   { tgcButton = (tgcButton defaultToggleButtonConfig)
-      { bcControl = (bcControl (tgcButton defaultToggleButtonConfig)) { ccStyleKey = radioButtonStyleKey } }
+      { bcControl = (bcControl (tgcButton defaultToggleButtonConfig)) { ccStyleKey = radioButtonStyleKey }
+      , bcLayout  = Layout FitContent FitContent TopLeft
+      }
   }
 
 -- | A radio button: a glyph showing whether it's currently selected (see
@@ -57,10 +59,11 @@ defaultRadioButtonConfig = defaultToggleButtonConfig
 -- never by being clicked again itself. See
 -- 'Blink.Controls.Button.onSelectedChanged' for reacting to it. Defaults to
 -- sizing itself to its own glyph-plus-caption content on both axes, the
--- same as 'Blink.Controls.Label.label'.
+-- same as 'Blink.Controls.Label.label'; override with
+-- 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/'Blink.Layout.Constraints.align'.
 radioButton :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> Element e msg
 radioButton eid attrs = Element
-  { elLayout  = Layout FitContent FitContent TopLeft
+  { elLayout  = bcLayout btn
   , elMeasure = measureChrome (ccStyleKey ctrl) (radioContentElement (lcText (bcLabelled btn)))
   , elRun     = void (toggleBase eid cfg')
   }

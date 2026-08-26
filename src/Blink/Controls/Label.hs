@@ -36,7 +36,7 @@ import Data.Text (Text)
 
 import Blink.Controls.Control
 import Blink.Geometry (Alignment (TopLeft))
-import Blink.Layout.Constraints (Layout (..), Length (..))
+import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), Length (..))
 import Blink.Style (Style (..))
 import Blink.UI (UI, currentStyle, drawText, measureText)
 import Blink.UI.Element (Element (..))
@@ -90,15 +90,17 @@ captionElement t = Element
 data LabelConfig e msg = LabelConfig
   { lcControl  :: ControlConfig e msg
   , lcLabelled :: LabelledConfig e msg
+  , lcLayout   :: Layout
   , lcTarget   :: Maybe e
   }
 
 -- | 'defaultControlConfig' (styled via 'labelStyleKey'), an empty caption,
--- and no 'target'.
+-- @Layout FitContent FitContent TopLeft@ (see 'label'), and no 'target'.
 defaultLabelConfig :: LabelConfig e msg
 defaultLabelConfig = LabelConfig
   { lcControl  = defaultControlConfig { ccStyleKey = labelStyleKey }
   , lcLabelled = defaultLabelledConfig
+  , lcLayout   = Layout FitContent FitContent TopLeft
   , lcTarget   = Nothing
   }
 
@@ -115,6 +117,9 @@ instance HasControlConfig e msg (LabelConfig e msg) where
 
 instance HasLabelledConfig e msg (LabelConfig e msg) where
   overLabelled attr = Attribute (\c -> c { lcLabelled = runAttribute attr (lcLabelled c) })
+
+instance HasLayoutConfig (LabelConfig e msg) where
+  overLayout attr = Attribute (\c -> c { lcLayout = runAttribute attr (lcLayout c) })
 
 -- | Names the element a click on the label should focus instead of the
 -- label itself -- e.g. a caption redirecting a click onto the input beside
@@ -133,9 +138,10 @@ target t = Attribute (\c -> c { lcTarget = Just t })
 -- -- unlike 'Blink.Controls.Button.button', a label is often placed beside
 -- other content in a row (a field name next to its input) rather than
 -- spanning it alone, so it shouldn't claim the whole row by default.
+-- Override with 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/'Blink.Layout.Constraints.align'.
 label :: Ord e => e -> [Attribute (LabelConfig e msg)] -> Element e msg
 label eid attrs = Element
-  { elLayout  = Layout FitContent FitContent TopLeft
+  { elLayout  = lcLayout cfg
   , elMeasure = measureChrome (ccStyleKey (lcControl cfg)) (captionElement (lcText (lcLabelled cfg)))
   , elRun     = void (controlBase eid ctrl)
   }

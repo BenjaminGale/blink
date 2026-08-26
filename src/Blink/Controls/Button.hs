@@ -54,7 +54,7 @@ import Blink.Controls.Label
   (HasLabelledConfig (..), LabelledConfig (..), captionElement, defaultLabelledConfig, renderLabelledContent)
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input (Key (KeyReturn), KeyEvent (..))
-import Blink.Layout.Constraints (Layout (..), Length (..))
+import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), Length (..))
 import Blink.Style (Style (..), VisualState (..))
 import Blink.UI (Out, UI, currentStyle, drawText)
 import Blink.UI.Element (Element (..))
@@ -68,15 +68,18 @@ import Blink.UI.Element (Element (..))
 data ButtonConfig e msg = ButtonConfig
   { bcControl     :: ControlConfig e msg
   , bcLabelled    :: LabelledConfig e msg
+  , bcLayout      :: Layout
   , bcOnActivated :: [EventHandler e msg]
   }
 
 -- | 'defaultControlConfig' (styled via 'buttonStyleKey'), an empty caption,
--- and no 'onActivated' reactions.
+-- @Layout Fill FitContent TopLeft@ (see 'button'), and no 'onActivated'
+-- reactions.
 defaultButtonConfig :: ButtonConfig e msg
 defaultButtonConfig = ButtonConfig
   { bcControl     = defaultControlConfig { ccStyleKey = buttonStyleKey }
   , bcLabelled    = defaultLabelledConfig
+  , bcLayout      = Layout Fill FitContent TopLeft
   , bcOnActivated = []
   }
 
@@ -93,6 +96,9 @@ instance HasControlConfig e msg (ButtonConfig e msg) where
 
 instance HasLabelledConfig e msg (ButtonConfig e msg) where
   overLabelled attr = Attribute (\bc -> bc { bcLabelled = runAttribute attr (bcLabelled bc) })
+
+instance HasLayoutConfig (ButtonConfig e msg) where
+  overLayout attr = Attribute (\bc -> bc { bcLayout = runAttribute attr (bcLayout bc) })
 
 -- | Implemented by any config type that nests a 'ButtonConfig', letting
 -- 'onActivated' be applied to it directly.
@@ -136,10 +142,10 @@ buttonBase eid cfg = do
 -- handler when activated by a left-click or by pressing Enter while
 -- focused. Always takes focus when clicked -- fixed behaviour, not a
 -- default. Defaults to filling the width it's given and sizing its height
--- to its own chrome-wrapped caption.
+-- to its own chrome-wrapped caption; override with 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/'Blink.Layout.Constraints.align'.
 button :: Ord e => e -> [Attribute (ButtonConfig e msg)] -> Element e msg
 button eid attrs = Element
-  { elLayout  = Layout Fill FitContent TopLeft
+  { elLayout  = bcLayout cfg
   , elMeasure = measureChrome (ccStyleKey (bcControl cfg)) (captionElement (lcText (bcLabelled cfg)))
   , elRun     = void (buttonBase eid cfg { bcControl = ctrl })
   }
@@ -223,6 +229,9 @@ instance HasLabelledConfig e msg (ToggleConfig e msg) where
 instance HasButtonConfig e msg (ToggleConfig e msg) where
   overButton attr = Attribute (\tc -> tc { tgcButton = runAttribute attr (tgcButton tc) })
 
+instance HasLayoutConfig (ToggleConfig e msg) where
+  overLayout attr = Attribute (\tc -> tc { tgcButton = runAttribute (overLayout attr) (tgcButton tc) })
+
 -- | What 'toggleBase' reports back: the wrapped button's own
 -- 'ButtonInteraction', and the selected state after this frame's
 -- activation, if any (see 'toggleBase').
@@ -258,10 +267,10 @@ toggleBase eid cfg = do
 -- distinct look. Activated the same way as 'button'; see
 -- 'onSelectedChanged' for reacting to it. Defaults to filling the width
 -- it's given and sizing its height to its own chrome-wrapped caption, the
--- same as 'button'.
+-- same as 'button'; override with 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/'Blink.Layout.Constraints.align'.
 toggleButton :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> Element e msg
 toggleButton eid attrs = Element
-  { elLayout  = Layout Fill FitContent TopLeft
+  { elLayout  = bcLayout btn
   , elMeasure = measureChrome (ccStyleKey (bcControl btn)) (captionElement (lcText (bcLabelled btn)))
   , elRun     = void (toggleBase eid cfg { tgcNext = not, tgcButton = btn { bcControl = ctrl } })
   }

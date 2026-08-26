@@ -19,7 +19,7 @@ import Control.Monad (void)
 
 import Blink.Controls.Control
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
-import Blink.Layout.Constraints (Layout (..), Length (..))
+import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), Length (..))
 import Blink.Style (Style (..))
 import Blink.UI
 import Blink.UI.Element (Element (..), noIntrinsicSize)
@@ -38,6 +38,7 @@ data ProgressBarConfig e msg = ProgressBarConfig
   { pbControl   :: ControlConfig e msg
   , pbValue     :: ProgressValue
   , pbBandSpeed :: Double
+  , pbLayout    :: Layout
   }
 
 -- | The 'StyleKey' 'progressBar' resolves its style from unless overridden
@@ -46,12 +47,13 @@ progressBarStyleKey :: StyleKey e
 progressBarStyleKey = Class "progressBar"
 
 -- | 'defaultControlConfig' (styled via 'progressBarStyleKey'), @'Progress' 0@,
--- and a band speed of 0.5.
+-- a band speed of 0.5, and @Layout Fill Fill TopLeft@ (see 'progressBar').
 defaultProgressBarConfig :: ProgressBarConfig e msg
 defaultProgressBarConfig = ProgressBarConfig
   { pbControl   = defaultControlConfig { ccStyleKey = progressBarStyleKey }
   , pbValue     = Progress 0
   , pbBandSpeed = 0.5
+  , pbLayout    = Layout Fill Fill TopLeft
   }
 
 instance HasElementConfig e msg (ProgressBarConfig e msg) where
@@ -59,6 +61,9 @@ instance HasElementConfig e msg (ProgressBarConfig e msg) where
 
 instance HasControlConfig e msg (ProgressBarConfig e msg) where
   overControl attr = Attribute (\pc -> pc { pbControl = runAttribute attr (pbControl pc) })
+
+instance HasLayoutConfig (ProgressBarConfig e msg) where
+  overLayout attr = Attribute (\pc -> pc { pbLayout = runAttribute attr (pbLayout pc) })
 
 -- | Sets the bar to 'Progress' (determinate) or 'Indeterminate'. Defaults
 -- to @'Progress' 0@.
@@ -79,11 +84,11 @@ bandSpeed v = Attribute (\pc -> pc { pbBandSpeed = v })
 -- itself, so it wins regardless of what a caller passes. Has no content of
 -- its own to size to, so it defaults to filling the space it's given on
 -- both axes, same as every control did before controls reported their own
--- 'Blink.Layout.Layout'.
+-- 'Blink.Layout.Layout'. Override with 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/'Blink.Layout.Constraints.align'.
 progressBar :: Ord e => e -> [Attribute (ProgressBarConfig e msg)] -> Element e msg
 progressBar eid attrs = Element
-  { elLayout  = Layout Fill Fill TopLeft
-  , elMeasure = measureChrome (ccStyleKey ctrl) (Element (Layout Fill Fill TopLeft) noIntrinsicSize (pure ()))
+  { elLayout  = pbLayout cfg
+  , elMeasure = measureChrome (ccStyleKey ctrl) (Element (pbLayout cfg) noIntrinsicSize (pure ()))
   , elRun     = void (controlBase eid ctrl)
   }
   where

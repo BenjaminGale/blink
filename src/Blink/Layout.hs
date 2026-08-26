@@ -23,6 +23,10 @@ module Blink.Layout
     layoutWithConstraints
   , Layout (..)
   , Length (..)
+  , HasLayoutConfig (..)
+  , width
+  , height
+  , align
     -- * Box layout
   , hBox
   , vBox
@@ -139,4 +143,5 @@ import Blink.Layout.Border
   (BorderContent, borderLayout, bottom, centre, emptyBorderContent, left, right, top)
 import Blink.Layout.Box
   (BoxConfig, alignment, boxTotalSpacing, children, defaultBoxConfig, hBox, margin, spacing, vBox)
-import Blink.Layout.Constraints (Layout (..), Length (..), layoutWithConstraints, preferredSize)
+import Blink.Layout.Constraints
+  (HasLayoutConfig (..), Layout (..), Length (..), align, height, layoutWithConstraints, preferredSize, width)

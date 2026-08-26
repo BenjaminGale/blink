@@ -193,9 +193,9 @@ spec = describe "layout" $ do
             , ( "BottomRight places the child at the bottom-right"
               , BottomRight,  Rectangle 120 60 80 40 )
             ]
-      forM_ cases $ \(desc, align, expected) ->
+      forM_ cases $ \(desc, anAlign, expected) ->
         it desc $ do
-          result <- run (rc (Exactly 80) (Exactly 40) align)
+          result <- run (rc (Exactly 80) (Exactly 40) anAlign)
           result `shouldBe` [expected]
 
   describe "hBox" $ do
@@ -241,9 +241,9 @@ spec = describe "layout" $ do
             , ("Center aligns the child to the middle",  Center,     Rectangle 0 30 200 40)
             , ("BottomLeft aligns the child to the bottom", BottomLeft, Rectangle 0 60 200 40)
             ]
-      forM_ cases $ \(desc, align, expected) ->
+      forM_ cases $ \(desc, anAlign, expected) ->
         it desc $ do
-          result <- runHBox hBounds cfg [rc Fill (Exactly 40) align]
+          result <- runHBox hBounds cfg [rc Fill (Exactly 40) anAlign]
           result `shouldBe` [expected]
 
     describe "alignment" $ do
@@ -304,9 +304,9 @@ spec = describe "layout" $ do
             , ("Center aligns the child to the centre",     Center,   Rectangle 20 0 60 200)
             , ("TopRight aligns the child to the right",    TopRight, Rectangle 40 0 60 200)
             ]
-      forM_ cases $ \(desc, align, expected) ->
+      forM_ cases $ \(desc, anAlign, expected) ->
         it desc $ do
-          result <- runVBox vBounds cfg [rc (Exactly 60) Fill align]
+          result <- runVBox vBounds cfg [rc (Exactly 60) Fill anAlign]
           result `shouldBe` [expected]
 
     describe "alignment" $ do
