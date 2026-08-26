@@ -18,9 +18,11 @@ module Blink.Controls.ProgressBar
 import Control.Monad (void)
 
 import Blink.Controls.Control
-import Blink.Geometry (Rectangle (..))
+import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
+import Blink.Layout.Constraints (Layout (..), Length (..))
 import Blink.Style (Style (..))
 import Blink.UI
+import Blink.UI.Element (Element (..), noIntrinsicSize)
 
 -- | The value passed to 'progressBar' via 'progress'.
 data ProgressValue
@@ -74,18 +76,24 @@ bandSpeed v = Attribute (\pc -> pc { pbBandSpeed = v })
 -- same way every other control does, even though a caller has no real
 -- reason to react to them. Never a tab stop, though: fixed behaviour, not
 -- a default -- 'progressBar' always overrides 'isFocusable' to 'False'
--- itself, so it wins regardless of what a caller passes.
-progressBar :: Ord e => e -> [Attribute (ProgressBarConfig e msg)] -> UI e msg ()
-progressBar eid attrs = do
-  let cfg  = resolve defaultProgressBarConfig attrs
-      ctrl = (pbControl cfg)
-        { ccIsFocusable  = False
-        , ccFocusOnClick = NoFocus
-        , ccContent      = body cfg
-        }
-  void (controlBase eid ctrl)
+-- itself, so it wins regardless of what a caller passes. Has no content of
+-- its own to size to, so it defaults to filling the space it's given on
+-- both axes, same as every control did before controls reported their own
+-- 'Blink.Layout.Layout'.
+progressBar :: Ord e => e -> [Attribute (ProgressBarConfig e msg)] -> Element e msg
+progressBar eid attrs = Element
+  { elLayout  = Layout Fill Fill TopLeft
+  , elMeasure = measureChrome (ccStyleKey ctrl) (Element (Layout Fill Fill TopLeft) noIntrinsicSize (pure ()))
+  , elRun     = void (controlBase eid ctrl)
+  }
   where
-    body cfg = do
+    cfg  = resolve defaultProgressBarConfig attrs
+    ctrl = (pbControl cfg)
+      { ccIsFocusable  = False
+      , ccFocusOnClick = NoFocus
+      , ccContent      = body
+      }
+    body = do
       s <- currentStyle
       r <- getBounds
       case pbValue cfg of

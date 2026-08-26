@@ -161,8 +161,8 @@ rowTextInput s =
     [ spacing 8, alignment Center
     , children
         [ elementWithLayout (Layout (Exactly 120) Fill MiddleLeft) (caption "Text input")
-        , elementWithLayout (Layout Fill Fill TopLeft)
-             (textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText)])
+        , (textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText)])
+             { elLayout = Layout Fill Fill TopLeft }
         ]
     ]
 
@@ -172,9 +172,9 @@ rowPasswordInput s =
     [ spacing 8, alignment Center
     , children
         [ elementWithLayout (Layout (Exactly 120) Fill MiddleLeft) (caption "Password input")
-        , elementWithLayout (Layout Fill Fill TopLeft)
-             (textInput PasswordInputCtl
+        , (textInput PasswordInputCtl
                [value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)])
+             { elLayout = Layout Fill Fill TopLeft }
         ]
     ]
 
@@ -185,9 +185,10 @@ rowAnimate s =
 
 rowProgress :: AppState -> DemoUI ()
 rowProgress s =
-  if animating s
-    then progressBar ProgressCtl [progress Indeterminate]
-    else progressBar ProgressCtl [progress (Progress (fromIntegral (clickCount s) / 50))]
+  runElement $
+    if animating s
+      then progressBar ProgressCtl [progress Indeterminate]
+      else progressBar ProgressCtl [progress (Progress (fromIntegral (clickCount s) / 50))]
 
 -- Footer
 
