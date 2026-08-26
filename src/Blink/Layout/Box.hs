@@ -300,6 +300,8 @@ minLength Fill           = 0
 minLength (AtLeast w)    = w
 minLength (AtMost _)     = 0
 minLength (Between l _)  = l
+minLength FitContent     = 0
+  -- Unreachable in practice: see Blink.Layout.Constraints.preferredSize.
 
 canExpand :: Length -> Bool
 canExpand (Exactly _) = False

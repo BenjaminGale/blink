@@ -52,6 +52,7 @@ library
         Blink.Style
         Blink.Style.Defaults
         Blink.UI
+        Blink.UI.Element
         Blink.Update
     hs-source-dirs: src
 

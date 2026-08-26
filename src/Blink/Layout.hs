@@ -45,10 +45,6 @@ module Blink.Layout
   , centre
     -- * Utilities
   , preferredSize
-  , AddLength (..)
-  , MaxLength (..)
-  , addLength
-  , maxLength
     -- * Advanced layout
     -- | Everything above covers a fixed arrangement decided in advance.
     --   Sometimes that isn't enough, in one of two ways:
@@ -143,5 +139,4 @@ import Blink.Layout.Border
   (BorderContent, borderLayout, bottom, centre, emptyBorderContent, left, right, top)
 import Blink.Layout.Box
   (BoxConfig, alignment, boxTotalSpacing, children, defaultBoxConfig, hBox, margin, spacing, stretch, vBox)
-import Blink.Layout.Constraints
-  (AddLength (..), Layout (..), Length (..), MaxLength (..), addLength, layoutWithConstraints, maxLength, preferredSize)
+import Blink.Layout.Constraints (Layout (..), Length (..), layoutWithConstraints, preferredSize)
