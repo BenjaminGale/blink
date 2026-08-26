@@ -11,7 +11,7 @@ import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.UI
 
@@ -28,23 +28,21 @@ testStyle = Style
   { styleBackground   = testColour
   , styleTextColour   = testColour
   , styleTextAlign    = AlignCenter
-  , styleMargin       = uniform 10
-  , stylePadding      = uniform 5
   , styleBorderColour = Nothing
-  , styleBorderEdges  = noBorder
+  }
+
+testMetrics :: Metrics
+testMetrics = Metrics
+  { metricsMargin      = uniform 10
+  , metricsPadding     = uniform 5
+  , metricsBorderEdges = noBorder
   }
 
 testStyleSet :: StyleSet
-testStyleSet = StyleSet
-  { styleSetNormal   = testStyle
-  , styleSetHovered  = testStyle
-  , styleSetPressed  = testStyle
-  , styleSetFocused  = testStyle
-  , styleSetDisabled = testStyle
-  }
+testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
 
 testTheme :: Theme TestElement
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = testStyleSet }
+testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
 
 noInput :: InputState
 noInput = InputState

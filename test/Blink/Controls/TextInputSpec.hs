@@ -12,7 +12,7 @@ import Blink.Geometry (Point (..), Rectangle (..), Size (..), insetRect, noBorde
 import Blink.Input (InputState (..), Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.Controls.TextInput
   (TextInputConfig, displayFilter, inputFilter, onInput, onSubmit, value, textInput)
 import Blink.UI
@@ -30,23 +30,21 @@ testStyle = Style
   { styleBackground   = testColour
   , styleTextColour   = testColour
   , styleTextAlign    = AlignLeft
-  , styleMargin       = uniform 10
-  , stylePadding      = uniform 5
   , styleBorderColour = Nothing
-  , styleBorderEdges  = noBorder
+  }
+
+testMetrics :: Metrics
+testMetrics = Metrics
+  { metricsMargin      = uniform 10
+  , metricsPadding     = uniform 5
+  , metricsBorderEdges = noBorder
   }
 
 testStyleSet :: StyleSet
-testStyleSet = StyleSet
-  { styleSetNormal   = testStyle
-  , styleSetHovered  = testStyle
-  , styleSetPressed  = testStyle
-  , styleSetFocused  = testStyle
-  , styleSetDisabled = testStyle
-  }
+testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
 
 testTheme :: Theme TestElement
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = testStyleSet }
+testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
 
 -- | Every character measures 0 wide, so any click lands on position 0 --
 -- fine for tests that don't care about exact click-to-offset placement.

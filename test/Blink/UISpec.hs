@@ -9,21 +9,21 @@ import Test.QuickCheck (forAll, choose)
 import Blink.Geometry (Point (..), Rectangle (..), uniform, noBorder, uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
-import Blink.Style (Style (..), StyleSet (..), StyleKey (..), Theme (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), StyleKey (..), VisualState (..), Theme (..))
 import Blink.UI
 import Blink.Generators ()
 
 data TwoElems = ElemA | ElemB deriving (Eq, Ord, Show)
 
 twoElemTheme :: Theme TwoElems
-twoElemTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = emptyStyleSet }
+twoElemTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (emptyMetrics, emptyStyleSet) }
 
 -- | A scope id (@Group@) plus two elements nested inside it, for testing
 -- that a scoped focus change only affects that scope's own 'FocusState'.
 data ScopeElems = Group | ItemA | ItemB deriving (Eq, Ord, Show)
 
 scopeTheme :: Theme ScopeElems
-scopeTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = emptyStyleSet }
+scopeTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (emptyMetrics, emptyStyleSet) }
 
 noInput :: InputState
 noInput = InputState
@@ -47,25 +47,23 @@ emptyStyle = Style
   { styleBackground = RGBA 0 0 0 1
   , styleTextColour = RGBA 0 0 0 1
   , styleTextAlign = AlignCenter
-  , styleMargin = uniform 0
-  , stylePadding = uniform 0
   , styleBorderColour = Nothing
-  , styleBorderEdges = noBorder
+  }
+
+emptyMetrics :: Metrics
+emptyMetrics = Metrics
+  { metricsMargin = uniform 0
+  , metricsPadding = uniform 0
+  , metricsBorderEdges = noBorder
   }
 
 emptyStyleSet :: StyleSet
-emptyStyleSet = StyleSet
-  { styleSetNormal = emptyStyle
-  , styleSetHovered = emptyStyle
-  , styleSetPressed = emptyStyle
-  , styleSetFocused = emptyStyle
-  , styleSetDisabled = emptyStyle
-  }
+emptyStyleSet = StyleSet { styleBase = emptyStyle, styleOverrides = Map.empty }
 
 emptyTheme :: Theme ()
 emptyTheme = Theme
   { themeElementStyles = Map.empty
-  , themeDefaultStyle = emptyStyleSet
+  , themeDefaultStyle = (emptyMetrics, emptyStyleSet)
   }
 
 testBounds :: Rectangle
@@ -594,26 +592,28 @@ spec = describe "Blink.UI" $ do
 
   describe "styles" $ do
     let distinctStyles = StyleSet
-          { styleSetNormal   = emptyStyle { styleBackground = RGBA 0 0 0 1 }
-          , styleSetHovered  = emptyStyle { styleBackground = RGBA 1 0 0 1 }
-          , styleSetPressed  = emptyStyle { styleBackground = RGBA 0 1 0 1 }
-          , styleSetFocused  = emptyStyle { styleBackground = RGBA 0 0 1 1 }
-          , styleSetDisabled = emptyStyle { styleBackground = RGBA 1 1 1 1 }
+          { styleBase = emptyStyle { styleBackground = RGBA 0 0 0 1 }
+          , styleOverrides = Map.fromList
+              [ (CommonMouseOver, \s -> s { styleBackground = RGBA 1 0 0 1 })
+              , (CommonPressed,   \s -> s { styleBackground = RGBA 0 1 0 1 })
+              , (FocusFocused,    \s -> s { styleBackground = RGBA 0 0 1 1 })
+              , (CommonDisabled,  \s -> s { styleBackground = RGBA 1 1 1 1 })
+              ]
           }
         styledTheme = Theme
-          { themeElementStyles = Map.singleton (ElementId ()) distinctStyles
-          , themeDefaultStyle  = emptyStyleSet
+          { themeElementStyles = Map.singleton (ElementId ()) (emptyMetrics, distinctStyles)
+          , themeDefaultStyle  = (emptyMetrics, emptyStyleSet)
           }
         runStyled ui = runUI ui (emptyUIContext testBounds noInput styledTheme noOpTextMeasurer)
 
     describe "getStyleSet" $ do
       it "returns the element-specific style when registered" $ do
-        (ss, _) <- runStyled (getStyleSet (ElementId ()))
-        styleBackground (styleSetNormal ss) `shouldBe` RGBA 0 0 0 1
+        ((_, ss), _) <- runStyled (getStyleSet (ElementId ()))
+        styleBackground (styleBase ss) `shouldBe` RGBA 0 0 0 1
 
       it "falls back to the theme default when no element-specific style is registered" $ do
-        (ss, _) <- run0 (getStyleSet (ElementId ()))
-        styleBackground (styleSetNormal ss) `shouldBe` styleBackground (styleSetNormal emptyStyleSet)
+        ((_, ss), _) <- run0 (getStyleSet (ElementId ()))
+        styleBackground (styleBase ss) `shouldBe` styleBackground (styleBase emptyStyleSet)
 
   describe "animation" $ do
     let animState isTick = mkAnimationState 0.016 1.5 isTick

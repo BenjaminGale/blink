@@ -51,16 +51,16 @@ module Blink.Controls.Control
   , StyleKey (..)
   ) where
 
-import Control.Monad (forM_, guard, void, when)
-import Data.Foldable (asum)
+import Control.Monad (forM_, void, when)
 import Data.Functor (($>))
 import Data.List (find)
-import Data.Maybe (fromMaybe)
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 import Blink.Controls.Element
 import Blink.Geometry (Rectangle, borderInsets, insetRect)
 import Blink.Input (InputState (..), Key, KeyEvent (..), Modifier)
-import Blink.Style (Style (..), StyleKey (..), StyleSet (..))
+import Blink.Style (Metrics (..), Style (..), StyleKey (..), VisualState (..), resolveStyle)
 import Blink.UI
 
 -- * Control
@@ -81,24 +81,30 @@ data FocusOnClick e
 -- focusable and enabled, its style, what clicking it does to focus, its
 -- content, and the element event handlers wrapped up inside it.
 data ControlConfig e msg = ControlConfig
-  { ccIsFocusable  :: Bool
-  , ccIsEnabled    :: Bool
-  , ccStyleKey     :: StyleKey e
-  , ccFocusOnClick :: FocusOnClick e
-  , ccContent      :: UI e msg ()
-  , ccEvents       :: ElementConfig e msg
+  { ccIsFocusable   :: Bool
+  , ccIsEnabled     :: Bool
+  , ccStyleKey      :: StyleKey e
+  , ccFocusOnClick  :: FocusOnClick e
+  , ccActiveStates  :: Set VisualState
+    -- ^ Extra 'VisualState's contributed by a wrapping layer (e.g.
+    -- 'Blink.Controls.Button.toggleBase' setting a checked\/unchecked
+    -- pseudo-state), unioned with the common\/focus states 'controlBase'
+    -- derives itself. Defaults to empty.
+  , ccContent       :: UI e msg ()
+  , ccEvents        :: ElementConfig e msg
   }
 
 -- | Focusable, enabled, styled via an arbitrary placeholder key (always
 -- overridden -- every real caller of 'controlBase' supplies its own via
--- 'style'), taking focus itself on click, rendering nothing, and with no
--- event handlers registered.
+-- 'style'), taking focus itself on click, no extra active states,
+-- rendering nothing, and with no event handlers registered.
 defaultControlConfig :: ControlConfig e msg
 defaultControlConfig = ControlConfig
   { ccIsFocusable  = True
   , ccIsEnabled    = True
   , ccStyleKey     = Class ""
   , ccFocusOnClick = FocusSelf
+  , ccActiveStates = Set.empty
   , ccContent      = pure ()
   , ccEvents       = defaultElementConfig
   }
@@ -169,45 +175,47 @@ fireFocusChangeDirect ec t = case t of
 -- mouse position within it counts as "outside" for hovering, clicking, and
 -- focus-claiming alike.
 --
--- Uses the element's /normal/ margin, not the margin of whichever style
--- variant is currently active, since real themes don't vary margin by
--- state and resolving the active style would otherwise depend on its own
--- result.
+-- Uses 'Metrics' directly (independent of interaction state, since real
+-- themes don't vary margin by state), so this never depends on the
+-- active 'Style'.
 marginInsetBounds :: Ord e => StyleKey e -> UI e msg Rectangle
 marginInsetBounds styleKey = do
-  ss <- getStyleSet styleKey
-  r  <- getBounds
-  pure (insetRect (styleMargin (styleSetNormal ss)) r)
-
--- | Picks the active 'Style' variant given the element's disabled\/held\/
--- hovered\/focused state. Priority: disabled > held > hovered > focused >
--- normal.
-resolveStyle :: StyleSet -> Bool -> Bool -> Bool -> Bool -> Style
-resolveStyle styles disabled held hovered focused =
-  fromMaybe (styleSetNormal styles) $ asum
-    [ guard disabled $> styleSetDisabled styles
-    , guard held     $> styleSetPressed  styles
-    , guard hovered  $> styleSetHovered  styles
-    , guard focused  $> styleSetFocused  styles
-    ]
-
--- | Draws a control's background and border from its resolved style, then
--- runs @body@ clipped to the remaining space inside the padding, with that
--- same style available via 'currentStyle' so content never needs to
--- resolve its own copy.
-renderStyled :: Style -> UI e msg () -> UI e msg ()
-renderStyled s body = do
+  m <- getMetrics styleKey
   r <- getBounds
-  let bg          = insetRect (styleMargin s) r
+  pure (insetRect (metricsMargin m) r)
+
+-- | The common\/focus 'VisualState's derived from a control's own
+-- disabled\/held\/hovered\/focused reading, before any 'ccActiveStates'
+-- contributed by a wrapping layer are unioned in.
+intrinsicStates :: Bool -> Bool -> Bool -> Bool -> Set VisualState
+intrinsicStates disabled held hovered focused = Set.fromList
+  [ common
+  , if focused then FocusFocused else FocusUnfocused
+  ]
+  where
+    common
+      | disabled  = CommonDisabled
+      | held      = CommonPressed
+      | hovered   = CommonMouseOver
+      | otherwise = CommonNormal
+
+-- | Draws a control's background and border from its resolved 'Metrics'
+-- and 'Style', then runs @body@ clipped to the remaining space inside the
+-- padding, with that same style\/metrics available via 'currentStyle'\/
+-- 'currentMetrics' so content never needs to resolve its own copy.
+renderStyled :: Metrics -> Style -> UI e msg () -> UI e msg ()
+renderStyled m s body = do
+  r <- getBounds
+  let bg          = insetRect (metricsMargin m) r
       borderRect  = case styleBorderColour s of
-                      Just _  -> insetRect (borderInsets (styleBorderEdges s)) bg
+                      Just _  -> insetRect (borderInsets (metricsBorderEdges m)) bg
                       Nothing -> bg
-      contentRect = insetRect (stylePadding s) borderRect
-      inner       = withBounds contentRect $ clipToCurrent (withStyle s body)
+      contentRect = insetRect (metricsPadding m) borderRect
+      inner       = withBounds contentRect $ clipToCurrent (withMetrics m (withStyle s body))
   withBounds bg $
     withBackground (styleBackground s) $
     case styleBorderColour s of
-      Just c  -> withBorder c (styleBorderEdges s) inner
+      Just c  -> withBorder c (metricsBorderEdges m) inner
       Nothing -> inner
 
 -- | Whether a control is eligible to claim focus purely by rendering first
@@ -267,10 +275,12 @@ controlBase eid cc = disableWhen (not (ccIsEnabled cc)) $ do
   hitBounds <- marginInsetBounds styleKey
   ei        <- withBounds hitBounds (elementBase eid (ccEvents cc))
   when (eiClicked ei) (applyClickFocus currentScope)
-  styles   <- getStyleSet styleKey
-  disabled <- isDisabled
-  let s = resolveStyle styles disabled (eiHeld ei) (eiHovered ei) (eiFocused ei)
-  renderStyled s (ccContent cc)
+  (m, styles) <- getStyleSet styleKey
+  disabled    <- isDisabled
+  let active = intrinsicStates disabled (eiHeld ei) (eiHovered ei) (eiFocused ei)
+               `Set.union` ccActiveStates cc
+      s      = resolveStyle styles active
+  renderStyled m s (ccContent cc)
   when (ccIsFocusable cc && not disabled) (setPreviousTabStop eid)
   pure (ControlInteraction ei s)
   where

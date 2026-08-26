@@ -19,35 +19,6 @@ Description — what it is, why it'd help, or what it'd take.
 
 ## Controls
 
-### Pseudo states
-`Blink.Controls.Control`'s style resolution picks one of five fixed variants per
-`StyleKey` (normal/hovered/pressed/focused/disabled) based on real
-interaction state. There's no way for a control to say "resolve as if in
-some other state" for a reason that isn't one of those five — e.g.
-`Blink.Controls.Button.toggleButton` wants to show its *pressed* variant while
-*selected*, even when nothing is physically pressed. Today it does this by
-looking up `styleSetPressed` for `ElementId eid` directly, ignoring
-whatever `StyleKey` the control actually resolved to via `style` — so a
-caller who themes a toggle button via `style` gets an inconsistent look
-when it's selected (the base look follows their override; the
-pressed-while-selected look doesn't).
-
-Two ways to fix this were considered and set aside for now:
-
-- Let `toggleButton` pick a second `StyleKey` itself (e.g.
-  `Class "toggleButton.selected"`) and set `style` to it when selected.
-  Cheap, no new mechanism, but a theme author now needs a *complete*
-  second `StyleSet` (with its own hover/focus/disabled variants) for the
-  selected look, and a theme that only registers the base key gets a
-  silent fallback to the theme's generic default when selected, instead of
-  "same look, pressed-tinted" — worse than today's behaviour.
-- Add a real pseudo-state slot to `Blink.Style.StyleSet` (a 6th variant
-  alongside the existing five), fed by a new control attr, so resolution
-  composes properly with whatever `StyleKey` is actually in effect. Correct,
-  but `StyleSet` is a public record with no field defaults, so this is a
-  breaking change to every `Theme` any application using Blink has already
-  defined — not something to do as a side effect of fixing one widget.
-
 ### Label mnemonics
 A label could name a mnemonic key (e.g. Alt+F) that redirects focus to its
 `target` the same way clicking it already does, without requiring the label

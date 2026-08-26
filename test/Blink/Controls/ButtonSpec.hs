@@ -4,7 +4,7 @@ module Blink.Controls.ButtonSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Button (ButtonConfig, ToggleConfig, button, isSelected, toggleButton)
+import Blink.Controls.Button (ButtonConfig, ToggleConfig, button, isSelected, toggleButton, toggleChecked)
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec)
 import Blink.Controls.Element (Attribute)
 import Blink.Controls.Label (text)
@@ -12,7 +12,7 @@ import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 
 data TestElement = Ok deriving (Eq, Ord, Show)
@@ -28,23 +28,21 @@ testStyle = Style
   { styleBackground   = testColour
   , styleTextColour   = testColour
   , styleTextAlign    = AlignCenter
-  , styleMargin       = uniform 10
-  , stylePadding      = uniform 5
   , styleBorderColour = Nothing
-  , styleBorderEdges  = noBorder
+  }
+
+testMetrics :: Metrics
+testMetrics = Metrics
+  { metricsMargin      = uniform 10
+  , metricsPadding     = uniform 5
+  , metricsBorderEdges = noBorder
   }
 
 testStyleSet :: StyleSet
-testStyleSet = StyleSet
-  { styleSetNormal   = testStyle
-  , styleSetHovered  = testStyle
-  , styleSetPressed  = testStyle
-  , styleSetFocused  = testStyle
-  , styleSetDisabled = testStyle
-  }
+testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
 
 testTheme :: Theme TestElement
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = testStyleSet }
+testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
 
 pressedColour :: Colour
 pressedColour = RGBA 1 1 1 1
@@ -52,7 +50,10 @@ pressedColour = RGBA 1 1 1 1
 toggleTestTheme :: Theme TestElement
 toggleTestTheme = Theme
   { themeElementStyles = Map.empty
-  , themeDefaultStyle  = testStyleSet { styleSetPressed = testStyle { styleTextColour = pressedColour } }
+  , themeDefaultStyle  =
+      ( testMetrics
+      , testStyleSet { styleOverrides = Map.singleton toggleChecked (\s -> s { styleTextColour = pressedColour }) }
+      )
   }
 
 noInput :: InputState

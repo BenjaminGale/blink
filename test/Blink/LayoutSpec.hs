@@ -12,7 +12,7 @@ import Blink.Geometry (Alignment (..), Point (..), Rectangle (..), uniform)
 import Blink.Input (KeyEvent, InputState (..))
 import Blink.Layout
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..), noBorder)
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), noBorder)
 import Blink.UI
 
 -- Test infrastructure
@@ -30,25 +30,23 @@ emptyStyle = Style
   { styleBackground   = RGBA 0 0 0 1
   , styleTextColour   = RGBA 0 0 0 1
   , styleTextAlign    = AlignCenter
-  , styleMargin       = uniform 0
-  , stylePadding      = uniform 0
   , styleBorderColour = Nothing
-  , styleBorderEdges  = noBorder
+  }
+
+emptyMetrics :: Metrics
+emptyMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = uniform 0
+  , metricsBorderEdges = noBorder
   }
 
 emptyStyleSet :: StyleSet
-emptyStyleSet = StyleSet
-  { styleSetNormal   = emptyStyle
-  , styleSetHovered  = emptyStyle
-  , styleSetPressed  = emptyStyle
-  , styleSetFocused  = emptyStyle
-  , styleSetDisabled = emptyStyle
-  }
+emptyStyleSet = StyleSet { styleBase = emptyStyle, styleOverrides = Map.empty }
 
 emptyTheme :: Theme ()
 emptyTheme = Theme
   { themeElementStyles = Map.empty
-  , themeDefaultStyle  = emptyStyleSet
+  , themeDefaultStyle  = (emptyMetrics, emptyStyleSet)
   }
 
 testColour :: Colour

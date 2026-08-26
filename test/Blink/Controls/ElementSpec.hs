@@ -14,7 +14,7 @@ import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Interaction (Interaction (DragTo, Wait), InteractionResult (..), runInteractions)
 import qualified Blink.Interaction as Ixn (Interaction (MouseDown, MouseUp))
 import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 
 data TestElement = ElemA | ElemB deriving (Eq, Ord, Show)
@@ -34,23 +34,21 @@ emptyStyle = Style
   { styleBackground   = RGBA 0 0 0 1
   , styleTextColour   = RGBA 0 0 0 1
   , styleTextAlign    = AlignCenter
-  , styleMargin       = uniform 0
-  , stylePadding      = uniform 0
   , styleBorderColour = Nothing
-  , styleBorderEdges  = noBorder
+  }
+
+emptyMetrics :: Metrics
+emptyMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = uniform 0
+  , metricsBorderEdges = noBorder
   }
 
 emptyStyleSet :: StyleSet
-emptyStyleSet = StyleSet
-  { styleSetNormal   = emptyStyle
-  , styleSetHovered  = emptyStyle
-  , styleSetPressed  = emptyStyle
-  , styleSetFocused  = emptyStyle
-  , styleSetDisabled = emptyStyle
-  }
+emptyStyleSet = StyleSet { styleBase = emptyStyle, styleOverrides = Map.empty }
 
 testTheme :: Theme TestElement
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = emptyStyleSet }
+testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (emptyMetrics, emptyStyleSet) }
 
 noInput :: InputState
 noInput = InputState

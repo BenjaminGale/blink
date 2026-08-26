@@ -36,6 +36,9 @@ module Blink.Controls.Button
   , ToggleInteraction (..)
   , defaultToggleButtonConfig
   , toggleButtonStyleKey
+  , toggleGroup
+  , toggleChecked
+  , toggleUnchecked
   , toggleBase
   , toggleButton
   , isSelected
@@ -43,12 +46,14 @@ module Blink.Controls.Button
   ) where
 
 import Control.Monad (void, when)
+import Data.Text (Text)
+import qualified Data.Set as Set
 
 import Blink.Controls.Control
 import Blink.Controls.Label (HasLabelledConfig (..), LabelledConfig (..), defaultLabelledConfig, renderLabelledContent)
 import Blink.Input (Key (KeyReturn), KeyEvent (..))
-import Blink.Style (Style (..), StyleSet (..))
-import Blink.UI (Out, UI, currentStyle, drawText, getStyleSet, isDisabled)
+import Blink.Style (Style (..), VisualState (..))
+import Blink.UI (Out, UI, currentStyle, drawText)
 
 -- * Button
 
@@ -175,6 +180,28 @@ defaultToggleButtonConfig = ToggleConfig
 toggleButtonStyleKey :: StyleKey e
 toggleButtonStyleKey = Class "toggleButton"
 
+-- | The 'VisualState' group name shared by 'toggleChecked'\/
+-- 'toggleUnchecked' -- see "Blink.Style"'s module header for why a
+-- control defines its own pseudo-states as opaque exported constants
+-- rather than letting callers build 'Custom' values themselves.
+toggleGroup :: Text
+toggleGroup = "Toggle"
+
+-- | The pseudo-state 'toggleBase' puts in 'ccActiveStates' while the
+-- control is selected (see 'isSelected') -- a theme registers an
+-- override for this on its own 'Blink.Style.StyleSet' (keyed to whatever 'StyleKey'
+-- the control actually resolves to, e.g. 'toggleButtonStyleKey') to give
+-- it a distinct "selected" look, composed with whatever
+-- common\/focus state is also active.
+toggleChecked :: VisualState
+toggleChecked = Custom toggleGroup "Checked"
+
+-- | The pseudo-state 'toggleBase' puts in 'ccActiveStates' while the
+-- control is unselected. Themes typically register no override for this
+-- -- the plain base look already reads as "unchecked".
+toggleUnchecked :: VisualState
+toggleUnchecked = Custom toggleGroup "Unchecked"
+
 instance HasElementConfig e msg (ToggleConfig e msg) where
   overElement attr = Attribute (\tc -> tc { tgcButton = runAttribute (overElement attr) (tgcButton tc) })
 
@@ -203,42 +230,30 @@ data ToggleInteraction e msg = ToggleInteraction
 -- shape 'toggleButton' and any checkbox\/radio button share.
 toggleBase :: Ord e => e -> ToggleConfig e msg -> UI e msg (ToggleInteraction e msg)
 toggleBase eid cfg = do
-  r <- buttonBase eid (tgcButton cfg)
+  r <- buttonBase eid (tgcButton cfg')
   let wasSelected = tgcSelected cfg
       newValue    = tgcNext cfg wasSelected
       changed     = biActivated r && newValue /= wasSelected
   when changed $ runHandlers (tgcOnSelectedChanged cfg) newValue
   pure (ToggleInteraction r (if biActivated r then newValue else wasSelected))
-
--- | The resolved style for a toggle button given its ordinary resolved
--- @base@ style (see 'currentStyle'): selected and enabled forces the
--- pressed variant regardless of hover\/focus.
---
--- Always looked up by @eid@ directly (ignoring any 'style' override) --
--- see the "Pseudo states" entry in IDEAS.md; there's no general way yet
--- for a control to borrow a specific 'Blink.Style.StyleSet' variant from
--- whatever key it actually resolved to.
-toggleStyle :: Ord e => e -> Style -> Bool -> UI e msg Style
-toggleStyle eid base selected = do
-  disabled <- isDisabled
-  if disabled || not selected
-    then pure base
-    else styleSetPressed <$> getStyleSet (ElementId eid)
+  where
+    btn  = tgcButton cfg
+    ctrl = bcControl btn
+    pseudoState = if tgcSelected cfg then toggleChecked else toggleUnchecked
+    cfg' = cfg { tgcButton = btn { bcControl = ctrl { ccActiveStates = Set.singleton pseudoState } } }
 
 -- | A button labelled via 'Blink.Controls.Label.text' that tracks an external selected\/unselected
 -- state (see 'isSelected') instead of only ever being momentarily pressed,
--- flipping every time it's activated. Drawn in its pressed style while
--- selected, even without being physically pressed, unless disabled.
--- Activated the same way as 'button'; see 'onSelectedChanged' for reacting
--- to it.
+-- flipping every time it's activated. Drawn with 'toggleChecked' active
+-- while selected -- see "Blink.Style" for how a theme gives that a
+-- distinct look. Activated the same way as 'button'; see
+-- 'onSelectedChanged' for reacting to it.
 toggleButton :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> UI e msg ()
 toggleButton eid attrs = do
-  let cfg      = resolve defaultToggleButtonConfig attrs
-      btn      = tgcButton cfg
-      selected = tgcSelected cfg
+  let cfg  = resolve defaultToggleButtonConfig attrs
+      btn  = tgcButton cfg
       draw = do
-        base <- currentStyle
-        s    <- toggleStyle eid base selected
+        s <- currentStyle
         drawText (styleTextColour s) (styleTextAlign s) (lcText (bcLabelled btn))
       ctrl = (bcControl btn) { ccContent = draw }
   void (toggleBase eid cfg { tgcNext = not, tgcButton = btn { bcControl = ctrl } })

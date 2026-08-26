@@ -8,7 +8,7 @@ import Blink.Geometry (Point (..), Rectangle (..), uniform, noBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
 import Blink.Interaction
 import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 
 emptyStyle :: Style
@@ -16,16 +16,20 @@ emptyStyle = Style
   { styleBackground   = RGBA 0 0 0 1
   , styleTextColour   = RGBA 0 0 0 1
   , styleTextAlign    = AlignCenter
-  , styleMargin       = uniform 0
-  , stylePadding      = uniform 0
   , styleBorderColour = Nothing
-  , styleBorderEdges  = noBorder
+  }
+
+emptyMetrics :: Metrics
+emptyMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = uniform 0
+  , metricsBorderEdges = noBorder
   }
 
 testTheme :: Theme ()
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = testStyleSet }
+testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (emptyMetrics, testStyleSet) }
   where
-    testStyleSet = StyleSet emptyStyle emptyStyle emptyStyle emptyStyle emptyStyle
+    testStyleSet = StyleSet emptyStyle Map.empty
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100

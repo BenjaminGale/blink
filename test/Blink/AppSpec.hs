@@ -11,7 +11,7 @@ import Blink.App
 import Blink.Geometry (Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
-import Blink.Style (Style (..), StyleSet (..), emptyTheme, noBorder)
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
 import Blink.UI
 import Blink.Update (modify)
 
@@ -39,20 +39,18 @@ testStyle = Style
   { styleBackground   = RGBA 0 0 0 1
   , styleTextColour   = RGBA 0 0 0 1
   , styleTextAlign    = AlignLeft
-  , styleMargin       = uniform 0
-  , stylePadding      = uniform 0
   , styleBorderColour = Nothing
-  , styleBorderEdges  = noBorder
+  }
+
+testMetrics :: Metrics
+testMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = uniform 0
+  , metricsBorderEdges = noBorder
   }
 
 testStyleSet :: StyleSet
-testStyleSet = StyleSet
-  { styleSetNormal   = testStyle
-  , styleSetHovered  = testStyle
-  , styleSetPressed  = testStyle
-  , styleSetFocused  = testStyle
-  , styleSetDisabled = testStyle
-  }
+testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = mempty }
 
 resultState :: FrameResult s -> s
 resultState (Continue _ s) = s
@@ -79,7 +77,7 @@ counterApp :: App () (Int -> Int) Int
 counterApp = App
   { startUp        = pure 0
 
-  , theme          = const (emptyTheme testStyleSet)
+  , theme          = const (emptyTheme (testMetrics, testStyleSet))
   , view           = \_ -> emit (+1)
   , update         = modify
   }
@@ -89,7 +87,7 @@ drawingApp :: Colour -> App () () ()
 drawingApp c = App
   { startUp        = pure ()
 
-  , theme          = const (emptyTheme testStyleSet)
+  , theme          = const (emptyTheme (testMetrics, testStyleSet))
   , view           = \_ -> fillRect c
   , update         = \_ -> pure ()
   }
@@ -101,7 +99,7 @@ stateDrawApp :: App () (Int -> Int) Int
 stateDrawApp = App
   { startUp        = pure 0
 
-  , theme          = const (emptyTheme testStyleSet)
+  , theme          = const (emptyTheme (testMetrics, testStyleSet))
   , view           = \n -> do
       emit (+1)
       drawText (RGBA 0 0 0 1) AlignLeft (T.pack (show n))
@@ -113,7 +111,7 @@ keyCountApp :: App () (Int -> Int) Int
 keyCountApp = App
   { startUp        = pure 0
 
-  , theme          = const (emptyTheme testStyleSet)
+  , theme          = const (emptyTheme (testMetrics, testStyleSet))
   , view           = \_ -> do
       input <- getInput
       emit (+ length (inputKeyEvents input))
@@ -124,7 +122,7 @@ keyCountApp = App
 uiStateApp :: App () (Int -> Int) Int
 uiStateApp = App
   { startUp = pure 0
-  , theme   = const (emptyTheme testStyleSet)
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
   , view    = \_ -> do
       pos <- getScrollState ()
       emitUi (ScrollTo () (pos + 1))
@@ -137,7 +135,7 @@ multiEmitApp :: App () (String -> String) String
 multiEmitApp = App
   { startUp        = pure ""
 
-  , theme          = const (emptyTheme testStyleSet)
+  , theme          = const (emptyTheme (testMetrics, testStyleSet))
   , view           = \_ -> do
       emit (++ "a")
       emit (++ "b")
@@ -149,7 +147,7 @@ deltaApp :: App () (Float -> Float) Float
 deltaApp = App
   { startUp        = pure 999
 
-  , theme          = const (emptyTheme testStyleSet)
+  , theme          = const (emptyTheme (testMetrics, testStyleSet))
   , view           = \_ -> do
       d <- getAnimDelta
       emit (const d)
@@ -164,7 +162,7 @@ deltaApp = App
 captureApp :: App () () ()
 captureApp = App
   { startUp        = pure ()
-  , theme          = const (emptyTheme testStyleSet)
+  , theme          = const (emptyTheme (testMetrics, testStyleSet))
   , view           = \_ -> do
       acquireCapture ()
       dragging <- isDragging ()
@@ -186,7 +184,7 @@ countingMeasurer ref = noOpTextMeasurer
 viewCountApp :: Bool -> App () () ()
 viewCountApp emits = App
   { startUp        = pure ()
-  , theme          = const (emptyTheme testStyleSet)
+  , theme          = const (emptyTheme (testMetrics, testStyleSet))
   , view           = \_ -> do
       _ <- measureText "x"
       when emits (emit ())

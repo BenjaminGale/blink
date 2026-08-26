@@ -286,9 +286,12 @@ module Blink.UI
   , getCurrentScope
     -- * Styles
   , getStyleSet
+  , getMetrics
   , contextTheme
   , currentStyle
   , withStyle
+  , currentMetrics
+  , withMetrics
     -- * Text measurement
   , charOffset
   , charAtOffset
@@ -321,7 +324,7 @@ import Blink.Input
   , HoverState (..), wasHit, nextHoverState
   , Mouse (..), emptyMouse, advanceHover, advanceButton
   )
-import Blink.Style (Style, StyleSet (..), StyleKey (..), Theme (..))
+import Blink.Style (Style, StyleSet, Metrics, StyleKey (..), Theme (..), resolveStyle)
 
 -- | Per-frame animation state threaded through the 'UIContext'. Set by the
 -- backend at the start of each frame; read by 'withAnimationFrame' and
@@ -564,6 +567,8 @@ data UIContext e msg = UIContext
   , ctxOutputs         :: FrameOutputs e msg
   , ctxStyle           :: Style
     -- ^ Set by 'withStyle', read back via 'currentStyle'.
+  , ctxMetrics         :: Metrics
+    -- ^ Set by 'withMetrics', read back via 'currentMetrics'.
   }
 
 -- | The UI monad. A state-threading computation in 'IO' that reads from a
@@ -624,7 +629,8 @@ emptyUIContext bounds input thm measurer = UIContext
       , elmSelections    = Map.empty
       }
   , ctxOutputs         = emptyFrameOutputs
-  , ctxStyle           = styleSetNormal (themeDefaultStyle thm)
+  , ctxStyle           = resolveStyle (snd (themeDefaultStyle thm)) Set.empty
+  , ctxMetrics         = fst (themeDefaultStyle thm)
   }
 
 -- | Advances the context to the next frame, given the backend-supplied
@@ -671,7 +677,8 @@ finishFrame bounds input thm anim ctx = ctx
   , ctxFocus       = nextFocusTrackerFrame (ctxFocus ctx)
   , ctxMouse       = advanceHover (ctxMouse ctx)
   , ctxOutputs     = emptyFrameOutputs
-  , ctxStyle       = styleSetNormal (themeDefaultStyle thm)
+  , ctxStyle       = resolveStyle (snd (themeDefaultStyle thm)) Set.empty
+  , ctxMetrics     = fst (themeDefaultStyle thm)
   }
 
 gets :: (UIContext e msg -> a) -> UI e msg a
@@ -891,12 +898,19 @@ getTheme = gets contextTheme
 contextTheme :: UIContext e msg -> Theme e
 contextTheme = ctxTheme
 
--- | Returns all style variants registered for the given 'StyleKey'. Falls
--- back to the theme's default style when nothing is registered for it.
-getStyleSet :: Ord e => StyleKey e -> UI e msg StyleSet
+-- | Returns the @('Metrics', 'StyleSet')@ pair registered for the given
+-- 'StyleKey'. Falls back to the theme's default when nothing is
+-- registered for it.
+getStyleSet :: Ord e => StyleKey e -> UI e msg (Metrics, StyleSet)
 getStyleSet styleKey = do
   t <- getTheme
   return $ Map.findWithDefault (themeDefaultStyle t) styleKey (themeElementStyles t)
+
+-- | Just the 'Metrics' half of 'getStyleSet' -- used where a size is
+-- needed independently of interaction state (e.g. hit-testing before the
+-- active 'Style' is known).
+getMetrics :: Ord e => StyleKey e -> UI e msg Metrics
+getMetrics styleKey = fst <$> getStyleSet styleKey
 
 -- | 'True' when the left button is currently held, whether this is the
 -- first frame of the press or a later one -- callers that only care whether
@@ -1237,6 +1251,18 @@ withStyle style (UI f) = UI $ \ctx -> do
 -- | The 'Style' set by the nearest enclosing 'withStyle'.
 currentStyle :: UI e msg Style
 currentStyle = gets ctxStyle
+
+-- | Runs a sub-tree with the given 'Metrics' as the one 'currentMetrics'
+-- reads back. The previous metrics are restored once the sub-tree
+-- completes.
+withMetrics :: Metrics -> UI e msg a -> UI e msg a
+withMetrics m (UI f) = UI $ \ctx -> do
+  (a, ctx') <- f (ctx { ctxMetrics = m })
+  pure (a, ctx' { ctxMetrics = ctxMetrics ctx })
+
+-- | The 'Metrics' set by the nearest enclosing 'withMetrics'.
+currentMetrics :: UI e msg Metrics
+currentMetrics = gets ctxMetrics
 
 -- | 'True' when the current sub-tree has been marked disabled.
 isDisabled :: UI e msg Bool

@@ -15,7 +15,7 @@ import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonPressed))
 import Blink.UI
 
 data TestElement
@@ -38,33 +38,35 @@ testStyle = Style
   { styleBackground   = testColour
   , styleTextColour   = testColour
   , styleTextAlign    = AlignCenter
-  , styleMargin       = uniform 10
-  , stylePadding      = uniform 5
   , styleBorderColour = Nothing
-  , styleBorderEdges  = noBorder
+  }
+
+testMetrics :: Metrics
+testMetrics = Metrics
+  { metricsMargin      = uniform 10
+  , metricsPadding     = uniform 5
+  , metricsBorderEdges = noBorder
   }
 
 testStyleSet :: StyleSet
-testStyleSet = StyleSet
-  { styleSetNormal   = testStyle
-  , styleSetHovered  = testStyle
-  , styleSetPressed  = testStyle
-  , styleSetFocused  = testStyle
-  , styleSetDisabled = testStyle
-  }
+testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
 
 testTheme :: Theme TestElement
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = testStyleSet }
+testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
 
 pressedColour :: Colour
 pressedColour = RGBA 1 1 1 1
 
--- | Like 'testTheme', but with a 'styleSetPressed' background distinct
--- from every other variant, so a test can tell whether the pressed style
--- was actually the one drawn.
+-- | Like 'testTheme', but with a 'CommonPressed' override with a
+-- background distinct from every other state, so a test can tell whether
+-- the pressed style was actually the one drawn.
 pressedTestTheme :: Theme TestElement
 pressedTestTheme = testTheme
-  { themeDefaultStyle = testStyleSet { styleSetPressed = testStyle { styleBackground = pressedColour } } }
+  { themeDefaultStyle =
+      ( testMetrics
+      , testStyleSet { styleOverrides = Map.singleton CommonPressed (\s -> s { styleBackground = pressedColour }) }
+      )
+  }
 
 onA, onB :: Point
 onA = Point 10 50
