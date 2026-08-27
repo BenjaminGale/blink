@@ -10,7 +10,8 @@ drives the loop and calls into Blink each frame.
 = Architecture
 
 An application is described by an 'App', which bundles the initial state,
-theme, view, and update handler. Passing an 'App' to 'configureContinuous' or
+theme, a view returning an 'Blink.UI.Element.Element', and an update handler.
+Passing an 'App' to 'configureContinuous' or
 'configureEventDriven' produces a 'BlinkHandle'. The backend then calls
 'stepFrame' each iteration, passing a 'FrameInput' assembled from platform
 events and receiving a 'FrameResult' containing draw commands and the
@@ -47,6 +48,16 @@ Every 'App' is parameterised over three types:
                        Start here when implementing a new backend.
   * "Blink.UI"       — The UI monad: drawing, interaction, focus, and style
                        queries. Start here when building views.
+  * "Blink.UI.Element" — The 'Blink.UI.Element.Element' type every view
+                       returns: a component's size request paired with how
+                       to measure and run it. Every ready-made control and
+                       layout container already produces one; reach for
+                       'Blink.UI.Element.elementWithLayout' only when placing
+                       a hand-written 'Blink.UI.UI' action as a container
+                       child. Not re-exported here, since @e@ (the element
+                       identity type — see above) is conventionally itself
+                       named @Element@, which would clash; import this
+                       module qualified alongside "Blink".
   * "Blink.Update"   — The Update monad: turns a message emitted by the view
                        into an updated application state.
   * "Blink.Controls.Control" — The shared control primitive every

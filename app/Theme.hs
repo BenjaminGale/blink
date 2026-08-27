@@ -8,7 +8,7 @@
 -- registers ('StatusBar' is an app-specific 'ElementId', not a built-in
 -- control class, so 'defaultTheme' can't register it itself).
 module Theme
-  ( Element (..)
+  ( ControlId (..)
   , lightTheme
   , darkTheme
   ) where
@@ -20,7 +20,7 @@ import Blink.Rendering
 import Blink.Style
 import Blink.Style.Defaults (defaultTheme)
 
-data Element = Label
+data ControlId = Label
              | StatusBar
              | DarkModeCheckbox
              | EditingCheckbox
@@ -76,7 +76,7 @@ statusBarMetrics = Metrics
 -- | Inserts the status bar's look -- an 'ElementId'-keyed entry, not a
 -- built-in control class, so 'Blink.Style.Defaults.defaultTheme' doesn't
 -- (and can't) register it itself.
-withStatusBar :: Palette -> Theme Element -> Theme Element
+withStatusBar :: Palette -> Theme ControlId -> Theme ControlId
 withStatusBar p thm = thm
   { themeElementStyles = Map.insert (ElementId StatusBar) (statusBarMetrics, style) (themeElementStyles thm) }
   where
@@ -90,8 +90,8 @@ withStatusBar p thm = thm
       , styleOverrides = Map.empty
       }
 
-lightTheme :: Theme Element
+lightTheme :: Theme ControlId
 lightTheme = withStatusBar lightPalette (defaultTheme lightPalette)
 
-darkTheme :: Theme Element
+darkTheme :: Theme ControlId
 darkTheme = withStatusBar darkPalette (defaultTheme darkPalette)

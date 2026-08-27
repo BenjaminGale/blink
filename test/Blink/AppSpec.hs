@@ -1,19 +1,26 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.AppSpec (spec) where
 
-import Control.Monad (when)
+import Control.Monad (void, when)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
-import Blink.Geometry (Point (..), Rectangle (..), Size (..), uniform)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
+import Blink.Layout.Constraints (Layout (..), Length (Fill))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
 import Blink.UI
+import Blink.UI.Element (Element, elementWithLayout)
 import Blink.Update (modify)
+
+-- | Every test app below fills the whole test bounds; only the body of the
+-- wrapped action varies per app.
+fullView :: UI e msg a -> Element e msg
+fullView = elementWithLayout (Layout Fill Fill TopLeft) . void
 
 -- Test infrastructure
 
@@ -78,7 +85,7 @@ counterApp = App
   { startUp        = pure 0
 
   , theme          = const (emptyTheme (testMetrics, testStyleSet))
-  , view           = \_ -> emit (+1)
+  , view           = \_ -> fullView (emit (+1))
   , update         = modify
   }
 
@@ -88,7 +95,7 @@ drawingApp c = App
   { startUp        = pure ()
 
   , theme          = const (emptyTheme (testMetrics, testStyleSet))
-  , view           = \_ -> fillRect c
+  , view           = \_ -> fullView (fillRect c)
   , update         = \_ -> pure ()
   }
 
@@ -100,7 +107,7 @@ stateDrawApp = App
   { startUp        = pure 0
 
   , theme          = const (emptyTheme (testMetrics, testStyleSet))
-  , view           = \n -> do
+  , view           = \n -> fullView $ do
       emit (+1)
       drawText (RGBA 0 0 0 1) AlignLeft (T.pack (show n))
   , update         = modify
@@ -112,7 +119,7 @@ keyCountApp = App
   { startUp        = pure 0
 
   , theme          = const (emptyTheme (testMetrics, testStyleSet))
-  , view           = \_ -> do
+  , view           = \_ -> fullView $ do
       input <- getInput
       emit (+ length (inputKeyEvents input))
   , update         = modify
@@ -123,7 +130,7 @@ uiStateApp :: App () (Int -> Int) Int
 uiStateApp = App
   { startUp = pure 0
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
-  , view    = \_ -> do
+  , view    = \_ -> fullView $ do
       pos <- getScrollState ()
       emitUi (ScrollTo () (pos + 1))
       emit (\_ -> round pos)
@@ -136,7 +143,7 @@ multiEmitApp = App
   { startUp        = pure ""
 
   , theme          = const (emptyTheme (testMetrics, testStyleSet))
-  , view           = \_ -> do
+  , view           = \_ -> fullView $ do
       emit (++ "a")
       emit (++ "b")
   , update         = modify
@@ -148,7 +155,7 @@ deltaApp = App
   { startUp        = pure 999
 
   , theme          = const (emptyTheme (testMetrics, testStyleSet))
-  , view           = \_ -> do
+  , view           = \_ -> fullView $ do
       d <- getAnimDelta
       emit (const d)
   , update         = modify
@@ -163,7 +170,7 @@ captureApp :: App () () ()
 captureApp = App
   { startUp        = pure ()
   , theme          = const (emptyTheme (testMetrics, testStyleSet))
-  , view           = \_ -> do
+  , view           = \_ -> fullView $ do
       acquireCapture ()
       dragging <- isDragging ()
       drawText (RGBA 0 0 0 1) AlignLeft (if dragging then "dragging" else "idle")
@@ -185,7 +192,7 @@ viewCountApp :: Bool -> App () () ()
 viewCountApp emits = App
   { startUp        = pure ()
   , theme          = const (emptyTheme (testMetrics, testStyleSet))
-  , view           = \_ -> do
+  , view           = \_ -> fullView $ do
       _ <- measureText "x"
       when emits (emit ())
   , update         = \_ -> pure ()

@@ -11,7 +11,7 @@ and the message handler.
 data App e msg s = App
   { startUp :: IO s
   , theme   :: s -> Theme e
-  , view    :: s -> UI e msg ()
+  , view    :: s -> Element e msg
   , update  :: msg -> Update s ()
   }
 @
@@ -110,13 +110,14 @@ import Blink.Input (KeyEvent, InputState (..))
 import Blink.Rendering (DrawCommand, TextMeasurer (..))
 import Blink.Style (Theme)
 import Blink.UI
-  ( UI, UIContext
+  ( UIContext
   , AnimationState (animElapsed)
   , mkAnimationState
   , emptyUIContext, nextFrameContext, rerenderContext
   , runUI, getDrawCommands, getMessages, getUiEffects
   , contextAnimation, contextRequiresAnimation
   )
+import Blink.UI.Element (Element, runElement)
 import Blink.Update (Update, runUpdate)
 
 -- | Describes a complete Blink application.
@@ -130,7 +131,7 @@ data App e msg s = App
   , theme :: s -> Theme e
     -- ^ Derives the active 'Theme' from the current state. Called each frame,
     -- allowing the theme to change in response to state changes.
-  , view :: s -> UI e msg ()
+  , view :: s -> Element e msg
     -- ^ The UI tree, given the application state as it was at the start of
     -- the frame. Queues messages with 'Blink.UI.emit'; run once or twice per
     -- frame depending on the render mode.
@@ -243,7 +244,7 @@ runFrame app refs input = do
 
   prevCtx <- readIORef (refsCtx refs)
   let ctx = buildCtx app winRect inputState delta (isAnimationTick input) state prevCtx
-  ((), ctx') <- runUI (view app state) ctx
+  ((), ctx') <- runUI (runElement (view app state)) ctx
   let state' = foldl' (\s msg -> runUpdate (update app msg) s) state (getMessages ctx')
 
   writeIORef (refsState refs) state'
@@ -271,7 +272,7 @@ doStepEventDriven app refs notify input = do
             inputState = toInputState input
             freshCtx   = rerenderContext winRect (clearKeyEvents inputState)
                            (theme app state') (contextAnimation firstPassCtx) firstPassCtx
-        snd <$> runUI (view app state') freshCtx
+        snd <$> runUI (runElement (view app state')) freshCtx
   writeIORef (refsCtx refs) renderedCtx
   wasActive <- readIORef (refsAnimActive refs)
   let nowActive = contextRequiresAnimation renderedCtx

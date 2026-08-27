@@ -12,7 +12,10 @@ into Blink once per frame.
 A minimal todo list, showing the shape of a Blink application:
 
 ```haskell
-data Element = NewItemInput | AddButton | ItemCheckbox Int
+import Blink
+import Blink.UI.Element (Element)
+
+data ControlId = NewItemInput | AddButton | ItemCheckbox Int
   deriving (Eq, Ord)
 
 data Msg
@@ -22,8 +25,8 @@ data Msg
 
 data AppState = AppState { newItemText :: Text, items :: [(Text, Bool)] }
 
-todoView :: AppState -> UI Element Msg ()
-todoView s = runElement $ vBox
+todoView :: AppState -> Element ControlId Msg
+todoView s = vBox
   [ spacing 8, margin 12
   , children
       [ hBox
@@ -51,7 +54,7 @@ todoUpdate msg = case msg of
   ToggleItem i done -> modify $ \s -> s
     { items = [ if j == i then (t, done) else item | (j, item@(t, _)) <- zip [0 ..] (items s) ] }
 
-app :: App Element Msg AppState
+app :: App ControlId Msg AppState
 app = App
   { startUp = pure (AppState "" [])
   , theme   = const myTheme
@@ -60,7 +63,7 @@ app = App
   }
 ```
 
-`Element` identifies each interactive control, used to look up styles and
+`ControlId` identifies each interactive control, used to look up styles and
 route keyboard focus — note `ItemCheckbox Int`, one constructor covering
 every item's checkbox rather than a fixed control per row. `Msg` is what the
 view emits: `onInput (postWith SetNewItemText)` queues an updated draft as

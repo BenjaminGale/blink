@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module UI (Element, AppState (..), demoApp) where
+module UI (ControlId, AppState (..), demoApp) where
 
 import Blink.App
 import Blink.Attribute (Attribute)
@@ -16,10 +16,9 @@ import Blink.Input
 import Blink.Layout
 import Blink.Rendering
 import Blink.UI
-import Blink.UI.Element (runElement)
-import qualified Blink.UI.Element as UIElement (Element)
+import Blink.UI.Element (Element, elementWithLayout, runElement)
 import Blink.Update
-import Theme (Element (..), lightTheme, darkTheme)
+import Theme (ControlId (..), lightTheme, darkTheme)
 import Control.Monad (when)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -52,7 +51,7 @@ data Msg
   | SetAnimating Bool
   | FrameObserved Bool Text  -- ^ mouse-is-hovering, this frame's raw key/typed-text label
 
-demoApp :: App Element Msg AppState
+demoApp :: App ControlId Msg AppState
 demoApp = App
   { startUp = pure AppState
       { darkMode       = False
@@ -91,12 +90,12 @@ updateApp msg = case msg of
                        else 1
     }
 
-type DemoUI = UI Element Msg
+type DemoUI = UI ControlId Msg
 
 -- Shell
 
 -- | Plain, non-interactive text under the shared 'Label' element ID.
-caption :: Text -> [Attribute (LabelConfig Element Msg)] -> UIElement.Element Element Msg
+caption :: Text -> [Attribute (LabelConfig ControlId Msg)] -> Element ControlId Msg
 caption t attrs = label Label (text t : attrs)
 
 rowHeight :: Length
@@ -109,16 +108,16 @@ rowLayout = [width Fill, height rowHeight, align TopLeft]
 
 -- Control rows, top to bottom
 
-rowDarkMode :: AppState -> UIElement.Element Element Msg
+rowDarkMode :: AppState -> Element ControlId Msg
 rowDarkMode s =
   checkbox DarkModeCheckbox (rowLayout ++ [text "Dark mode", isSelected (darkMode s), onSelectedChanged (postWith SetDarkMode)])
 
-rowEditing :: AppState -> UIElement.Element Element Msg
+rowEditing :: AppState -> Element ControlId Msg
 rowEditing s =
   checkbox EditingCheckbox
     (rowLayout ++ [text "Enable editing", isSelected (editingEnabled s), onSelectedChanged (postWith SetEditingEnabled)])
 
-rowButtons :: AppState -> UIElement.Element Element Msg
+rowButtons :: AppState -> Element ControlId Msg
 rowButtons s =
   hBox
     ( rowLayout ++
@@ -131,7 +130,7 @@ rowButtons s =
       ]
     )
 
-rowToggle :: AppState -> UIElement.Element Element Msg
+rowToggle :: AppState -> Element ControlId Msg
 rowToggle s =
   hBox
     ( rowLayout ++
@@ -149,7 +148,7 @@ rowToggle s =
 radioOptions :: [Text]
 radioOptions = ["Small", "Medium", "Large"]
 
-rowRadio :: AppState -> UIElement.Element Element Msg
+rowRadio :: AppState -> Element ControlId Msg
 rowRadio s =
   hBox
     ( rowLayout ++
@@ -167,7 +166,7 @@ rowRadio s =
         , isEnabled (editingEnabled s), width (Exactly 100), height Fill, align MiddleLeft
         ]
 
-rowTextInput :: AppState -> UIElement.Element Element Msg
+rowTextInput :: AppState -> Element ControlId Msg
 rowTextInput s =
   hBox
     ( rowLayout ++
@@ -179,7 +178,7 @@ rowTextInput s =
       ]
     )
 
-rowPasswordInput :: AppState -> UIElement.Element Element Msg
+rowPasswordInput :: AppState -> Element ControlId Msg
 rowPasswordInput s =
   hBox
     ( rowLayout ++
@@ -194,12 +193,12 @@ rowPasswordInput s =
       ]
     )
 
-rowAnimate :: AppState -> UIElement.Element Element Msg
+rowAnimate :: AppState -> Element ControlId Msg
 rowAnimate s =
   checkbox AnimateCheckbox
     (rowLayout ++ [text "Animate progress bar", isSelected (animating s), onSelectedChanged (postWith SetAnimating), isEnabled (editingEnabled s)])
 
-rowProgress :: AppState -> UIElement.Element Element Msg
+rowProgress :: AppState -> Element ControlId Msg
 rowProgress s =
   if animating s
     then progressBar ProgressCtl (rowLayout ++ [progress Indeterminate])
@@ -235,8 +234,8 @@ footer s (winW, winH) = do
 
 -- Top-level view
 
-demoView :: AppState -> DemoUI ()
-demoView s = do
+demoView :: AppState -> Element ControlId Msg
+demoView s = elementWithLayout (Layout Fill Fill TopLeft) $ do
   input <- getInput
   win   <- getBounds
   let winSize = (round (rectWidth win) :: Int, round (rectHeight win) :: Int)
