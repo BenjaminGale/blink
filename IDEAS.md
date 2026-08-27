@@ -19,6 +19,28 @@ Description — what it is, why it'd help, or what it'd take.
 
 ## Controls
 
+### Icon element
+An `icon` control, built the same way `label` is, that draws a single glyph
+from an icon font (e.g. Material Symbols) instead of body text — a `name`
+attribute selects the icon via a named key (e.g. `"delete"`, `"settings"`)
+looked up in a `Map Text Char` built from the icon font's codepoints file,
+with a sensible fallback glyph (e.g. a "missing"/`question_mark`-style icon)
+when a name isn't found rather than rendering nothing.
+
+This needs multi-font support first: today `DrawText`/`TextMeasurer` and the
+SDL2 backend (`app/Rendering.hs`, `app/Main.hs`) all assume a single global
+`Font.Font` loaded once at startup, so drawing from a second font (body vs.
+icon) means threading a `FontKey` (or similar) through `DrawCommand`,
+`TextMeasurer`, and the backend's font map before `icon` can render anything.
+
+Also open: the full Material Symbols variable font is ~10.6MB (vs. 407KB for
+the current Inter body font), since it's the entire icon set in one
+variable-axis file. Subsetting it down to just the icons actually used would
+need `fonttools`/`pyftsubset`, which isn't installed and has no package
+manager available in the dev sandbox — so this needs either accepting the
+10.6MB asset as-is, installing `fonttools` (sudo/apt), or subsetting the font
+outside this environment before it's added to `assets/fonts/`.
+
 ### Label mnemonics
 A label could name a mnemonic key (e.g. Alt+F) that redirects focus to its
 `target` the same way clicking it already does, without requiring the label
