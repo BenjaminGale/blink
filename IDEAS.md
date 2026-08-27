@@ -34,8 +34,6 @@ measurement (to know when truncation is needed and how much text fits)
 wired into rendering, which the library doesn't do anywhere yet.
 
 ### Wrapping label
-Depends on: Self-sizing layout via an Element type
-
 A label control that wraps text across multiple lines to fit whatever width
 it's given, rather than clipping or overflowing:
 
@@ -106,14 +104,6 @@ This is the same idea as WPF's content model or JavaFX's `Labeled` control:
 one content slot that accepts either text or an arbitrary child, rather than
 a bespoke text-only field per control.
 
-### Intrinsic control sizing
-A control's on-screen size currently comes entirely from the layout slot
-it's placed in, not from its own content — there's no general "size = margin
-+ border + padding + content" calculation a control can opt into. This
-matters most once controls can hold richer content (see above): text needs
-to be measured to size a control around it, and non-text content needs its
-own measurement approach entirely.
-
 ## Styling
 
 ### Control classes
@@ -174,49 +164,6 @@ nothing stops a caller from constructing a negative inset, which would
 invert a rectangle rather than raising an error. Needs a decision on whether
 applying an inset to a rectangle should clamp the result, or whether insets
 should be constrained to non-negative values when they're constructed.
-
-## Layout
-
-### Self-sizing layout via an Element type
-Depends on: Intrinsic control sizing
-
-Controls and panels currently only know the size they're given by their
-parent — there's no way for either to report back how big they'd like to be,
-so a caller who wants a panel to fit itself around its content, rather than
-stretch to fill, has to size that content's slot by hand ahead of time (e.g.
-measuring a button's chrome and text separately).
-
-The idea is to have every control and panel return, alongside the action
-that draws it, a description of how it wants to be sized:
-
-```
-data Element e msg = Element
-  { elementLayout :: ...          -- how big this wants to be
-  , elementAction :: UI e msg ()  -- how it draws
-  }
-```
-
-Panels would then compute their own size from their children's declared
-sizes — e.g. a vertical panel's height being the sum of its children's
-heights — instead of requiring the caller to state it up front, and this
-composes: a panel built from self-sizing children becomes self-sizing
-itself.
-
-One shape doesn't cover everything, though. Some content — wrapped text
-being the obvious case — can't declare a fixed size ahead of time, because
-its height depends on the width it ends up being given, which is only known
-once layout is actually being resolved. Supporting that means letting
-`elementLayout` be a measurement taken during layout rather than a value
-stated upfront, and keeping that measurement strictly read-only (no drawing
-or interaction side effects).
-
-That points to `elementLayout` living in its own lightweight monad for
-layout queries — something like `LayoutM e Layout`, offering only
-bounds/text-measurement access rather than the full range of things a `UI`
-action can do (drawing, emitting messages, mutating interaction state).
-Kept as its own type, separate from `UI`, but with a way to run one inside
-the other wherever a panel needs to resolve a child's size as part of its
-own `UI` action.
 
 ## Architecture
 
