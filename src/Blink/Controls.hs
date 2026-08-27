@@ -13,9 +13,10 @@ module Blink.Controls
   , textInput
   ) where
 
-import Blink.Controls.Button (button, toggleButton)
+import Blink.Controls.Button (button)
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Label (label)
 import Blink.Controls.ProgressBar (progressBar)
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.TextInput (textInput)
+import Blink.Controls.Toggle (toggleButton)

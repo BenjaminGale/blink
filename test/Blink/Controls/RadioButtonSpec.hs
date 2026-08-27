@@ -4,16 +4,18 @@ module Blink.Controls.RadioButtonSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Button (ToggleConfig, isSelected)
 import Blink.Controls.Element (Attribute)
 import Blink.Controls.Label (text)
-import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
-import Blink.Input (InputState (..))
 import Blink.Controls.RadioButton (radioButton)
+import Blink.Controls.Toggle (ToggleConfig, isSelected)
+import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)
+import Blink.Input (InputState (..))
+import Blink.Layout.Constraints (Layout (..), Length (Fill))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
-import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.UI
+import Blink.UI.Element (elLayout, runElement)
 
 data TestElement = OptionA deriving (Eq, Ord, Show)
 
@@ -64,15 +66,24 @@ type Attribute' = Attribute (ToggleConfig TestElement String)
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
+-- | The behaviour contracts below are about interaction, not sizing --
+-- they're written against a radio button that fills its given bounds
+-- entirely, as every control did before controls reported their own
+-- 'Layout'. 'radioButton' now defaults to sizing itself to its own content,
+-- so these tests ask for the old full-size behaviour explicitly, the same
+-- way any other caller would.
+fullSize :: [Attribute'] -> UI TestElement String ()
+fullSize attrs = runElement (radioButton OptionA attrs) { elLayout = Layout Fill Fill TopLeft }
+
 start :: [Attribute'] -> IO (UIContext TestElement String)
-start attrs = snd <$> runUI (radioButton OptionA attrs) seedCtx
+start attrs = snd <$> runUI (fullSize attrs) seedCtx
 
 spec :: Spec
 spec = describe "Blink.Controls.RadioButton" $ do
   -- Unlike a flipping toggle, a radio button only ever moves from
   -- unselected to selected -- activating it while already selected leaves
   -- it selected, so it reports nothing.
-  toggleBehaviourSpec (const True) testBounds seedCtx OptionA (Point 5 5) hitRect (Point 200 200) (radioButton OptionA)
+  toggleBehaviourSpec (const True) testBounds seedCtx OptionA (Point 5 5) hitRect (Point 200 200) fullSize
 
   it "draws the unselected glyph and its caption while not selected" $ do
     ctx <- start [text "Option A"]

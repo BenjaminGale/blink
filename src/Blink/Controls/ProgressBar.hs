@@ -18,9 +18,11 @@ module Blink.Controls.ProgressBar
 import Control.Monad (void)
 
 import Blink.Controls.Control
-import Blink.Geometry (Rectangle (..))
+import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
+import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), Length (..))
 import Blink.Style (Style (..))
 import Blink.UI
+import Blink.UI.Element (Element (..), noIntrinsicSize)
 
 -- | The value passed to 'progressBar' via 'progress'.
 data ProgressValue
@@ -36,6 +38,7 @@ data ProgressBarConfig e msg = ProgressBarConfig
   { pbControl   :: ControlConfig e msg
   , pbValue     :: ProgressValue
   , pbBandSpeed :: Double
+  , pbLayout    :: Layout
   }
 
 -- | The 'StyleKey' 'progressBar' resolves its style from unless overridden
@@ -44,12 +47,13 @@ progressBarStyleKey :: StyleKey e
 progressBarStyleKey = Class "progressBar"
 
 -- | 'defaultControlConfig' (styled via 'progressBarStyleKey'), @'Progress' 0@,
--- and a band speed of 0.5.
+-- a band speed of 0.5, and @Layout Fill Fill TopLeft@ (see 'progressBar').
 defaultProgressBarConfig :: ProgressBarConfig e msg
 defaultProgressBarConfig = ProgressBarConfig
   { pbControl   = defaultControlConfig { ccStyleKey = progressBarStyleKey }
   , pbValue     = Progress 0
   , pbBandSpeed = 0.5
+  , pbLayout    = Layout Fill Fill TopLeft
   }
 
 instance HasElementConfig e msg (ProgressBarConfig e msg) where
@@ -57,6 +61,9 @@ instance HasElementConfig e msg (ProgressBarConfig e msg) where
 
 instance HasControlConfig e msg (ProgressBarConfig e msg) where
   overControl attr = Attribute (\pc -> pc { pbControl = runAttribute attr (pbControl pc) })
+
+instance HasLayoutConfig (ProgressBarConfig e msg) where
+  overLayout attr = Attribute (\pc -> pc { pbLayout = runAttribute attr (pbLayout pc) })
 
 -- | Sets the bar to 'Progress' (determinate) or 'Indeterminate'. Defaults
 -- to @'Progress' 0@.
@@ -74,18 +81,24 @@ bandSpeed v = Attribute (\pc -> pc { pbBandSpeed = v })
 -- same way every other control does, even though a caller has no real
 -- reason to react to them. Never a tab stop, though: fixed behaviour, not
 -- a default -- 'progressBar' always overrides 'isFocusable' to 'False'
--- itself, so it wins regardless of what a caller passes.
-progressBar :: Ord e => e -> [Attribute (ProgressBarConfig e msg)] -> UI e msg ()
-progressBar eid attrs = do
-  let cfg  = resolve defaultProgressBarConfig attrs
-      ctrl = (pbControl cfg)
-        { ccIsFocusable  = False
-        , ccFocusOnClick = NoFocus
-        , ccContent      = body cfg
-        }
-  void (controlBase eid ctrl)
+-- itself, so it wins regardless of what a caller passes. Has no content of
+-- its own to size to, so it defaults to filling the space it's given on
+-- both axes, same as every control did before controls reported their own
+-- 'Blink.Layout.Layout'. Override with 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/'Blink.Layout.Constraints.align'.
+progressBar :: Ord e => e -> [Attribute (ProgressBarConfig e msg)] -> Element e msg
+progressBar eid attrs = Element
+  { elLayout  = pbLayout cfg
+  , elMeasure = measureChrome (ccStyleKey ctrl) (Element (pbLayout cfg) noIntrinsicSize (pure ()))
+  , elRun     = void (controlBase eid ctrl)
+  }
   where
-    body cfg = do
+    cfg  = resolve defaultProgressBarConfig attrs
+    ctrl = (pbControl cfg)
+      { ccIsFocusable  = False
+      , ccFocusOnClick = NoFocus
+      , ccContent      = body
+      }
+    body = do
       s <- currentStyle
       r <- getBounds
       case pbValue cfg of

@@ -52,7 +52,8 @@ Every 'App' is parameterised over three types:
   * "Blink.Controls.Control" — The shared control primitive every
                        ready-made widget is built from: focus, chrome, and
                        events. Import alongside whichever of
-                       "Blink.Controls.Button", "Blink.Controls.Checkbox",
+                       "Blink.Controls.Button", "Blink.Controls.Toggle",
+                       "Blink.Controls.Checkbox",
                        "Blink.Controls.RadioButton",
                        "Blink.Controls.TextInput",
                        "Blink.Controls.ProgressBar", or

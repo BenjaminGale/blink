@@ -25,6 +25,7 @@ module Blink.Geometry
   , Insets (..)
   , uniform
   , insetRect
+  , inflate
     -- * Border edges
   , BorderEdges (..)
   , noBorder
@@ -73,6 +74,24 @@ data Insets = Insets
 -- | Creates 'Insets' with the same value on all four sides.
 uniform :: Double -> Insets
 uniform n = Insets { topInset = n, rightInset = n, bottomInset = n, leftInset = n }
+
+-- | Adds two 'Insets' side by side; @'mempty'@ is zero on every side. Lets a
+-- caller combine several inset sources (e.g. margin, border, padding) into
+-- one before applying them, rather than inset by each in turn.
+instance Semigroup Insets where
+  Insets t1 r1 b1 l1 <> Insets t2 r2 b2 l2 = Insets (t1 + t2) (r1 + r2) (b1 + b2) (l1 + l2)
+
+instance Monoid Insets where
+  mempty = Insets 0 0 0 0
+
+-- | Grows a 'Size' by 'Insets' on each side -- the inverse of 'insetRect'
+-- shrinking a 'Rectangle'. Used to inflate a measured content size back out
+-- by the chrome that was subtracted from the space offered to it.
+inflate :: Insets -> Size -> Size
+inflate ins s = Size
+  { sizeWidth  = sizeWidth s + leftInset ins + rightInset ins
+  , sizeHeight = sizeHeight s + topInset ins + bottomInset ins
+  }
 
 -- | Per-side border widths in pixels.
 data BorderEdges = BorderEdges

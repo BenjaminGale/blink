@@ -2,11 +2,11 @@
 -- | The shared "activating it changes its selected state and reports the
 -- new value" contract every toggle-style control must satisfy, on top of
 -- the activation contract every button-like control already satisfies (see
--- 'Blink.Controls.ButtonBehaviour.buttonBehaviourSpec'). 'Blink.Controls.Button.toggleButton',
+-- 'Blink.Controls.ButtonBehaviour.buttonBehaviourSpec'). 'Blink.Controls.Toggle.toggleButton',
 -- 'Blink.Controls.Checkbox.checkbox', and 'Blink.Controls.RadioButton.radioButton' all reuse
 -- this, each passing the function describing how activating it changes its
 -- own selected state (see 'toggleBehaviourSpec'). Unlike the layers below,
--- there's only ever one 'Blink.Controls.Button.ToggleConfig' type -- none of the three
+-- there's only ever one 'Blink.Controls.Toggle.ToggleConfig' type -- none of the three
 -- has its own -- so this isn't generic over a config type the way
 -- 'Blink.Controls.ButtonBehaviour.buttonBehaviourSpec' is.
 module Blink.Controls.ToggleBehaviour
@@ -16,8 +16,8 @@ module Blink.Controls.ToggleBehaviour
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Controls.Button (ToggleConfig, isSelected, onSelectedChanged)
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec)
+import Blink.Controls.Toggle (ToggleConfig, isSelected, onSelectedChanged)
 import Blink.Controls.Element (Attribute)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Generators (genPointIn)
@@ -33,7 +33,7 @@ taggedToggle = onSelectedChanged (\b -> [OutMsg ("SelectedChanged:" ++ show b)])
 
 -- | 'True' when @msgs@ reports activating a control starting at @current@
 -- the way @next@ says it should: the changed-to value when that's actually
--- a change (see 'Blink.Controls.Button.toggleBase'), or no 'SelectedChanged' at all
+-- a change (see 'Blink.Controls.Toggle.toggleBase'), or no 'SelectedChanged' at all
 -- when it isn't. Other tagged messages (hover, click, focus, ...) may
 -- freely appear alongside either way.
 reportsSelectedChange :: (Bool -> Bool) -> Bool -> [String] -> Bool

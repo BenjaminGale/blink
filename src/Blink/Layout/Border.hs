@@ -17,6 +17,7 @@ import Blink.Geometry (Alignment (..))
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), Length (..))
 import Blink.UI (UI)
+import Blink.UI.Element (elementWithLayout, runElement)
 
 -- | Every capability 'borderLayout' resolves: its up to five named panels.
 data BorderContent e msg = BorderContent
@@ -85,19 +86,19 @@ centre ui = Attribute (\bc -> bc { bcCentre = Just ui })
 -- panel can still overlap its neighbours within the same row.
 borderLayout :: [Attribute (BorderContent e msg)] -> UI e msg ()
 borderLayout attrs =
-  vBox [children (catMaybes [topRow, middleRow, bottomRow])]
+  runElement $ vBox [children (catMaybes [topRow, middleRow, bottomRow])]
   where
     bc = resolve emptyBorderContent attrs
 
-    topRow    = (\(h, ui) -> (Layout Fill (Exactly h) TopLeft, ui)) <$> bcTop bc
-    bottomRow = (\(h, ui) -> (Layout Fill (Exactly h) TopLeft, ui)) <$> bcBottom bc
+    topRow    = (\(h, ui) -> elementWithLayout (Layout Fill (Exactly h) TopLeft) ui) <$> bcTop bc
+    bottomRow = (\(h, ui) -> elementWithLayout (Layout Fill (Exactly h) TopLeft) ui) <$> bcBottom bc
 
     middleCells = catMaybes
-      [ (\(w, ui) -> (Layout (Exactly w) Fill TopLeft, ui)) <$> bcLeft bc
-      , (\ui      -> (Layout Fill        Fill TopLeft, ui)) <$> bcCentre bc
-      , (\(w, ui) -> (Layout (Exactly w) Fill TopLeft, ui)) <$> bcRight bc
+      [ (\(w, ui) -> elementWithLayout (Layout (Exactly w) Fill TopLeft) ui) <$> bcLeft bc
+      , (\ui      -> elementWithLayout (Layout Fill        Fill TopLeft) ui) <$> bcCentre bc
+      , (\(w, ui) -> elementWithLayout (Layout (Exactly w) Fill TopLeft) ui) <$> bcRight bc
       ]
 
     middleRow
       | null middleCells = Nothing
-      | otherwise        = Just (Layout Fill Fill TopLeft, hBox [children middleCells])
+      | otherwise        = Just (hBox [children middleCells])

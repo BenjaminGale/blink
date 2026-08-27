@@ -14,6 +14,7 @@ import Blink.Layout
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), noBorder)
 import Blink.UI
+import Blink.UI.Element (elementWithLayout, runElement)
 
 -- Test infrastructure
 
@@ -70,10 +71,10 @@ marginGen :: Gen Double
 marginGen = fromIntegral <$> (choose (0, 49) :: Gen Int)
 
 runHBox :: Rectangle -> [Attribute (BoxConfig () ())] -> [Layout] -> IO [Rectangle]
-runHBox bounds c rcs = runLayout bounds $ hBox (c ++ [children [(r, fill) | r <- rcs]])
+runHBox bounds c rcs = runLayout bounds $ runElement $ hBox (c ++ [children [elementWithLayout r fill | r <- rcs]])
 
 runVBox :: Rectangle -> [Attribute (BoxConfig () ())] -> [Layout] -> IO [Rectangle]
-runVBox bounds c rcs = runLayout bounds $ vBox (c ++ [children [(r, fill) | r <- rcs]])
+runVBox bounds c rcs = runLayout bounds $ runElement $ vBox (c ++ [children [elementWithLayout r fill | r <- rcs]])
 
 rc :: Length -> Length -> Alignment -> Layout
 rc = Layout
@@ -192,9 +193,9 @@ spec = describe "layout" $ do
             , ( "BottomRight places the child at the bottom-right"
               , BottomRight,  Rectangle 120 60 80 40 )
             ]
-      forM_ cases $ \(desc, align, expected) ->
+      forM_ cases $ \(desc, anAlign, expected) ->
         it desc $ do
-          result <- run (rc (Exactly 80) (Exactly 40) align)
+          result <- run (rc (Exactly 80) (Exactly 40) anAlign)
           result `shouldBe` [expected]
 
   describe "hBox" $ do
@@ -231,8 +232,8 @@ spec = describe "layout" $ do
             pure $ result == [Rectangle m m (200 - 2*m) (100 - 2*m)]
 
     describe "cross axis (height)" $ do
-      it "fillCross = True stretches children to the full available height" $ do
-        result <- runHBox hBounds cfg [rc Fill (Exactly 40) TopLeft]
+      it "a Fill cross request stretches the child to the full available height" $ do
+        result <- runHBox hBounds cfg [rc Fill Fill TopLeft]
         result `shouldBe` [Rectangle 0 0 200 100]
 
       let cases =
@@ -240,9 +241,9 @@ spec = describe "layout" $ do
             , ("Center aligns the child to the middle",  Center,     Rectangle 0 30 200 40)
             , ("BottomLeft aligns the child to the bottom", BottomLeft, Rectangle 0 60 200 40)
             ]
-      forM_ cases $ \(desc, align, expected) ->
+      forM_ cases $ \(desc, anAlign, expected) ->
         it desc $ do
-          result <- runHBox hBounds [stretch False] [rc Fill (Exactly 40) align]
+          result <- runHBox hBounds cfg [rc Fill (Exactly 40) anAlign]
           result `shouldBe` [expected]
 
     describe "alignment" $ do
@@ -294,8 +295,8 @@ spec = describe "layout" $ do
             pure $ result == [Rectangle m m (100 - 2*m) (200 - 2*m)]
 
     describe "cross axis (width)" $ do
-      it "fillCross = True stretches children to the full available width" $ do
-        result <- runVBox vBounds cfg [rc (Exactly 60) Fill TopLeft]
+      it "a Fill cross request stretches the child to the full available width" $ do
+        result <- runVBox vBounds cfg [rc Fill Fill TopLeft]
         result `shouldBe` [Rectangle 0 0 100 200]
 
       let cases =
@@ -303,9 +304,9 @@ spec = describe "layout" $ do
             , ("Center aligns the child to the centre",     Center,   Rectangle 20 0 60 200)
             , ("TopRight aligns the child to the right",    TopRight, Rectangle 40 0 60 200)
             ]
-      forM_ cases $ \(desc, align, expected) ->
+      forM_ cases $ \(desc, anAlign, expected) ->
         it desc $ do
-          result <- runVBox vBounds [stretch False] [rc (Exactly 60) Fill align]
+          result <- runVBox vBounds cfg [rc (Exactly 60) Fill anAlign]
           result `shouldBe` [expected]
 
     describe "alignment" $ do

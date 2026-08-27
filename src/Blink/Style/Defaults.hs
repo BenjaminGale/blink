@@ -35,12 +35,13 @@ module Blink.Style.Defaults
 
 import qualified Data.Map.Strict as Map
 
-import Blink.Controls.Button (buttonStyleKey, toggleButtonStyleKey, toggleChecked)
+import Blink.Controls.Button (buttonStyleKey)
 import Blink.Controls.Checkbox (checkboxStyleKey)
 import Blink.Controls.Label (labelStyleKey)
 import Blink.Controls.ProgressBar (progressBarStyleKey)
 import Blink.Controls.RadioButton (radioButtonStyleKey)
 import Blink.Controls.TextInput (textInputStyleKey)
+import Blink.Controls.Toggle (toggleButtonStyleKey, toggleChecked)
 import Blink.Geometry (uniform)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style
@@ -83,7 +84,7 @@ progressBarMetrics = Metrics
 
 -- | A bordered-box control style: background/border step through
 -- hover/press/focus/disabled, with a bold accent fill both on press and
--- while selected (see 'Blink.Controls.Button.toggleChecked'). Used for
+-- while selected (see 'Blink.Controls.Toggle.toggleChecked'). Used for
 -- buttons, toggle buttons, and (left-aligned) text inputs.
 buttonStyle :: TextAlign -> Palette -> StyleSet
 buttonStyle align p = StyleSet

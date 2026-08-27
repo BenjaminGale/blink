@@ -95,7 +95,7 @@ A control that needs a look beyond the common\/focus states its
 button's checked\/unchecked look) defines its own pre-built 'Custom'
 values in its own module and exports them as opaque constants, the same
 way a control exports its default 'StyleKey' — callers never construct
-'Custom' values themselves. See "Blink.Controls.Button" for
+'Custom' values themselves. See "Blink.Controls.Toggle" for
 @toggleChecked@\/@toggleUnchecked@, a worked example.
 -}
 module Blink.Style

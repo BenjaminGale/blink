@@ -1,20 +1,23 @@
 -- | The foundation "Blink.Layout.Box" and "Blink.Layout.Border" are both
 -- built on: 'Length'\/'Layout' describe a single child's size and
--- position, 'layoutWithConstraints' applies one to a single action, and
--- the 'AddLength'\/'MaxLength' monoids let a caller compute a 'Length'
--- from several others rather than only ever writing one down by hand.
+-- position, and 'layoutWithConstraints' applies one to a single action.
 module Blink.Layout.Constraints
   ( Length (..)
   , Layout (..)
   , layoutWithConstraints
   , preferredSize
-  , AddLength (..)
-  , MaxLength (..)
-  , addLength
-  , maxLength
+  , Available (..)
+  , MeasureCtx (..)
+  , shrink
+    -- * Layout attributes
+  , HasLayoutConfig (..)
+  , width
+  , height
+  , align
   ) where
 
-import Blink.Geometry (Alignment (..), Rectangle (..), alignRect)
+import Blink.Attribute (Attribute (..))
+import Blink.Geometry (Alignment (..), Orientation (..), Rectangle (..), alignRect)
 import Blink.UI (UI, getBounds, withBounds)
 
 -- | Describes how a child should be sized along a single axis. See
@@ -31,6 +34,13 @@ data Length
     -- ^ Expands to fill available space, but never larger than the given maximum. Has no minimum — can shrink to zero.
   | Between Double Double
     -- ^ Expands to fill available space clamped between the given minimum and maximum.
+  | FitContent
+    -- ^ Exactly the widget's own preferred size, determined by measuring it.
+    -- Unlike the other constructors, this cannot be resolved from available
+    -- space alone -- see 'Blink.UI.Element.resolveLength'. A 'FitContent'
+    -- reaching 'preferredSize' unresolved is a bug in the caller: every path
+    -- that can encounter it (element measurement, box slot sizing) must
+    -- resolve it to an 'Exactly' first.
   deriving (Eq, Show)
 
 -- | Per-child sizing and alignment within a layout panel slot.
@@ -135,90 +145,73 @@ preferredSize Fill            available  = available
 preferredSize (AtLeast w)     available  = max w available
 preferredSize (AtMost w)      available  = min w available
 preferredSize (Between lo hi) available  = max lo (min hi available)
+preferredSize FitContent      _          = 0
+  -- Unreachable in practice: every caller resolves 'FitContent' to an
+  -- 'Exactly' via 'Blink.UI.Element.resolveLength' before a 'Layout'
+  -- reaches here.
 
--- | Wraps 'Length' for the additive monoid: @'mempty' = 'Exactly' 0@,
--- @('<>') = 'addLength'@. Use 'mconcat' to sum a list of lengths.
-newtype AddLength = AddLength { getAddLength :: Length }
+-- | What a parent can offer a child along one axis, for the purpose of
+-- measuring the child's preferred size. @Bounded@ when the parent knows its
+-- own extent there; 'Unbounded' when the parent is itself sizing to content
+-- on that axis and has nothing to offer yet. Distinguishing the two lets a
+-- measuring child tell "no room at all" apart from "no ceiling", which a
+-- bare number cannot.
+data Available = Bounded Double | Unbounded
+  deriving (Eq, Show)
 
-instance Semigroup AddLength where
-  AddLength a <> AddLength b = AddLength (add a b)
-    where
-      add Fill              _                   = Fill
-      add _                 Fill                = Fill
-      add (Exactly a')      (Exactly b')         = Exactly     (a' + b')
-      add (AtLeast a')      (Exactly b')         = AtLeast     (a' + b')
-      add (Exactly a')      (AtLeast b')         = AtLeast     (a' + b')
-      add (AtMost a')       (Exactly b')         = AtMost      (a' + b')
-      add (Exactly a')      (AtMost b')          = AtMost      (a' + b')
-      add (Between lo hi)   (Exactly b')         = Between     (lo + b') (hi + b')
-      add (Exactly a')      (Between lo hi)      = Between     (a' + lo) (a' + hi)
-      add (AtLeast a')      (AtLeast b')         = AtLeast     (a' + b')
-      add (AtMost a')       (AtMost b')          = AtMost      (a' + b')
-      add (Between lo1 hi1) (Between lo2 hi2)    = Between     (lo1 + lo2) (hi1 + hi2)
-      add (AtLeast a')      (AtMost _)           = AtLeast     a'
-      add (AtMost _)        (AtLeast b')         = AtLeast     b'
-      add (AtLeast a')      (Between lo _)       = AtLeast     (a' + lo)
-      add (Between lo _)    (AtLeast b')         = AtLeast     (lo + b')
-      add (AtMost a')       (Between lo hi)      = Between     lo (a' + hi)
-      add (Between lo hi)   (AtMost b')          = Between     lo (hi + b')
+-- | What a parent offers a child when asking for its preferred size.
+-- 'measureAxis' is which of the widget's two axes ('Blink.Geometry.Horizontal'
+-- \/ 'Blink.Geometry.Vertical') the question is about -- needed because a
+-- widget can answer differently depending on which extent is being asked
+-- for, such as a wrapping text block whose height depends on the width it
+-- is given.
+data MeasureCtx = MeasureCtx
+  { measureAxis  :: Orientation
+    -- ^ Which axis the parent will read the result on.
+  , measureMain  :: Available
+    -- ^ Room along that axis, if the parent knows it.
+  , measureCross :: Available
+    -- ^ Room along the perpendicular axis, if the parent knows it.
+  } deriving (Eq, Show)
 
-instance Monoid AddLength where
-  mempty = AddLength (Exactly 0)
-
--- | Wraps 'Length' for the max monoid: @'mempty' = 'Exactly' 0@,
--- @('<>') = 'maxLength' of two@. Use 'mconcat' to find the largest in a list.
-newtype MaxLength = MaxLength { getMaxLength :: Length }
-
-instance Semigroup MaxLength where
-  MaxLength a <> MaxLength b = MaxLength (maxL a b)
-    where
-      maxL Fill              _                   = Fill
-      maxL _                 Fill                = Fill
-      maxL (Exactly a')      (Exactly b')         = Exactly     (max a' b')
-      maxL (AtLeast a')      (AtLeast b')         = AtLeast     (max a' b')
-      maxL (AtMost a')       (AtMost b')          = AtMost      (max a' b')
-      maxL (Between lo1 hi1) (Between lo2 hi2)    = Between     (max lo1 lo2) (max hi1 hi2)
-      maxL (Exactly a')      (AtLeast b')         = AtLeast     (max a' b')
-      maxL (AtLeast a')      (Exactly b')         = AtLeast     (max a' b')
-      maxL (Exactly a')      (AtMost b')          = AtMost      (max a' b')
-      maxL (AtMost a')       (Exactly b')         = AtMost      (max a' b')
-      maxL (Exactly a')      (Between lo hi)      = Between     (max a' lo) (max a' hi)
-      maxL (Between lo hi)   (Exactly b')         = Between     (max lo b') (max hi b')
-      maxL (AtLeast a')      (AtMost _)           = AtLeast     a'
-      maxL (AtMost _)        (AtLeast b')         = AtLeast     b'
-      maxL (AtLeast a')      (Between lo _)       = AtLeast     (max a' lo)
-      maxL (Between lo _)    (AtLeast b')         = AtLeast     (max lo b')
-      maxL (AtMost a')       (Between _ hi)       = AtMost      (max a' hi)
-      maxL (Between _ hi)    (AtMost b')          = AtMost      (max hi b')
-
-instance Monoid MaxLength where
-  mempty = MaxLength (Exactly 0)
-
--- | Add two 'Length' constraints. Convenience wrapper around 'AddLength'.
+-- | Reduces the room 'Available' along an axis by a fixed amount, such as
+-- chrome a control draws around a child it measures. Total: shrinking
+-- 'Unbounded' is a no-op, which is why chrome arithmetic never needs to
+-- special-case infinity.
 --
--- >>> addLength (Exactly 10) (Exactly 20)
--- Exactly 30.0
--- >>> addLength (Exactly 10) Fill
--- Fill
--- >>> addLength (AtLeast 10) (Exactly 5)
--- AtLeast 15.0
--- >>> addLength (AtLeast 10) (AtMost 20)
--- AtLeast 10.0
--- >>> addLength (Between 10 20) (Exactly 5)
--- Between 15.0 25.0
-addLength :: Length -> Length -> Length
-addLength a b = getAddLength (AddLength a <> AddLength b)
+-- >>> shrink 10 (Bounded 100)
+-- Bounded 90.0
+-- >>> shrink 200 (Bounded 100)
+-- Bounded 0.0
+-- >>> shrink 10 Unbounded
+-- Unbounded
+shrink :: Double -> Available -> Available
+shrink n (Bounded d) = Bounded (max 0 (d - n))
+shrink _ Unbounded   = Unbounded
 
--- | Return the maximum 'Length' across a list. Convenience wrapper around 'MaxLength'.
--- Returns @'Exactly' 0@ for an empty list.
---
--- >>> maxLength [Exactly 10, Exactly 30, Exactly 20]
--- Exactly 30.0
--- >>> maxLength [Fill, Exactly 100]
--- Fill
--- >>> maxLength [AtLeast 10, AtMost 20]
--- AtLeast 10.0
--- >>> maxLength []
--- Exactly 0.0
-maxLength :: [Length] -> Length
-maxLength = getMaxLength . mconcat . map MaxLength
+-- | Implemented by any config type that nests a 'Layout', letting 'width'\/
+-- 'height'\/'align' be applied to it directly -- the same delegation
+-- pattern as 'Blink.Controls.Control.HasControlConfig'\/
+-- 'Blink.Controls.Element.HasElementConfig', minus the @e@\/@msg@
+-- functional dependency those need and this doesn't: a 'Layout' is pure
+-- geometry, with no element-identity or message type of its own to fix.
+class HasLayoutConfig cfg where
+  overLayout :: Attribute Layout -> Attribute cfg
+
+instance HasLayoutConfig Layout where
+  overLayout = id
+
+-- | Sets the size request's width. See 'Length' for the available
+-- constraints, and each control's own haddock for its default.
+width :: HasLayoutConfig cfg => Length -> Attribute cfg
+width l = overLayout (Attribute (\lay -> lay { layoutWidth = l }))
+
+-- | Sets the size request's height. See 'Length' for the available
+-- constraints, and each control's own haddock for its default.
+height :: HasLayoutConfig cfg => Length -> Attribute cfg
+height l = overLayout (Attribute (\lay -> lay { layoutHeight = l }))
+
+-- | Sets how the control is positioned within its slot when it does not
+-- fill the slot on one or both axes. Defaults to 'TopLeft'.
+align :: HasLayoutConfig cfg => Alignment -> Attribute cfg
+align a = overLayout (Attribute (\lay -> lay { layoutAlignment = a }))

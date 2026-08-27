@@ -3,28 +3,23 @@ module UI (Element, AppState (..), demoApp) where
 
 import Blink.App
 import Blink.Controls
-import Blink.Controls.Button (isSelected, onActivated, onSelectedChanged)
+import Blink.Controls.Button (onActivated)
+import Blink.Controls.Element (post, postWith)
 import Blink.Controls.Label (text)
 import Blink.Controls.ProgressBar (ProgressValue (..), progress)
 import Blink.Controls.TextInput (displayFilter, onInput, value)
+import Blink.Controls.Toggle (isSelected, onSelectedChanged)
 import Blink.Geometry
 import Blink.Input
 import Blink.Layout
 import Blink.Rendering
 import Blink.UI
+import Blink.UI.Element (elementWithLayout, runElement)
 import Blink.Update
 import Theme (Element (..), lightTheme, darkTheme)
 import Control.Monad (when)
 import Data.Text (Text)
 import qualified Data.Text as T
-
--- | Emits @msg@, ignoring whatever data the triggering event carried.
-post :: msg -> a -> [Out e msg]
-post msg = const [OutMsg msg]
-
--- | Emits @f a@ -- uses the triggering event's own data to build the message.
-postWith :: (a -> msg) -> a -> [Out e msg]
-postWith f a = [OutMsg (f a)]
 
 -- Application state
 
@@ -99,7 +94,7 @@ type DemoUI = UI Element Msg
 
 -- | Plain, non-interactive text under the shared 'Label' element ID.
 caption :: Text -> DemoUI ()
-caption t = label Label [text t]
+caption t = runElement (label Label [text t])
 
 rowHeight :: Length
 rowHeight = Exactly 40
@@ -108,31 +103,32 @@ rowHeight = Exactly 40
 
 rowDarkMode :: AppState -> DemoUI ()
 rowDarkMode s =
-  checkbox DarkModeCheckbox [text "Dark mode", isSelected (darkMode s), onSelectedChanged (postWith SetDarkMode)]
+  runElement $ checkbox DarkModeCheckbox [text "Dark mode", isSelected (darkMode s), onSelectedChanged (postWith SetDarkMode)]
 
 rowEditing :: AppState -> DemoUI ()
 rowEditing s =
-  checkbox EditingCheckbox [text "Enable editing", isSelected (editingEnabled s), onSelectedChanged (postWith SetEditingEnabled)]
+  runElement $
+    checkbox EditingCheckbox [text "Enable editing", isSelected (editingEnabled s), onSelectedChanged (postWith SetEditingEnabled)]
 
 rowButtons :: AppState -> DemoUI ()
 rowButtons s =
-  hBox
+  runElement $ hBox
     [ spacing 8
     , children
-        [ (Layout (Exactly 100) Fill TopLeft, button ClickButton [text "Click me", onActivated (post AddClick)])
-        , (Layout (Exactly 100) Fill TopLeft, button ResetButton [text "Reset", onActivated (post ResetClicks)])
-        , (Layout Fill Fill MiddleLeft, caption ("Clicks: " <> T.pack (show (clickCount s))))
+        [ button ClickButton [text "Click me", onActivated (post AddClick), width (Exactly 100), height Fill]
+        , button ResetButton [text "Reset", onActivated (post ResetClicks), width (Exactly 100), height Fill]
+        , elementWithLayout (Layout Fill Fill MiddleLeft) (caption ("Clicks: " <> T.pack (show (clickCount s))))
         ]
     ]
 
 rowToggle :: AppState -> DemoUI ()
 rowToggle s =
-  hBox
+  runElement $ hBox
     [ spacing 8
     , children
-        [ (Layout (Exactly 160) Fill TopLeft,
-             toggleButton ToggleCtl [text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle)])
-        , (Layout Fill Fill MiddleLeft, caption (if toggleOn s then "On" else "Off"))
+        [ toggleButton ToggleCtl
+            [text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle), width (Exactly 160), height Fill]
+        , elementWithLayout (Layout Fill Fill MiddleLeft) (caption (if toggleOn s then "On" else "Off"))
         ]
     ]
 
@@ -141,50 +137,52 @@ radioOptions = ["Small", "Medium", "Large"]
 
 rowRadio :: AppState -> DemoUI ()
 rowRadio s =
-  hBox
+  runElement $ hBox
     [ spacing 16
     , children
-        [ (Layout (Exactly 100) Fill MiddleLeft, radioOption i opt)
+        [ radioOption i opt
         | (i, opt) <- zip [0 ..] radioOptions
         ]
     ]
   where
     radioOption i opt =
       radioButton (RadioCtl i)
-        [text opt, isSelected (radioChoice s == Just opt), onSelectedChanged (\_ -> [OutMsg (PickRadio opt)])]
+        [ text opt, isSelected (radioChoice s == Just opt), onSelectedChanged (\_ -> [OutMsg (PickRadio opt)])
+        , width (Exactly 100), height Fill, align MiddleLeft
+        ]
 
 rowTextInput :: AppState -> DemoUI ()
 rowTextInput s =
-  hBox
+  runElement $ hBox
     [ spacing 8, alignment Center
     , children
-        [ (Layout (Exactly 120) Fill MiddleLeft, caption "Text input")
-        , (Layout Fill Fill TopLeft,
-             textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText)])
+        [ elementWithLayout (Layout (Exactly 120) Fill MiddleLeft) (caption "Text input")
+        , textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText), height Fill]
         ]
     ]
 
 rowPasswordInput :: AppState -> DemoUI ()
 rowPasswordInput s =
-  hBox
+  runElement $ hBox
     [ spacing 8, alignment Center
     , children
-        [ (Layout (Exactly 120) Fill MiddleLeft, caption "Password input")
-        , (Layout Fill Fill TopLeft,
-             textInput PasswordInputCtl
-               [value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)])
+        [ elementWithLayout (Layout (Exactly 120) Fill MiddleLeft) (caption "Password input")
+        , textInput PasswordInputCtl
+            [value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText), height Fill]
         ]
     ]
 
 rowAnimate :: AppState -> DemoUI ()
 rowAnimate s =
-  checkbox AnimateCheckbox [text "Animate progress bar", isSelected (animating s), onSelectedChanged (postWith SetAnimating)]
+  runElement $
+    checkbox AnimateCheckbox [text "Animate progress bar", isSelected (animating s), onSelectedChanged (postWith SetAnimating)]
 
 rowProgress :: AppState -> DemoUI ()
 rowProgress s =
-  if animating s
-    then progressBar ProgressCtl [progress Indeterminate]
-    else progressBar ProgressCtl [progress (Progress (fromIntegral (clickCount s) / 50))]
+  runElement $
+    if animating s
+      then progressBar ProgressCtl [progress Indeterminate]
+      else progressBar ProgressCtl [progress (Progress (fromIntegral (clickCount s) / 50))]
 
 -- Footer
 
@@ -203,14 +201,14 @@ footer s (winW, winH) = do
                       else ""
       keyText    = "Last Key Press: "
                 <> if T.null (lastInput s) then "none" else lastInput s <> countSuffix
-  hBox
+  runElement $ hBox
     [ spacing 24, margin 4, alignment Center
     , children
-        [ (Layout (Exactly 160) Fill MiddleLeft, caption winText)
-        , (Layout (Exactly 160) Fill MiddleLeft, caption mouseText)
-        , (Layout (Exactly 160) Fill MiddleLeft, caption buttonText)
-        , (Layout (Exactly 100) Fill MiddleLeft, caption hoverText)
-        , (Layout Fill          Fill MiddleLeft, caption keyText)
+        [ elementWithLayout (Layout (Exactly 160) Fill MiddleLeft) (caption winText)
+        , elementWithLayout (Layout (Exactly 160) Fill MiddleLeft) (caption mouseText)
+        , elementWithLayout (Layout (Exactly 160) Fill MiddleLeft) (caption buttonText)
+        , elementWithLayout (Layout (Exactly 100) Fill MiddleLeft) (caption hoverText)
+        , elementWithLayout (Layout Fill          Fill MiddleLeft) (caption keyText)
         ]
     ]
 
@@ -235,18 +233,18 @@ demoView s = do
 
 mainList :: AppState -> DemoUI ()
 mainList s =
-  vBox
+  runElement $ vBox
     [ spacing 8, margin 12
     , children
-        [ (Layout Fill (Exactly 24) TopLeft, caption "Blink controls demo")
-        , (Layout Fill rowHeight    TopLeft, rowDarkMode s)
-        , (Layout Fill rowHeight    TopLeft, rowEditing s)
-        , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowButtons s))
-        , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowToggle s))
-        , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowRadio s))
-        , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowTextInput s))
-        , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowPasswordInput s))
-        , (Layout Fill rowHeight    TopLeft, disableWhen (not (editingEnabled s)) (rowAnimate s))
-        , (Layout Fill rowHeight    TopLeft, rowProgress s)
+        [ elementWithLayout (Layout Fill (Exactly 24) TopLeft) (caption "Blink controls demo")
+        , elementWithLayout (Layout Fill rowHeight    TopLeft) (rowDarkMode s)
+        , elementWithLayout (Layout Fill rowHeight    TopLeft) (rowEditing s)
+        , elementWithLayout (Layout Fill rowHeight    TopLeft) (disableWhen (not (editingEnabled s)) (rowButtons s))
+        , elementWithLayout (Layout Fill rowHeight    TopLeft) (disableWhen (not (editingEnabled s)) (rowToggle s))
+        , elementWithLayout (Layout Fill rowHeight    TopLeft) (disableWhen (not (editingEnabled s)) (rowRadio s))
+        , elementWithLayout (Layout Fill rowHeight    TopLeft) (disableWhen (not (editingEnabled s)) (rowTextInput s))
+        , elementWithLayout (Layout Fill rowHeight    TopLeft) (disableWhen (not (editingEnabled s)) (rowPasswordInput s))
+        , elementWithLayout (Layout Fill rowHeight    TopLeft) (disableWhen (not (editingEnabled s)) (rowAnimate s))
+        , elementWithLayout (Layout Fill rowHeight    TopLeft) (rowProgress s)
         ]
     ]

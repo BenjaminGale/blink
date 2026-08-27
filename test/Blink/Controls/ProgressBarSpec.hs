@@ -13,6 +13,7 @@ import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSp
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.UI
+import Blink.UI.Element (runElement)
 
 data TestElement = Bar deriving (Eq, Ord, Show)
 
@@ -66,7 +67,7 @@ seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
 run :: [Attribute'] -> IO (UIContext TestElement String)
-run attrs = snd <$> runUI (progressBar Bar attrs) seedCtx
+run attrs = snd <$> runUI (runElement (progressBar Bar attrs)) seedCtx
 
 -- | A context whose animation clock reads one elapsed second -- 'runUI'
 -- against this directly, rather than through 'runInteractions', since
@@ -78,9 +79,9 @@ elapsedCtx = nextFrameContext testBounds noInput testTheme (mkAnimationState 0 1
 spec :: Spec
 spec = describe "Blink.Controls.ProgressBar" $ do
   controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    testBounds seedCtx Bar (Point 5 5) hitRect (Point 200 200) (progressBar Bar)
+    testBounds seedCtx Bar (Point 5 5) hitRect (Point 200 200) (runElement . progressBar Bar)
 
-  fixedNotFocusableSpec testBounds seedCtx (progressBar Bar)
+  fixedNotFocusableSpec testBounds seedCtx (runElement . progressBar Bar)
 
   describe "Progress" $ do
     it "fills the correct proportion of the content area at 0.5" $ do
@@ -105,15 +106,15 @@ spec = describe "Blink.Controls.ProgressBar" $ do
 
   describe "Indeterminate" $ do
     it "sweeps the band using the default band speed (0.5)" $ do
-      ctx <- snd <$> runUI (progressBar Bar [progress Indeterminate]) elapsedCtx
+      ctx <- snd <$> runUI (runElement (progressBar Bar [progress Indeterminate])) elapsedCtx
       getDrawCommands ctx `shouldContain` [FillRect (Rectangle 39.5 15 21 70) testColour]
 
     it "sweeps faster when a custom speed is given" $ do
-      ctx <- snd <$> runUI (progressBar Bar [progress Indeterminate, bandSpeed 1.0]) elapsedCtx
+      ctx <- snd <$> runUI (runElement (progressBar Bar [progress Indeterminate, bandSpeed 1.0])) elapsedCtx
       getDrawCommands ctx `shouldContain` [FillRect (Rectangle (-6) 15 21 70) testColour]
 
     it "keeps the animation ticker alive" $ do
-      ctx <- snd <$> runUI (progressBar Bar [progress Indeterminate]) elapsedCtx
+      ctx <- snd <$> runUI (runElement (progressBar Bar [progress Indeterminate])) elapsedCtx
       contextRequiresAnimation ctx `shouldBe` True
 
     it "does not request animation for a determinate bar" $ do

@@ -7,13 +7,15 @@ import Test.Hspec
 import Blink.Controls.Element (Attribute)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
-import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.Label (LabelConfig, label, target, text)
+import Blink.Layout.Constraints (Layout (..), Length (Fill))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.UI
+import Blink.UI.Element (elLayout, runElement)
 
 data TestElement = Caption | Target deriving (Eq, Ord, Show)
 
@@ -65,29 +67,38 @@ type Attribute' = Attribute (LabelConfig TestElement String)
 seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
+-- | The behaviour contracts below are about interaction, not sizing --
+-- they're written against a label that fills its given bounds entirely, as
+-- every control did before controls reported their own 'Layout'. 'label'
+-- now defaults to sizing its height to its own content, so these tests ask
+-- for the old full-size behaviour explicitly, the same way any other
+-- caller would.
+fullSize :: [Attribute'] -> UI TestElement String ()
+fullSize attrs = runElement (label Caption attrs) { elLayout = Layout Fill Fill TopLeft }
+
 start :: [Attribute'] -> IO (UIContext TestElement String)
-start attrs = snd <$> runUI (label Caption attrs) seedCtx
+start attrs = snd <$> runUI (fullSize attrs) seedCtx
 
 spec :: Spec
 spec = describe "Blink.Controls.Label" $ do
   controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    testBounds seedCtx Caption (Point 5 5) hitRect (Point 200 200) (label Caption)
+    testBounds seedCtx Caption (Point 5 5) hitRect (Point 200 200) fullSize
 
-  fixedNotFocusableSpec testBounds seedCtx (label Caption)
+  fixedNotFocusableSpec testBounds seedCtx fullSize
 
   it "draws its text in the resolved style" $ do
     ctx <- start [text "Hello"]
     getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "Hello" testColour AlignCenter]
 
   it "never claims focus, even with nothing else focused" $ do
-    result <- runInteractions testBounds seedCtx (label Caption []) [] []
+    result <- runInteractions testBounds seedCtx (fullSize []) [] []
     contextFocus (resultContext result) `shouldBe` Nothing
 
   it "does not take focus when clicked by default" $ do
-    result <- runInteractions testBounds seedCtx (label Caption []) [] [ClickAt onCaption, Wait 1]
+    result <- runInteractions testBounds seedCtx (fullSize []) [] [ClickAt onCaption, Wait 1]
     contextFocus (resultContext result) `shouldBe` Nothing
 
   it "redirects a click's focus onto the element named by target" $ do
     let attrs = [target Target]
-    result <- runInteractions testBounds seedCtx (label Caption attrs) [] [ClickAt onCaption, Wait 1]
+    result <- runInteractions testBounds seedCtx (fullSize attrs) [] [ClickAt onCaption, Wait 1]
     contextFocus (resultContext result) `shouldBe` Just Target

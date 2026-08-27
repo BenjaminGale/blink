@@ -25,11 +25,14 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import Blink.Controls.Control
-import Blink.Geometry (Point (..), Rectangle (..))
+import Blink.Controls.Label (captionElement)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
+import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), Length (..))
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..))
 import Blink.UI
+import Blink.UI.Element (Element (..))
 
 -- | Every capability 'textInput' resolves: the wrapped 'ControlConfig',
 -- its current value, 'inputFilter'\/'displayFilter', and its
@@ -41,6 +44,7 @@ data TextInputConfig e msg = TextInputConfig
   , ticDisplayFilter :: Text -> Text
   , ticOnInput       :: [Text -> [Out e msg]]
   , ticOnSubmit      :: [EventHandler e msg]
+  , ticLayout        :: Layout
   }
 
 -- | The 'StyleKey' 'textInput' resolves its style from unless overridden
@@ -49,7 +53,8 @@ textInputStyleKey :: StyleKey e
 textInputStyleKey = Class "textInput"
 
 -- | 'defaultControlConfig' (styled via 'textInputStyleKey'), an empty
--- value, identity filters, and no 'onInput'\/'onSubmit' reactions.
+-- value, identity filters, no 'onInput'\/'onSubmit' reactions, and
+-- @Layout Fill FitContent TopLeft@ (see 'textInput').
 defaultTextInputConfig :: TextInputConfig e msg
 defaultTextInputConfig = TextInputConfig
   { ticControl       = defaultControlConfig { ccStyleKey = textInputStyleKey }
@@ -58,6 +63,7 @@ defaultTextInputConfig = TextInputConfig
   , ticDisplayFilter = id
   , ticOnInput       = []
   , ticOnSubmit      = []
+  , ticLayout        = Layout Fill FitContent TopLeft
   }
 
 instance HasElementConfig e msg (TextInputConfig e msg) where
@@ -65,6 +71,9 @@ instance HasElementConfig e msg (TextInputConfig e msg) where
 
 instance HasControlConfig e msg (TextInputConfig e msg) where
   overControl attr = Attribute (\tc -> tc { ticControl = runAttribute attr (ticControl tc) })
+
+instance HasLayoutConfig (TextInputConfig e msg) where
+  overLayout attr = Attribute (\tc -> tc { ticLayout = runAttribute attr (ticLayout tc) })
 
 -- | Sets the field's current value. Defaults to @\"\"@ when not given.
 value :: Text -> Attribute (TextInputConfig e msg)
@@ -235,19 +244,33 @@ drawTextInputContent s bounds displayValue canEdit ox sel@(Selection _ active) =
 -- | A single-line text entry field (see the module header). Cursor
 -- position and selection are control state, not application data --
 -- 'textInput' reads and writes them itself via 'getSelection' and
--- 'getScrollState', keyed by the element ID.
-textInput :: Ord e => e -> [Attribute (TextInputConfig e msg)] -> UI e msg ()
-textInput eid attrs = do
-  wasFocused   <- isFocused eid
-  wasCapturing <- isDragging eid
-  let cfg  = resolve defaultTextInputConfig attrs
-      ctrl = (ticControl cfg)
-        { ccFocusOnClick = FocusSelf
-        , ccContent      = body cfg wasFocused wasCapturing
-        }
-  void (controlBase eid ctrl)
+-- 'getScrollState', keyed by the element ID. Defaults to filling the width
+-- it's given and sizing its height to one line of text plus chrome -- never
+-- its own value's width, which would make the field resize as it's typed
+-- into. Override with 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/'Blink.Layout.Constraints.align'.
+textInput :: Ord e => e -> [Attribute (TextInputConfig e msg)] -> Element e msg
+textInput eid attrs = Element
+  { elLayout  = ticLayout cfg
+  , elMeasure = measureChrome (ccStyleKey (ticControl cfg)) (lineHeightElement (ticValue cfg))
+  , elRun     = do
+      wasFocused   <- isFocused eid
+      wasCapturing <- isDragging eid
+      let ctrl = (ticControl cfg)
+            { ccFocusOnClick = FocusSelf
+            , ccContent      = body wasFocused wasCapturing
+            }
+      void (controlBase eid ctrl)
+  }
   where
-    body cfg wasFocused wasCapturing = do
+    cfg = resolve defaultTextInputConfig attrs
+
+    -- A single line of the current value's text, for height purposes only
+    -- ('elLayout' never asks for 'FitContent' width) -- falls back to a
+    -- single space when empty so an untouched field doesn't collapse to
+    -- zero height.
+    lineHeightElement t = captionElement (if T.null t then " " else t)
+
+    body wasFocused wasCapturing = do
       let currentValue = ticValue cfg
       s        <- currentStyle
       hasFocus <- isFocused eid
