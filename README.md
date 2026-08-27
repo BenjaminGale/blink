@@ -9,58 +9,73 @@ into Blink once per frame.
 
 ## Example
 
-A minimal counter, showing the shape of a Blink application:
+A minimal todo list, showing the shape of a Blink application:
 
 ```haskell
-data Element = Increment | CountLabel
+data Element = NewItemInput | AddButton | ItemCheckbox Int
   deriving (Eq, Ord)
 
-data Msg = Increment'
+data Msg
+  = SetNewItemText Text
+  | AddItem
+  | ToggleItem Int Bool
 
-counterView :: Int -> UI Element Msg ()
-counterView count = vBox defaultBoxConfig
-  [ ( Layout Fill (Exactly 24) TopLeft,
-        label CountLabel [text (T.pack (show count))]
-    )
-  , ( Layout Fill (Exactly 32) TopLeft,
-        button Increment [text "+1", onClick (post Increment')]
-    )
+data AppState = AppState { newItemText :: Text, items :: [(Text, Bool)] }
+
+todoView :: AppState -> UI Element Msg ()
+todoView s = runElement $ vBox
+  [ spacing 8, margin 12
+  , children
+      [ hBox
+          [ spacing 8
+          , children
+              [ textInput NewItemInput [value (newItemText s), onInput (postWith SetNewItemText), width Fill]
+              , button AddButton [text "Add", onActivated (post AddItem), width (Exactly 80)]
+              ]
+          ]
+      , vBox
+          [ spacing 4
+          , children
+              [ checkbox (ItemCheckbox i)
+                  [text label, isSelected done, onSelectedChanged (postWith (ToggleItem i)), height (Exactly 24)]
+              | (i, (label, done)) <- zip [0 ..] (items s)
+              ]
+          ]
+      ]
   ]
 
-counterUpdate :: Msg -> Update Int ()
-counterUpdate Increment' = modify (+ 1)
+todoUpdate :: Msg -> Update AppState ()
+todoUpdate msg = case msg of
+  SetNewItemText t -> modify $ \s -> s { newItemText = t }
+  AddItem           -> modify $ \s -> s { items = items s ++ [(newItemText s, False)], newItemText = "" }
+  ToggleItem i done -> modify $ \s -> s
+    { items = [ if j == i then (t, done) else item | (j, item@(t, _)) <- zip [0 ..] (items s) ] }
 
-app :: App Element Msg Int
-app = App { startUp = pure 0, theme = const myTheme, view = counterView, update = counterUpdate }
+app :: App Element Msg AppState
+app = App
+  { startUp = pure (AppState "" [])
+  , theme   = const myTheme
+  , view    = todoView
+  , update  = todoUpdate
+  }
 ```
 
 `Element` identifies each interactive control, used to look up styles and
-route keyboard focus. `Msg` is what the view emits — here, `onClick (post
-Increment')` queues `Increment'` when the button fires. `Int` is the
-application state, passed into `view` explicitly each frame; `update` folds
-each queued `Msg` into the
-state once the frame completes, in emission order. Pass `app` to
-`configureContinuous` or `configureEventDriven` to get a `BlinkHandle`, then
-drive it with `stepFrame` each iteration of your platform's event loop.
+route keyboard focus — note `ItemCheckbox Int`, one constructor covering
+every item's checkbox rather than a fixed control per row. `Msg` is what the
+view emits: `onInput (postWith SetNewItemText)` queues an updated draft as
+you type, `onActivated (post AddItem)` queues `AddItem` on click, and
+`onSelectedChanged (postWith (ToggleItem i))` queues which item changed and
+its new state. `AppState` is the application state, passed into `view`
+explicitly each frame and rebuilt into a fresh `Element`/child list every
+time — there's no manual diffing, since `items` in the view is just read
+straight off `AppState`. `update` folds each queued `Msg` into the state once
+the frame completes, in emission order. Pass `app` to `configureContinuous`
+or `configureEventDriven` to get a `BlinkHandle`, then drive it with
+`stepFrame` each iteration of your platform's event loop.
 
-## Modules
-
-  * `Blink.App` — application definition and backend integration.
-  * `Blink.UI` — the UI monad: drawing, interaction, focus, and style queries.
-  * `Blink.Update` — the Update monad: turns a message emitted by the view
-    into an updated application state.
-  * `Blink.Controls` — ready-made controls: buttons, text inputs, checkboxes,
-    progress bars, labels, sliders, scroll bars, viewports, selectors, radio
-    groups, and list boxes.
-  * `Blink.Layout` — box layout and constraint-based sizing.
-  * `Blink.Style` — themes and per-state styles.
-  * `Blink.Rendering` — the draw command list produced each frame.
-  * `Blink.Geometry` — primitive geometry types.
-  * `Blink.Input` — raw keyboard and mouse types assembled by the backend
-    each frame.
-
-See each module's Haddock documentation for details; the top-level `Blink`
-module re-exports everything above and is the package's entry point.
+See the top-level `Blink` module's Haddock documentation for the full module
+guide and package entry point.
 
 ## Getting Started
 
