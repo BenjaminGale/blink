@@ -7,6 +7,7 @@ module Blink.UI.Element
   , noIntrinsicSize
   , spacer
   , elementWithLayout
+  , withLayout
   , resolveLength
   ) where
 
@@ -72,6 +73,13 @@ spacer = Element (Layout Fill Fill TopLeft) noIntrinsicSize (pure ())
 -- to measure.
 elementWithLayout :: Layout -> UI e msg () -> Element e msg
 elementWithLayout layout ui = Element layout noIntrinsicSize ui
+
+-- | Overrides an already-built element's size request, e.g. to slot a
+-- composite built elsewhere into a container at a specific width, height,
+-- or alignment. Unlike 'elementWithLayout', this starts from an 'Element'
+-- that already has its own layout and measure, and replaces only the former.
+withLayout :: Layout -> Element e msg -> Element e msg
+withLayout layout el = el { elLayout = layout }
 
 -- | Turns a possibly content-dependent 'Length' into a pure one by
 -- measuring the element when its request names 'FitContent', 'AtLeast', or
