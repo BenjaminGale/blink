@@ -5,7 +5,6 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Element (Attribute)
-import Blink.Controls.Label (text)
 import Blink.Controls.Toggle (ToggleConfig, isSelected, toggleButton, toggleChecked)
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 

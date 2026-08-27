@@ -21,21 +21,26 @@ import qualified Data.IntMap.Strict as IntMap
 import Blink.Attribute (Attribute (..), resolve)
 import Blink.Geometry (Alignment (..), Orientation (..), Rectangle (..), Size (..), alignRect, insetRect, uniform)
 import Blink.Layout.Constraints
-  (Available (..), Layout (..), Length (..), MeasureCtx (..), layoutWithConstraints, shrink)
+  (Available (..), HasLayoutConfig (..), Layout (..), Length (..), MeasureCtx (..), layoutWithConstraints, shrink)
 import Blink.UI (UI, clipToCurrent, getBounds, withBounds)
 import Blink.UI.Element (Element (..), resolveLength)
 
--- | Every capability 'hBox'\/'vBox' resolve: spacing, margin, alignment of
--- the content block, and the children themselves (see 'children').
+-- | Every capability 'hBox'\/'vBox' resolve: the box's own size request,
+-- spacing, margin, alignment of the content block, and the children
+-- themselves (see 'children').
 data BoxConfig e msg = BoxConfig
-  { bxSpacing    :: Double
+  { bxLayout     :: Layout
+  , bxSpacing    :: Double
   , bxMargin     :: Double
   , bxAlignment  :: Alignment
   , bxChildren   :: [Element e msg]
   }
 
--- | No spacing, no margin, 'TopLeft' alignment, and no children. Override
--- only the attributes you need:
+instance HasLayoutConfig (BoxConfig e msg) where
+  overLayout attr = Attribute (\c -> c { bxLayout = runAttribute attr (bxLayout c) })
+
+-- | Fills its parent on both axes, no spacing, no margin, 'TopLeft'
+-- alignment, and no children. Override only the attributes you need:
 --
 -- @
 -- hBox
@@ -45,7 +50,8 @@ data BoxConfig e msg = BoxConfig
 -- @
 defaultBoxConfig :: BoxConfig e msg
 defaultBoxConfig = BoxConfig
-  { bxSpacing   = 0
+  { bxLayout    = Layout Fill Fill TopLeft
+  , bxSpacing   = 0
   , bxMargin    = 0
   , bxAlignment = TopLeft
   , bxChildren  = []
@@ -220,9 +226,9 @@ crossOrientation ax = case axisOrientation ax of
 -- hBox
 --   [ spacing 4
 --   , children
---       [ elementWithLayout (Layout (Exactly 80) Fill TopLeft) (button Btn1 [text "Back"])
---       , elementWithLayout (Layout Fill         Fill TopLeft) (button Btn2 [text "Title"])
---       , elementWithLayout (Layout (Exactly 80) Fill TopLeft) (button Btn3 [text "Next"])
+--       [ button Btn1 [text "Back",  width (Exactly 80), height Fill]
+--       , button Btn2 [text "Title", width Fill,          height Fill]
+--       , button Btn3 [text "Next",  width (Exactly 80), height Fill]
 --       ]
 --   ]
 -- @
@@ -276,7 +282,7 @@ vBox attrs = box vertical (resolve defaultBoxConfig attrs)
 -- assumed.
 box :: Axis -> BoxConfig e msg -> Element e msg
 box ax cfg = Element
-  { elLayout  = Layout Fill Fill TopLeft
+  { elLayout  = bxLayout cfg
   , elMeasure = boxMeasure ax cfg
   , elRun     = runBox ax cfg
   }

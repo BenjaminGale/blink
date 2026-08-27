@@ -16,7 +16,7 @@ import Blink.Input
 import Blink.Layout
 import Blink.Rendering
 import Blink.UI
-import Blink.UI.Element (runElement, withLayout)
+import Blink.UI.Element (runElement)
 import qualified Blink.UI.Element as UIElement (Element)
 import Blink.Update
 import Theme (Element (..), lightTheme, darkTheme)
@@ -102,43 +102,49 @@ caption t attrs = label Label (text t : attrs)
 rowHeight :: Length
 rowHeight = Exactly 40
 
--- | Slots a control row into 'mainList' at the shared row height.
-row :: UIElement.Element Element Msg -> UIElement.Element Element Msg
-row = withLayout (Layout Fill rowHeight TopLeft)
+-- | Layout attributes shared by every direct child of 'mainList': the full
+-- row width, the shared row height, top-left within that slot.
+rowLayout :: HasLayoutConfig cfg => [Attribute cfg]
+rowLayout = [width Fill, height rowHeight, align TopLeft]
 
 -- Control rows, top to bottom
 
 rowDarkMode :: AppState -> UIElement.Element Element Msg
 rowDarkMode s =
-  checkbox DarkModeCheckbox [text "Dark mode", isSelected (darkMode s), onSelectedChanged (postWith SetDarkMode)]
+  checkbox DarkModeCheckbox (rowLayout ++ [text "Dark mode", isSelected (darkMode s), onSelectedChanged (postWith SetDarkMode)])
 
 rowEditing :: AppState -> UIElement.Element Element Msg
 rowEditing s =
-  checkbox EditingCheckbox [text "Enable editing", isSelected (editingEnabled s), onSelectedChanged (postWith SetEditingEnabled)]
+  checkbox EditingCheckbox
+    (rowLayout ++ [text "Enable editing", isSelected (editingEnabled s), onSelectedChanged (postWith SetEditingEnabled)])
 
 rowButtons :: AppState -> UIElement.Element Element Msg
 rowButtons s =
   hBox
-    [ spacing 8
-    , children
-        [ button ClickButton [text "Click me", onActivated (post AddClick), isEnabled (editingEnabled s), width (Exactly 100), height Fill]
-        , button ResetButton [text "Reset", onActivated (post ResetClicks), isEnabled (editingEnabled s), width (Exactly 100), height Fill]
-        , caption ("Clicks: " <> T.pack (show (clickCount s))) [width Fill, height Fill, align MiddleLeft]
-        ]
-    ]
+    ( rowLayout ++
+      [ spacing 8
+      , children
+          [ button ClickButton [text "Click me", onActivated (post AddClick), isEnabled (editingEnabled s), width (Exactly 100), height Fill]
+          , button ResetButton [text "Reset", onActivated (post ResetClicks), isEnabled (editingEnabled s), width (Exactly 100), height Fill]
+          , caption ("Clicks: " <> T.pack (show (clickCount s))) [width Fill, height Fill, align MiddleLeft]
+          ]
+      ]
+    )
 
 rowToggle :: AppState -> UIElement.Element Element Msg
 rowToggle s =
   hBox
-    [ spacing 8
-    , children
-        [ toggleButton ToggleCtl
-            [ text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle)
-            , isEnabled (editingEnabled s), width (Exactly 160), height Fill
-            ]
-        , caption (if toggleOn s then "On" else "Off") [width Fill, height Fill, align MiddleLeft]
-        ]
-    ]
+    ( rowLayout ++
+      [ spacing 8
+      , children
+          [ toggleButton ToggleCtl
+              [ text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle)
+              , isEnabled (editingEnabled s), width (Exactly 160), height Fill
+              ]
+          , caption (if toggleOn s then "On" else "Off") [width Fill, height Fill, align MiddleLeft]
+          ]
+      ]
+    )
 
 radioOptions :: [Text]
 radioOptions = ["Small", "Medium", "Large"]
@@ -146,12 +152,14 @@ radioOptions = ["Small", "Medium", "Large"]
 rowRadio :: AppState -> UIElement.Element Element Msg
 rowRadio s =
   hBox
-    [ spacing 16
-    , children
-        [ radioOption i opt
-        | (i, opt) <- zip [0 ..] radioOptions
-        ]
-    ]
+    ( rowLayout ++
+      [ spacing 16
+      , children
+          [ radioOption i opt
+          | (i, opt) <- zip [0 ..] radioOptions
+          ]
+      ]
+    )
   where
     radioOption i opt =
       radioButton (RadioCtl i)
@@ -162,36 +170,40 @@ rowRadio s =
 rowTextInput :: AppState -> UIElement.Element Element Msg
 rowTextInput s =
   hBox
-    [ spacing 8, alignment Center
-    , children
-        [ caption "Text input" [width (Exactly 120), height Fill, align MiddleLeft]
-        , textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText), isEnabled (editingEnabled s), height Fill]
-        ]
-    ]
+    ( rowLayout ++
+      [ spacing 8, alignment Center
+      , children
+          [ caption "Text input" [width (Exactly 120), height Fill, align MiddleLeft]
+          , textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText), isEnabled (editingEnabled s), height Fill]
+          ]
+      ]
+    )
 
 rowPasswordInput :: AppState -> UIElement.Element Element Msg
 rowPasswordInput s =
   hBox
-    [ spacing 8, alignment Center
-    , children
-        [ caption "Password input" [width (Exactly 120), height Fill, align MiddleLeft]
-        , textInput PasswordInputCtl
-            [ value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)
-            , isEnabled (editingEnabled s), height Fill
-            ]
-        ]
-    ]
+    ( rowLayout ++
+      [ spacing 8, alignment Center
+      , children
+          [ caption "Password input" [width (Exactly 120), height Fill, align MiddleLeft]
+          , textInput PasswordInputCtl
+              [ value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)
+              , isEnabled (editingEnabled s), height Fill
+              ]
+          ]
+      ]
+    )
 
 rowAnimate :: AppState -> UIElement.Element Element Msg
 rowAnimate s =
   checkbox AnimateCheckbox
-    [text "Animate progress bar", isSelected (animating s), onSelectedChanged (postWith SetAnimating), isEnabled (editingEnabled s)]
+    (rowLayout ++ [text "Animate progress bar", isSelected (animating s), onSelectedChanged (postWith SetAnimating), isEnabled (editingEnabled s)])
 
 rowProgress :: AppState -> UIElement.Element Element Msg
 rowProgress s =
   if animating s
-    then progressBar ProgressCtl [progress Indeterminate]
-    else progressBar ProgressCtl [progress (Progress (fromIntegral (clickCount s) / 50))]
+    then progressBar ProgressCtl (rowLayout ++ [progress Indeterminate])
+    else progressBar ProgressCtl (rowLayout ++ [progress (Progress (fromIntegral (clickCount s) / 50))])
 
 -- Footer
 
@@ -246,14 +258,14 @@ mainList s =
     [ spacing 8, margin 12
     , children
         [ caption "Blink controls demo" [width Fill, height (Exactly 24), align TopLeft]
-        , row (rowDarkMode s)
-        , row (rowEditing s)
-        , row (rowButtons s)
-        , row (rowToggle s)
-        , row (rowRadio s)
-        , row (rowTextInput s)
-        , row (rowPasswordInput s)
-        , row (rowAnimate s)
-        , row (rowProgress s)
+        , rowDarkMode s
+        , rowEditing s
+        , rowButtons s
+        , rowToggle s
+        , rowRadio s
+        , rowTextInput s
+        , rowPasswordInput s
+        , rowAnimate s
+        , rowProgress s
         ]
     ]
