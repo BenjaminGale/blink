@@ -206,11 +206,14 @@ rowProgress s =
 
 -- Footer
 
-footer :: AppState -> (Int, Int) -> DemoUI ()
-footer s (winW, winH) = do
-  pos   <- getMousePos
-  input <- getInput
-  let winText    = "Window: " <> T.pack (show winW) <> " x " <> T.pack (show winH)
+footer :: AppState -> DemoUI ()
+footer s = do
+  pos    <- getMousePos
+  input  <- getInput
+  win    <- getWindowSize
+  let winW      = round (rectWidth win) :: Int
+      winH      = round (rectHeight win) :: Int
+      winText    = "Window: " <> T.pack (show winW) <> " x " <> T.pack (show winH)
       mx         = T.pack (show (round (pointX pos) :: Int))
       my         = T.pack (show (round (pointY pos) :: Int))
       mouseText  = "Mouse: " <> mx <> ", " <> my
@@ -237,10 +240,8 @@ footer s (winW, winH) = do
 demoView :: AppState -> Element ControlId Msg
 demoView s = elementWithLayout (Layout Fill Fill TopLeft) $ do
   input <- getInput
-  win   <- getBounds
-  let winSize = (round (rectWidth win) :: Int, round (rectHeight win) :: Int)
   when (darkMode s) $ fillRect (RGBA 0.082 0.102 0.129 1)
-  borderLayout [centre (mainList s), bottom 36 (footer s winSize)]
+  borderLayout [centre (mainList s), bottom 36 (footer s)]
   anyHov <- isAnyMouseOver
   let typed   = T.concat (inputTypedText input)
       keyName = case inputKeyEvents input of

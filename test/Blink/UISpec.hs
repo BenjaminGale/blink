@@ -137,6 +137,22 @@ spec = describe "Blink.UI" $ do
       (b, _) <- run0 (withBounds (Rectangle 10 10 50 50) (pure ()) >> getBounds)
       b `shouldBe` testBounds
 
+  describe "getWindowSize" $ do
+    it "returns the window rectangle passed to emptyUIContext" $ do
+      (w, _) <- run0 getWindowSize
+      w `shouldBe` testBounds
+
+    it "is unaffected by withBounds narrowing the current bounds" $ do
+      (w, _) <- run0 (withBounds (Rectangle 10 10 50 50) getWindowSize)
+      w `shouldBe` testBounds
+
+    it "reflects the new window rectangle after nextFrameContext advances it" $ do
+      (_, ctx) <- run0 (pure ())
+      let resized = Rectangle 0 0 200 150
+          ctx'    = nextFrameContext resized noInput (contextTheme ctx) (contextAnimation ctx) ctx
+      (w, _) <- runUI getWindowSize ctx'
+      w `shouldBe` resized
+
   it "getMessages returns emitted messages in emit order" $ do
     (_, ctx) <- run0 (emit (1 :: Int) >> emit 2)
     getMessages ctx `shouldBe` [1, 2]

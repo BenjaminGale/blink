@@ -231,6 +231,7 @@ module Blink.UI
   , extendActive
     -- * Bounds
   , getBounds
+  , getWindowSize
   , withBounds
     -- * Drawing
   , fillRect
@@ -534,6 +535,10 @@ data FrameOutputs e msg = FrameOutputs
 -- lives in this context.
 data UIContext e msg = UIContext
   { ctxBounds          :: Rectangle
+  , ctxWindowBounds    :: Rectangle
+    -- ^ The backend-supplied window rectangle for this frame (origin always
+    -- @0,0@), independent of any 'withBounds' narrowing applied while
+    -- descending the tree. See 'getWindowSize'.
   , ctxInput           :: InputState
   , ctxTheme           :: Theme e
   , ctxDisabled        :: Bool
@@ -614,6 +619,7 @@ emptyFrameOutputs = FrameOutputs
 emptyUIContext :: Rectangle -> InputState -> Theme e -> TextMeasurer -> UIContext e msg
 emptyUIContext bounds input thm measurer = UIContext
   { ctxBounds          = bounds
+  , ctxWindowBounds    = bounds
   , ctxInput           = input
   , ctxTheme           = thm
   , ctxDisabled        = False
@@ -671,6 +677,7 @@ rerenderContext bounds input thm anim ctx0 = finishFrame bounds input thm anim c
 finishFrame :: Rectangle -> InputState -> Theme e -> AnimationState -> UIContext e msg -> UIContext e msg
 finishFrame bounds input thm anim ctx = ctx
   { ctxBounds      = bounds
+  , ctxWindowBounds = bounds
   , ctxInput       = input
   , ctxTheme       = thm
   , ctxAnimation   = anim
@@ -792,6 +799,13 @@ clampScrollPos = max 0 . min 1
 -- | The current layout rectangle. Set by the layout system via 'withBounds'.
 getBounds :: UI e msg Rectangle
 getBounds = gets ctxBounds
+
+-- | The backend-supplied window rectangle for this frame, at origin
+-- @0,0@. Unlike 'getBounds', this is unaffected by 'withBounds' narrowing
+-- as the tree is descended, so it reads the same everywhere in the tree for
+-- a given frame.
+getWindowSize :: UI e msg Rectangle
+getWindowSize = gets ctxWindowBounds
 
 -- | The current mouse cursor position in window coordinates.
 getMousePos :: UI e msg Point
