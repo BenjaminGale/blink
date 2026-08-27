@@ -4,6 +4,7 @@ module UI (Element, AppState (..), demoApp) where
 import Blink.App
 import Blink.Controls
 import Blink.Controls.Button (onActivated)
+import Blink.Controls.Element (post, postWith)
 import Blink.Controls.Label (text)
 import Blink.Controls.ProgressBar (ProgressValue (..), progress)
 import Blink.Controls.TextInput (displayFilter, onInput, value)
@@ -19,14 +20,6 @@ import Theme (Element (..), lightTheme, darkTheme)
 import Control.Monad (when)
 import Data.Text (Text)
 import qualified Data.Text as T
-
--- | Emits @msg@, ignoring whatever data the triggering event carried.
-post :: msg -> a -> [Out e msg]
-post msg = const [OutMsg msg]
-
--- | Emits @f a@ -- uses the triggering event's own data to build the message.
-postWith :: (a -> msg) -> a -> [Out e msg]
-postWith f a = [OutMsg (f a)]
 
 -- Application state
 

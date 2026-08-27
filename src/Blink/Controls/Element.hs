@@ -51,6 +51,8 @@ module Blink.Controls.Element
 
     -- * Handler plumbing
   , runHandlers
+  , post
+  , postWith
 
     -- * Shared with Control
   , isMouseFreeFor
@@ -156,6 +158,17 @@ runHandlers hs a = mapM_ dispatch (concatMap ($ a) hs)
   where
     dispatch (OutMsg msg) = emit msg
     dispatch (OutUi eff)  = emitUi eff
+
+-- | Builds a reaction (an 'EventHandler'\/'Blink.Controls.Toggle.onSelectedChanged'-shaped
+-- function into @['Out' e msg]@) that emits @msg@, ignoring whatever data
+-- the triggering event carried.
+post :: msg -> a -> [Out e msg]
+post msg = const [OutMsg msg]
+
+-- | Builds a reaction that emits @f a@ -- uses the triggering event's own
+-- data to build the message.
+postWith :: (a -> msg) -> a -> [Out e msg]
+postWith f a = [OutMsg (f a)]
 
 -- | 'True' when nothing else holds mouse capture, or this element itself
 -- does (a drag in progress on this element doesn't count as contention).
