@@ -2,10 +2,11 @@
 module UI (Element, AppState (..), demoApp) where
 
 import Blink.App
+import Blink.Attribute (Attribute)
 import Blink.Controls
 import Blink.Controls.Button (onActivated)
 import Blink.Controls.Element (post, postWith)
-import Blink.Controls.Label (text)
+import Blink.Controls.Label (LabelConfig, text)
 import Blink.Controls.ProgressBar (ProgressValue (..), progress)
 import Blink.Controls.TextInput (displayFilter, onInput, value)
 import Blink.Controls.Toggle (isSelected, onSelectedChanged)
@@ -15,6 +16,7 @@ import Blink.Layout
 import Blink.Rendering
 import Blink.UI
 import Blink.UI.Element (elementWithLayout, runElement)
+import qualified Blink.UI.Element as UIElement (Element)
 import Blink.Update
 import Theme (Element (..), lightTheme, darkTheme)
 import Control.Monad (when)
@@ -93,8 +95,8 @@ type DemoUI = UI Element Msg
 -- Shell
 
 -- | Plain, non-interactive text under the shared 'Label' element ID.
-caption :: Text -> DemoUI ()
-caption t = runElement (label Label [text t])
+caption :: Text -> [Attribute (LabelConfig Element Msg)] -> UIElement.Element Element Msg
+caption t attrs = label Label (text t : attrs)
 
 rowHeight :: Length
 rowHeight = Exactly 40
@@ -117,7 +119,7 @@ rowButtons s =
     , children
         [ button ClickButton [text "Click me", onActivated (post AddClick), width (Exactly 100), height Fill]
         , button ResetButton [text "Reset", onActivated (post ResetClicks), width (Exactly 100), height Fill]
-        , elementWithLayout (Layout Fill Fill MiddleLeft) (caption ("Clicks: " <> T.pack (show (clickCount s))))
+        , caption ("Clicks: " <> T.pack (show (clickCount s))) [width Fill, height Fill, align MiddleLeft]
         ]
     ]
 
@@ -128,7 +130,7 @@ rowToggle s =
     , children
         [ toggleButton ToggleCtl
             [text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle), width (Exactly 160), height Fill]
-        , elementWithLayout (Layout Fill Fill MiddleLeft) (caption (if toggleOn s then "On" else "Off"))
+        , caption (if toggleOn s then "On" else "Off") [width Fill, height Fill, align MiddleLeft]
         ]
     ]
 
@@ -156,7 +158,7 @@ rowTextInput s =
   runElement $ hBox
     [ spacing 8, alignment Center
     , children
-        [ elementWithLayout (Layout (Exactly 120) Fill MiddleLeft) (caption "Text input")
+        [ caption "Text input" [width (Exactly 120), height Fill, align MiddleLeft]
         , textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText), height Fill]
         ]
     ]
@@ -166,7 +168,7 @@ rowPasswordInput s =
   runElement $ hBox
     [ spacing 8, alignment Center
     , children
-        [ elementWithLayout (Layout (Exactly 120) Fill MiddleLeft) (caption "Password input")
+        [ caption "Password input" [width (Exactly 120), height Fill, align MiddleLeft]
         , textInput PasswordInputCtl
             [value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText), height Fill]
         ]
@@ -204,11 +206,11 @@ footer s (winW, winH) = do
   runElement $ hBox
     [ spacing 24, margin 4, alignment Center
     , children
-        [ elementWithLayout (Layout (Exactly 160) Fill MiddleLeft) (caption winText)
-        , elementWithLayout (Layout (Exactly 160) Fill MiddleLeft) (caption mouseText)
-        , elementWithLayout (Layout (Exactly 160) Fill MiddleLeft) (caption buttonText)
-        , elementWithLayout (Layout (Exactly 100) Fill MiddleLeft) (caption hoverText)
-        , elementWithLayout (Layout Fill          Fill MiddleLeft) (caption keyText)
+        [ caption winText    [width (Exactly 160), height Fill, align MiddleLeft]
+        , caption mouseText  [width (Exactly 160), height Fill, align MiddleLeft]
+        , caption buttonText [width (Exactly 160), height Fill, align MiddleLeft]
+        , caption hoverText  [width (Exactly 100), height Fill, align MiddleLeft]
+        , caption keyText    [width Fill,          height Fill, align MiddleLeft]
         ]
     ]
 
@@ -236,7 +238,7 @@ mainList s =
   runElement $ vBox
     [ spacing 8, margin 12
     , children
-        [ elementWithLayout (Layout Fill (Exactly 24) TopLeft) (caption "Blink controls demo")
+        [ caption "Blink controls demo" [width Fill, height (Exactly 24), align TopLeft]
         , elementWithLayout (Layout Fill rowHeight    TopLeft) (rowDarkMode s)
         , elementWithLayout (Layout Fill rowHeight    TopLeft) (rowEditing s)
         , elementWithLayout (Layout Fill rowHeight    TopLeft) (disableWhen (not (editingEnabled s)) (rowButtons s))
