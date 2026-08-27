@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | A checkbox: a glyph and a caption toggled together as one control.
--- Built on 'toggleBase' -- see "Blink.Controls.Button" for how it and every
--- other button-like control fit together. A leaf: nothing derives from it,
+-- Built on 'toggleBase' -- see "Blink.Controls.Toggle" for how it and every
+-- other toggle-like control fit together. A leaf: nothing derives from it,
 -- so it has no 'Blink.Controls.Control.ControlConfig'\/'Blink.Controls.Control.ControlInteraction'-style pair of its own
--- beyond 'ToggleConfig'\/'Blink.Controls.Button.ToggleInteraction', which already have every field
+-- beyond 'ToggleConfig'\/'Blink.Controls.Toggle.ToggleInteraction', which already have every field
 -- it needs.
 module Blink.Controls.Checkbox
   ( checkbox
@@ -13,9 +13,10 @@ module Blink.Controls.Checkbox
 import Control.Monad (void, when)
 import Data.Text (Text)
 
-import Blink.Controls.Button (ButtonConfig (..), ToggleConfig (..), defaultToggleButtonConfig, toggleBase)
+import Blink.Controls.Button (ButtonConfig (..))
 import Blink.Controls.Control
 import Blink.Controls.Label (lcText, renderLabelledContent)
+import Blink.Controls.Toggle (ToggleConfig (..), defaultToggleButtonConfig, toggleBase)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..), uniformBorder)
 import Blink.Layout.Constraints (Layout (..), Length (..))
 import Blink.Rendering (TextAlign (..))
@@ -51,10 +52,10 @@ defaultCheckboxConfig = defaultToggleButtonConfig
   }
 
 -- | A checkbox: a small box drawn with 'strokeRect', a tick inside it while
--- selected (see 'Blink.Controls.Button.isSelected'), beside a caption set via 'Blink.Controls.Label.text', toggled
+-- selected (see 'Blink.Controls.Toggle.isSelected'), beside a caption set via 'Blink.Controls.Label.text', toggled
 -- together as one control -- clicking either the box or the caption
--- activates it, the same as 'Blink.Controls.Button.toggleButton'. Flips
--- every time it's activated; see 'Blink.Controls.Button.onSelectedChanged' for reacting to it.
+-- activates it, the same as 'Blink.Controls.Toggle.toggleButton'. Flips
+-- every time it's activated; see 'Blink.Controls.Toggle.onSelectedChanged' for reacting to it.
 -- Defaults to sizing itself to its own glyph-plus-caption content on both
 -- axes, the same as 'Blink.Controls.Label.label'; override with
 -- 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/'Blink.Layout.Constraints.align'.

@@ -4,12 +4,13 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Test.Hspec
 
-import Blink.Controls.Button (buttonStyleKey, toggleButtonStyleKey, toggleChecked)
+import Blink.Controls.Button (buttonStyleKey)
 import Blink.Controls.Checkbox (checkboxStyleKey)
 import Blink.Controls.Label (labelStyleKey)
 import Blink.Controls.ProgressBar (progressBarStyleKey)
 import Blink.Controls.RadioButton (radioButtonStyleKey)
 import Blink.Controls.TextInput (textInputStyleKey)
+import Blink.Controls.Toggle (toggleButtonStyleKey, toggleChecked)
 import Blink.Rendering (Colour (..))
 import Blink.Style
 import Blink.Style.Defaults (defaultTheme)

@@ -93,7 +93,7 @@ data ControlConfig e msg = ControlConfig
   , ccFocusOnClick  :: FocusOnClick e
   , ccActiveStates  :: Set VisualState
     -- ^ Extra 'VisualState's contributed by a wrapping layer (e.g.
-    -- 'Blink.Controls.Button.toggleBase' setting a checked\/unchecked
+    -- 'Blink.Controls.Toggle.toggleBase' setting a checked\/unchecked
     -- pseudo-state), unioned with the common\/focus states 'controlBase'
     -- derives itself. Defaults to empty.
   , ccContent       :: UI e msg ()

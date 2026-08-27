@@ -42,6 +42,7 @@ library
         Blink.Controls.ProgressBar
         Blink.Controls.RadioButton
         Blink.Controls.TextInput
+        Blink.Controls.Toggle
         Blink.Geometry
         Blink.Input
         Blink.Layout
@@ -90,6 +91,7 @@ test-suite blink-tests
         Blink.Controls.RadioButtonSpec
         Blink.Controls.TextInputSpec
         Blink.Controls.ToggleBehaviour
+        Blink.Controls.ToggleSpec
         Blink.Generators
         Blink.GeometrySpec
         Blink.InputSpec

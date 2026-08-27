@@ -3,10 +3,11 @@ module UI (Element, AppState (..), demoApp) where
 
 import Blink.App
 import Blink.Controls
-import Blink.Controls.Button (isSelected, onActivated, onSelectedChanged)
+import Blink.Controls.Button (onActivated)
 import Blink.Controls.Label (text)
 import Blink.Controls.ProgressBar (ProgressValue (..), progress)
 import Blink.Controls.TextInput (displayFilter, onInput, value)
+import Blink.Controls.Toggle (isSelected, onSelectedChanged)
 import Blink.Geometry
 import Blink.Input
 import Blink.Layout

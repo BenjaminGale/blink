@@ -4,16 +4,16 @@ module Blink.Controls.RadioButtonSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Button (ToggleConfig, isSelected)
 import Blink.Controls.Element (Attribute)
 import Blink.Controls.Label (text)
+import Blink.Controls.RadioButton (radioButton)
+import Blink.Controls.Toggle (ToggleConfig, isSelected)
+import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
-import Blink.Controls.RadioButton (radioButton)
 import Blink.Layout.Constraints (Layout (..), Length (Fill))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
-import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.UI
 import Blink.UI.Element (elLayout, runElement)
 

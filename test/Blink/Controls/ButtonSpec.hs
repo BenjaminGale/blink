@@ -4,11 +4,10 @@ module Blink.Controls.ButtonSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Button (ButtonConfig, ToggleConfig, button, isSelected, toggleButton, toggleChecked)
+import Blink.Controls.Button (ButtonConfig, button)
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec)
 import Blink.Controls.Element (Attribute)
 import Blink.Controls.Label (text)
-import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 import qualified Data.Text as T
 
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform)
@@ -47,18 +46,6 @@ testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
 
 testTheme :: Theme TestElement
 testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
-
-pressedColour :: Colour
-pressedColour = RGBA 1 1 1 1
-
-toggleTestTheme :: Theme TestElement
-toggleTestTheme = Theme
-  { themeElementStyles = Map.empty
-  , themeDefaultStyle  =
-      ( testMetrics
-      , testStyleSet { styleOverrides = Map.singleton toggleChecked (\s -> s { styleTextColour = pressedColour }) }
-      )
-  }
 
 noInput :: InputState
 noInput = InputState
@@ -122,26 +109,3 @@ spec = describe "Blink.Controls.Button" $ do
           fitCtx = emptyUIContext (Rectangle 0 0 500 500) noInput testTheme fixedWidthMeasurer
       ctx <- snd <$> runUI (fitContentEl [text caption]) fitCtx
       getDrawCommands ctx `shouldContain` [FillRect expectedBg testColour]
-
-  describe "toggleButton" $ do
-    toggleBehaviourSpec not testBounds toggleSeedCtx Ok (Point 5 5) hitRect (Point 200 200) fullSizeToggle
-
-    it "draws in its normal style while not selected" $ do
-      ctx <- startToggle []
-      getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "" testColour AlignCenter]
-
-    it "draws in its pressed style while selected, even without being physically pressed" $ do
-      ctx <- startToggle [isSelected True]
-      getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "" pressedColour AlignCenter]
-
-type ToggleAttr' = Attribute (ToggleConfig TestElement String)
-
-toggleSeedCtx :: UIContext TestElement String
-toggleSeedCtx = emptyUIContext testBounds noInput toggleTestTheme noOpTextMeasurer
-
--- | See 'fullSize' -- same reasoning, for 'toggleButton'.
-fullSizeToggle :: [ToggleAttr'] -> UI TestElement String ()
-fullSizeToggle attrs = runElement (toggleButton Ok attrs) { elLayout = Layout Fill Fill TopLeft }
-
-startToggle :: [ToggleAttr'] -> IO (UIContext TestElement String)
-startToggle attrs = snd <$> runUI (fullSizeToggle attrs) toggleSeedCtx
