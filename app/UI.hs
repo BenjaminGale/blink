@@ -101,6 +101,10 @@ caption t attrs = label Label (text t : attrs)
 rowHeight :: Length
 rowHeight = Exactly 40
 
+-- | Wraps a control row at the shared row height, for use as a 'mainList' child.
+row :: DemoUI () -> UIElement.Element Element Msg
+row = elementWithLayout (Layout Fill rowHeight TopLeft)
+
 -- Control rows, top to bottom
 
 rowDarkMode :: AppState -> DemoUI ()
@@ -239,14 +243,14 @@ mainList s =
     [ spacing 8, margin 12
     , children
         [ caption "Blink controls demo" [width Fill, height (Exactly 24), align TopLeft]
-        , elementWithLayout (Layout Fill rowHeight    TopLeft) (rowDarkMode s)
-        , elementWithLayout (Layout Fill rowHeight    TopLeft) (rowEditing s)
-        , elementWithLayout (Layout Fill rowHeight    TopLeft) (disableWhen (not (editingEnabled s)) (rowButtons s))
-        , elementWithLayout (Layout Fill rowHeight    TopLeft) (disableWhen (not (editingEnabled s)) (rowToggle s))
-        , elementWithLayout (Layout Fill rowHeight    TopLeft) (disableWhen (not (editingEnabled s)) (rowRadio s))
-        , elementWithLayout (Layout Fill rowHeight    TopLeft) (disableWhen (not (editingEnabled s)) (rowTextInput s))
-        , elementWithLayout (Layout Fill rowHeight    TopLeft) (disableWhen (not (editingEnabled s)) (rowPasswordInput s))
-        , elementWithLayout (Layout Fill rowHeight    TopLeft) (disableWhen (not (editingEnabled s)) (rowAnimate s))
-        , elementWithLayout (Layout Fill rowHeight    TopLeft) (rowProgress s)
+        , row (rowDarkMode s)
+        , row (rowEditing s)
+        , row (disableWhen (not (editingEnabled s)) (rowButtons s))
+        , row (disableWhen (not (editingEnabled s)) (rowToggle s))
+        , row (disableWhen (not (editingEnabled s)) (rowRadio s))
+        , row (disableWhen (not (editingEnabled s)) (rowTextInput s))
+        , row (disableWhen (not (editingEnabled s)) (rowPasswordInput s))
+        , row (disableWhen (not (editingEnabled s)) (rowAnimate s))
+        , row (rowProgress s)
         ]
     ]
