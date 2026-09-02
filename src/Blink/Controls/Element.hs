@@ -304,11 +304,15 @@ watchFocus eid disabled = do
 -- computed.
 fireElementEvents :: ElementConfig e msg -> ElementInteraction -> UI e msg ()
 fireElementEvents ec ei = do
-  when (eiMouseEntered ei) $ runHandlers (ecOnMouseEntered ec) ()
-  when (eiMouseExited  ei) $ runHandlers (ecOnMouseExited  ec) ()
-  when (eiMouseDown    ei) $ runHandlers (ecOnMouseDown    ec) ()
-  when (eiMouseUp      ei) $ runHandlers (ecOnMouseUp      ec) ()
-  when (eiClicked      ei) $ runHandlers (ecOnClicked      ec) ()
+  mapM_ (\(fired, hs) -> when fired $ runHandlers hs ()) events
   mapM_ (runHandlers (ecOnKeyPressed ec)) (eiKeysPressed ei)
-  when (eiFocusGained  ei) $ runHandlers (ecOnFocusGained ec) ()
-  when (eiFocusLost    ei) $ runHandlers (ecOnFocusLost   ec) ()
+  where
+    events =
+      [ (eiMouseEntered ei, ecOnMouseEntered ec)
+      , (eiMouseExited  ei, ecOnMouseExited  ec)
+      , (eiMouseDown    ei, ecOnMouseDown    ec)
+      , (eiMouseUp      ei, ecOnMouseUp      ec)
+      , (eiClicked      ei, ecOnClicked      ec)
+      , (eiFocusGained  ei, ecOnFocusGained  ec)
+      , (eiFocusLost    ei, ecOnFocusLost    ec)
+      ]
