@@ -15,13 +15,13 @@ import Data.Text (Text)
 
 import Blink.Controls.Button (ButtonConfig (..))
 import Blink.Controls.Control
-import Blink.Controls.Label (lcText, renderLabelledContent)
-import Blink.Controls.Toggle (ToggleConfig (..), defaultToggleButtonConfig, toggleBase)
-import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..), uniformBorder)
-import Blink.Layout.Constraints (Layout (..), Length (..))
+import Blink.Controls.Label (lcText)
+import Blink.Controls.Toggle
+  (ToggleConfig (..), defaultGlyphToggleConfig, glyphCaptionContent, glyphCaptionElement, toggleBase)
+import Blink.Geometry (Rectangle (..), uniformBorder)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..))
-import Blink.UI (currentStyle, drawText, getBounds, measureText, strokeRect, withBounds)
+import Blink.UI (currentStyle, drawText, getBounds, strokeRect, withBounds)
 import Blink.UI.Element (Element (..))
 
 -- | The fixed width reserved for the glyph, on the left of the caption.
@@ -31,12 +31,6 @@ glyphWidth = 20
 -- | The gap between the glyph and the caption beside it.
 labelGap :: Double
 labelGap = 6
-
--- | Where the caption starts, relative to the control's left edge: past the
--- glyph column and its gap. Shared by 'glyphContent' (render time) and
--- 'checkboxContentElement' (measure time) so the two can't drift apart.
-contentOffset :: Double
-contentOffset = glyphWidth + labelGap
 
 -- | The margin left between the glyph column's edges and the drawn box, so
 -- the stroked box doesn't touch the caption or the control's own bounds.
@@ -54,14 +48,6 @@ checkTick = "\10003"
 checkboxStyleKey :: StyleKey e
 checkboxStyleKey = Class "checkbox"
 
-defaultCheckboxConfig :: ToggleConfig e msg
-defaultCheckboxConfig = defaultToggleButtonConfig
-  { tgcButton = (tgcButton defaultToggleButtonConfig)
-      { bcControl = (bcControl (tgcButton defaultToggleButtonConfig)) { ccStyleKey = checkboxStyleKey }
-      , bcLayout  = Layout FitContent FitContent TopLeft
-      }
-  }
-
 -- | A checkbox: a small box drawn with 'strokeRect', a tick inside it while
 -- selected (see 'Blink.Controls.Toggle.isSelected'), beside a caption set via 'Blink.Controls.Label.text', toggled
 -- together as one control -- clicking either the box or the caption
@@ -73,47 +59,31 @@ defaultCheckboxConfig = defaultToggleButtonConfig
 checkbox :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> Element e msg
 checkbox eid attrs = Element
   { elLayout  = bcLayout btn
-  , elMeasure = measureChrome (ccStyleKey ctrl) (checkboxContentElement (lcText (bcLabelled btn)))
+  , elMeasure = measureChrome (ccStyleKey ctrl) (glyphCaptionElement glyphWidth labelGap (lcText (bcLabelled btn)))
   , elRun     = void (toggleBase eid cfg')
   }
   where
-    cfg      = resolve defaultCheckboxConfig attrs
+    cfg      = resolve (defaultGlyphToggleConfig checkboxStyleKey) attrs
     btn      = tgcButton cfg
     selected = tgcSelected cfg
-    glyphContent = do
+    -- | The box, drawn with 'strokeRect' and (while selected) a tick inside
+    -- it, centred within the glyph column's own bounds.
+    drawBox = do
       s      <- currentStyle
       bounds <- getBounds
-      let glyphRect = bounds { rectWidth = glyphWidth }
-          boxSize   = max 0 (min glyphWidth (rectHeight bounds) - boxInset)
-          boxRect   = Rectangle
-            { rectX      = rectX glyphRect + (glyphWidth - boxSize) / 2
-            , rectY      = rectY glyphRect + (rectHeight glyphRect - boxSize) / 2
+      let boxSize = max 0 (min glyphWidth (rectHeight bounds) - boxInset)
+          boxRect = Rectangle
+            { rectX      = rectX bounds + (glyphWidth - boxSize) / 2
+            , rectY      = rectY bounds + (rectHeight bounds - boxSize) / 2
             , rectWidth  = boxSize
             , rectHeight = boxSize
-            }
-          textRect  = bounds
-            { rectX     = rectX bounds + contentOffset
-            , rectWidth = max 0 (rectWidth bounds - contentOffset)
             }
       withBounds boxRect $ do
         strokeRect (styleTextColour s) (uniformBorder 1)
         when selected $ drawText (styleTextColour s) AlignCenter checkTick
-      withBounds textRect $ renderLabelledContent (bcLabelled btn)
+    glyphContent = glyphCaptionContent glyphWidth labelGap drawBox (bcLabelled btn)
     ctrl = (bcControl btn) { ccContent = glyphContent }
     cfg' = cfg
       { tgcNext   = not
       , tgcButton = btn { bcControl = ctrl }
       }
-
--- | The glyph-plus-caption content's own preferred size: the glyph's fixed
--- width plus its gap plus the caption's unwrapped single-line width; the
--- taller of the glyph's width (it's drawn as a square) and the caption's
--- line height.
-checkboxContentElement :: Text -> Element e msg
-checkboxContentElement t = Element
-  { elLayout  = Layout Fill FitContent TopLeft
-  , elMeasure = const $ do
-      capSize <- measureText t
-      pure (Size (contentOffset + sizeWidth capSize) (max glyphWidth (sizeHeight capSize)))
-  , elRun     = pure ()
-  }

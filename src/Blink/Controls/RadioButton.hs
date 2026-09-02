@@ -15,18 +15,23 @@ import Data.Text (Text)
 
 import Blink.Controls.Button (ButtonConfig (..))
 import Blink.Controls.Control
-import Blink.Controls.Label (lcText, renderLabelledContent)
-import Blink.Controls.Toggle (ToggleConfig (..), defaultToggleButtonConfig, toggleBase)
-import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..))
-import Blink.Layout.Constraints (Layout (..), Length (..))
+import Blink.Controls.Label (lcText)
+import Blink.Controls.Toggle
+  (ToggleConfig (..), defaultGlyphToggleConfig, glyphCaptionContent, glyphCaptionElement, toggleBase)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..))
-import Blink.UI (currentStyle, drawText, getBounds, measureText, withBounds)
+import Blink.UI (currentStyle, drawText)
 import Blink.UI.Element (Element (..))
 
 -- | The fixed width reserved for the glyph, on the left of the caption.
 glyphWidth :: Double
 glyphWidth = 20
+
+-- | The gap between the glyph and the caption beside it -- a radio button's
+-- glyph, unlike 'Blink.Controls.Checkbox.checkbox''s, sits flush against
+-- its caption.
+glyphGap :: Double
+glyphGap = 0
 
 -- | 'CIRCLED BULLET' (U+25C9) would read better but isn't in most UI
 -- fonts' coverage (including this project's demo font); 'BLACK CIRCLE' is
@@ -40,14 +45,6 @@ radioGlyph False = "\9675" -- WHITE CIRCLE
 -- via 'style'.
 radioButtonStyleKey :: StyleKey e
 radioButtonStyleKey = Class "radioButton"
-
-defaultRadioButtonConfig :: ToggleConfig e msg
-defaultRadioButtonConfig = defaultToggleButtonConfig
-  { tgcButton = (tgcButton defaultToggleButtonConfig)
-      { bcControl = (bcControl (tgcButton defaultToggleButtonConfig)) { ccStyleKey = radioButtonStyleKey }
-      , bcLayout  = Layout FitContent FitContent TopLeft
-      }
-  }
 
 -- | A radio button: a glyph showing whether it's currently selected (see
 -- 'Blink.Controls.Toggle.isSelected'), beside a caption set via
@@ -65,34 +62,19 @@ defaultRadioButtonConfig = defaultToggleButtonConfig
 radioButton :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> Element e msg
 radioButton eid attrs = Element
   { elLayout  = bcLayout btn
-  , elMeasure = measureChrome (ccStyleKey ctrl) (radioContentElement (lcText (bcLabelled btn)))
+  , elMeasure = measureChrome (ccStyleKey ctrl) (glyphCaptionElement glyphWidth glyphGap (lcText (bcLabelled btn)))
   , elRun     = void (toggleBase eid cfg')
   }
   where
-    cfg      = resolve defaultRadioButtonConfig attrs
+    cfg      = resolve (defaultGlyphToggleConfig radioButtonStyleKey) attrs
     btn      = tgcButton cfg
     selected = tgcSelected cfg
-    glyphContent = do
-      s      <- currentStyle
-      bounds <- getBounds
-      let glyphRect = bounds { rectWidth = glyphWidth }
-          textRect  = bounds { rectX = rectX bounds + glyphWidth, rectWidth = max 0 (rectWidth bounds - glyphWidth) }
-      withBounds glyphRect $ drawText (styleTextColour s) AlignCenter (radioGlyph selected)
-      withBounds textRect  $ renderLabelledContent (bcLabelled btn)
+    drawGlyph = do
+      s <- currentStyle
+      drawText (styleTextColour s) AlignCenter (radioGlyph selected)
+    glyphContent = glyphCaptionContent glyphWidth glyphGap drawGlyph (bcLabelled btn)
     ctrl = (bcControl btn) { ccContent = glyphContent }
     cfg' = cfg
       { tgcNext   = const True
       , tgcButton = btn { bcControl = ctrl }
       }
-
--- | The glyph-plus-caption content's own preferred size: the glyph's fixed
--- width plus the caption's unwrapped single-line width; the taller of the
--- glyph's width (it's drawn as a square) and the caption's line height.
-radioContentElement :: Text -> Element e msg
-radioContentElement t = Element
-  { elLayout  = Layout Fill FitContent TopLeft
-  , elMeasure = const $ do
-      capSize <- measureText t
-      pure (Size (glyphWidth + sizeWidth capSize) (max glyphWidth (sizeHeight capSize)))
-  , elRun     = pure ()
-  }

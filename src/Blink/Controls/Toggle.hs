@@ -20,12 +20,15 @@ module Blink.Controls.Toggle
   ( ToggleConfig (..)
   , ToggleInteraction (..)
   , defaultToggleButtonConfig
+  , defaultGlyphToggleConfig
   , toggleButtonStyleKey
   , toggleGroup
   , toggleChecked
   , toggleUnchecked
   , toggleBase
   , toggleButton
+  , glyphCaptionElement
+  , glyphCaptionContent
   , isSelected
   , onSelectedChanged
   ) where
@@ -38,10 +41,11 @@ import Blink.Controls.Button
   (ButtonConfig (..), ButtonInteraction (..), HasButtonConfig (..), buttonBase, defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label
-  (HasLabelledConfig (..), captionElement, lcText, renderLabelledContent)
-import Blink.Layout.Constraints (HasLayoutConfig (..))
+  (HasLabelledConfig (..), LabelledConfig (..), captionElement, lcText, renderLabelledContent)
+import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..))
+import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), Length (..))
 import Blink.Style (VisualState (..))
-import Blink.UI (Out, UI)
+import Blink.UI (Out, UI, getBounds, measureText, withBounds)
 import Blink.UI.Element (Element (..))
 
 -- | Whether the control is currently selected.
@@ -167,3 +171,44 @@ toggleButton eid attrs = Element
     cfg  = resolve defaultToggleButtonConfig attrs
     btn  = tgcButton cfg
     ctrl = (bcControl btn) { ccContent = renderLabelledContent (bcLabelled btn) }
+
+-- | 'defaultToggleButtonConfig' styled via @styleKey@ and sized to fit its
+-- own content on both axes -- the shared default for a leaf toggle control
+-- that pairs a fixed-width glyph with a caption beside it (a checkbox or
+-- radio button), rather than filling its row the way 'toggleButton' does.
+defaultGlyphToggleConfig :: StyleKey e -> ToggleConfig e msg
+defaultGlyphToggleConfig styleKey = defaultToggleButtonConfig
+  { tgcButton = (tgcButton defaultToggleButtonConfig)
+      { bcControl = (bcControl (tgcButton defaultToggleButtonConfig)) { ccStyleKey = styleKey }
+      , bcLayout  = Layout FitContent FitContent TopLeft
+      }
+  }
+
+-- | The glyph-plus-caption content's own preferred size: the glyph's fixed
+-- width plus the gap between it and the caption plus the caption's
+-- unwrapped single-line width; the taller of the glyph's width (drawn as a
+-- square) and the caption's line height. Shared measure for a checkbox\/
+-- radio button; see 'glyphCaptionContent' for the matching render shape.
+glyphCaptionElement :: Double -> Double -> Text -> Element e msg
+glyphCaptionElement glyphWidth gap t = Element
+  { elLayout  = Layout Fill FitContent TopLeft
+  , elMeasure = const $ do
+      capSize <- measureText t
+      pure (Size (glyphWidth + gap + sizeWidth capSize) (max glyphWidth (sizeHeight capSize)))
+  , elRun     = pure ()
+  }
+
+-- | Renders a fixed-width glyph column, drawn by @drawGlyph@ into just that
+-- column's own bounds, beside a caption filling the remaining space. The
+-- shared render shape behind a checkbox\/radio button; see
+-- 'glyphCaptionElement' for the matching measure.
+glyphCaptionContent :: Double -> Double -> UI e msg () -> LabelledConfig e msg -> UI e msg ()
+glyphCaptionContent glyphWidth gap drawGlyph labelled = do
+  bounds <- getBounds
+  let glyphRect = bounds { rectWidth = glyphWidth }
+      textRect  = bounds
+        { rectX     = rectX bounds + glyphWidth + gap
+        , rectWidth = max 0 (rectWidth bounds - glyphWidth - gap)
+        }
+  withBounds glyphRect drawGlyph
+  withBounds textRect (renderLabelledContent labelled)
