@@ -105,6 +105,27 @@ data ElementInteraction = ElementInteraction
   , eiKeysPressed   :: [KeyEvent]
   }
 
+-- | Field-by-field: @||@ for flags, concatenation for key events. Combining
+-- a report against 'mempty' leaves it unchanged, so a report that only
+-- knows about some fields can be merged with others covering the rest.
+instance Semigroup ElementInteraction where
+  a <> b = ElementInteraction
+    { eiHovered      = eiHovered a      || eiHovered b
+    , eiHeld         = eiHeld a         || eiHeld b
+    , eiFocused      = eiFocused a      || eiFocused b
+    , eiMouseEntered = eiMouseEntered a || eiMouseEntered b
+    , eiMouseExited  = eiMouseExited a  || eiMouseExited b
+    , eiMouseDown    = eiMouseDown a    || eiMouseDown b
+    , eiMouseUp      = eiMouseUp a      || eiMouseUp b
+    , eiClicked      = eiClicked a      || eiClicked b
+    , eiFocusGained  = eiFocusGained a  || eiFocusGained b
+    , eiFocusLost    = eiFocusLost a    || eiFocusLost b
+    , eiKeysPressed  = eiKeysPressed a  ++ eiKeysPressed b
+    }
+
+instance Monoid ElementInteraction where
+  mempty = ElementInteraction False False False False False False False False False False []
+
 -- | Implemented by any config type that nests an 'ElementConfig', letting
 -- an element attribute (e.g. 'onClicked') be applied to it directly. Every
 -- instance but the base case delegates one hop into its own nested field.
@@ -190,25 +211,71 @@ elementBase :: Ord e => e -> ElementConfig e msg -> UI e msg ElementInteraction
 elementBase eid ec = do
   disabled <- isDisabled
   hit      <- isRegionHit
-  let hovered = not disabled && hit
-  when hovered $ do
+  let eligible = not disabled && hit
+
+  hoverI <- watchHover eid eligible
+  mouseI <- watchMouseButton eid eligible
+  focusI <- watchFocus eid disabled
+
+  let interaction = hoverI <> mouseI <> focusI
+
+  fireElementEvents ec interaction
+  pure interaction
+
+-- | Registers this frame's hover, claiming mouse-over and capture when the
+-- element is eligible, and reports hovered plus the enter\/exit edges
+-- against last frame's hover state. Only fills in 'eiHovered',
+-- 'eiMouseEntered', and 'eiMouseExited' -- the rest is 'mempty'.
+watchHover :: Ord e => e -> Bool -> UI e msg ElementInteraction
+watchHover eid eligible = do
+  when eligible $ do
     registerMouseOver eid
     acquireCapture eid
   wasOver <- wasMouseOverLastFrame eid
-  let mouseEntered = not wasOver && hovered
-      mouseExited  = wasOver && not hovered
+  let mouseEntered = not wasOver && eligible
+      mouseExited  = wasOver && not eligible
+  pure mempty
+    { eiHovered      = eligible
+    , eiMouseEntered = mouseEntered
+    , eiMouseExited  = mouseExited
+    }
 
+-- | Reports this frame's mouse-button activity against the element: down,
+-- up, click (up while this element holds capture), and held (button down
+-- with capture free or held by this element). Only fills in
+-- 'eiMouseDown', 'eiMouseUp', 'eiClicked', and 'eiHeld' -- the rest is
+-- 'mempty'.
+watchMouseButton :: Eq e => e -> Bool -> UI e msg ElementInteraction
+watchMouseButton eid eligible = do
   mouse <- getMouse
-  let eligible     = not disabled && hit
-      capturedByMe = captureOf (mouseButton mouse) == MouseCapturedBy eid
+  let capturedByMe = captureOf (mouseButton mouse) == MouseCapturedBy eid
       mouseDown    = eligible && isButtonDownEvent (mouseButton mouse)
       mouseUp      = eligible && isButtonReleasedEvent (mouseButton mouse)
       clicked      = mouseUp && capturedByMe
 
   free <- isMouseFreeFor eid
   down <- isButtonDown
-  let held = not disabled && hit && free && down
+  let held = eligible && free && down
 
+  pure mempty
+    { eiMouseDown = mouseDown
+    , eiMouseUp   = mouseUp
+    , eiClicked   = clicked
+    , eiHeld      = held
+    }
+  where
+    isButtonDownEvent (ButtonDown _) = True
+    isButtonDownEvent _              = False
+    isButtonReleasedEvent (ButtonReleased _) = True
+    isButtonReleasedEvent _                  = False
+
+-- | Reports whether the element is focused this frame, the key events it
+-- received (empty when disabled or unfocused), and whether a focus
+-- transfer this frame named it winner or loser. Only fills in
+-- 'eiFocused', 'eiFocusGained', 'eiFocusLost', and 'eiKeysPressed' -- the
+-- rest is 'mempty'.
+watchFocus :: Eq e => e -> Bool -> UI e msg ElementInteraction
+watchFocus eid disabled = do
   focused <- isFocused eid
   input   <- getInput
   let keysPressed = if not disabled && focused then inputKeyEvents input else []
@@ -217,27 +284,12 @@ elementBase eid ec = do
   let focusGained = maybe False (\fc -> focusChangeTo fc == Just eid) change
       focusLost   = maybe False (\fc -> focusChangeFrom fc == Just eid) change
 
-  let interaction = ElementInteraction
-        { eiHovered      = hovered
-        , eiHeld         = held
-        , eiFocused      = focused
-        , eiMouseEntered = mouseEntered
-        , eiMouseExited  = mouseExited
-        , eiMouseDown    = mouseDown
-        , eiMouseUp      = mouseUp
-        , eiClicked      = clicked
-        , eiFocusGained  = focusGained
-        , eiFocusLost    = focusLost
-        , eiKeysPressed  = keysPressed
-        }
-
-  fireElementEvents ec interaction
-  pure interaction
-  where
-    isButtonDownEvent (ButtonDown _) = True
-    isButtonDownEvent _              = False
-    isButtonReleasedEvent (ButtonReleased _) = True
-    isButtonReleasedEvent _                  = False
+  pure mempty
+    { eiFocused     = focused
+    , eiFocusGained = focusGained
+    , eiFocusLost   = focusLost
+    , eiKeysPressed = keysPressed
+    }
 
 -- | Fires the handler matching each flag set on @ei@ -- the one place
 -- 'elementBase' dispatches anything, run once every flag has been
