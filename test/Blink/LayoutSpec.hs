@@ -131,6 +131,13 @@ spec = describe "layout" $ do
             r  = preferredSize (between lo hi) x
         in r >= lo && r <= hi
 
+      it "orders its arguments itself when given a swapped min and max" $
+        preferredSize (between 80 20) 10 `shouldBe` preferredSize (between 20 80) 10
+
+      prop "gives the same result regardless of argument order" $ \(NonNegative lo) (NonNegative d) (NonNegative x) ->
+        let hi = lo + d
+        in preferredSize (between lo hi) x == preferredSize (between hi lo) x
+
   describe "layoutWithConstraints" $ do
     let run rct = runLayout hBounds (layoutWithConstraints rct paint)
 
