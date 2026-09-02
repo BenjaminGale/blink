@@ -38,10 +38,10 @@ import Blink.Controls.Button
   (ButtonConfig (..), ButtonInteraction (..), HasButtonConfig (..), buttonBase, defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label
-  (HasLabelledConfig (..), captionElement, lcText)
+  (HasLabelledConfig (..), captionElement, lcText, renderLabelledContent)
 import Blink.Layout.Constraints (HasLayoutConfig (..))
-import Blink.Style (Style (..), VisualState (..))
-import Blink.UI (Out, UI, currentStyle, drawText)
+import Blink.Style (VisualState (..))
+import Blink.UI (Out, UI)
 import Blink.UI.Element (Element (..))
 
 -- | Whether the control is currently selected.
@@ -166,7 +166,4 @@ toggleButton eid attrs = Element
   where
     cfg  = resolve defaultToggleButtonConfig attrs
     btn  = tgcButton cfg
-    draw = do
-      s <- currentStyle
-      drawText (styleTextColour s) (styleTextAlign s) (lcText (bcLabelled btn))
-    ctrl = (bcControl btn) { ccContent = draw }
+    ctrl = (bcControl btn) { ccContent = renderLabelledContent (bcLabelled btn) }
