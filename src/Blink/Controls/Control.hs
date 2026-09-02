@@ -181,12 +181,11 @@ fireFocusChangeDirect ec t = case t of
 -- mouse position within it counts as "outside" for hovering, clicking, and
 -- focus-claiming alike.
 --
--- Uses 'Metrics' directly (independent of interaction state, since real
+-- Takes 'Metrics' directly (independent of interaction state, since real
 -- themes don't vary margin by state), so this never depends on the
 -- active 'Style'.
-marginInsetBounds :: Ord e => StyleKey e -> UI e msg Rectangle
-marginInsetBounds styleKey = do
-  m <- getMetrics styleKey
+marginInsetBounds :: Metrics -> UI e msg Rectangle
+marginInsetBounds m = do
   r <- getBounds
   pure (insetRect (metricsMargin m) r)
 
@@ -314,10 +313,10 @@ controlBase eid cc = disableWhen (not (ccIsEnabled cc)) $ do
   applyNavigationKeys wasFocused
   nowFocused <- isFocused eid
   fireFocusChangeDirect (ccEvents cc) (focusTransition wasFocused nowFocused)
-  hitBounds <- marginInsetBounds styleKey
-  ei        <- withBounds hitBounds (elementBase eid (ccEvents cc))
-  when (eiClicked ei) (applyClickFocus currentScope)
   (m, styles) <- getStyleSet styleKey
+  hitBounds   <- marginInsetBounds m
+  ei          <- withBounds hitBounds (elementBase eid (ccEvents cc))
+  when (eiClicked ei) (applyClickFocus currentScope)
   disabled    <- isDisabled
   let active = intrinsicStates disabled (eiHeld ei) (eiHovered ei) (eiFocused ei)
                `Set.union` ccActiveStates cc
