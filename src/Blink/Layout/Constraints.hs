@@ -147,11 +147,11 @@ data Layout = Layout
 -- >  |                            |    Badge    |
 -- >  +----------------------------+-------------+
 layoutWithConstraints :: Layout -> UI e msg a -> UI e msg a
-layoutWithConstraints rc ui = do
+layoutWithConstraints layout ui = do
   r <- getBounds
-  let w = preferredSize (layoutWidth rc) (rectWidth r)
-      h = preferredSize (layoutHeight rc) (rectHeight r)
-  withBounds (alignRect (layoutAlignment rc) r (Rectangle 0 0 w h)) ui
+  let w = preferredSize (layoutWidth layout) (rectWidth r)
+      h = preferredSize (layoutHeight layout) (rectHeight r)
+  withBounds (alignRect (layoutAlignment layout) r (Rectangle 0 0 w h)) ui
 
 -- | Returns the preferred size for a 'Length' given the amount of available space.
 --
