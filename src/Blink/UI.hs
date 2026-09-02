@@ -1030,8 +1030,8 @@ contextFocus = focusedElement . ftAmbient . ctxFocus
 -- whichever scope is ambient at the time — but it's useful for tests and
 -- debugging tools that want to see the whole nested claim at once.
 --
--- Guards against revisiting an id already on the chain:
--- 'Blink.Controls.focusOnClick' with 'Blink.Controls.FocusTarget' lets a
+-- Guards against revisiting an id already on the chain: a control setting
+-- 'Blink.Controls.ccFocusOnClick' to 'Blink.Controls.FocusTarget' lets a
 -- click redirect focus onto any id, including an
 -- enclosing composite's own — 'Blink.Controls.radioGroup' does exactly this
 -- so that clicking an item leaves the group itself focused, not the item —
