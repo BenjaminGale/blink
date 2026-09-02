@@ -188,20 +188,20 @@ marginInsetBounds m = do
   r <- getBounds
   pure (insetRect (metricsMargin m) r)
 
--- | The common\/focus 'VisualState's derived from a control's own
--- disabled\/held\/hovered\/focused reading, before any 'ccActiveStates'
--- contributed by a wrapping layer are unioned in.
-intrinsicStates :: Bool -> Bool -> Bool -> Bool -> Set VisualState
-intrinsicStates disabled held hovered focused = Set.fromList
+-- | The common\/focus 'VisualState's derived from a control's own disabled
+-- reading and its wrapped element's held\/hovered\/focused reading, before
+-- any 'ccActiveStates' contributed by a wrapping layer are unioned in.
+intrinsicStates :: Bool -> ElementInteraction -> Set VisualState
+intrinsicStates disabled ei = Set.fromList
   [ common
-  , if focused then FocusFocused else FocusUnfocused
+  , if eiFocused ei then FocusFocused else FocusUnfocused
   ]
   where
     common
-      | disabled  = CommonDisabled
-      | held      = CommonPressed
-      | hovered   = CommonMouseOver
-      | otherwise = CommonNormal
+      | disabled       = CommonDisabled
+      | eiHeld ei      = CommonPressed
+      | eiHovered ei   = CommonMouseOver
+      | otherwise      = CommonNormal
 
 -- | Draws a control's background and border from its resolved 'Metrics'
 -- and 'Style', then runs @body@ clipped to the remaining space inside the
@@ -318,8 +318,7 @@ controlBase eid cc = disableWhen (not (ccIsEnabled cc)) $ do
   ei          <- withBounds hitBounds (elementBase eid (ccEvents cc))
   when (eiClicked ei) (applyClickFocus currentScope)
   disabled    <- isDisabled
-  let active = intrinsicStates disabled (eiHeld ei) (eiHovered ei) (eiFocused ei)
-               `Set.union` ccActiveStates cc
+  let active = intrinsicStates disabled ei `Set.union` ccActiveStates cc
       s      = resolveStyle styles active
   renderStyled m s (ccContent cc)
   when (ccIsFocusable cc && not disabled) (setPreviousTabStop eid)
