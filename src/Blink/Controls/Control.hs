@@ -55,8 +55,7 @@ module Blink.Controls.Control
   , measureChrome
   ) where
 
-import Control.Monad (forM_, void, when)
-import Data.Functor (($>))
+import Control.Monad (forM_, when)
 import Data.List (find)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -282,19 +281,19 @@ canAutoClaim eid foc cc = do
 -- consistently regardless of render order). Consumes whichever specific
 -- key matched, so nothing else reacts to the same press. Disabled controls
 -- never react.
-advanceOrRetreat :: Bool -> [(Key, [Modifier])] -> [(Key, [Modifier])] -> UI e msg Bool
+advanceOrRetreat :: Bool -> [(Key, [Modifier])] -> [(Key, [Modifier])] -> UI e msg ()
 advanceOrRetreat wasFocused advanceKeys retreatKeys = do
   disabled <- isDisabled
-  if disabled then pure False else do
+  when (not disabled) $ do
     evs      <- inputKeyEvents <$> getInput
     prevCtrl <- getPreviousTabStop
     scopeId  <- getCurrentScope
     let advanceHit = find (\e -> (key e, modifiers e) `elem` advanceKeys) evs
         retreatHit = find (\e -> (key e, modifiers e) `elem` retreatKeys) evs
     case (wasFocused, advanceHit, retreatHit) of
-      (True, Just e, _) -> clearFocus >> consumeKey (key e) $> True
-      (True, _, Just e) -> forM_ prevCtrl (requestFocus scopeId) >> consumeKey (key e) $> False
-      _                 -> pure False
+      (True, Just e, _) -> clearFocus >> consumeKey (key e)
+      (True, _, Just e) -> forM_ prevCtrl (requestFocus scopeId) >> consumeKey (key e)
+      _                 -> pure ()
 
 -- | Manages this element's keyboard focus, reports its element interaction,
 -- and draws its chrome around its content -- all configured entirely by
@@ -339,7 +338,7 @@ controlBase eid cc = disableWhen (not (ccIsEnabled cc)) $ do
     -- redefined them).
     applyNavigationKeys wasFocused = do
       keys <- getNavigationKeys
-      void (advanceOrRetreat wasFocused (navAdvance keys) (navRetreat keys))
+      advanceOrRetreat wasFocused (navAdvance keys) (navRetreat keys)
 
     -- A click hands focus to whichever element FocusOnClick names, taking
     -- effect one frame later (see 'elementBase's own deferred detection via
