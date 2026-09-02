@@ -135,43 +135,51 @@ class HasElementConfig e msg cfg | cfg -> e msg where
 instance HasElementConfig e msg (ElementConfig e msg) where
   overElement = id
 
+-- | Appends a handler to whichever 'ElementConfig' field @get@\/@set@
+-- address, wrapping the result as an 'Attribute'. The shared plumbing
+-- behind every @onX@ builder below.
+addHandler :: HasElementConfig e msg cfg
+           => (ElementConfig e msg -> [h]) -> (ElementConfig e msg -> [h] -> ElementConfig e msg)
+           -> h -> Attribute cfg
+addHandler get set h = overElement (Attribute (\ec -> set ec (get ec ++ [h])))
+
 -- | Reacts when the pointer starts being over the element this frame.
 onMouseEntered :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onMouseEntered f = overElement (Attribute (\ec -> ec { ecOnMouseEntered = ecOnMouseEntered ec ++ [f] }))
+onMouseEntered = addHandler ecOnMouseEntered (\ec hs -> ec { ecOnMouseEntered = hs })
 
 -- | Reacts when the pointer stops being over the element this frame.
 onMouseExited :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onMouseExited f = overElement (Attribute (\ec -> ec { ecOnMouseExited = ecOnMouseExited ec ++ [f] }))
+onMouseExited = addHandler ecOnMouseExited (\ec hs -> ec { ecOnMouseExited = hs })
 
 -- | Reacts when the mouse button goes down while the element is hit.
 onMouseDown :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onMouseDown f = overElement (Attribute (\ec -> ec { ecOnMouseDown = ecOnMouseDown ec ++ [f] }))
+onMouseDown = addHandler ecOnMouseDown (\ec hs -> ec { ecOnMouseDown = hs })
 
 -- | Reacts when the mouse button comes up while the element is hit, even
 -- if the press started elsewhere. See 'onClicked' for the click-only
 -- version.
 onMouseUp :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onMouseUp f = overElement (Attribute (\ec -> ec { ecOnMouseUp = ecOnMouseUp ec ++ [f] }))
+onMouseUp = addHandler ecOnMouseUp (\ec hs -> ec { ecOnMouseUp = hs })
 
 -- | Reacts when the element is clicked: the mouse button pressed and
 -- released on it without leaving. Mouse-only -- see
 -- 'Blink.Controls.Button.onActivated' for the event that also fires on
 -- Enter while a button-like control holds focus.
 onClicked :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onClicked f = overElement (Attribute (\ec -> ec { ecOnClicked = ecOnClicked ec ++ [f] }))
+onClicked = addHandler ecOnClicked (\ec hs -> ec { ecOnClicked = hs })
 
 -- | Reacts to a key event while the element holds focus, with the
 -- triggering 'KeyEvent'.
 onKeyPressed :: HasElementConfig e msg cfg => KeyEventHandler e msg -> Attribute cfg
-onKeyPressed f = overElement (Attribute (\ec -> ec { ecOnKeyPressed = ecOnKeyPressed ec ++ [f] }))
+onKeyPressed = addHandler ecOnKeyPressed (\ec hs -> ec { ecOnKeyPressed = hs })
 
 -- | Reacts when the element is named the winner of a focus transfer.
 onFocusGained :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onFocusGained f = overElement (Attribute (\ec -> ec { ecOnFocusGained = ecOnFocusGained ec ++ [f] }))
+onFocusGained = addHandler ecOnFocusGained (\ec hs -> ec { ecOnFocusGained = hs })
 
 -- | Reacts when the element loses focus, whether to a transfer or a clear.
 onFocusLost :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onFocusLost f = overElement (Attribute (\ec -> ec { ecOnFocusLost = ecOnFocusLost ec ++ [f] }))
+onFocusLost = addHandler ecOnFocusLost (\ec hs -> ec { ecOnFocusLost = hs })
 
 -- | Runs every handler in @hs@ on @a@, dispatching the resulting 'Out's.
 runHandlers :: [a -> [Out e msg]] -> a -> UI e msg ()
