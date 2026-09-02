@@ -32,6 +32,12 @@ glyphWidth = 20
 labelGap :: Double
 labelGap = 6
 
+-- | Where the caption starts, relative to the control's left edge: past the
+-- glyph column and its gap. Shared by 'glyphContent' (render time) and
+-- 'checkboxContentElement' (measure time) so the two can't drift apart.
+contentOffset :: Double
+contentOffset = glyphWidth + labelGap
+
 -- | 'CHECK MARK' (U+2713) is near-universally supported, unlike the
 -- 'BALLOT BOX WITH CHECK' glyph (U+2611) that would otherwise draw the
 -- whole box-plus-tick in one character.
@@ -81,8 +87,8 @@ checkbox eid attrs = Element
             , rectHeight = boxSize
             }
           textRect  = bounds
-            { rectX     = rectX bounds + glyphWidth + labelGap
-            , rectWidth = max 0 (rectWidth bounds - glyphWidth - labelGap)
+            { rectX     = rectX bounds + contentOffset
+            , rectWidth = max 0 (rectWidth bounds - contentOffset)
             }
       withBounds boxRect $ do
         strokeRect (styleTextColour s) (uniformBorder 1)
@@ -103,6 +109,6 @@ checkboxContentElement t = Element
   { elLayout  = Layout Fill FitContent TopLeft
   , elMeasure = const $ do
       capSize <- measureText t
-      pure (Size (glyphWidth + labelGap + sizeWidth capSize) (max glyphWidth (sizeHeight capSize)))
+      pure (Size (contentOffset + sizeWidth capSize) (max glyphWidth (sizeHeight capSize)))
   , elRun     = pure ()
   }
