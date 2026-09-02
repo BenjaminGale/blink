@@ -74,19 +74,28 @@ type KeyEventHandler e msg = KeyEvent -> [Out e msg]
 
 -- | One element's handlers, grouped by event.
 data ElementConfig e msg = ElementConfig
-  { ecOnClicked      :: [EventHandler e msg]
-  , ecOnFocusGained  :: [EventHandler e msg]
-  , ecOnFocusLost    :: [EventHandler e msg]
-  , ecOnMouseEntered :: [EventHandler e msg]
+  { ecOnMouseEntered :: [EventHandler e msg]
   , ecOnMouseExited  :: [EventHandler e msg]
   , ecOnMouseDown    :: [EventHandler e msg]
   , ecOnMouseUp      :: [EventHandler e msg]
+  , ecOnClicked      :: [EventHandler e msg]
   , ecOnKeyPressed   :: [KeyEventHandler e msg]
+  , ecOnFocusGained  :: [EventHandler e msg]
+  , ecOnFocusLost    :: [EventHandler e msg]
   }
 
 -- | Every field empty: no handlers registered for anything.
 defaultElementConfig :: ElementConfig e msg
-defaultElementConfig = ElementConfig [] [] [] [] [] [] [] []
+defaultElementConfig = ElementConfig
+  { ecOnMouseEntered = []
+  , ecOnMouseExited  = []
+  , ecOnMouseDown    = []
+  , ecOnMouseUp      = []
+  , ecOnClicked      = []
+  , ecOnKeyPressed   = []
+  , ecOnFocusGained  = []
+  , ecOnFocusLost    = []
+  }
 
 -- | What 'elementBase' reports about the current frame's mouse, keyboard,
 -- and focus activity: three steady interaction states (@eiHovered@,
