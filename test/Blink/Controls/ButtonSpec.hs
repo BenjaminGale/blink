@@ -12,7 +12,7 @@ import qualified Data.Text as T
 
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
-import Blink.Layout.Constraints (Layout (..), Length (Fill, FitContent))
+import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -72,7 +72,7 @@ seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 -- own content, so these tests ask for the old full-size behaviour
 -- explicitly, the same way any other caller would.
 fullSize :: [Attribute'] -> UI TestElement String ()
-fullSize attrs = runElement (button Ok attrs) { elLayout = Layout Fill Fill TopLeft }
+fullSize attrs = runElement (button Ok attrs) { elLayout = Layout fill fill TopLeft }
 
 start :: [Attribute'] -> IO (UIContext TestElement String)
 start attrs = snd <$> runUI (fullSize attrs) seedCtx
@@ -86,7 +86,7 @@ spec = describe "Blink.Controls.Button" $ do
     getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "OK" testColour AlignCenter]
 
   describe "FitContent sizing" $ do
-    -- Spec scenario: a button with 'width FitContent' (here, both axes, via
+    -- Spec scenario: a button with 'width fitContent' (here, both axes, via
     -- a direct 'elLayout' override -- there is no public 'width'/'height'
     -- attribute for controls yet) sizes itself to its own chrome-wrapped
     -- caption. Verified against a manually computed 'Exactly' from the same
@@ -105,7 +105,7 @@ spec = describe "Blink.Controls.Button" $ do
           -- inset by margin (10px each side) -- not the outer bounds
           -- themselves.
           expectedBg   = Rectangle 10 10 (expectedW - 20) (expectedH - 20)
-          fitContentEl attrs = runElement (button Ok attrs) { elLayout = Layout FitContent FitContent TopLeft }
+          fitContentEl attrs = runElement (button Ok attrs) { elLayout = Layout fitContent fitContent TopLeft }
           fitCtx = emptyUIContext (Rectangle 0 0 500 500) noInput testTheme fixedWidthMeasurer
       ctx <- snd <$> runUI (fitContentEl [text caption]) fitCtx
       getDrawCommands ctx `shouldContain` [FillRect expectedBg testColour]

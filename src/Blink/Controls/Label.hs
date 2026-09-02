@@ -36,7 +36,7 @@ import Data.Text (Text)
 
 import Blink.Controls.Control
 import Blink.Geometry (Alignment (TopLeft))
-import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), Length (..))
+import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), fill, fitContent)
 import Blink.Style (Style (..))
 import Blink.UI (UI, currentStyle, drawText, measureText)
 import Blink.UI.Element (Element (..))
@@ -77,7 +77,7 @@ renderLabelledContent cfg = do
 -- content is a plain caption (see 'Blink.Controls.Button.button', 'label').
 captionElement :: Text -> Element e msg
 captionElement t = Element
-  { elLayout  = Layout Fill FitContent TopLeft
+  { elLayout  = Layout fill fitContent TopLeft
   , elMeasure = const (measureText t)
   , elRun     = pure ()
   }
@@ -95,12 +95,12 @@ data LabelConfig e msg = LabelConfig
   }
 
 -- | 'defaultControlConfig' (styled via 'labelStyleKey'), an empty caption,
--- @Layout FitContent FitContent TopLeft@ (see 'label'), and no 'target'.
+-- @Layout fitContent fitContent TopLeft@ (see 'label'), and no 'target'.
 defaultLabelConfig :: LabelConfig e msg
 defaultLabelConfig = LabelConfig
   { lblControl  = defaultControlConfig { ccStyleKey = labelStyleKey }
   , lblLabelled = defaultLabelledConfig
-  , lblLayout   = Layout FitContent FitContent TopLeft
+  , lblLayout   = Layout fitContent fitContent TopLeft
   , lblTarget   = Nothing
   }
 

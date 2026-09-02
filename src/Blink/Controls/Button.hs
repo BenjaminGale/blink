@@ -27,7 +27,7 @@ import Blink.Controls.Label
   (HasLabelledConfig (..), LabelledConfig (..), captionElement, defaultLabelledConfig, renderLabelledContent)
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input (Key (KeyReturn), KeyEvent (..))
-import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), Length (..))
+import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), fill, fitContent)
 import Blink.UI (UI)
 import Blink.UI.Element (Element (..))
 
@@ -45,13 +45,13 @@ data ButtonConfig e msg = ButtonConfig
   }
 
 -- | 'defaultControlConfig' (styled via 'buttonStyleKey'), an empty caption,
--- @Layout Fill FitContent TopLeft@ (see 'button'), and no 'onActivated'
+-- @Layout fill fitContent TopLeft@ (see 'button'), and no 'onActivated'
 -- reactions.
 defaultButtonConfig :: ButtonConfig e msg
 defaultButtonConfig = ButtonConfig
   { bcControl     = defaultControlConfig { ccStyleKey = buttonStyleKey }
   , bcLabelled    = defaultLabelledConfig
-  , bcLayout      = Layout Fill FitContent TopLeft
+  , bcLayout      = Layout fill fitContent TopLeft
   , bcOnActivated = []
   }
 

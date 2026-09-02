@@ -99,12 +99,12 @@ caption :: Text -> [Attribute (LabelConfig ControlId Msg)] -> Element ControlId 
 caption t attrs = label Label (text t : attrs)
 
 rowHeight :: Length
-rowHeight = Exactly 40
+rowHeight = exactly 40
 
 -- | Layout attributes shared by every direct child of 'mainList': the full
 -- row width, the shared row height, top-left within that slot.
 rowLayout :: HasLayoutConfig cfg => [Attribute cfg]
-rowLayout = [width Fill, height rowHeight, align TopLeft]
+rowLayout = [width fill, height rowHeight, align TopLeft]
 
 -- Control rows, top to bottom
 
@@ -123,9 +123,9 @@ rowButtons s =
     ( rowLayout ++
       [ spacing 8
       , children
-          [ button ClickButton [text "Click me", onActivated (post AddClick), isEnabled (editingEnabled s), width (Exactly 100), height Fill]
-          , button ResetButton [text "Reset", onActivated (post ResetClicks), isEnabled (editingEnabled s), width (Exactly 100), height Fill]
-          , caption ("Clicks: " <> T.pack (show (clickCount s))) [width Fill, height Fill, align MiddleLeft]
+          [ button ClickButton [text "Click me", onActivated (post AddClick), isEnabled (editingEnabled s), width (exactly 100), height fill]
+          , button ResetButton [text "Reset", onActivated (post ResetClicks), isEnabled (editingEnabled s), width (exactly 100), height fill]
+          , caption ("Clicks: " <> T.pack (show (clickCount s))) [width fill, height fill, align MiddleLeft]
           ]
       ]
     )
@@ -138,9 +138,9 @@ rowToggle s =
       , children
           [ toggleButton ToggleCtl
               [ text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle)
-              , isEnabled (editingEnabled s), width (Exactly 160), height Fill
+              , isEnabled (editingEnabled s), width (exactly 160), height fill
               ]
-          , caption (if toggleOn s then "On" else "Off") [width Fill, height Fill, align MiddleLeft]
+          , caption (if toggleOn s then "On" else "Off") [width fill, height fill, align MiddleLeft]
           ]
       ]
     )
@@ -163,7 +163,7 @@ rowRadio s =
     radioOption i opt =
       radioButton (RadioCtl i)
         [ text opt, isSelected (radioChoice s == Just opt), onSelectedChanged (\_ -> [OutMsg (PickRadio opt)])
-        , isEnabled (editingEnabled s), width (Exactly 100), height Fill, align MiddleLeft
+        , isEnabled (editingEnabled s), width (exactly 100), height fill, align MiddleLeft
         ]
 
 rowTextInput :: AppState -> Element ControlId Msg
@@ -172,8 +172,8 @@ rowTextInput s =
     ( rowLayout ++
       [ spacing 8, alignment Center
       , children
-          [ caption "Text input" [width (Exactly 120), height Fill, align MiddleLeft]
-          , textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText), isEnabled (editingEnabled s), height Fill]
+          [ caption "Text input" [width (exactly 120), height fill, align MiddleLeft]
+          , textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText), isEnabled (editingEnabled s), height fill]
           ]
       ]
     )
@@ -184,10 +184,10 @@ rowPasswordInput s =
     ( rowLayout ++
       [ spacing 8, alignment Center
       , children
-          [ caption "Password input" [width (Exactly 120), height Fill, align MiddleLeft]
+          [ caption "Password input" [width (exactly 120), height fill, align MiddleLeft]
           , textInput PasswordInputCtl
               [ value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)
-              , isEnabled (editingEnabled s), height Fill
+              , isEnabled (editingEnabled s), height fill
               ]
           ]
       ]
@@ -227,18 +227,18 @@ footer s = do
   runElement $ hBox
     [ spacing 24, margin 4, alignment Center
     , children
-        [ caption winText    [width (Exactly 160), height Fill, align MiddleLeft]
-        , caption mouseText  [width (Exactly 160), height Fill, align MiddleLeft]
-        , caption buttonText [width (Exactly 160), height Fill, align MiddleLeft]
-        , caption hoverText  [width (Exactly 100), height Fill, align MiddleLeft]
-        , caption keyText    [width Fill,          height Fill, align MiddleLeft]
+        [ caption winText    [width (exactly 160), height fill, align MiddleLeft]
+        , caption mouseText  [width (exactly 160), height fill, align MiddleLeft]
+        , caption buttonText [width (exactly 160), height fill, align MiddleLeft]
+        , caption hoverText  [width (exactly 100), height fill, align MiddleLeft]
+        , caption keyText    [width fill,          height fill, align MiddleLeft]
         ]
     ]
 
 -- Top-level view
 
 demoView :: AppState -> Element ControlId Msg
-demoView s = elementWithLayout (Layout Fill Fill TopLeft) $ do
+demoView s = elementWithLayout (Layout fill fill TopLeft) $ do
   input <- getInput
   when (darkMode s) $ fillRect (RGBA 0.082 0.102 0.129 1)
   borderLayout [centre (mainList s), bottom 36 (footer s)]
@@ -257,7 +257,7 @@ mainList s =
   runElement $ vBox
     [ spacing 8, margin 12
     , children
-        [ caption "Blink controls demo" [width Fill, height (Exactly 24), align TopLeft]
+        [ caption "Blink controls demo" [width fill, height (exactly 24), align TopLeft]
         , rowDarkMode s
         , rowEditing s
         , rowButtons s

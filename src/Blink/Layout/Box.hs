@@ -21,9 +21,11 @@ import qualified Data.IntMap.Strict as IntMap
 import Blink.Attribute (Attribute (..), resolve)
 import Blink.Geometry (Alignment (..), Orientation (..), Rectangle (..), Size (..), alignRect, insetRect, uniform)
 import Blink.Layout.Constraints
-  (Available (..), HasLayoutConfig (..), Layout (..), Length (..), MeasureCtx (..), layoutWithConstraints, shrink)
+  ( Available (..), HasLayoutConfig (..), Layout (..), Length, MeasureCtx (..)
+  , canExpand, capLength, exactly, fill, layoutWithConstraints, minLength, naturalLength, resolveLength, shrink
+  )
 import Blink.UI (UI, clipToCurrent, getBounds, withBounds)
-import Blink.UI.Element (Element (..), resolveLength)
+import Blink.UI.Element (Element (..))
 
 -- | Every capability 'hBox'\/'vBox' resolve: the box's own size request,
 -- spacing, margin, alignment of the content block, and the children
@@ -50,7 +52,7 @@ instance HasLayoutConfig (BoxConfig e msg) where
 -- @
 defaultBoxConfig :: BoxConfig e msg
 defaultBoxConfig = BoxConfig
-  { bxLayout    = Layout Fill Fill TopLeft
+  { bxLayout    = Layout fill fill TopLeft
   , bxSpacing   = 0
   , bxMargin    = 0
   , bxAlignment = TopLeft
@@ -106,7 +108,7 @@ alignment v = Attribute (\c -> c { bxAlignment = v })
 
 -- | The children to arrange. Each carries its own size request (see
 -- 'Blink.UI.Element.Element'), including how it behaves on the cross axis:
--- a 'Fill' cross request expands to the box's full cross extent, anything
+-- a 'fill' cross request expands to the box's full cross extent, anything
 -- else keeps its own size and is positioned within the row\/column by its
 -- own alignment. Defaults to @[]@; a later 'children' attribute replaces an
 -- earlier one rather than adding to it, the same as every other attribute
@@ -215,7 +217,7 @@ crossOrientation ax = case axisOrientation ax of
 --     controls where the whitespace goes. When they overflow it controls
 --     which side clips.
 --   * Once each child's space is allocated, it is positioned and aligned
---     within its slot according to its own 'Blink.Layout.Layout' -- a 'Fill'
+--     within its slot according to its own 'Blink.Layout.Layout' -- a 'fill'
 --     cross-axis request expands to the row's full height, anything else
 --     keeps the child's own size, aligned per its own request.
 --   * Children are clipped to the panel's content area as a group, not
@@ -226,15 +228,15 @@ crossOrientation ax = case axisOrientation ax of
 -- hBox
 --   [ spacing 4
 --   , children
---       [ button Btn1 [text "Back",  width (Exactly 80), height Fill]
---       , button Btn2 [text "Title", width Fill,          height Fill]
---       , button Btn3 [text "Next",  width (Exactly 80), height Fill]
+--       [ button Btn1 [text "Back",  width (exactly 80), height fill]
+--       , button Btn2 [text "Title", width fill,          height fill]
+--       , button Btn3 [text "Next",  width (exactly 80), height fill]
 --       ]
 --   ]
 -- @
 --
 -- Here the two outer buttons are fixed at 80px wide. The centre button
--- expands to fill whatever space remains. The 'Fill' height constraint in
+-- expands to fill whatever space remains. The 'fill' height constraint in
 -- each child means it stretches to the panel's full height.
 --
 -- >  +--------+------------------------------------+--------+
@@ -254,9 +256,9 @@ hBox attrs = box horizontal (resolve defaultBoxConfig attrs)
 -- vBox
 --   [ spacing 1
 --   , children
---       [ elementWithLayout (Layout Fill (Exactly 3) TopLeft) header
---       , elementWithLayout (Layout Fill Fill        TopLeft) body
---       , elementWithLayout (Layout Fill (Exactly 3) TopLeft) footer
+--       [ elementWithLayout (Layout fill (exactly 3) TopLeft) header
+--       , elementWithLayout (Layout fill fill        TopLeft) body
+--       , elementWithLayout (Layout fill (exactly 3) TopLeft) footer
 --       ]
 --   ]
 -- @
@@ -300,7 +302,9 @@ boxSlots ax cfg ctx = do
   let kids = bxChildren cfg
       gaps = boxTotalSpacing cfg (length kids)
       main = shrink gaps (measureMain ctx)
-  lengths <- mapM (resolveLength (axisOrientation ax) (mainConstraint ax) main (measureCross ctx)) kids
+  lengths <- mapM
+    (\kid -> resolveLength (axisOrientation ax) (mainConstraint ax (elLayout kid)) main (measureCross ctx) (elMeasure kid))
+    kids
   pure $ case main of
     Bounded avail -> preferredSizes avail lengths
     Unbounded     -> map naturalLength lengths
@@ -327,8 +331,9 @@ boxMeasure ax cfg ctx = do
 -- 'boxSlots'.
 measureCrossExtent :: Axis -> BoxConfig e msg -> MeasureCtx -> UI e msg Double
 measureCrossExtent ax cfg ctx = do
-  lengths <- mapM (resolveLength (crossOrientation ax) (crossConstraint ax) (measureCross ctx) (measureMain ctx))
-                   (bxChildren cfg)
+  lengths <- mapM
+    (\kid -> resolveLength (crossOrientation ax) (crossConstraint ax (elLayout kid)) (measureCross ctx) (measureMain ctx) (elMeasure kid))
+    (bxChildren cfg)
   pure $ case map naturalLength lengths of
     [] -> 0
     xs -> maximum xs
@@ -355,10 +360,10 @@ runBox ax cfg = do
       slotOrigins  = scanl' (\o s -> o + s + bxSpacing cfg) (mainOrigin ax contentBlock) slotSizes
   withBounds contentArea $ clipToCurrent $
     forM_ (zip3 slotOrigins slotSizes kids) $ \(slotOrigin, slotSize, kid) -> do
-      resolvedCross <- resolveLength (crossOrientation ax) (crossConstraint ax)
-                          (Bounded crossLen) (Bounded slotSize) kid
+      resolvedCross <- resolveLength (crossOrientation ax) (crossConstraint ax (elLayout kid))
+                          (Bounded crossLen) (Bounded slotSize) (elMeasure kid)
       let slotRect = makeSlot ax slotOrigin crossOrig slotSize crossLen
-          rc       = setCross ax resolvedCross (setMain ax (Exactly slotSize) (elLayout kid))
+          rc       = setCross ax resolvedCross (setMain ax (exactly slotSize) (elLayout kid))
       withBounds slotRect $ layoutWithConstraints rc (elRun kid)
 
 preferredSizes :: Double -> [Length] -> [Double]
@@ -367,40 +372,12 @@ preferredSizes available constraints =
       surplus    = max 0 (available - foldl' (+) 0 mins)
   in zipWith (+) mins (distributeSurplusSpace surplus cs)
 
-minLength :: Length -> Double
-minLength (Exactly w)    = w
-minLength Fill           = 0
-minLength (AtLeast w)    = w
-minLength (AtMost _)     = 0
-minLength (Between l _)  = l
-minLength FitContent     = 0
-  -- Unreachable in practice: see Blink.Layout.Constraints.preferredSize.
-
--- | The size a resolved 'Length' takes when there is no space to
--- distribute -- used for a box that is itself sizing to content. Every
--- constructor that depends on measurement ('FitContent', 'AtLeast',
--- 'Between') has already been turned into an 'Exactly' by 'resolveLength'
--- before reaching here.
-naturalLength :: Length -> Double
-naturalLength (Exactly w)   = w
-naturalLength (AtLeast w)   = w
-naturalLength (AtMost w)    = w
-naturalLength (Between l _) = l
-naturalLength Fill          = 0
-  -- Degenerate: see the spec's note on Fill inside a content-sized box.
-naturalLength FitContent    = 0
-  -- Unreachable: resolveLength never leaves a FitContent unresolved.
-
-canExpand :: Length -> Bool
-canExpand (Exactly _) = False
-canExpand _           = True
-
 -- Computes how much extra space (above each constraint's minimum) each slot
 -- receives, distributing surplus equally and redistributing any space left
 -- over from slots that hit their cap.
 distributeSurplusSpace :: Double -> [Length] -> [Double]
 distributeSurplusSpace surplus constraints =
-  let flexible = sortBy (comparing snd) [(i, cap c) | (i, c) <- zip [0..] constraints, canExpand c]
+  let flexible = sortBy (comparing snd) [(i, capLength c) | (i, c) <- zip [0..] constraints, canExpand c]
       shares   = go surplus (length flexible) flexible
   in let shareMap = IntMap.fromList shares
      in [IntMap.findWithDefault 0 i shareMap | i <- [0 .. length constraints - 1]]
@@ -411,6 +388,3 @@ distributeSurplusSpace surplus constraints =
       in if c <= share
          then (i, c) : go (s - c) (n - 1) rest
          else [(j, share) | (j, _) <- (i, c) : rest]
-    cap (AtMost w)    = w
-    cap (Between l h) = h - l
-    cap _             = 1 / 0

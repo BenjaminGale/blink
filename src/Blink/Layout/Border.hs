@@ -15,7 +15,7 @@ import Data.Maybe (catMaybes)
 import Blink.Attribute (Attribute (..), resolve)
 import Blink.Geometry (Alignment (..))
 import Blink.Layout.Box (children, hBox, vBox)
-import Blink.Layout.Constraints (Layout (..), Length (..))
+import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.UI (UI)
 import Blink.UI.Element (elementWithLayout, runElement)
 
@@ -90,13 +90,13 @@ borderLayout attrs =
   where
     bc = resolve emptyBorderContent attrs
 
-    topRow    = (\(h, ui) -> elementWithLayout (Layout Fill (Exactly h) TopLeft) ui) <$> bcTop bc
-    bottomRow = (\(h, ui) -> elementWithLayout (Layout Fill (Exactly h) TopLeft) ui) <$> bcBottom bc
+    topRow    = (\(h, ui) -> elementWithLayout (Layout fill (exactly h) TopLeft) ui) <$> bcTop bc
+    bottomRow = (\(h, ui) -> elementWithLayout (Layout fill (exactly h) TopLeft) ui) <$> bcBottom bc
 
     middleCells = catMaybes
-      [ (\(w, ui) -> elementWithLayout (Layout (Exactly w) Fill TopLeft) ui) <$> bcLeft bc
-      , (\ui      -> elementWithLayout (Layout Fill        Fill TopLeft) ui) <$> bcCentre bc
-      , (\(w, ui) -> elementWithLayout (Layout (Exactly w) Fill TopLeft) ui) <$> bcRight bc
+      [ (\(w, ui) -> elementWithLayout (Layout (exactly w) fill TopLeft) ui) <$> bcLeft bc
+      , (\ui      -> elementWithLayout (Layout fill        fill TopLeft) ui) <$> bcCentre bc
+      , (\(w, ui) -> elementWithLayout (Layout (exactly w) fill TopLeft) ui) <$> bcRight bc
       ]
 
     middleRow

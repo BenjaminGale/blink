@@ -10,7 +10,7 @@ import Test.Hspec
 import Blink.App
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
-import Blink.Layout.Constraints (Layout (..), Length (Fill))
+import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
 import Blink.UI
@@ -20,7 +20,7 @@ import Blink.Update (modify)
 -- | Every test app below fills the whole test bounds; only the body of the
 -- wrapped action varies per app.
 fullView :: UI e msg a -> Element e msg
-fullView = elementWithLayout (Layout Fill Fill TopLeft) . void
+fullView = elementWithLayout (Layout fill fill TopLeft) . void
 
 -- Test infrastructure
 

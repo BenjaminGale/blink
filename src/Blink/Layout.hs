@@ -22,7 +22,13 @@ module Blink.Layout
   ( -- * Single control layout
     layoutWithConstraints
   , Layout (..)
-  , Length (..)
+  , Length
+  , exactly
+  , fill
+  , atLeast
+  , atMost
+  , between
+  , fitContent
   , HasLayoutConfig (..)
   , width
   , height
@@ -54,8 +60,8 @@ module Blink.Layout
     --
     --   * The arrangement itself needs to depend on something only known at
     --     render time — the current context.
-    --   * A slot needs a constraint more specific than 'Fill' or a single
-    --     hardcoded 'Exactly' — a finer-grained choice of 'Length'.
+    --   * A slot needs a constraint more specific than 'fill' or a single
+    --     hardcoded 'exactly' — a finer-grained choice of 'Length'.
     --
     --   Both are special cases: they draw on 'Blink.UI.getBounds' \/ 'Blink.UI.withBounds', the
     --   application state passed into the enclosing view, a box combinator
@@ -80,11 +86,11 @@ module Blink.Layout
     --     bounds <- getBounds
     --     runElement $
     --       if appCompactMode state || rectWidth bounds < 600
-    --         then vBox [children [ elementWithLayout (Layout Fill (Exactly 200) TopLeft) sidebar
-    --                              , elementWithLayout (Layout Fill Fill        TopLeft) content
+    --         then vBox [children [ elementWithLayout (Layout fill (exactly 200) TopLeft) sidebar
+    --                              , elementWithLayout (Layout fill fill        TopLeft) content
     --                              ]]
-    --         else hBox [children [ elementWithLayout (Layout (Exactly 200) Fill TopLeft) sidebar
-    --                              , elementWithLayout (Layout Fill         Fill TopLeft) content
+    --         else hBox [children [ elementWithLayout (Layout (exactly 200) fill TopLeft) sidebar
+    --                              , elementWithLayout (Layout fill         fill TopLeft) content
     --                              ]]
     --   @
     --
@@ -98,9 +104,9 @@ module Blink.Layout
     --   == Choosing a finer-grained constraint
     --
     --   A slot's 'Length' does not have to be a value you wrote down ahead
-    --   of time as 'Fill' or 'Exactly' — it can be computed, and it does
-    --   not have to be either of those two constructors. 'AtLeast',
-    --   'AtMost', and 'Between' give a slot room to flex within bounds
+    --   of time as 'fill' or 'exactly' — it can be computed, and it does
+    --   not have to be either of those two. 'atLeast',
+    --   'atMost', and 'between' give a slot room to flex within bounds
     --   instead of being either fully rigid or fully flexible; picking the
     --   right one is itself a form of custom layout:
     --
@@ -109,15 +115,15 @@ module Blink.Layout
     --   -- readable width, alongside content that takes whatever is left.
     --   hBox
     --     [children
-    --       [ elementWithLayout (Layout (AtLeast 180) Fill TopLeft) sidebar
-    --       , elementWithLayout (Layout Fill          Fill TopLeft) content
+    --       [ elementWithLayout (Layout (atLeast 180) fill TopLeft) sidebar
+    --       , elementWithLayout (Layout fill          fill TopLeft) content
     --       ]]
     --   @
     --
     --   An exact constraint can be computed the same way, rather than
     --   hardcoded. A caption's width is not known ahead of time either
     --   (it depends on the text and the active font), so sizing a slot
-    --   tightly around it means computing an 'Exactly' from
+    --   tightly around it means computing an 'exactly' from
     --   'Blink.UI.measureText' rather than writing one down:
     --
     --   @
@@ -128,8 +134,8 @@ module Blink.Layout
     --     Size textW _ <- measureText caption
     --     runElement $ hBox
     --       [children
-    --         [ elementWithLayout (Layout (Exactly (realToFrac textW)) Fill MiddleLeft) (label Label [text caption])
-    --         , elementWithLayout (Layout Fill                         Fill TopLeft)    content
+    --         [ elementWithLayout (Layout (exactly (realToFrac textW)) fill MiddleLeft) (label Label [text caption])
+    --         , elementWithLayout (Layout fill                         fill TopLeft)    content
     --         ]]
     --   @
     --
@@ -144,4 +150,6 @@ import Blink.Layout.Border
 import Blink.Layout.Box
   (BoxConfig, alignment, boxTotalSpacing, children, defaultBoxConfig, hBox, margin, spacing, vBox)
 import Blink.Layout.Constraints
-  (HasLayoutConfig (..), Layout (..), Length (..), align, height, layoutWithConstraints, preferredSize, width)
+  ( HasLayoutConfig (..), Layout (..), Length
+  , align, atLeast, atMost, between, exactly, fill, fitContent, height, layoutWithConstraints, preferredSize, width
+  )

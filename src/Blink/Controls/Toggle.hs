@@ -43,7 +43,7 @@ import Blink.Controls.Control
 import Blink.Controls.Label
   (HasLabelledConfig (..), LabelledConfig (..), captionElement, lcText, renderLabelledContent)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..))
-import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), Length (..))
+import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), fill, fitContent)
 import Blink.Style (VisualState (..))
 import Blink.UI (Out, UI, getBounds, measureText, withBounds)
 import Blink.UI.Element (Element (..))
@@ -180,7 +180,7 @@ defaultGlyphToggleConfig :: StyleKey e -> ToggleConfig e msg
 defaultGlyphToggleConfig styleKey = defaultToggleButtonConfig
   { tgcButton = (tgcButton defaultToggleButtonConfig)
       { bcControl = (bcControl (tgcButton defaultToggleButtonConfig)) { ccStyleKey = styleKey }
-      , bcLayout  = Layout FitContent FitContent TopLeft
+      , bcLayout  = Layout fitContent fitContent TopLeft
       }
   }
 
@@ -191,7 +191,7 @@ defaultGlyphToggleConfig styleKey = defaultToggleButtonConfig
 -- radio button; see 'glyphCaptionContent' for the matching render shape.
 glyphCaptionElement :: Double -> Double -> Text -> Element e msg
 glyphCaptionElement glyphWidth gap t = Element
-  { elLayout  = Layout Fill FitContent TopLeft
+  { elLayout  = Layout fill fitContent TopLeft
   , elMeasure = const $ do
       capSize <- measureText t
       pure (Size (glyphWidth + gap + sizeWidth capSize) (max glyphWidth (sizeHeight capSize)))

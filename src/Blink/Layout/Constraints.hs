@@ -2,10 +2,21 @@
 -- built on: 'Length'\/'Layout' describe a single child's size and
 -- position, and 'layoutWithConstraints' applies one to a single action.
 module Blink.Layout.Constraints
-  ( Length (..)
+  ( Length
+  , exactly
+  , fill
+  , atLeast
+  , atMost
+  , between
+  , fitContent
   , Layout (..)
   , layoutWithConstraints
   , preferredSize
+  , resolveLength
+  , minLength
+  , naturalLength
+  , canExpand
+  , capLength
   , Available (..)
   , MeasureCtx (..)
   , shrink
@@ -17,31 +28,54 @@ module Blink.Layout.Constraints
   ) where
 
 import Blink.Attribute (Attribute (..))
-import Blink.Geometry (Alignment (..), Orientation (..), Rectangle (..), alignRect)
+import Blink.Geometry
+  (Alignment (..), Orientation (..), Rectangle (..), Size (..), alignRect)
 import Blink.UI (UI, getBounds, withBounds)
 
--- | Describes how a child should be sized along a single axis. See
---   'preferredSize' for worked examples of how each constructor resolves
---   against different amounts of available space.
+-- | Describes how a child should be sized along a single axis. Built via
+--   'exactly', 'fill', 'atLeast', 'atMost', 'between', or 'fitContent' --
+--   see 'preferredSize' for worked examples of how each resolves against
+--   different amounts of available space.
 data Length
   = Exactly Double
-    -- ^ A fixed size. The available space is ignored.
   | Fill
-    -- ^ Expands to fill all available space.
   | AtLeast Double
-    -- ^ Expands to fill available space, but never smaller than the given minimum.
   | AtMost Double
-    -- ^ Expands to fill available space, but never larger than the given maximum. Has no minimum — can shrink to zero.
   | Between Double Double
-    -- ^ Expands to fill available space clamped between the given minimum and maximum.
   | FitContent
-    -- ^ Exactly the widget's own preferred size, determined by measuring it.
-    -- Unlike the other constructors, this cannot be resolved from available
-    -- space alone -- see 'Blink.UI.Element.resolveLength'. A 'FitContent'
-    -- reaching 'preferredSize' unresolved is a bug in the caller: every path
-    -- that can encounter it (element measurement, box slot sizing) must
-    -- resolve it to an 'Exactly' first.
   deriving (Eq, Show)
+
+-- | A fixed size. The available space is ignored.
+exactly :: Double -> Length
+exactly = Exactly
+
+-- | Expands to fill all available space.
+fill :: Length
+fill = Fill
+
+-- | Expands to fill available space, but never smaller than the given minimum.
+atLeast :: Double -> Length
+atLeast = AtLeast
+
+-- | Expands to fill available space, but never larger than the given
+-- maximum. Has no minimum -- can shrink to zero.
+atMost :: Double -> Length
+atMost = AtMost
+
+-- | Expands to fill available space clamped between the given minimum and
+-- maximum. Orders its two arguments itself, so the smaller is always the
+-- floor and the larger always the ceiling regardless of the order passed in.
+between :: Double -> Double -> Length
+between lo hi = Between (min lo hi) (max lo hi)
+
+-- | Exactly the widget's own preferred size, determined by measuring it.
+-- Unlike the other constructors, this cannot be resolved from available
+-- space alone -- see 'resolveLength'. A 'fitContent' reaching
+-- 'preferredSize' unresolved is a bug in the caller: every path that can
+-- encounter it (element measurement, box slot sizing) must resolve it to an
+-- 'exactly' first.
+fitContent :: Length
+fitContent = FitContent
 
 -- | Per-child sizing and alignment within a layout panel slot.
 data Layout = Layout
@@ -66,7 +100,7 @@ data Layout = Layout
 --   'Blink.Layout.Box.vBox') clips it.
 --
 -- @
--- layoutWithConstraints (Layout (Exactly 120) (Exactly 32) Center) $
+-- layoutWithConstraints (Layout (exactly 120) (exactly 32) Center) $
 --   button MyBtn [text "Click me"]
 -- @
 --
@@ -85,10 +119,10 @@ data Layout = Layout
 -- A few more variations help build intuition.
 --
 -- @
--- layoutWithConstraints (Layout Fill (Exactly 3) TopLeft) toolbar
+-- layoutWithConstraints (Layout fill (exactly 3) TopLeft) toolbar
 -- @
 --
--- 'Fill' on one axis and a fixed size on the other pins a full-width bar to
+-- 'fill' on one axis and a fixed size on the other pins a full-width bar to
 -- the top, regardless of the parent's height.
 --
 -- >  +------------------------------------------+
@@ -100,7 +134,7 @@ data Layout = Layout
 -- >  +------------------------------------------+
 --
 -- @
--- layoutWithConstraints (Layout (Exactly 14) (Exactly 3) BottomRight) badge
+-- layoutWithConstraints (Layout (exactly 14) (exactly 3) BottomRight) badge
 -- @
 --
 -- A fixed size with 'BottomRight' alignment pins a component to a corner.
@@ -121,23 +155,23 @@ layoutWithConstraints rc ui = do
 
 -- | Returns the preferred size for a 'Length' given the amount of available space.
 --
--- >>> preferredSize (Exactly 80) 200
+-- >>> preferredSize (exactly 80) 200
 -- 80.0
--- >>> preferredSize Fill 200
+-- >>> preferredSize fill 200
 -- 200.0
--- >>> preferredSize (AtLeast 50) 200
+-- >>> preferredSize (atLeast 50) 200
 -- 200.0
--- >>> preferredSize (AtLeast 50) 20
+-- >>> preferredSize (atLeast 50) 20
 -- 50.0
--- >>> preferredSize (AtMost 150) 200
+-- >>> preferredSize (atMost 150) 200
 -- 150.0
--- >>> preferredSize (AtMost 150) 100
+-- >>> preferredSize (atMost 150) 100
 -- 100.0
--- >>> preferredSize (Between 50 150) 200
+-- >>> preferredSize (between 50 150) 200
 -- 150.0
--- >>> preferredSize (Between 50 150) 100
+-- >>> preferredSize (between 50 150) 100
 -- 100.0
--- >>> preferredSize (Between 50 150) 20
+-- >>> preferredSize (between 50 150) 20
 -- 50.0
 preferredSize :: Length -> Double -> Double
 preferredSize (Exactly w)     _         = w
@@ -146,9 +180,75 @@ preferredSize (AtLeast w)     available  = max w available
 preferredSize (AtMost w)      available  = min w available
 preferredSize (Between lo hi) available  = max lo (min hi available)
 preferredSize FitContent      _          = 0
-  -- Unreachable in practice: every caller resolves 'FitContent' to an
-  -- 'Exactly' via 'Blink.UI.Element.resolveLength' before a 'Layout'
-  -- reaches here.
+  -- Unreachable in practice: every caller resolves 'fitContent' to an
+  -- 'exactly' via 'resolveLength' before a 'Layout' reaches here.
+
+-- | Turns a possibly content-dependent 'Length' into a pure one by measuring
+-- the element when it names 'fitContent', 'atLeast', or 'between'. @measure@
+-- is the element's own preferred-size function; @orientation@ says which of
+-- its two axes @len@ constrains, so @measure@ can answer accordingly.
+resolveLength
+  :: Orientation
+  -> Length
+  -> Available
+  -> Available
+  -> (MeasureCtx -> UI e msg Size)
+  -> UI e msg Length
+resolveLength orientation len mainAvail crossAvail measure =
+  case len of
+    FitContent  -> Exactly              <$> preferred
+    AtLeast l   -> Exactly . max l      <$> preferred
+    Between l h -> Exactly . clampTo l h <$> preferred
+    l           -> pure l
+  where
+    preferred = sizeAlong orientation <$> measure MeasureCtx
+      { measureAxis  = orientation
+      , measureMain  = mainAvail
+      , measureCross = crossAvail
+      }
+    clampTo lo hi = max lo . min hi
+
+sizeAlong :: Orientation -> Size -> Double
+sizeAlong Horizontal = sizeWidth
+sizeAlong Vertical   = sizeHeight
+
+-- | The smallest size a 'Length' can be resolved to -- the floor a box
+-- guarantees each child before distributing any surplus space. See
+-- 'Blink.Layout.Box.preferredSizes'.
+minLength :: Length -> Double
+minLength (Exactly w)    = w
+minLength Fill           = 0
+minLength (AtLeast w)    = w
+minLength (AtMost _)     = 0
+minLength (Between l _)  = l
+minLength FitContent     = 0
+
+-- | The size a resolved 'Length' takes when there is no space to
+-- distribute -- used for a box that is itself sizing to content. Every
+-- constructor that depends on measurement ('fitContent', 'atLeast',
+-- 'between') has already been turned into an 'exactly' by 'resolveLength'
+-- before reaching here.
+naturalLength :: Length -> Double
+naturalLength (Exactly w)   = w
+naturalLength (AtLeast w)   = w
+naturalLength (AtMost w)    = w
+naturalLength (Between l _) = l
+naturalLength Fill          = 0
+  -- Degenerate: see the spec's note on Fill inside a content-sized box.
+naturalLength FitContent    = 0
+  -- Unreachable: resolveLength never leaves a FitContent unresolved.
+
+-- | Whether a 'Length' can grow to absorb surplus space beyond its minimum.
+canExpand :: Length -> Bool
+canExpand (Exactly _) = False
+canExpand _           = True
+
+-- | The most extra space (above its minimum) a 'Length' can absorb, or
+-- infinite when it has no ceiling. See 'Blink.Layout.Box.distributeSurplusSpace'.
+capLength :: Length -> Double
+capLength (AtMost w)    = w
+capLength (Between l h) = h - l
+capLength _             = 1 / 0
 
 -- | What a parent can offer a child along one axis, for the purpose of
 -- measuring the child's preferred size. @Bounded@ when the parent knows its

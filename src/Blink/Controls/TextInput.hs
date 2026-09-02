@@ -28,7 +28,7 @@ import Blink.Controls.Control
 import Blink.Controls.Label (captionElement)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
-import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), Length (..))
+import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), fill, fitContent)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Style (..))
 import Blink.UI
@@ -54,7 +54,7 @@ textInputStyleKey = Class "textInput"
 
 -- | 'defaultControlConfig' (styled via 'textInputStyleKey'), an empty
 -- value, identity filters, no 'onInput'\/'onSubmit' reactions, and
--- @Layout Fill FitContent TopLeft@ (see 'textInput').
+-- @Layout fill fitContent TopLeft@ (see 'textInput').
 defaultTextInputConfig :: TextInputConfig e msg
 defaultTextInputConfig = TextInputConfig
   { ticControl       = defaultControlConfig { ccStyleKey = textInputStyleKey }
@@ -63,7 +63,7 @@ defaultTextInputConfig = TextInputConfig
   , ticDisplayFilter = id
   , ticOnInput       = []
   , ticOnSubmit      = []
-  , ticLayout        = Layout Fill FitContent TopLeft
+  , ticLayout        = Layout fill fitContent TopLeft
   }
 
 instance HasElementConfig e msg (TextInputConfig e msg) where
@@ -265,7 +265,7 @@ textInput eid attrs = Element
     cfg = resolve defaultTextInputConfig attrs
 
     -- A single line of the current value's text, for height purposes only
-    -- ('elLayout' never asks for 'FitContent' width) -- falls back to a
+    -- ('elLayout' never asks for 'fitContent' width) -- falls back to a
     -- single space when empty so an untouched field doesn't collapse to
     -- zero height.
     lineHeightElement t = captionElement (if T.null t then " " else t)

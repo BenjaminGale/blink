@@ -11,7 +11,7 @@ import Blink.Controls.Toggle (ToggleConfig, isSelected)
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
-import Blink.Layout.Constraints (Layout (..), Length (Fill))
+import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -73,7 +73,7 @@ seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 -- so these tests ask for the old full-size behaviour explicitly, the same
 -- way any other caller would.
 fullSize :: [Attribute'] -> UI TestElement String ()
-fullSize attrs = runElement (radioButton OptionA attrs) { elLayout = Layout Fill Fill TopLeft }
+fullSize attrs = runElement (radioButton OptionA attrs) { elLayout = Layout fill fill TopLeft }
 
 start :: [Attribute'] -> IO (UIContext TestElement String)
 start attrs = snd <$> runUI (fullSize attrs) seedCtx

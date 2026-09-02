@@ -10,7 +10,7 @@ import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
-import Blink.Layout.Constraints (Layout (..), Length (Fill))
+import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.UI
@@ -75,7 +75,7 @@ seedCtx = emptyUIContext testBounds noInput toggleTestTheme noOpTextMeasurer
 -- | See 'Blink.Controls.ButtonSpec.fullSize' -- same reasoning, for
 -- 'toggleButton'.
 fullSize :: [Attribute'] -> UI TestElement String ()
-fullSize attrs = runElement (toggleButton Ok attrs) { elLayout = Layout Fill Fill TopLeft }
+fullSize attrs = runElement (toggleButton Ok attrs) { elLayout = Layout fill fill TopLeft }
 
 start :: [Attribute'] -> IO (UIContext TestElement String)
 start attrs = snd <$> runUI (fullSize attrs) seedCtx

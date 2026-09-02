@@ -7,11 +7,11 @@ module Blink.UI.Element
   , noIntrinsicSize
   , spacer
   , elementWithLayout
-  , resolveLength
   ) where
 
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Rectangle (..), Size (..))
-import Blink.Layout.Constraints (Available (..), Layout (..), Length (..), MeasureCtx (..), layoutWithConstraints)
+import Blink.Layout.Constraints
+  (Available (..), Layout (..), MeasureCtx (..), fill, layoutWithConstraints, resolveLength)
 import Blink.UI (UI, getBounds)
 
 -- | The layout-facing pairing of a component's size request, its measure,
@@ -36,7 +36,7 @@ data Element e msg = Element
 -- | Applies an element's own size request within the current bounds and
 -- runs it. Used at the root of a view, and by a composite laying out
 -- children it has already built. Resolves any content-dependent request
--- ('FitContent', 'AtLeast', 'Between') against the current bounds first --
+-- ('fitContent', 'atLeast', 'between') against the current bounds first --
 -- unlike a box, which already knows the exact slot it is placing a child
 -- into, the root has nothing narrower to offer than its own bounds on
 -- either axis.
@@ -46,8 +46,8 @@ runElement el = do
   let avail = \o -> case o of
         Horizontal -> Bounded (rectWidth r)
         Vertical   -> Bounded (rectHeight r)
-  w <- resolveLength Horizontal layoutWidth  (avail Horizontal) (avail Vertical)   el
-  h <- resolveLength Vertical   layoutHeight (avail Vertical)   (avail Horizontal) el
+  w <- resolveLength Horizontal (layoutWidth  (elLayout el)) (avail Horizontal) (avail Vertical)   (elMeasure el)
+  h <- resolveLength Vertical   (layoutHeight (elLayout el)) (avail Vertical)   (avail Horizontal) (elMeasure el)
   layoutWithConstraints (elLayout el) { layoutWidth = w, layoutHeight = h } (elRun el)
 
 -- | For elements with no intrinsic size: whatever the parent can spare
@@ -63,42 +63,12 @@ noIntrinsicSize ctx = pure $ case measureAxis ctx of
 
 -- | An element that draws nothing and takes whatever share it is given.
 spacer :: Element e msg
-spacer = Element (Layout Fill Fill TopLeft) noIntrinsicSize (pure ())
+spacer = Element (Layout fill fill TopLeft) noIntrinsicSize (pure ())
 
 -- | Pairs a plain 'UI' action with an explicit size request, for use as a
 -- container child before it reports its own 'Layout' (see "Blink.Controls").
 -- Reports 'noIntrinsicSize', so @layout@ must not name a content-dependent
--- rule ('FitContent', 'AtLeast', or 'Between') -- there is nothing behind it
+-- rule ('fitContent', 'atLeast', or 'between') -- there is nothing behind it
 -- to measure.
 elementWithLayout :: Layout -> UI e msg () -> Element e msg
 elementWithLayout layout ui = Element layout noIntrinsicSize ui
-
--- | Turns a possibly content-dependent 'Length' into a pure one by
--- measuring the element when its request names 'FitContent', 'AtLeast', or
--- 'Between'. @mainOf@ extracts the constraint being resolved (the element's
--- width or height) from its 'Layout'; @orientation@ says which of those two
--- axes that is, so the element's 'elMeasure' can answer accordingly.
-resolveLength
-  :: Orientation
-  -> (Layout -> Length)
-  -> Available
-  -> Available
-  -> Element e msg
-  -> UI e msg Length
-resolveLength orientation mainOf mainAvail crossAvail el =
-  case mainOf (elLayout el) of
-    FitContent  -> Exactly              <$> preferred
-    AtLeast l   -> Exactly . max l      <$> preferred
-    Between l h -> Exactly . clampTo l h <$> preferred
-    l           -> pure l
-  where
-    preferred = sizeAlong orientation <$> elMeasure el MeasureCtx
-      { measureAxis  = orientation
-      , measureMain  = mainAvail
-      , measureCross = crossAvail
-      }
-    clampTo lo hi = max lo . min hi
-
-sizeAlong :: Orientation -> Size -> Double
-sizeAlong Horizontal = sizeWidth
-sizeAlong Vertical   = sizeHeight

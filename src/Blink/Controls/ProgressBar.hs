@@ -19,7 +19,7 @@ import Control.Monad (void)
 
 import Blink.Controls.Control
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
-import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), Length (..))
+import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), fill)
 import Blink.Style (Style (..))
 import Blink.UI
 import Blink.UI.Element (Element (..), noIntrinsicSize)
@@ -47,13 +47,13 @@ progressBarStyleKey :: StyleKey e
 progressBarStyleKey = Class "progressBar"
 
 -- | 'defaultControlConfig' (styled via 'progressBarStyleKey'), @'Progress' 0@,
--- a band speed of 0.5, and @Layout Fill Fill TopLeft@ (see 'progressBar').
+-- a band speed of 0.5, and @Layout fill fill TopLeft@ (see 'progressBar').
 defaultProgressBarConfig :: ProgressBarConfig e msg
 defaultProgressBarConfig = ProgressBarConfig
   { pbControl   = defaultControlConfig { ccStyleKey = progressBarStyleKey }
   , pbValue     = Progress 0
   , pbBandSpeed = 0.5
-  , pbLayout    = Layout Fill Fill TopLeft
+  , pbLayout    = Layout fill fill TopLeft
   }
 
 instance HasElementConfig e msg (ProgressBarConfig e msg) where

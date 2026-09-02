@@ -11,7 +11,7 @@ import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBeha
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Layout.Constraints (Layout (..), Length (Fill))
+import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.Controls.TextInput
@@ -106,7 +106,7 @@ seedWith = emptyUIContext testBounds noInput testTheme
 -- text, so every call site here asks for the old full-size behaviour
 -- explicitly, the same way any other caller would.
 fullSizeTextInput :: TestElement -> [Attribute'] -> UI TestElement String ()
-fullSizeTextInput eid attrs = runElement (textInput eid attrs) { elLayout = Layout Fill Fill TopLeft }
+fullSizeTextInput eid attrs = runElement (textInput eid attrs) { elLayout = Layout fill fill TopLeft }
 
 -- | 'Field' run alongside a second, already-focused element, so 'Field'
 -- itself never gains focus.
