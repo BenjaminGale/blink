@@ -88,20 +88,20 @@ captionElement t = Element
 -- caption, and the element a click on it should redirect focus to (see
 -- 'target').
 data LabelConfig e msg = LabelConfig
-  { lcControl  :: ControlConfig e msg
-  , lcLabelled :: LabelledConfig e msg
-  , lcLayout   :: Layout
-  , lcTarget   :: Maybe e
+  { lblControl  :: ControlConfig e msg
+  , lblLabelled :: LabelledConfig e msg
+  , lblLayout   :: Layout
+  , lblTarget   :: Maybe e
   }
 
 -- | 'defaultControlConfig' (styled via 'labelStyleKey'), an empty caption,
 -- @Layout FitContent FitContent TopLeft@ (see 'label'), and no 'target'.
 defaultLabelConfig :: LabelConfig e msg
 defaultLabelConfig = LabelConfig
-  { lcControl  = defaultControlConfig { ccStyleKey = labelStyleKey }
-  , lcLabelled = defaultLabelledConfig
-  , lcLayout   = Layout FitContent FitContent TopLeft
-  , lcTarget   = Nothing
+  { lblControl  = defaultControlConfig { ccStyleKey = labelStyleKey }
+  , lblLabelled = defaultLabelledConfig
+  , lblLayout   = Layout FitContent FitContent TopLeft
+  , lblTarget   = Nothing
   }
 
 -- | The 'StyleKey' 'label' resolves its style from unless overridden via
@@ -110,23 +110,23 @@ labelStyleKey :: StyleKey e
 labelStyleKey = Class "label"
 
 instance HasElementConfig e msg (LabelConfig e msg) where
-  overElement attr = Attribute (\c -> c { lcControl = runAttribute (overElement attr) (lcControl c) })
+  overElement attr = Attribute (\c -> c { lblControl = runAttribute (overElement attr) (lblControl c) })
 
 instance HasControlConfig e msg (LabelConfig e msg) where
-  overControl attr = Attribute (\c -> c { lcControl = runAttribute attr (lcControl c) })
+  overControl attr = Attribute (\c -> c { lblControl = runAttribute attr (lblControl c) })
 
 instance HasLabelledConfig e msg (LabelConfig e msg) where
-  overLabelled attr = Attribute (\c -> c { lcLabelled = runAttribute attr (lcLabelled c) })
+  overLabelled attr = Attribute (\c -> c { lblLabelled = runAttribute attr (lblLabelled c) })
 
 instance HasLayoutConfig (LabelConfig e msg) where
-  overLayout attr = Attribute (\c -> c { lcLayout = runAttribute attr (lcLayout c) })
+  overLayout attr = Attribute (\c -> c { lblLayout = runAttribute attr (lblLayout c) })
 
 -- | Names the element a click on the label should focus instead of the
 -- label itself -- e.g. a caption redirecting a click onto the input beside
 -- it. Unset by default, in which case clicking the label does nothing to
 -- focus.
 target :: e -> Attribute (LabelConfig e msg)
-target t = Attribute (\c -> c { lcTarget = Just t })
+target t = Attribute (\c -> c { lblTarget = Just t })
 
 -- | Displays text (see 'text'). Unlike every other control built on
 -- 'controlBase', a label never takes keyboard focus itself, whether by Tab
@@ -141,15 +141,15 @@ target t = Attribute (\c -> c { lcTarget = Just t })
 -- Override with 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/'Blink.Layout.Constraints.align'.
 label :: Ord e => e -> [Attribute (LabelConfig e msg)] -> Element e msg
 label eid attrs = Element
-  { elLayout  = lcLayout cfg
-  , elMeasure = measureChrome (ccStyleKey (lcControl cfg)) (captionElement (lcText (lcLabelled cfg)))
+  { elLayout  = lblLayout cfg
+  , elMeasure = measureChrome (ccStyleKey (lblControl cfg)) (captionElement (lcText (lblLabelled cfg)))
   , elRun     = void (controlBase eid ctrl)
   }
   where
     cfg   = resolve defaultLabelConfig attrs
-    focus = maybe NoFocus FocusTarget (lcTarget cfg)
-    ctrl  = (lcControl cfg)
+    focus = maybe NoFocus FocusTarget (lblTarget cfg)
+    ctrl  = (lblControl cfg)
       { ccIsFocusable  = False
       , ccFocusOnClick = focus
-      , ccContent      = renderLabelledContent (lcLabelled cfg)
+      , ccContent      = renderLabelledContent (lblLabelled cfg)
       }
