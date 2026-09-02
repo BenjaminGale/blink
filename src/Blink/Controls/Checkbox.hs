@@ -38,6 +38,11 @@ labelGap = 6
 contentOffset :: Double
 contentOffset = glyphWidth + labelGap
 
+-- | The margin left between the glyph column's edges and the drawn box, so
+-- the stroked box doesn't touch the caption or the control's own bounds.
+boxInset :: Double
+boxInset = 2
+
 -- | 'CHECK MARK' (U+2713) is near-universally supported, unlike the
 -- 'BALLOT BOX WITH CHECK' glyph (U+2611) that would otherwise draw the
 -- whole box-plus-tick in one character.
@@ -79,7 +84,7 @@ checkbox eid attrs = Element
       s      <- currentStyle
       bounds <- getBounds
       let glyphRect = bounds { rectWidth = glyphWidth }
-          boxSize   = max 0 (min glyphWidth (rectHeight bounds) - 2)
+          boxSize   = max 0 (min glyphWidth (rectHeight bounds) - boxInset)
           boxRect   = Rectangle
             { rectX      = rectX glyphRect + (glyphWidth - boxSize) / 2
             , rectY      = rectY glyphRect + (rectHeight glyphRect - boxSize) / 2
