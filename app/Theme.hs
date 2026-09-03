@@ -32,6 +32,7 @@ data ControlId = Label
              | PasswordInputCtl
              | AnimateCheckbox
              | ProgressCtl
+             | SliderCtl
   deriving (Eq, Ord)
 
 -- | Colours sampled from a light-mode reference screenshot (an inspector

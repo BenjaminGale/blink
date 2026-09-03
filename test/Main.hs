@@ -9,6 +9,7 @@ import qualified Blink.Controls.ElementSpec as Element
 import qualified Blink.Controls.LabelSpec as Label
 import qualified Blink.Controls.ProgressBarSpec as ProgressBar
 import qualified Blink.Controls.RadioButtonSpec as RadioButton
+import qualified Blink.Controls.SliderSpec as Slider
 import qualified Blink.Controls.TextInputSpec as TextInput
 import qualified Blink.Controls.ToggleSpec as Toggle
 import qualified Blink.GeometrySpec as Geometry
@@ -35,6 +36,7 @@ main = hspec $ do
   Checkbox.spec
   ProgressBar.spec
   RadioButton.spec
+  Slider.spec
   TextInput.spec
   Interaction.spec
   StyleDefaults.spec

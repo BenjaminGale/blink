@@ -9,6 +9,7 @@ import Blink.Controls.Checkbox (checkboxStyleKey)
 import Blink.Controls.Label (labelStyleKey)
 import Blink.Controls.ProgressBar (progressBarStyleKey)
 import Blink.Controls.RadioButton (radioButtonStyleKey)
+import Blink.Controls.Slider (sliderStyleKey)
 import Blink.Controls.TextInput (textInputStyleKey)
 import Blink.Controls.Toggle (toggleButtonStyleKey, toggleChecked)
 import Blink.Rendering (Colour (..))
@@ -43,7 +44,7 @@ spec = describe "Blink.Style.Defaults" $ do
     it "registers every built-in control's default StyleKey" $ do
       Map.keys (themeElementStyles (defaultTheme testPalette :: Theme ()))
         `shouldMatchList`
-          [buttonStyleKey, toggleButtonStyleKey, checkboxStyleKey, radioButtonStyleKey, textInputStyleKey, progressBarStyleKey, labelStyleKey]
+          [buttonStyleKey, toggleButtonStyleKey, checkboxStyleKey, radioButtonStyleKey, textInputStyleKey, progressBarStyleKey, sliderStyleKey, labelStyleKey]
 
     it "gives a button the surface colour at rest" $ do
       styleBackground (resolvedAt buttonStyleKey (Set.singleton CommonNormal)) `shouldBe` paletteSurface testPalette

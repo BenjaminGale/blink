@@ -67,7 +67,8 @@ Every 'App' is parameterised over three types:
                        "Blink.Controls.Checkbox",
                        "Blink.Controls.RadioButton",
                        "Blink.Controls.TextInput",
-                       "Blink.Controls.ProgressBar", or
+                       "Blink.Controls.ProgressBar",
+                       "Blink.Controls.Slider", or
                        "Blink.Controls.Label" a view actually uses — their
                        overlapping attribute names (e.g. @text@) mean they
                        aren't re-exported together here.

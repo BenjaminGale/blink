@@ -40,6 +40,7 @@ import Blink.Controls.Checkbox (checkboxStyleKey)
 import Blink.Controls.Label (labelStyleKey)
 import Blink.Controls.ProgressBar (progressBarStyleKey)
 import Blink.Controls.RadioButton (radioButtonStyleKey)
+import Blink.Controls.Slider (sliderStyleKey)
 import Blink.Controls.TextInput (textInputStyleKey)
 import Blink.Controls.Toggle (toggleButtonStyleKey, toggleChecked)
 import Blink.Geometry (uniform)
@@ -126,7 +127,8 @@ flatRowStyle p = StyleSet
 
 -- | A progress bar's track/fill style: 'paletteSurface' for the track
 -- (background), 'paletteAccent' for the fill (drawn via
--- 'styleTextColour'), no border.
+-- 'styleTextColour'), no border. Reused as-is for 'Blink.Controls.Slider.slider',
+-- whose track and thumb are drawn the same way.
 progressBarStyle :: Palette -> StyleSet
 progressBarStyle p = StyleSet
   { styleBase = Style
@@ -165,6 +167,7 @@ defaultTheme p = Theme
       , (radioButtonStyleKey,  (flatRowMetrics,     flatRowStyle p))
       , (textInputStyleKey,    (controlMetrics,     buttonStyle AlignLeft p))
       , (progressBarStyleKey,  (progressBarMetrics, progressBarStyle p))
+      , (sliderStyleKey,       (progressBarMetrics, progressBarStyle p))
       , (labelStyleKey,        (labelMetrics,       labelStyle p))
       ]
   , themeDefaultStyle = (controlMetrics, buttonStyle AlignCenter p)

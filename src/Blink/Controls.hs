@@ -10,6 +10,7 @@ module Blink.Controls
   , radioButton
   , label
   , progressBar
+  , slider
   , textInput
   ) where
 
@@ -18,5 +19,6 @@ import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Label (label)
 import Blink.Controls.ProgressBar (progressBar)
 import Blink.Controls.RadioButton (radioButton)
+import Blink.Controls.Slider (slider)
 import Blink.Controls.TextInput (textInput)
 import Blink.Controls.Toggle (toggleButton)

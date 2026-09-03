@@ -9,6 +9,8 @@ import Blink.Controls.Control (isEnabled)
 import Blink.Controls.Element (post, postWith)
 import Blink.Controls.Label (LabelConfig, text)
 import Blink.Controls.ProgressBar (ProgressValue (..), progress)
+import Blink.Controls.Slider (onValueChanged)
+import qualified Blink.Controls.Slider as Slider (value)
 import Blink.Controls.TextInput (displayFilter, onInput, value)
 import Blink.Controls.Toggle (isSelected, onSelectedChanged)
 import Blink.Geometry
@@ -34,6 +36,7 @@ data AppState = AppState
   , inputText      :: Text
   , passwordText   :: Text
   , animating      :: Bool
+  , sliderValue    :: Double
   , isHovering     :: Bool
   , lastInput      :: Text
   , lastInputCount :: Int
@@ -49,6 +52,7 @@ data Msg
   | SetInputText Text
   | SetPasswordText Text
   | SetAnimating Bool
+  | SetSlider Double
   | FrameObserved Bool Text  -- ^ mouse-is-hovering, this frame's raw key/typed-text label
 
 demoApp :: App ControlId Msg AppState
@@ -62,6 +66,7 @@ demoApp = App
       , inputText      = ""
       , passwordText   = ""
       , animating      = False
+      , sliderValue    = 0.5
       , isHovering     = False
       , lastInput      = ""
       , lastInputCount = 0
@@ -82,6 +87,7 @@ updateApp msg = case msg of
   SetInputText t       -> modify $ \s -> s { inputText = t }
   SetPasswordText t    -> modify $ \s -> s { passwordText = t }
   SetAnimating v       -> modify $ \s -> s { animating = v }
+  SetSlider v          -> modify $ \s -> s { sliderValue = v }
   FrameObserved hov keyLabel -> modify $ \s -> s
     { isHovering     = hov
     , lastInput      = if T.null keyLabel then lastInput s else keyLabel
@@ -204,6 +210,19 @@ rowProgress s =
     then progressBar ProgressCtl (rowLayout ++ [progress Indeterminate])
     else progressBar ProgressCtl (rowLayout ++ [progress (Progress (fromIntegral (clickCount s) / 50))])
 
+rowSlider :: AppState -> Element ControlId Msg
+rowSlider s =
+  hBox
+    ( rowLayout ++
+      [ spacing 8, alignment Center
+      , children
+          [ caption "Slider" [width (exactly 120), height fill, align MiddleLeft]
+          , slider SliderCtl [Slider.value (sliderValue s), onValueChanged (postWith SetSlider), isEnabled (editingEnabled s), height fill]
+          , caption (T.pack (show (round (sliderValue s * 100) :: Int)) <> "%") [width (exactly 60), height fill, align MiddleLeft]
+          ]
+      ]
+    )
+
 -- Footer
 
 footer :: AppState -> DemoUI ()
@@ -267,5 +286,6 @@ mainList s =
         , rowPasswordInput s
         , rowAnimate s
         , rowProgress s
+        , rowSlider s
         ]
     ]
