@@ -10,6 +10,8 @@ import Blink.Controls.Divider (orientation)
 import Blink.Controls.Element (post, postWith)
 import Blink.Controls.Label (LabelConfig, text)
 import Blink.Controls.ProgressBar (ProgressValue (..), progress)
+import Blink.Controls.RepeatButton
+  (firedCount, onFiredCountChanged, onPressEnded, onPressStarted, pressStartedAt)
 import Blink.Controls.Slider (onValueChanged)
 import qualified Blink.Controls.Slider as Slider (value)
 import Blink.Controls.TextInput (displayFilter, onInput, value)
@@ -37,6 +39,8 @@ data AppState = AppState
   , inputText      :: Text
   , passwordText   :: Text
   , animating      :: Bool
+  , holdPressedAt  :: Maybe Double
+  , holdFiredCount :: Int
   , sliderValue    :: Double
   , isHovering     :: Bool
   , lastInput      :: Text
@@ -53,6 +57,9 @@ data Msg
   | SetInputText Text
   | SetPasswordText Text
   | SetAnimating Bool
+  | HoldPressStarted Double
+  | HoldFiredCountChanged Int
+  | HoldPressEnded
   | SetSlider Double
   | FrameObserved Bool Text  -- ^ mouse-is-hovering, this frame's raw key/typed-text label
 
@@ -67,6 +74,8 @@ demoApp = App
       , inputText      = ""
       , passwordText   = ""
       , animating      = False
+      , holdPressedAt  = Nothing
+      , holdFiredCount = 0
       , sliderValue    = 0.5
       , isHovering     = False
       , lastInput      = ""
@@ -88,6 +97,9 @@ updateApp msg = case msg of
   SetInputText t       -> modify $ \s -> s { inputText = t }
   SetPasswordText t    -> modify $ \s -> s { passwordText = t }
   SetAnimating v       -> modify $ \s -> s { animating = v }
+  HoldPressStarted t      -> modify $ \s -> s { holdPressedAt = Just t, holdFiredCount = 0 }
+  HoldFiredCountChanged n -> modify $ \s -> s { holdFiredCount = n }
+  HoldPressEnded          -> modify $ \s -> s { holdPressedAt = Nothing, holdFiredCount = 0 }
   SetSlider v          -> modify $ \s -> s { sliderValue = v }
   FrameObserved hov keyLabel -> modify $ \s -> s
     { isHovering     = hov
@@ -137,6 +149,12 @@ rowButtons s =
       [ spacing 8
       , children
           [ button ClickButton [text "Click me", onActivated (post AddClick), isEnabled (editingEnabled s), width (exactly 100), height fill]
+          , repeatButton HoldButton
+              [ text "Hold me", onActivated (post AddClick), isEnabled (editingEnabled s), width (exactly 100), height fill
+              , pressStartedAt (holdPressedAt s), onPressStarted (postWith HoldPressStarted)
+              , firedCount (holdFiredCount s), onFiredCountChanged (postWith HoldFiredCountChanged)
+              , onPressEnded [OutMsg HoldPressEnded]
+              ]
           , button ResetButton [text "Reset", onActivated (post ResetClicks), isEnabled (editingEnabled s), width (exactly 100), height fill]
           , divider [orientation Vertical, height fill]
           , caption ("Clicks: " <> T.pack (show (clickCount s))) [width fill, height fill, align MiddleLeft]

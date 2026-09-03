@@ -42,6 +42,7 @@ library
         Blink.Controls.Label
         Blink.Controls.ProgressBar
         Blink.Controls.RadioButton
+        Blink.Controls.RepeatButton
         Blink.Controls.Slider
         Blink.Controls.TextInput
         Blink.Controls.Toggle
@@ -92,6 +93,7 @@ test-suite blink-tests
         Blink.Controls.LabelSpec
         Blink.Controls.ProgressBarSpec
         Blink.Controls.RadioButtonSpec
+        Blink.Controls.RepeatButtonSpec
         Blink.Controls.SliderSpec
         Blink.Controls.TextInputSpec
         Blink.Controls.ToggleBehaviour

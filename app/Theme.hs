@@ -25,6 +25,7 @@ data ControlId = Label
              | DarkModeCheckbox
              | EditingCheckbox
              | ClickButton
+             | HoldButton
              | ResetButton
              | ToggleCtl
              | RadioCtl Int

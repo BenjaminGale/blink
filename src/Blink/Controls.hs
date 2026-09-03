@@ -8,6 +8,7 @@ module Blink.Controls
   , toggleButton
   , checkbox
   , radioButton
+  , repeatButton
   , label
   , progressBar
   , slider
@@ -21,6 +22,7 @@ import Blink.Controls.Divider (divider)
 import Blink.Controls.Label (label)
 import Blink.Controls.ProgressBar (progressBar)
 import Blink.Controls.RadioButton (radioButton)
+import Blink.Controls.RepeatButton (repeatButton)
 import Blink.Controls.Slider (slider)
 import Blink.Controls.TextInput (textInput)
 import Blink.Controls.Toggle (toggleButton)
