@@ -45,11 +45,13 @@ and folds them into its own state via "Blink.Update".
 Some controls carry presentation state that is no business of the
 application — which element holds keyboard focus, a scrollbar's position, a
 text input's cursor. This state is baked directly into the 'UIContext':
-focus lives in the interaction state, and scroll positions (@elmScrollStates@, a
-@Map e 'ScrollState'@) and selections (@elmSelections@, a @Map e
-['Selection']@) live in the element state. Both maps are keyed by element ID,
-populate lazily on first write, and persist across frames; the application
-never sees the traffic.
+focus lives in the interaction state, and scroll positions
+(@elmScrollStates@, a @Map e 'ScrollState'@) live in the element state, keyed
+by element ID, populating lazily on first write and persisting across
+frames. Selection (@elmSelection@) holds just one 'Selection' at a time,
+tagged with the element it belongs to, since only the focused control ever
+has one; writing a new element's selection replaces whichever one was there
+before. The application never sees any of this traffic.
 
 Focus ('setFocus', 'clearFocus') changes immediately, exactly like
 'registerMouseOver' and mouse capture: a control's decision (take focus when
@@ -215,11 +217,9 @@ module Blink.UI
   , getScrollState
   , clampScrollPos
   , contextScrollPosition
-    -- * Selections
+    -- * Selection
   , Selection (..)
-  , getSelections
   , getSelection
-  , contextSelections
   , contextSelection
   , selectionLow
   , selectionHigh
@@ -313,7 +313,6 @@ module Blink.UI
 
 import Control.Monad (when, unless)
 import Data.List (foldl')
-import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -507,11 +506,13 @@ nextFocusTrackerFrame ft = ft
   , ftScopes  = Map.map nextFocusFrame (ftScopes ft)
   }
 
--- | Cross-frame per-element presentation state. Persists unchanged across
--- frames; never exposed to the application.
+-- | Cross-frame presentation state. Persists unchanged across frames; never
+-- exposed to the application. Scroll position is tracked per element
+-- (@elmScrollStates@); selection is tracked for at most one element at a
+-- time (@elmSelection@), tagged with which element it belongs to.
 data ElementState e = ElementState
   { elmScrollStates   :: Map.Map e ScrollState
-  , elmSelections     :: Map.Map e [Selection]
+  , elmSelection      :: Maybe (e, Selection)
   }
 
 -- | Outputs accumulated during a single frame: draw commands, the queued
@@ -632,7 +633,7 @@ emptyUIContext bounds input thm measurer = UIContext
   , ctxMouse           = advanceButton False (inputLeftButtonDown input) emptyMouse
   , ctxElements        = ElementState
       { elmScrollStates  = Map.empty
-      , elmSelections    = Map.empty
+      , elmSelection     = Nothing
       }
   , ctxOutputs         = emptyFrameOutputs
   , ctxStyle           = resolveStyle (snd (themeDefaultStyle thm)) Set.empty
@@ -728,23 +729,18 @@ contextScrollPosition :: Ord e => e -> UIContext e msg -> Double
 contextScrollPosition eid ctx =
   scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
--- | All selections for the given element. Returns @[]@ when none have been recorded.
-getSelections :: Ord e => e -> UI e msg [Selection]
-getSelections eid = gets (contextSelections eid)
+-- | The given element's selection, or 'Nothing' if it isn't the element
+-- currently holding one.
+getSelection :: Eq e => e -> UI e msg (Maybe Selection)
+getSelection eid = gets (contextSelection eid)
 
--- | All selections for the given element, read directly from a 'UIContext'
--- outside the 'UI' monad. Returns @[]@ when none have been recorded.
-contextSelections :: Ord e => e -> UIContext e msg -> [Selection]
-contextSelections eid ctx = Map.findWithDefault [] eid (elmSelections (ctxElements ctx))
-
--- | The first selection for the given element, or 'Nothing'.
-getSelection :: Ord e => e -> UI e msg (Maybe Selection)
-getSelection eid = listToMaybe <$> getSelections eid
-
--- | The first selection for the given element, or 'Nothing', read directly
--- from a 'UIContext' outside the 'UI' monad.
-contextSelection :: Ord e => e -> UIContext e msg -> Maybe Selection
-contextSelection eid = listToMaybe . contextSelections eid
+-- | The given element's selection, or 'Nothing' if it isn't the element
+-- currently holding one, read directly from a 'UIContext' outside the 'UI'
+-- monad.
+contextSelection :: Eq e => e -> UIContext e msg -> Maybe Selection
+contextSelection eid ctx = case elmSelection (ctxElements ctx) of
+  Just (owner, sel) | owner == eid -> Just sel
+  _                                -> Nothing
 
 -- Internal: writes a scroll position directly into the context, bypassing
 -- the deferred-effect queue. Clamps to @[0, 1]@ so this is the single point
@@ -755,10 +751,11 @@ writeScrollState eid v ctx = ctx { ctxElements = (ctxElements ctx)
   { elmScrollStates = Map.insert eid (ScrollState (clampScrollPos v)) (elmScrollStates (ctxElements ctx)) } }
 
 -- Internal: writes a selection directly into the context, bypassing the
--- deferred-effect queue. Used only by 'applyUiEffects'.
-writeSelection :: Ord e => e -> Selection -> UIContext e msg -> UIContext e msg
+-- deferred-effect queue, replacing whichever element held the selection
+-- before. Used only by 'applyUiEffects'.
+writeSelection :: e -> Selection -> UIContext e msg -> UIContext e msg
 writeSelection eid sel ctx = ctx { ctxElements = (ctxElements ctx)
-  { elmSelections = Map.insert eid [sel] (elmSelections (ctxElements ctx)) } }
+  { elmSelection = Just (eid, sel) } }
 
 -- | The lower bound of the selected range: @min selectionAnchor selectionActive@.
 selectionLow :: Selection -> Int
@@ -1387,9 +1384,10 @@ contextRequiresAnimation = outRequiresAnimation . ctxOutputs
 -- control's scroll\/selection writes) to the context handed to the next
 -- frame. Run automatically by 'nextFrameContext' — no host or application
 -- code needs to call this directly. Effects are folded in queue order:
--- 'ScrollTo' and 'SetSelectionAt' each overwrite what came before for the
--- same target, while 'ScrollBy' composes with a previous write to the same
--- target. Every scroll write passes through the same internal clamp, so the
+-- 'ScrollTo' overwrites what came before for the same target, 'ScrollBy'
+-- composes with a previous write to the same target, and 'SetSelectionAt'
+-- overwrites whichever selection was there before, no matter which element
+-- held it. Every scroll write passes through the same internal clamp, so the
 -- result is always in @[0, 1]@ regardless of which constructor produced it:
 --
 -- @

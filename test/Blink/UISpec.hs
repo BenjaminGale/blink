@@ -230,28 +230,32 @@ spec = describe "Blink.UI" $ do
         extendActive (const 2) (sel 2 5) `shouldBe` cursor 2
 
   describe "selection store" $ do
-    it "returns [] when no selection has been recorded" $ do
-      (ss, _) <- run0 (getSelections ())
-      ss `shouldBe` []
-
     it "getSelection returns Nothing when no selection exists" $ do
       (s, _) <- run0 (getSelection ())
       s `shouldBe` Nothing
 
     it "SetSelectionAt is queued rather than applied immediately" $ do
-      (ss, ctx) <- run0 (emitUi (SetSelectionAt () (Selection 1 4)) >> getSelections ())
-      ss `shouldBe` []
+      (s, ctx) <- run0 (emitUi (SetSelectionAt () (Selection 1 4)) >> getSelection ())
+      s `shouldBe` Nothing
       getUiEffects ctx `shouldBe` [SetSelectionAt () (Selection 1 4)]
 
-    it "a queued SetSelectionAt is visible via getSelections once applied" $ do
+    it "a queued SetSelectionAt is visible via getSelection once applied" $ do
       (_, ctx) <- run0 (emitUi (SetSelectionAt () (Selection 1 4)))
-      (ss, _) <- runUI (getSelections ()) (applyUiEffects (getUiEffects ctx) ctx)
-      ss `shouldBe` [Selection 1 4]
+      (s, _) <- runUI (getSelection ()) (applyUiEffects (getUiEffects ctx) ctx)
+      s `shouldBe` Just (Selection 1 4)
 
     it "a later SetSelectionAt in the same frame overrides an earlier one" $ do
       (_, ctx) <- run0 (emitUi (SetSelectionAt () (Selection 0 5)) >> emitUi (SetSelectionAt () (cursor 1)))
-      (ss, _) <- runUI (getSelections ()) (applyUiEffects (getUiEffects ctx) ctx)
-      ss `shouldBe` [cursor 1]
+      (s, _) <- runUI (getSelection ()) (applyUiEffects (getUiEffects ctx) ctx)
+      s `shouldBe` Just (cursor 1)
+
+    it "a selection for a different element replaces the one held before" $ do
+      (_, ctx)   <- runTwoElem (emitUi (SetSelectionAt ElemA (Selection 0 5)))
+      let ctx' = applyUiEffects (getUiEffects ctx) ctx
+      (_, ctx'') <- runUI (emitUi (SetSelectionAt ElemB (cursor 1))) ctx'
+      let settled = applyUiEffects (getUiEffects ctx'') ctx''
+      contextSelection ElemA settled `shouldBe` Nothing
+      contextSelection ElemB settled `shouldBe` Just (cursor 1)
 
   describe "scroll state" $ do
     it "returns 0 when no position has been recorded" $ do

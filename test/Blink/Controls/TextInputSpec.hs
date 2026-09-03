@@ -168,24 +168,24 @@ spec = describe "Blink.Controls.TextInput" $ do
     -- offset math.
     it "sets the cursor to the clicked position on mouse press" $ do
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field [value "hello"]) [] [ClickAt focusPt]
-      contextSelections Field (resultContext result) `shouldBe` [Selection 0 0]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 0 0)
 
     it "extends the active end on drag while keeping the anchor" $ do
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field [value "hello"]) []
                   [MouseDown (Point 15 50), DragTo (Point 55 50)]
-      case contextSelections Field (resultContext result) of
-        [Selection a _] -> a `shouldBe` 0
-        other           -> expectationFailure ("expected [Selection 0 _], got: " <> show other)
+      case contextSelection Field (resultContext result) of
+        Just (Selection a _) -> a `shouldBe` 0
+        other                -> expectationFailure ("expected Just (Selection 0 _), got: " <> show other)
 
   describe "focus and selection" $ do
     it "selects the entire value when it first claims focus with nothing else focused" $ do
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field [value "hello"]) [] []
-      contextSelections Field (resultContext result) `shouldBe` [Selection 0 5]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 0 5)
 
     it "selects the entire value when Tab moves focus onto it from another element" $ do
       let action = fullSizeTextInput Second [value "world"] >> fullSizeTextInput Field [value "hello"]
       result <- runInteractions testBounds seedCtx action [Wait 1] [Tab]
-      contextSelections Field (resultContext result) `shouldBe` [Selection 0 5]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 0 5)
 
     it "clears a stale selection and places the cursor at the click position when a click returns focus to it" $ do
       -- Focus 'Field' and give it a real, non-empty selection away from
@@ -195,20 +195,19 @@ spec = describe "Blink.Controls.TextInput" $ do
       -- from the old anchor.
       focused <- runInteractions testBounds (seedWith fixedCharWidth) (fullSizeTextInput Field [value "hello"]) []
                    [ClickAt (Point 88 50), PressKey KeyLeft [Shift]]
-      contextSelections Field (resultContext focused) `shouldBe` [Selection 4 3]
+      contextSelection Field (resultContext focused) `shouldBe` Just (Selection 4 3)
       away    <- runInteractions testBounds (resultContext focused) (setFocus Other) [] []
       result  <- runInteractions testBounds (resultContext away) (fullSizeTextInput Field [value "hello"]) [] [ClickAt (Point 15 50)]
-      case contextSelections Field (resultContext result) of
-        [Selection a act] -> do
+      case contextSelection Field (resultContext result) of
+        Just (Selection a act) -> do
           a `shouldBe` act    -- a fresh cursor, not a range
           a `shouldNotBe` 4   -- moved by the click, not left at the old anchor
         other -> expectationFailure ("expected a single cursor selection, got: " <> show other)
 
   describe "arrow navigation" $ do
-    -- Renders the field alongside the seeding 'emitUi' (rather than emitting
-    -- it alone) so 'Field' reconfirms its focus this frame too -- an action
-    -- that never renders it would let its focus expire (see 'controlBase'),
-    -- and a freshly *re*-claimed focus now selects the whole value.
+    -- Renders the field alongside the seeding 'emitUi' so 'Field' reconfirms
+    -- its focus this frame -- unrendered, its focus would expire (see
+    -- 'controlBase'), and a freshly claimed focus selects the whole value.
     let seeded a v = do
           focused <- runInteractions testBounds seedCtx (fullSizeTextInput Field [value "hello"]) [] [ClickAt focusPt]
           settled <- runInteractions testBounds (resultContext focused)
@@ -218,42 +217,42 @@ spec = describe "Blink.Controls.TextInput" $ do
     it "moves the cursor left with Left" $ do
       base   <- seeded 3 3
       result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyLeft []]
-      contextSelections Field (resultContext result) `shouldBe` [Selection 2 2]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 2 2)
 
     it "moves the cursor right with Right" $ do
       base   <- seeded 2 2
       result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyRight []]
-      contextSelections Field (resultContext result) `shouldBe` [Selection 3 3]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 3 3)
 
     it "collapses an existing selection to its low end on plain Left" $ do
       base   <- seeded 1 3
       result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyLeft []]
-      contextSelections Field (resultContext result) `shouldBe` [Selection 1 1]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 1 1)
 
     it "collapses an existing selection to its high end on plain Right" $ do
       base   <- seeded 1 3
       result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyRight []]
-      contextSelections Field (resultContext result) `shouldBe` [Selection 3 3]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 3 3)
 
     it "extends the selection left with Shift+Left" $ do
       base   <- seeded 3 3
       result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyLeft [Shift]]
-      contextSelections Field (resultContext result) `shouldBe` [Selection 3 2]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 3 2)
 
     it "extends the selection right with Shift+Right" $ do
       base   <- seeded 3 3
       result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyRight [Shift]]
-      contextSelections Field (resultContext result) `shouldBe` [Selection 3 4]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 3 4)
 
     it "does not move the cursor past the beginning" $ do
       base   <- seeded 0 0
       result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyLeft []]
-      contextSelections Field (resultContext result) `shouldBe` [Selection 0 0]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 0 0)
 
     it "does not move the cursor past the end" $ do
       base   <- seeded 5 5
       result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyRight []]
-      contextSelections Field (resultContext result) `shouldBe` [Selection 5 5]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 5 5)
 
   describe "selection editing" $ do
     -- See the "arrow navigation" 'seeded' above for why the field itself is
@@ -280,7 +279,7 @@ spec = describe "Blink.Controls.TextInput" $ do
       let attrs = [value "hello"]
       base   <- seeded 1 3 attrs
       result <- runInteractions testBounds base (fullSizeTextInput Field attrs) [] [TypeText "XY"]
-      contextSelections Field (resultContext result) `shouldBe` [Selection 3 3]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 3 3)
 
   describe "inputFilter" $ do
     it "inserts only the characters the filter accepts" $ do
@@ -313,7 +312,7 @@ spec = describe "Blink.Controls.TextInput" $ do
     it "places the cursor using offsets measured against the masked text, not the real value" $ do
       let attrs = [value "hunter2", displayFilter (T.map (const '*'))]
       result <- runInteractions testBounds (seedWith fixedCharWidth) (fullSizeTextInput Field attrs) [] [ClickAt (Point 35 50)]
-      contextSelections Field (resultContext result) `shouldBe` [Selection 1 1]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 1 1)
 
   describe "onSubmit" $ do
     it "fires when Enter is pressed while focused" $ do
