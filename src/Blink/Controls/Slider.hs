@@ -1,14 +1,16 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | A continuous-value slider: a filled track up to the current value, with
--- a thumb drawn at its edge. A leaf, built directly on 'controlBase' --
--- nothing derives from it, and it displays no label, so it has no
--- 'Blink.Controls.Label.LabelledConfig' either. The interactive counterpart
--- to 'Blink.Controls.ProgressBar.progressBar': where a progress bar only
--- ever displays a value the application computes, a slider lets the user
--- set one, by dragging the thumb, clicking the track, or (while focused)
--- pressing the arrow keys.
+-- | A continuous-value slider: a thin filled track up to the current
+-- value, with a square thumb straddling it at that point -- the
+-- traditional thin-bar-plus-thumb slider look, rather than one solid
+-- block. A leaf, built directly on 'controlBase' -- nothing derives from
+-- it, and it displays no label, so it has no
+-- 'Blink.Controls.Label.LabelledConfig' either. The interactive
+-- counterpart to 'Blink.Controls.ProgressBar.progressBar': where a
+-- progress bar only ever displays a value the application computes, a
+-- slider lets the user set one, by dragging the thumb, clicking the
+-- track, or (while focused) pressing the arrow keys.
 module Blink.Controls.Slider
   ( SliderConfig (..)
   , defaultSliderConfig
@@ -19,20 +21,68 @@ module Blink.Controls.Slider
   , onValueChanged
   ) where
 
-import Control.Monad (void, when)
+import Control.Monad (forM_, void, when)
 import Data.Maybe (fromMaybe)
 
 import Blink.Controls.Control
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), fill)
+import Blink.Rendering (Colour (..))
 import Blink.Style (Style (..))
 import Blink.UI
 import Blink.UI.Element (Element (..), noIntrinsicSize)
 
--- | The fixed width of the thumb drawn at the current value's edge.
-thumbWidth :: Double
-thumbWidth = 8
+-- | The height of the thin filled bar drawn along the middle of the
+-- control's full bounds -- deliberately much shorter than the thumb, so
+-- the two read as a track and a thing sliding along it rather than one
+-- solid block.
+trackThickness :: Double
+trackThickness = 4
+
+-- | The fixed width and height of the square thumb drawn at the current
+-- value's position, straddling the track -- bigger than 'trackThickness'
+-- so it reads as the thing you grab, not part of the track itself.
+thumbSize :: Double
+thumbSize = 14
+
+-- | The width of the focus ring drawn around the whole control while
+-- focused.
+focusRingWidth :: Double
+focusRingWidth = 1
+
+-- | Horizontal margin, on each side, between the control's own bounds and
+-- its track -- so the groove and thumb never touch the control's edge (or
+-- its focus ring).
+contentInset :: Double
+contentInset = 6
+
+-- | @bounds@ narrowed by 'contentInset' on the left and right -- the
+-- track's own geometry, and what a mouse position maps to a value
+-- against, both live within this rather than the raw control bounds.
+trackRect :: Rectangle -> Rectangle
+trackRect bounds = bounds
+  { rectX     = rectX bounds + contentInset
+  , rectWidth = max 0 (rectWidth bounds - 2 * contentInset)
+  }
+
+-- | Darkens @c@'s RGB toward black by @factor@ (in @[0, 1]@; 1 leaves it
+-- unchanged), leaving alpha alone. Used to shade the thumb on hover\/drag
+-- without needing a dedicated theme colour for each -- see 'thumbColourFor'.
+shade :: Double -> Colour -> Colour
+shade factor (RGBA r g b a) = RGBA (r * factor) (g * factor) (b * factor) a
+
+-- | The thumb's own colour for this frame: darkened while a drag is in
+-- progress (checked first, since a drag can continue after the pointer
+-- has moved off the thumb entirely), a lighter darkening on hover, or
+-- @accent@ unchanged otherwise. Only ever applied to the thumb -- the
+-- groove and the filled track stay @accent@ regardless, so hovering or
+-- dragging never recolours anything but the thing being grabbed.
+thumbColourFor :: Bool -> Bool -> Colour -> Colour
+thumbColourFor dragging hovered accent
+  | dragging  = shade 0.7 accent
+  | hovered   = shade 0.85 accent
+  | otherwise = accent
 
 -- | Every capability 'slider' resolves: the wrapped 'ControlConfig', its
 -- current value, the increment arrow keys move it by, and its
@@ -112,30 +162,35 @@ resolveKeyboardValue s keyEvts v
   where
     pressed k = any ((== k) . key) keyEvts
 
--- | Draws the filled track up to @v@, then the thumb centred on that same
--- point (clamped so it never draws outside the track), both in the
--- resolved style's text colour -- the same "foreground" role
--- 'Blink.Controls.ProgressBar.progressBar's fill and
--- 'Blink.Controls.Checkbox.checkbox's tick already use.
-drawTrack :: Style -> Rectangle -> Double -> UI e msg ()
-drawTrack s bounds v = do
-  withBounds filled $ fillRect (styleTextColour s)
-  withBounds thumb $ fillRect (styleTextColour s)
+-- | Draws the groove (border colour), the filled bar and thumb (text
+-- colour, thumb shaded for hover\/drag), and a focus ring around the whole
+-- control when focused.
+drawTrack :: Style -> Rectangle -> Bool -> Bool -> Bool -> Double -> UI e msg ()
+drawTrack s bounds focused hovered dragging v = do
+  forM_ (styleBorderColour s) $ \c -> withBounds groove (fillRect c)
+  withBounds track $ fillRect accent
+  withBounds thumb $ fillRect (thumbColourFor dragging hovered accent)
+  when focused $ strokeRect accent (uniformBorder focusRingWidth)
   where
+    accent   = styleTextColour s
+    tr       = trackRect bounds
     clamped  = clamp01 v
-    filled   = bounds { rectWidth = rectWidth bounds * clamped }
-    thumbX   = rectX bounds + clamped * rectWidth bounds - thumbWidth / 2
-    clampedX = max (rectX bounds) (min (rectX bounds + rectWidth bounds - thumbWidth) thumbX)
-    thumb    = bounds { rectX = clampedX, rectWidth = thumbWidth }
+    trackY   = rectY tr + (rectHeight tr - trackThickness) / 2
+    groove   = Rectangle (rectX tr) trackY (rectWidth tr) trackThickness
+    track    = groove { rectWidth = rectWidth tr * clamped }
+    thumbX   = rectX tr + clamped * rectWidth tr - thumbSize / 2
+    clampedX = max (rectX tr) (min (rectX tr + rectWidth tr - thumbSize) thumbX)
+    thumbY   = rectY tr + (rectHeight tr - thumbSize) / 2
+    thumb    = Rectangle clampedX thumbY thumbSize thumbSize
 
 -- | A continuous-value slider (see the module header). Dragging the thumb
 -- or clicking anywhere on the track jumps the value to the pointer's
 -- position, continuously, for as long as the press holds capture -- even
 -- once the pointer moves outside the track -- the same way dragging a text
 -- selection does. While focused and enabled, Left\/Down and Right\/Up also
--- adjust it by 'step'. Its value is control state owned by the caller, not
--- this control -- see 'onValueChanged' for reacting to a change. Defaults
--- to filling the space it's given on both axes, the same as
+-- adjust it by 'step'. Its value is control state owned by the caller,
+-- not this control -- see 'onValueChanged' for reacting to a change.
+-- Defaults to filling the space it's given on both axes, the same as
 -- 'Blink.Controls.ProgressBar.progressBar'; override with
 -- 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/'Blink.Layout.Constraints.align'.
 slider :: Ord e => e -> [Attribute (SliderConfig e msg)] -> Element e msg
@@ -153,6 +208,10 @@ slider eid attrs = Element
       disabled  <- isDisabled
       focused   <- isFocused eid
       capturing <- isDragging eid
+      -- One frame behind the real hit test (see 'wasMouseOverLastFrame'),
+      -- since 'body' has no access to this frame's own hover reading --
+      -- imperceptible for a cosmetic thumb tint.
+      hovered   <- wasMouseOverLastFrame eid
       input     <- getInput
 
       let value0   = clamp01 (scValue cfg)
@@ -161,11 +220,11 @@ slider eid attrs = Element
 
       fromMouse <-
         if not disabled && capturing
-          then Just . fractionAt bounds . pointX <$> getMousePos
+          then Just . fractionAt (trackRect bounds) . pointX <$> getMousePos
           else pure Nothing
 
       let newValue = fromMaybe (fromMaybe value0 fromKeys) fromMouse
 
       when (newValue /= value0) $ runHandlers (scOnValueChanged cfg) newValue
 
-      drawTrack s bounds value0
+      drawTrack s bounds focused hovered capturing value0

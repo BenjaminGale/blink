@@ -6,7 +6,7 @@ coherent, usable look out of the box just by supplying a 'Palette' --
 see 'defaultTheme'.
 
 Each control shape below is also exported on its own
-('buttonStyle', 'flatRowStyle', 'progressBarStyle', 'labelStyle'), so an
+('buttonStyle', 'flatRowStyle', 'progressBarStyle', 'sliderStyle', 'labelStyle'), so an
 app that wants the built-in look for every control /except/ one state on
 one control doesn't have to rebuild a whole 'StyleSet' by hand -- take the
 built-in one and replace a single entry in its sparse 'styleOverrides'
@@ -30,6 +30,7 @@ module Blink.Style.Defaults
   , buttonStyle
   , flatRowStyle
   , progressBarStyle
+  , sliderStyle
   , labelStyle
   ) where
 
@@ -127,8 +128,7 @@ flatRowStyle p = StyleSet
 
 -- | A progress bar's track/fill style: 'paletteSurface' for the track
 -- (background), 'paletteAccent' for the fill (drawn via
--- 'styleTextColour'), no border. Reused as-is for 'Blink.Controls.Slider.slider',
--- whose track and thumb are drawn the same way.
+-- 'styleTextColour'), no border.
 progressBarStyle :: Palette -> StyleSet
 progressBarStyle p = StyleSet
   { styleBase = Style
@@ -136,6 +136,21 @@ progressBarStyle p = StyleSet
       , styleTextColour   = paletteAccent p
       , styleTextAlign    = AlignLeft
       , styleBorderColour = Nothing
+      }
+  , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
+  }
+
+-- | A slider's groove\/fill\/thumb style: transparent background,
+-- 'paletteBorder' for the groove (drawn via 'styleBorderColour'),
+-- 'paletteAccent' for the filled track and thumb (drawn via
+-- 'styleTextColour').
+sliderStyle :: Palette -> StyleSet
+sliderStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = transparent
+      , styleTextColour   = paletteAccent p
+      , styleTextAlign    = AlignLeft
+      , styleBorderColour = Just (paletteBorder p)
       }
   , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
   }
@@ -167,7 +182,7 @@ defaultTheme p = Theme
       , (radioButtonStyleKey,  (flatRowMetrics,     flatRowStyle p))
       , (textInputStyleKey,    (controlMetrics,     buttonStyle AlignLeft p))
       , (progressBarStyleKey,  (progressBarMetrics, progressBarStyle p))
-      , (sliderStyleKey,       (progressBarMetrics, progressBarStyle p))
+      , (sliderStyleKey,       (progressBarMetrics, sliderStyle p))
       , (labelStyleKey,        (labelMetrics,       labelStyle p))
       ]
   , themeDefaultStyle = (controlMetrics, buttonStyle AlignCenter p)
