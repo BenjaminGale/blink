@@ -33,6 +33,8 @@ data ControlId = Label
              | AnimateCheckbox
              | ProgressCtl
              | SliderCtl
+             | DividerCtl
+             | ButtonsDividerCtl
   deriving (Eq, Ord)
 
 -- | Colours sampled from a light-mode reference screenshot (an inspector

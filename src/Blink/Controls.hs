@@ -11,11 +11,13 @@ module Blink.Controls
   , label
   , progressBar
   , slider
+  , divider
   , textInput
   ) where
 
 import Blink.Controls.Button (button)
 import Blink.Controls.Checkbox (checkbox)
+import Blink.Controls.Divider (divider)
 import Blink.Controls.Label (label)
 import Blink.Controls.ProgressBar (progressBar)
 import Blink.Controls.RadioButton (radioButton)

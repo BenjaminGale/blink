@@ -6,6 +6,7 @@ import Blink.Attribute (Attribute)
 import Blink.Controls
 import Blink.Controls.Button (onActivated)
 import Blink.Controls.Control (isEnabled)
+import Blink.Controls.Divider (orientation)
 import Blink.Controls.Element (post, postWith)
 import Blink.Controls.Label (LabelConfig, text)
 import Blink.Controls.ProgressBar (ProgressValue (..), progress)
@@ -123,6 +124,12 @@ rowEditing s =
   checkbox EditingCheckbox
     (rowLayout ++ [text "Enable editing", isSelected (editingEnabled s), onSelectedChanged (postWith SetEditingEnabled)])
 
+-- | A plain full-width separator between the settings checkboxes above and
+-- the interactive controls below -- 'divider's own default orientation and
+-- thickness, no attributes needed beyond fitting a vBox row.
+rowDivider :: Element ControlId Msg
+rowDivider = divider DividerCtl []
+
 rowButtons :: AppState -> Element ControlId Msg
 rowButtons s =
   hBox
@@ -131,6 +138,7 @@ rowButtons s =
       , children
           [ button ClickButton [text "Click me", onActivated (post AddClick), isEnabled (editingEnabled s), width (exactly 100), height fill]
           , button ResetButton [text "Reset", onActivated (post ResetClicks), isEnabled (editingEnabled s), width (exactly 100), height fill]
+          , divider ButtonsDividerCtl [orientation Vertical, height fill]
           , caption ("Clicks: " <> T.pack (show (clickCount s))) [width fill, height fill, align MiddleLeft]
           ]
       ]
@@ -279,6 +287,7 @@ mainList s =
         [ caption "Blink controls demo" [width fill, height (exactly 24), align TopLeft]
         , rowDarkMode s
         , rowEditing s
+        , rowDivider
         , rowButtons s
         , rowToggle s
         , rowRadio s

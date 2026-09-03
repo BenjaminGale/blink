@@ -31,6 +31,7 @@ module Blink.Style.Defaults
   , flatRowStyle
   , progressBarStyle
   , sliderStyle
+  , dividerStyle
   , labelStyle
   ) where
 
@@ -38,6 +39,7 @@ import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Button (buttonStyleKey)
 import Blink.Controls.Checkbox (checkboxStyleKey)
+import Blink.Controls.Divider (dividerStyleKey)
 import Blink.Controls.Label (labelStyleKey)
 import Blink.Controls.ProgressBar (progressBarStyleKey)
 import Blink.Controls.RadioButton (radioButtonStyleKey)
@@ -80,6 +82,13 @@ labelMetrics = Metrics
 progressBarMetrics :: Metrics
 progressBarMetrics = Metrics
   { metricsMargin      = uniform 3
+  , metricsPadding     = uniform 0
+  , metricsBorderEdges = noBorder
+  }
+
+dividerMetrics :: Metrics
+dividerMetrics = Metrics
+  { metricsMargin      = uniform 4
   , metricsPadding     = uniform 0
   , metricsBorderEdges = noBorder
   }
@@ -155,6 +164,20 @@ sliderStyle p = StyleSet
   , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
   }
 
+-- | A divider's line style: transparent background, 'paletteBorder' for
+-- the line itself (drawn via 'styleBorderColour', same as
+-- 'Blink.Controls.Slider.Slider's groove).
+dividerStyle :: Palette -> StyleSet
+dividerStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = transparent
+      , styleTextColour   = paletteTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleBorderColour = Just (paletteBorder p)
+      }
+  , styleOverrides = Map.empty
+  }
+
 -- | A plain, transparent label style with no border.
 labelStyle :: Palette -> StyleSet
 labelStyle p = StyleSet
@@ -183,6 +206,7 @@ defaultTheme p = Theme
       , (textInputStyleKey,    (controlMetrics,     buttonStyle AlignLeft p))
       , (progressBarStyleKey,  (progressBarMetrics, progressBarStyle p))
       , (sliderStyleKey,       (progressBarMetrics, sliderStyle p))
+      , (dividerStyleKey,      (dividerMetrics,     dividerStyle p))
       , (labelStyleKey,        (labelMetrics,       labelStyle p))
       ]
   , themeDefaultStyle = (controlMetrics, buttonStyle AlignCenter p)
