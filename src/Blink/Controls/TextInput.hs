@@ -106,16 +106,20 @@ onInput f = Attribute (\tc -> tc { ticOnInput = ticOnInput tc ++ [f] })
 onSubmit :: EventHandler e msg -> Attribute (TextInputConfig e msg)
 onSubmit f = Attribute (\tc -> tc { ticOnSubmit = ticOnSubmit tc ++ [f] })
 
--- | Click sets both selection ends at the clicked character; dragging
--- extends only the active end, keeping the anchor from before the drag
--- started. Assumes the caller has already checked the control is focused
--- and enabled.
+-- | Click sets both selection ends at the clicked character, clearing
+-- whatever was selected before; dragging extends only the active end,
+-- keeping the anchor from before the drag started. Gaining focus with no
+-- drag in progress -- Tab\/Shift-Tab, or an initial default focus -- selects
+-- the entire value instead, so the single selection this control tracks
+-- always reflects how focus was most recently gained rather than something
+-- left over from before. Assumes the caller has already checked the
+-- control is focused and enabled.
 resolveMouseSelection
   :: Ord e
   => e           -- ^ element ID
   -> Rectangle   -- ^ control's bounds
   -> Bool        -- ^ control was already being dragged last frame
-  -> Bool        -- ^ control just gained focus this frame via a click
+  -> Bool        -- ^ control just gained focus this frame
   -> Text        -- ^ displayed value (post-'displayFilter')
   -> Double      -- ^ current horizontal scroll offset
   -> Selection   -- ^ current selection
@@ -130,7 +134,9 @@ resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX s
       pure $ if not wasCapturing || justFocused
         then cursor clickedPos
         else extendActive (const clickedPos) sel
-    else pure sel
+    else pure $ if justFocused
+      then Selection 0 (T.length displayValue)
+      else sel
 
 -- | Shift+Left\/Right extend the selection; plain Left\/Right collapse an
 -- existing selection to its near end, or step by one otherwise.
@@ -280,14 +286,19 @@ textInput eid attrs = Element
       input    <- getInput
       sel      <- getSelection eid
       frac     <- getScrollState eid
+      focusChg <- getFocusChange
 
       let displayValue = ticDisplayFilter cfg currentValue
           w           = rectWidth bounds
           selInit     = fromMaybe (cursor (T.length currentValue)) sel
-          -- Focus was gained by a click this frame (e.g. clicking from
-          -- another element). Treat as a fresh click rather than a drag
-          -- continuation so the old anchor is not inherited.
-          justFocused = hasFocus && not wasFocused
+          -- Focus was gained this frame, either just now (an immediate
+          -- same-frame claim, e.g. auto-claim or Tab landing here) or via a
+          -- 'Focus' effect applied between frames (a click on this control,
+          -- or Shift-Tab) that only becomes visible once 'hasFocus' has
+          -- already caught up with 'wasFocused' -- 'getFocusChange' is what
+          -- still distinguishes that case from an ordinary focused frame.
+          justFocused = (hasFocus && not wasFocused)
+                     || maybe False (\c -> focusChangeTo c == Just eid) focusChg
           canEdit     = hasFocus && not disabled
 
       contentW <- realToFrac <$> charOffset displayValue (T.length displayValue)

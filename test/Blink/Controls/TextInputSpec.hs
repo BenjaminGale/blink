@@ -19,7 +19,7 @@ import Blink.Controls.TextInput
 import Blink.UI
 import Blink.UI.Element (elLayout, runElement)
 
-data TestElement = Field | Other deriving (Eq, Ord, Show)
+data TestElement = Field | Other | Second deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -129,14 +129,19 @@ spec = describe "Blink.Controls.TextInput" $ do
       resultDraws result `shouldContain` [cursorRectAt 15]
 
   describe "text editing" $ do
+    -- The field selects its whole value on this first, implicit auto-claimed
+    -- focus (see "focus and selection" below), so these collapse that
+    -- selection to the end with a plain Right first -- the same as a real
+    -- user would before typing or backspacing -- to exercise plain
+    -- (non-selection) editing.
     it "appends typed characters to the value and fires onInput" $ do
       let attrs = [value "hello", onInput (\t -> [OutMsg (T.unpack t)])]
-      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [TypeText "!"]
+      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], TypeText "!"]
       resultMessages result `shouldBe` ["hello!"]
 
     it "removes the last character on backspace" $ do
       let attrs = [value "hello", onInput (\t -> [OutMsg (T.unpack t)])]
-      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyBackspace []]
+      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], PressKey KeyBackspace []]
       resultMessages result `shouldBe` ["hell"]
 
     it "does not fire onInput when there is no input" $ do
@@ -172,10 +177,42 @@ spec = describe "Blink.Controls.TextInput" $ do
         [Selection a _] -> a `shouldBe` 0
         other           -> expectationFailure ("expected [Selection 0 _], got: " <> show other)
 
+  describe "focus and selection" $ do
+    it "selects the entire value when it first claims focus with nothing else focused" $ do
+      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field [value "hello"]) [] []
+      contextSelections Field (resultContext result) `shouldBe` [Selection 0 5]
+
+    it "selects the entire value when Tab moves focus onto it from another element" $ do
+      let action = fullSizeTextInput Second [value "world"] >> fullSizeTextInput Field [value "hello"]
+      result <- runInteractions testBounds seedCtx action [Wait 1] [Tab]
+      contextSelections Field (resultContext result) `shouldBe` [Selection 0 5]
+
+    it "clears a stale selection and places the cursor at the click position when a click returns focus to it" $ do
+      -- Focus 'Field' and give it a real, non-empty selection away from
+      -- position 0, then let 'Other' take focus without 'Field' ever
+      -- rendering again -- clicking back into 'Field' should discard that
+      -- stale selection and place the cursor at the new click, not extend
+      -- from the old anchor.
+      focused <- runInteractions testBounds (seedWith fixedCharWidth) (fullSizeTextInput Field [value "hello"]) []
+                   [ClickAt (Point 88 50), PressKey KeyLeft [Shift]]
+      contextSelections Field (resultContext focused) `shouldBe` [Selection 4 3]
+      away    <- runInteractions testBounds (resultContext focused) (setFocus Other) [] []
+      result  <- runInteractions testBounds (resultContext away) (fullSizeTextInput Field [value "hello"]) [] [ClickAt (Point 15 50)]
+      case contextSelections Field (resultContext result) of
+        [Selection a act] -> do
+          a `shouldBe` act    -- a fresh cursor, not a range
+          a `shouldNotBe` 4   -- moved by the click, not left at the old anchor
+        other -> expectationFailure ("expected a single cursor selection, got: " <> show other)
+
   describe "arrow navigation" $ do
+    -- Renders the field alongside the seeding 'emitUi' (rather than emitting
+    -- it alone) so 'Field' reconfirms its focus this frame too -- an action
+    -- that never renders it would let its focus expire (see 'controlBase'),
+    -- and a freshly *re*-claimed focus now selects the whole value.
     let seeded a v = do
           focused <- runInteractions testBounds seedCtx (fullSizeTextInput Field [value "hello"]) [] [ClickAt focusPt]
-          settled <- runInteractions testBounds (resultContext focused) (emitUi (SetSelectionAt Field (Selection a v))) [] []
+          settled <- runInteractions testBounds (resultContext focused)
+                       (fullSizeTextInput Field [value "hello"] >> emitUi (SetSelectionAt Field (Selection a v))) [] []
           pure (resultContext settled)
 
     it "moves the cursor left with Left" $ do
@@ -219,9 +256,12 @@ spec = describe "Blink.Controls.TextInput" $ do
       contextSelections Field (resultContext result) `shouldBe` [Selection 5 5]
 
   describe "selection editing" $ do
+    -- See the "arrow navigation" 'seeded' above for why the field itself is
+    -- rendered alongside the seeding 'emitUi'.
     let seeded a v attrs = do
           focused <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [ClickAt focusPt]
-          settled <- runInteractions testBounds (resultContext focused) (emitUi (SetSelectionAt Field (Selection a v))) [] []
+          settled <- runInteractions testBounds (resultContext focused)
+                       (fullSizeTextInput Field attrs >> emitUi (SetSelectionAt Field (Selection a v))) [] []
           pure (resultContext settled)
 
     it "deletes the selected range on backspace" $ do
@@ -245,17 +285,17 @@ spec = describe "Blink.Controls.TextInput" $ do
   describe "inputFilter" $ do
     it "inserts only the characters the filter accepts" $ do
       let attrs = [value "12", inputFilter (T.filter isDigit), onInput (\t -> [OutMsg (T.unpack t)])]
-      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [TypeText "a3b"]
+      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], TypeText "a3b"]
       resultMessages result `shouldBe` ["123"]
 
     it "does not fire onInput when every typed character is rejected" $ do
       let attrs = [value "12", inputFilter (T.filter isDigit), onInput (\t -> [OutMsg (T.unpack t)])]
-      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [TypeText "!"]
+      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], TypeText "!"]
       resultMessages result `shouldBe` []
 
     it "still allows backspace regardless of the filter" $ do
       let attrs = [value "12", inputFilter (T.filter isDigit), onInput (\t -> [OutMsg (T.unpack t)])]
-      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyBackspace []]
+      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], PressKey KeyBackspace []]
       resultMessages result `shouldBe` ["1"]
 
   describe "displayFilter" $ do
@@ -267,7 +307,7 @@ spec = describe "Blink.Controls.TextInput" $ do
 
     it "still edits and reports the real (unfiltered) value" $ do
       let attrs = [value "hunter2", displayFilter (T.map (const '*')), onInput (\t -> [OutMsg (T.unpack t)])]
-      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [TypeText "!"]
+      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], TypeText "!"]
       resultMessages result `shouldBe` ["hunter2!"]
 
     it "places the cursor using offsets measured against the masked text, not the real value" $ do
