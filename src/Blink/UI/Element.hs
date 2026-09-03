@@ -1,6 +1,7 @@
 -- | 'Element', the type that pairs a component's size request with how to
 -- measure and how to run it, and the protocol containers use to resolve a
--- content-dependent 'Length' into a concrete number.
+-- content-dependent 'Blink.Layout.Constraints.Length' into a concrete
+-- number.
 module Blink.UI.Element
   ( Element (..)
   , runElement
@@ -36,7 +37,8 @@ data Element e msg = Element
 -- | Applies an element's own size request within the current bounds and
 -- runs it. Used at the root of a view, and by a composite laying out
 -- children it has already built. Resolves any content-dependent request
--- ('fitContent', 'atLeast', 'between') against the current bounds first --
+-- ('Blink.Layout.Constraints.fitContent', 'Blink.Layout.Constraints.atLeast',
+-- 'Blink.Layout.Constraints.between') against the current bounds first --
 -- unlike a box, which already knows the exact slot it is placing a child
 -- into, the root has nothing narrower to offer than its own bounds on
 -- either axis.
@@ -68,7 +70,8 @@ spacer = Element (Layout fill fill TopLeft) noIntrinsicSize (pure ())
 -- | Pairs a plain 'UI' action with an explicit size request, for use as a
 -- container child before it reports its own 'Layout' (see "Blink.Controls").
 -- Reports 'noIntrinsicSize', so @layout@ must not name a content-dependent
--- rule ('fitContent', 'atLeast', or 'between') -- there is nothing behind it
--- to measure.
+-- rule ('Blink.Layout.Constraints.fitContent', 'Blink.Layout.Constraints.atLeast',
+-- or 'Blink.Layout.Constraints.between') -- there is nothing behind it to
+-- measure.
 elementWithLayout :: Layout -> UI e msg () -> Element e msg
 elementWithLayout layout ui = Element layout noIntrinsicSize ui
