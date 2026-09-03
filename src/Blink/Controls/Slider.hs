@@ -100,12 +100,17 @@ data SliderConfig e msg = SliderConfig
 sliderStyleKey :: StyleKey e
 sliderStyleKey = Class "slider"
 
--- | 'defaultControlConfig' (styled via 'sliderStyleKey'), a value of 0, a
--- step of 0.1, no 'onValueChanged' reactions, and @Layout fill fill
--- TopLeft@ (see 'slider').
+-- | 'defaultControlConfig' (styled via 'sliderStyleKey', 'CaptureActivated'
+-- since dragging the thumb off the track and releasing there has already
+-- changed the value -- see 'MouseActivation'), a value of 0, a step of 0.1,
+-- no 'onValueChanged' reactions, and @Layout fill fill TopLeft@ (see
+-- 'slider').
 defaultSliderConfig :: SliderConfig e msg
 defaultSliderConfig = SliderConfig
-  { scControl        = defaultControlConfig { ccStyleKey = sliderStyleKey }
+  { scControl        = defaultControlConfig
+      { ccStyleKey = sliderStyleKey
+      , ccElement  = defaultElementConfig { ecMouseActivation = CaptureActivated }
+      }
   , scValue          = 0
   , scStep           = 0.1
   , scOnValueChanged = []

@@ -4,7 +4,7 @@ module Blink.Controls.SliderSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Control (isFocusable)
+import Blink.Controls.Control (isFocusable, onFocusGained)
 import Blink.Controls.Element (Attribute)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
@@ -16,7 +16,7 @@ import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.UI
 import Blink.UI.Element (runElement)
 
-data TestElement = Handle deriving (Eq, Ord, Show)
+data TestElement = Handle | Other deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -213,6 +213,27 @@ spec = describe "Blink.Controls.Slider" $ do
       let attrs = [value 0, onValueChanged (\v -> [OutMsg (show v)])]
       result <- runInteractions testBounds seedCtx (disableWhen True (runElement (slider Handle attrs))) [] [MouseDown midPoint]
       resultMessages result `shouldBe` []
+
+  describe "focus" $ do
+    -- 'Other' sits to the left, at 'dummyRect', and auto-claims focus the
+    -- moment nothing else holds it -- so the slider under test, at
+    -- 'sliderRect', never auto-claims itself and starts each of these
+    -- unfocused, the same starting point 'Blink.Controls.ControlSpec's
+    -- own click-to-focus tests use.
+    let dummyRect  = Rectangle 0 0 40 100
+        sliderRect = Rectangle 40 0 60 100
+        grabPoint  = Point 70 50
+        farAway    = Point 500 500
+        renderTwo attrs = do
+          withBounds dummyRect  (runElement (slider Other []))
+          withBounds sliderRect (runElement (slider Handle attrs))
+
+    it "takes focus after a drag started on it ends with a release outside its bounds" $ do
+      let attrs = [onFocusGained (const [OutMsg ("gained" :: String)])]
+      result <- runInteractions testBounds seedCtx (renderTwo attrs)
+                  [MouseDown grabPoint]
+                  [DragTo farAway, MouseUp farAway, Wait 1]
+      resultMessages result `shouldBe` ["gained"]
 
   describe "keyboard" $ do
     let focused attrs = runInteractions testBounds seedCtx (runElement (slider Handle attrs)) [Wait 1]

@@ -24,6 +24,7 @@ module Blink.Controls.Control
   , ElementConfig (..)
   , ElementInteraction (..)
   , HasElementConfig (..)
+  , MouseActivation (..)
   , defaultElementConfig
   , elementBase
   , onMouseEntered
@@ -34,6 +35,7 @@ module Blink.Controls.Control
   , onKeyPressed
   , onFocusGained
   , onFocusLost
+  , mouseActivation
   , runHandlers
 
     -- * Control
@@ -86,17 +88,17 @@ data FocusOnClick e
 -- focusable and enabled, its style, what clicking it does to focus, its
 -- content, and the element event handlers wrapped up inside it.
 data ControlConfig e msg = ControlConfig
-  { ccIsFocusable   :: Bool
-  , ccIsEnabled     :: Bool
-  , ccStyleKey      :: StyleKey e
-  , ccFocusOnClick  :: FocusOnClick e
-  , ccActiveStates  :: Set VisualState
+  { ccIsFocusable  :: Bool
+  , ccIsEnabled    :: Bool
+  , ccStyleKey     :: StyleKey e
+  , ccFocusOnClick :: FocusOnClick e
+  , ccActiveStates :: Set VisualState
     -- ^ Extra 'VisualState's contributed by a wrapping layer (e.g.
     -- 'Blink.Controls.Toggle.toggleBase' setting a checked\/unchecked
     -- pseudo-state), unioned with the common\/focus states 'controlBase'
     -- derives itself. Defaults to empty.
-  , ccContent       :: UI e msg ()
-  , ccEvents        :: ElementConfig e msg
+  , ccContent      :: UI e msg ()
+  , ccElement      :: ElementConfig e msg
   }
 
 -- | Focusable, enabled, styled via an arbitrary placeholder key (always
@@ -111,7 +113,7 @@ defaultControlConfig = ControlConfig
   , ccFocusOnClick = FocusSelf
   , ccActiveStates = Set.empty
   , ccContent      = pure ()
-  , ccEvents       = defaultElementConfig
+  , ccElement      = defaultElementConfig
   }
 
 -- | What 'controlBase' reports back: the wrapped element's own
@@ -125,7 +127,7 @@ data ControlInteraction e msg = ControlInteraction
 -- | Implemented by any config type that nests a 'ControlConfig', letting a
 -- control attribute (e.g. 'isFocusable') be applied to it directly. Also
 -- gives every such config an 'HasElementConfig' instance for free, one hop
--- further in through 'ccEvents'.
+-- further in through 'ccElement'.
 class HasControlConfig e msg cfg | cfg -> e msg where
   overControl :: Attribute (ControlConfig e msg) -> Attribute cfg
 
@@ -133,7 +135,7 @@ instance HasControlConfig e msg (ControlConfig e msg) where
   overControl = id
 
 instance HasElementConfig e msg (ControlConfig e msg) where
-  overElement (Attribute f) = Attribute (\cc -> cc { ccEvents = f (ccEvents cc) })
+  overElement (Attribute f) = Attribute (\cc -> cc { ccElement = f (ccElement cc) })
 
 -- | Whether this control participates in keyboard focus at all: Tab\/
 -- Shift-Tab cycling onto it, and auto-claiming focus by rendering first
@@ -312,10 +314,10 @@ controlBase eid cc = disableWhen (not (ccIsEnabled cc)) $ do
   applySelfFocus wasFocused
   applyNavigationKeys wasFocused
   nowFocused <- isFocused eid
-  fireFocusChangeDirect (ccEvents cc) (focusTransition wasFocused nowFocused)
+  fireFocusChangeDirect (ccElement cc) (focusTransition wasFocused nowFocused)
   (m, styles) <- getStyleSet styleKey
   hitBounds   <- marginInsetBounds m
-  ei          <- withBounds hitBounds (elementBase eid (ccEvents cc))
+  ei          <- withBounds hitBounds (elementBase eid (ccElement cc))
   when (eiClicked ei) (applyClickFocus currentScope)
   disabled    <- isDisabled
   let active = intrinsicStates disabled ei `Set.union` ccActiveStates cc

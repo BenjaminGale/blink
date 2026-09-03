@@ -36,6 +36,7 @@ module Blink.Controls.Element
   , ElementConfig (..)
   , ElementInteraction (..)
   , HasElementConfig (..)
+  , MouseActivation (..)
   , defaultElementConfig
   , elementBase
 
@@ -48,6 +49,7 @@ module Blink.Controls.Element
   , onKeyPressed
   , onFocusGained
   , onFocusLost
+  , mouseActivation
 
     -- * Handler plumbing
   , runHandlers
@@ -72,34 +74,62 @@ type EventHandler e msg = () -> [Out e msg]
 -- | A handler for 'onKeyPressed', with the triggering 'KeyEvent'.
 type KeyEventHandler e msg = KeyEvent -> [Out e msg]
 
--- | One element's handlers, grouped by event.
+-- | How an element's own mouse-button activity translates into
+-- 'eiClicked' -- and, transitively, into "Blink.Controls.Control"'s
+-- click-to-focus. A control declares this once, up front, as part of its
+-- own interaction model; it is never inferred from what a particular drag
+-- happened to do.
+data MouseActivation
+  = ClickActivated
+    -- ^ Activated only by a release that lands back within the element's
+    -- bounds -- the default. Dragging off before releasing cancels the
+    -- press without side effects, the conventional way to back out of a
+    -- click (buttons, checkboxes, and most other controls).
+  | CaptureActivated
+    -- ^ Activated by any release while the element still holds mouse
+    -- capture, even once the pointer has left its bounds. For a control
+    -- whose drag movement is itself the interaction (e.g.
+    -- 'Blink.Controls.Slider.slider'), the value has already changed by
+    -- the time the button comes up, so the release should count regardless
+    -- of where the pointer ends up -- plain capture without this would
+    -- just be a drag with no activation at all.
+  deriving (Eq, Show)
+
+-- | One element's handlers, grouped by event, plus its 'MouseActivation'.
 data ElementConfig e msg = ElementConfig
-  { ecOnMouseEntered :: [EventHandler e msg]
-  , ecOnMouseExited  :: [EventHandler e msg]
-  , ecOnMouseDown    :: [EventHandler e msg]
-  , ecOnMouseUp      :: [EventHandler e msg]
-  , ecOnClicked      :: [EventHandler e msg]
-  , ecOnKeyPressed   :: [KeyEventHandler e msg]
-  , ecOnFocusGained  :: [EventHandler e msg]
-  , ecOnFocusLost    :: [EventHandler e msg]
+  { ecOnMouseEntered  :: [EventHandler e msg]
+  , ecOnMouseExited   :: [EventHandler e msg]
+  , ecOnMouseDown     :: [EventHandler e msg]
+  , ecOnMouseUp       :: [EventHandler e msg]
+  , ecOnClicked       :: [EventHandler e msg]
+  , ecOnKeyPressed    :: [KeyEventHandler e msg]
+  , ecOnFocusGained   :: [EventHandler e msg]
+  , ecOnFocusLost     :: [EventHandler e msg]
+  , ecMouseActivation :: MouseActivation
   }
 
--- | Every field empty: no handlers registered for anything.
+-- | Every handler field empty, 'ClickActivated' for 'ecMouseActivation'.
 defaultElementConfig :: ElementConfig e msg
 defaultElementConfig = ElementConfig
-  { ecOnMouseEntered = []
-  , ecOnMouseExited  = []
-  , ecOnMouseDown    = []
-  , ecOnMouseUp      = []
-  , ecOnClicked      = []
-  , ecOnKeyPressed   = []
-  , ecOnFocusGained  = []
-  , ecOnFocusLost    = []
+  { ecOnMouseEntered  = []
+  , ecOnMouseExited   = []
+  , ecOnMouseDown     = []
+  , ecOnMouseUp       = []
+  , ecOnClicked       = []
+  , ecOnKeyPressed    = []
+  , ecOnFocusGained   = []
+  , ecOnFocusLost     = []
+  , ecMouseActivation = ClickActivated
   }
 
 -- | What 'elementBase' reports about the current frame's mouse, keyboard,
 -- and focus activity: three steady interaction states (@eiHovered@,
 -- @eiHeld@, @eiFocused@), and the discrete events that fired this frame.
+--
+-- @eiClicked@'s exact trigger depends on the 'ElementConfig's own
+-- 'ecMouseActivation': a release back within bounds by default, or (for
+-- 'CaptureActivated') any release while this element still holds capture,
+-- even outside them.
 data ElementInteraction = ElementInteraction
   { eiHovered       :: Bool
   , eiHeld          :: Bool
@@ -170,8 +200,10 @@ onMouseDown = addHandler ecOnMouseDown (\ec hs -> ec { ecOnMouseDown = hs })
 onMouseUp :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
 onMouseUp = addHandler ecOnMouseUp (\ec hs -> ec { ecOnMouseUp = hs })
 
--- | Reacts when the element is clicked: the mouse button pressed and
--- released on it without leaving. Mouse-only -- see
+-- | Reacts when the element is clicked -- by default (see
+-- 'MouseActivation'), the mouse button pressed and released on it without
+-- leaving; a 'CaptureActivated' element instead fires this on any release
+-- while it still holds capture, even outside its bounds. Mouse-only -- see
 -- 'Blink.Controls.Button.onActivated' for the event that also fires on
 -- Enter while a button-like control holds focus.
 onClicked :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
@@ -189,6 +221,11 @@ onFocusGained = addHandler ecOnFocusGained (\ec hs -> ec { ecOnFocusGained = hs 
 -- | Reacts when the element loses focus, whether to a transfer or a clear.
 onFocusLost :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
 onFocusLost = addHandler ecOnFocusLost (\ec hs -> ec { ecOnFocusLost = hs })
+
+-- | Which way this element's own mouse-button activity turns into a click
+-- -- see 'MouseActivation'. Defaults to 'ClickActivated'.
+mouseActivation :: HasElementConfig e msg cfg => MouseActivation -> Attribute cfg
+mouseActivation a = overElement (Attribute (\ec -> ec { ecMouseActivation = a }))
 
 -- | Runs every handler in @hs@ on @a@, dispatching the resulting 'Out's.
 runHandlers :: [a -> [Out e msg]] -> a -> UI e msg ()
@@ -223,7 +260,8 @@ isMouseFreeFor eid = do
 -- handler in @ec@ for each. Returns the full picture as an
 -- 'ElementInteraction' so a caller built on top (e.g.
 -- 'Blink.Controls.Control.controlBase') can read the same flags back
--- without re-querying the context itself.
+-- without re-querying the context itself. @ec@'s own 'ecMouseActivation'
+-- decides what counts as a click -- see 'MouseActivation'.
 elementBase :: Ord e => e -> ElementConfig e msg -> UI e msg ElementInteraction
 elementBase eid ec = do
   disabled <- isDisabled
@@ -231,7 +269,7 @@ elementBase eid ec = do
   let eligible = not disabled && hit
 
   hoverI <- watchHover eid eligible
-  mouseI <- watchMouseButton eid eligible
+  mouseI <- watchMouseButton eid (ecMouseActivation ec) eligible
   focusI <- watchFocus eid disabled
 
   let interaction = hoverI <> mouseI <> focusI
@@ -258,17 +296,24 @@ watchHover eid eligible = do
     }
 
 -- | Reports this frame's mouse-button activity against the element: down,
--- up, click (up while this element holds capture), and held (button down
--- with capture free or held by this element). Only fills in
--- 'eiMouseDown', 'eiMouseUp', 'eiClicked', and 'eiHeld' -- the rest is
--- 'mempty'.
-watchMouseButton :: Eq e => e -> Bool -> UI e msg ElementInteraction
-watchMouseButton eid eligible = do
+-- up (always bounds-gated), click, and held (button down with capture free
+-- or held by this element). Only fills in 'eiMouseDown', 'eiMouseUp',
+-- 'eiClicked', and 'eiHeld' -- the rest is 'mempty'.
+--
+-- @clicked@ reads differently depending on @activation@: for
+-- 'ClickActivated', a release only counts while still within bounds (the
+-- same release 'eiMouseUp' reports); for 'CaptureActivated', a release
+-- while this element holds capture counts regardless of bounds.
+watchMouseButton :: Eq e => e -> MouseActivation -> Bool -> UI e msg ElementInteraction
+watchMouseButton eid activation eligible = do
   mouse <- getMouse
-  let capturedByMe = captureOf (mouseButton mouse) == MouseCapturedBy eid
-      mouseDown    = eligible && isButtonDownEvent (mouseButton mouse)
-      mouseUp      = eligible && isButtonReleasedEvent (mouseButton mouse)
-      clicked      = mouseUp && capturedByMe
+  let capturedByMe  = captureOf (mouseButton mouse) == MouseCapturedBy eid
+      releasedEvent = isButtonReleasedEvent (mouseButton mouse)
+      mouseDown     = eligible && isButtonDownEvent (mouseButton mouse)
+      mouseUp       = eligible && releasedEvent
+      clicked       = capturedByMe && case activation of
+        ClickActivated   -> mouseUp
+        CaptureActivated -> releasedEvent
 
   free <- isMouseFreeFor eid
   down <- isButtonDown
