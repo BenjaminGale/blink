@@ -94,11 +94,11 @@ spec = describe "Blink.Controls.Label" $ do
     result <- runInteractions testBounds seedCtx (fullSize []) [] []
     contextFocus (resultContext result) `shouldBe` Nothing
 
-  it "does not take focus when clicked by default" $ do
-    result <- runInteractions testBounds seedCtx (fullSize []) [] [ClickAt onCaption, Wait 1]
+  it "does not take focus on mouse-down by default" $ do
+    result <- runInteractions testBounds seedCtx (fullSize []) [] [MouseDown onCaption, Wait 1]
     contextFocus (resultContext result) `shouldBe` Nothing
 
-  it "redirects a click's focus onto the element named by target" $ do
+  it "redirects a mouse-down's focus onto the element named by target" $ do
     let attrs = [target Target]
-    result <- runInteractions testBounds seedCtx (fullSize attrs) [] [ClickAt onCaption, Wait 1]
+    result <- runInteractions testBounds seedCtx (fullSize attrs) [] [MouseDown onCaption, Wait 1]
     contextFocus (resultContext result) `shouldBe` Just Target

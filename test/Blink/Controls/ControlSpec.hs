@@ -166,12 +166,12 @@ spec = describe "Blink.Controls.Control.controlBase" $ do
         attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
         render = both FocusSelf attrsA FocusSelf attrsB
 
-    it "does not take effect on the click's own frame" $ do
-      result <- runInteractions testBounds seedCtx render [] [ClickAt onB]
+    it "does not take effect on the mouse-down's own frame" $ do
+      result <- runInteractions testBounds seedCtx render [] [MouseDown onB]
       resultMessages result `shouldBe` []
 
-    it "takes effect one frame after the click, firing FocusLost/FocusGained for the right elements" $ do
-      result <- runInteractions testBounds seedCtx render [] [ClickAt onB, Wait 1]
+    it "takes effect one frame after mouse-down, firing FocusLost/FocusGained for the right elements, without waiting for release" $ do
+      result <- runInteractions testBounds seedCtx render [] [MouseDown onB, Wait 1]
       resultMessages result `shouldBe` ["A lost", "B gained"]
 
     it "FocusTarget redirects focus to the named element instead of the clicker" $ do

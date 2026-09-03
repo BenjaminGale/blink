@@ -4,7 +4,7 @@ module Blink.Controls.SliderSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Control (isFocusable, onFocusGained)
+import Blink.Controls.Control (isFocusable, onFocusGained, onFocusLost)
 import Blink.Controls.Element (Attribute)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
@@ -228,12 +228,17 @@ spec = describe "Blink.Controls.Slider" $ do
           withBounds dummyRect  (runElement (slider Other []))
           withBounds sliderRect (runElement (slider Handle attrs))
 
-    it "takes focus after a drag started on it ends with a release outside its bounds" $ do
+    it "takes focus as soon as the drag starts, before any movement or release" $ do
       let attrs = [onFocusGained (const [OutMsg ("gained" :: String)])]
-      result <- runInteractions testBounds seedCtx (renderTwo attrs)
-                  [MouseDown grabPoint]
-                  [DragTo farAway, MouseUp farAway, Wait 1]
+      result <- runInteractions testBounds seedCtx (renderTwo attrs) [] [MouseDown grabPoint, Wait 1]
       resultMessages result `shouldBe` ["gained"]
+
+    it "keeps focus once taken, even if the drag ends with a release outside its bounds" $ do
+      let attrs = [onFocusLost (const [OutMsg ("lost" :: String)])]
+      result <- runInteractions testBounds seedCtx (renderTwo attrs)
+                  [MouseDown grabPoint, Wait 1]
+                  [DragTo farAway, MouseUp farAway, Wait 1]
+      resultMessages result `shouldBe` []
 
   describe "keyboard" $ do
     let focused attrs = runInteractions testBounds seedCtx (runElement (slider Handle attrs)) [Wait 1]

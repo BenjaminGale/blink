@@ -8,7 +8,7 @@
 --
 -- A control ('controlBase') wraps an element with focus management (claim
 -- on render while nothing else holds it, give up on Tab, hand focus
--- elsewhere on Shift-Tab or a click, per 'FocusOnClick') and themed chrome
+-- elsewhere on Shift-Tab or a mouse-down, per 'FocusOnClick') and themed chrome
 -- (background, border, padding, resolved from a 'Blink.Style.StyleKey' and
 -- the element's own hover\/press\/focus state) around whatever content its
 -- 'ControlConfig' carries. Per "a layer fires only what it originates",
@@ -307,7 +307,9 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
 --
 -- Per "a layer fires only what it originates", never dispatches an element
 -- event itself: the click-to-focus effect it applies (per 'FocusOnClick')
--- is a direct 'UiEffect', read off the wrapped element's own 'eiClicked'.
+-- is a direct 'UiEffect', read off the wrapped element's own 'eiMouseDown'
+-- -- so focus moves on press, before any drag or release decides whether
+-- the press itself counts as a click.
 --
 -- Identified by @cc@'s own element config ('ecElementId', see 'elementId').
 -- With no id set, the control still renders, in its resting (undisabled,
@@ -340,7 +342,7 @@ controlBase cc = disableWhen (not (ccIsEnabled cc)) $
       (m, styles) <- getStyleSet styleKey
       hitBounds   <- marginInsetBounds m
       ei          <- withBounds hitBounds (elementBase (ccElement cc))
-      when (eiClicked ei) (applyClickFocus eid currentScope)
+      when (eiMouseDown ei) (applyClickFocus eid currentScope)
       disabled    <- isDisabled
       let active = intrinsicStates disabled ei `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
@@ -361,7 +363,7 @@ controlBase cc = disableWhen (not (ccIsEnabled cc)) $
       keys <- getNavigationKeys
       advanceOrRetreat wasFocused (navAdvance keys) (navRetreat keys)
 
-    -- A click hands focus to whichever element FocusOnClick names, taking
+    -- A press hands focus to whichever element FocusOnClick names, taking
     -- effect one frame later (see 'elementBase's own deferred detection via
     -- 'getFocusChange'). Targets whichever scope was ambient when this
     -- control itself rendered (@currentScope@, read once up front), not
