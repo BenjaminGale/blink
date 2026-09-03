@@ -258,8 +258,9 @@ textInput eid attrs = Element
       let ctrl = (ticControl cfg)
             { ccFocusOnClick = FocusSelf
             , ccContent      = body wasFocused wasCapturing
+            , ccElement      = (ccElement (ticControl cfg)) { ecElementId = Just eid }
             }
-      void (controlBase eid ctrl)
+      void (controlBase ctrl)
   }
   where
     cfg = resolve defaultTextInputConfig attrs

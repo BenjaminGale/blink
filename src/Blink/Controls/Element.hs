@@ -41,6 +41,7 @@ module Blink.Controls.Element
   , elementBase
 
     -- ** Element attributes
+  , elementId
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -95,9 +96,11 @@ data MouseActivation
     -- just be a drag with no activation at all.
   deriving (Eq, Show)
 
--- | One element's handlers, grouped by event, plus its 'MouseActivation'.
+-- | One element's handlers, grouped by event, plus its 'MouseActivation'
+-- and its identity ('ecElementId').
 data ElementConfig e msg = ElementConfig
-  { ecOnMouseEntered  :: [EventHandler e msg]
+  { ecElementId       :: Maybe e
+  , ecOnMouseEntered  :: [EventHandler e msg]
   , ecOnMouseExited   :: [EventHandler e msg]
   , ecOnMouseDown     :: [EventHandler e msg]
   , ecOnMouseUp       :: [EventHandler e msg]
@@ -108,10 +111,12 @@ data ElementConfig e msg = ElementConfig
   , ecMouseActivation :: MouseActivation
   }
 
--- | Every handler field empty, 'ClickActivated' for 'ecMouseActivation'.
+-- | No 'ecElementId', every handler field empty, 'ClickActivated' for
+-- 'ecMouseActivation'.
 defaultElementConfig :: ElementConfig e msg
 defaultElementConfig = ElementConfig
-  { ecOnMouseEntered  = []
+  { ecElementId       = Nothing
+  , ecOnMouseEntered  = []
   , ecOnMouseExited   = []
   , ecOnMouseDown     = []
   , ecOnMouseUp       = []
@@ -181,6 +186,13 @@ addHandler :: HasElementConfig e msg cfg
            => (ElementConfig e msg -> [h]) -> (ElementConfig e msg -> [h] -> ElementConfig e msg)
            -> h -> Attribute cfg
 addHandler get set h = overElement (Attribute (\ec -> set ec (get ec ++ [h])))
+
+-- | Gives the element a stable identity, keying its hover\/capture\/focus
+-- tracking across frames -- see 'elementBase'. Unset by default, in which
+-- case the element raises no events and takes no part in focus at all,
+-- regardless of any handler attached to it.
+elementId :: HasElementConfig e msg cfg => e -> Attribute cfg
+elementId eid = overElement (Attribute (\ec -> ec { ecElementId = Just eid }))
 
 -- | Reacts when the pointer starts being over the element this frame.
 onMouseEntered :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
@@ -262,20 +274,25 @@ isMouseFreeFor eid = do
 -- 'Blink.Controls.Control.controlBase') can read the same flags back
 -- without re-querying the context itself. @ec@'s own 'ecMouseActivation'
 -- decides what counts as a click -- see 'MouseActivation'.
-elementBase :: Ord e => e -> ElementConfig e msg -> UI e msg ElementInteraction
-elementBase eid ec = do
-  disabled <- isDisabled
-  hit      <- isRegionHit
-  let eligible = not disabled && hit
+--
+-- Identified by @ec@'s own 'ecElementId' (see 'elementId'). With no id set,
+-- this raises no events and reports 'mempty' -- fully inert, not an error.
+elementBase :: Ord e => ElementConfig e msg -> UI e msg ElementInteraction
+elementBase ec = case ecElementId ec of
+  Nothing  -> pure mempty
+  Just eid -> do
+    disabled <- isDisabled
+    hit      <- isRegionHit
+    let eligible = not disabled && hit
 
-  hoverI <- watchHover eid eligible
-  mouseI <- watchMouseButton eid (ecMouseActivation ec) eligible
-  focusI <- watchFocus eid disabled
+    hoverI <- watchHover eid eligible
+    mouseI <- watchMouseButton eid (ecMouseActivation ec) eligible
+    focusI <- watchFocus eid disabled
 
-  let interaction = hoverI <> mouseI <> focusI
+    let interaction = hoverI <> mouseI <> focusI
 
-  fireElementEvents ec interaction
-  pure interaction
+    fireElementEvents ec interaction
+    pure interaction
 
 -- | Registers this frame's hover, claiming mouse-over and capture when the
 -- element is eligible, and reports hovered plus the enter\/exit edges

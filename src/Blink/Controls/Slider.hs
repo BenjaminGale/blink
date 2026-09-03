@@ -202,11 +202,14 @@ slider :: Ord e => e -> [Attribute (SliderConfig e msg)] -> Element e msg
 slider eid attrs = Element
   { elLayout  = scLayout cfg
   , elMeasure = measureChrome (ccStyleKey ctrl) (Element (scLayout cfg) noIntrinsicSize (pure ()))
-  , elRun     = void (controlBase eid ctrl)
+  , elRun     = void (controlBase ctrl)
   }
   where
     cfg  = resolve defaultSliderConfig attrs
-    ctrl = (scControl cfg) { ccContent = body }
+    ctrl = (scControl cfg)
+      { ccContent = body
+      , ccElement = (ccElement (scControl cfg)) { ecElementId = Just eid }
+      }
     body = do
       s         <- currentStyle
       bounds    <- getBounds

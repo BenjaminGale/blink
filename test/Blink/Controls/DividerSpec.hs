@@ -4,12 +4,14 @@ module Blink.Controls.DividerSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute)
+import Blink.Controls.Control (Attribute, elementId)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.Divider (DividerConfig, divider, orientation, thickness)
+import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Geometry (Alignment (Center), Orientation (..), Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
+import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (align, exactly, width)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
@@ -88,17 +90,34 @@ seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
 run :: [Attribute'] -> IO (UIContext TestElement String)
-run attrs = snd <$> runUI (runElement (divider Bar attrs)) seedCtx
+run attrs = snd <$> runUI (runElement (divider attrs)) seedCtx
 
 runWith :: Theme TestElement -> [Attribute'] -> IO (UIContext TestElement String)
-runWith theme attrs = snd <$> runUI (runElement (divider Bar attrs)) (emptyUIContext testBounds noInput theme noOpTextMeasurer)
+runWith theme attrs = snd <$> runUI (runElement (divider attrs)) (emptyUIContext testBounds noInput theme noOpTextMeasurer)
+
+-- | 'divider' with 'elementId' 'Bar' set -- for the shared behaviour
+-- contracts below, which need a real identity to track hover\/click\/focus
+-- against.
+renderWithId :: [Attribute'] -> UI TestElement String ()
+renderWithId attrs = runElement (divider (elementId Bar : attrs))
 
 spec :: Spec
 spec = describe "Blink.Controls.Divider" $ do
   controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    testBounds seedCtx Bar (Point 5 5) hitRect (Point 200 200) (runElement . divider Bar)
+    testBounds seedCtx Bar (Point 5 5) hitRect (Point 200 200) renderWithId
 
-  fixedNotFocusableSpec testBounds seedCtx (runElement . divider Bar)
+  fixedNotFocusableSpec testBounds seedCtx renderWithId
+
+  describe "no id" $ do
+    -- No 'elementId' at all -- 'run' never adds one, unlike 'renderWithId'.
+    it "raises no events at all, even with every handler attached and the cursor pressed and released over it" $ do
+      result <- runInteractions testBounds seedCtx (runElement (divider tagged)) []
+                  [MouseDown (Point 50 15), MouseUp (Point 50 15)]
+      resultMessages result `shouldBe` []
+
+    it "still draws the line (in its resting style), just like it does with an id" $ do
+      ctx <- run []
+      getDrawCommands ctx `shouldContain` [FillRect contentRect testColour]
 
   describe "rendering" $ do
     it "fills the content area in the style's border colour by default" $ do

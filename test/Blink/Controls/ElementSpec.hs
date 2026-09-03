@@ -5,7 +5,7 @@ import Test.Hspec
 
 import Blink.Controls.Element
   ( Attribute, ElementConfig
-  , defaultElementConfig, elementBase, onClicked, onFocusGained, onFocusLost, onKeyPressed
+  , defaultElementConfig, elementBase, elementId, onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, resolve
   )
 import Blink.Controls.ElementBehaviour (elementBehaviourSpec)
@@ -63,11 +63,12 @@ onA     = Point 10 50
 offBoth = Point 200 200
 onB     = Point 60 50
 
--- | Runs 'elementBase' with @attrs@ resolved against 'defaultElementConfig',
--- discarding the 'Blink.Controls.Element.ElementInteraction' it returns -- the
--- render function every behaviour spec in this module drives.
+-- | Runs 'elementBase' with @attrs@ resolved against 'defaultElementConfig'
+-- plus 'elementId' @eid@, discarding the 'Blink.Controls.Element.ElementInteraction'
+-- it returns -- the render function every behaviour spec in this module
+-- drives.
 render :: Ord e => e -> [Attribute (ElementConfig e msg)] -> UI e msg ()
-render eid attrs = () <$ elementBase eid (resolve defaultElementConfig attrs)
+render eid attrs = () <$ elementBase (resolve defaultElementConfig (elementId eid : attrs))
 
 -- | Every raw event a reaction built on 'elementBase' can raise, tagged
 -- with @e@ and a plain label naming which one it was -- "Blink.Controls.Element"
@@ -136,3 +137,17 @@ spec = describe "Blink.Controls.Element.elementBase" $ do
       result <- runInteractions testBounds seedBothCtx
                   (setFocus ElemA >> requestFocus Nothing ElemB >> both) [Wait 1] []
       resultMessages result `shouldBe` [(ElemA, "FocusLost"), (ElemB, "FocusGained")]
+
+  describe "no id" $ do
+    -- No 'elementId' at all, unlike 'render'.
+    let renderNoId attrs = () <$ elementBase (resolve defaultElementConfig attrs)
+
+    it "raises no events at all, even with every handler attached and the cursor pressed and released over it" $ do
+      result <- runInteractions testBounds seedBothCtx (withBounds rectA (renderNoId (tagAll ElemA))) []
+                  [Ixn.MouseDown onA, Ixn.MouseUp onA]
+      resultMessages result `shouldBe` []
+
+    it "never takes focus, even after a request naming it" $ do
+      result <- runInteractions testBounds seedBothCtx
+                  (requestFocus Nothing ElemA >> withBounds rectA (renderNoId (tagAll ElemA))) [Wait 1] []
+      resultMessages result `shouldBe` []

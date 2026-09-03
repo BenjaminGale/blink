@@ -143,7 +143,7 @@ label :: Ord e => e -> [Attribute (LabelConfig e msg)] -> Element e msg
 label eid attrs = Element
   { elLayout  = lblLayout cfg
   , elMeasure = measureChrome (ccStyleKey (lblControl cfg)) (captionElement (lcText (lblLabelled cfg)))
-  , elRun     = void (controlBase eid ctrl)
+  , elRun     = void (controlBase ctrl)
   }
   where
     cfg   = resolve defaultLabelConfig attrs
@@ -152,4 +152,5 @@ label eid attrs = Element
       { ccIsFocusable  = False
       , ccFocusOnClick = focus
       , ccContent      = renderLabelledContent (lblLabelled cfg)
+      , ccElement      = (ccElement (lblControl cfg)) { ecElementId = Just eid }
       }

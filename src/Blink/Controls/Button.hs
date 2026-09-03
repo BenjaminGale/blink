@@ -100,10 +100,12 @@ data ButtonInteraction e msg = ButtonInteraction
 -- pressing Enter while it holds focus and isn't disabled. The shape every
 -- button-like control ('button', 'Blink.Controls.Toggle.toggleButton', and
 -- 'Blink.Controls.Checkbox.checkbox'\/'Blink.Controls.RadioButton.radioButton') is
--- built from.
+-- built from. Always identified by @eid@, regardless of any 'elementId'
+-- a caller passes via @cfg@.
 buttonBase :: Ord e => e -> ButtonConfig e msg -> UI e msg (ButtonInteraction e msg)
 buttonBase eid cfg = do
-  r <- controlBase eid (bcControl cfg)
+  let ctrl = bcControl cfg
+  r <- controlBase ctrl { ccElement = (ccElement ctrl) { ecElementId = Just eid } }
   let e         = ciElement r
       enter     = any ((== KeyReturn) . key) (eiKeysPressed e)
       activated = eiClicked e || (eiFocused e && enter)

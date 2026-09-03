@@ -5,7 +5,8 @@
 -- whichever axis it's not thin on. A leaf, built directly on
 -- 'controlBase' -- nothing derives from it, it displays no label, and
 -- it's never a tab stop (see 'divider'). The simplest control in
--- "Blink.Controls": no value, no interaction, no reaction.
+-- "Blink.Controls": no value, and -- unlike every other control -- no id
+-- required.
 module Blink.Controls.Divider
   ( DividerConfig (..)
   , defaultDividerConfig
@@ -90,18 +91,21 @@ thickness t = Attribute (\dc -> dc { dcThickness = t })
 -- fixed behaviour, not a default, the same way 'Blink.Controls.ProgressBar.progressBar'
 -- fixes 'isFocusable' to 'False' itself. Draws nothing when the resolved
 -- style's border colour is 'Nothing', the same as a control with no
--- border drawing no chrome border. Defaults to filling the space it's
--- given along 'orientation' and sizing to 'thickness' (plus the current
--- theme's margin\/border\/padding, same as every other control) across it
--- -- override with 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/
+-- border drawing no chrome border. Takes no id by default -- pass
+-- 'elementId' to give one instance a stable identity and react to its
+-- hover\/click\/focus events. Defaults to filling the space it's given
+-- along 'orientation' and sizing to 'thickness' (plus the current theme's
+-- margin\/border\/padding, same as every other control) across it --
+-- override with 'Blink.Layout.Constraints.width'\/'Blink.Layout.Constraints.height'\/
 -- 'Blink.Layout.Constraints.align'; when placed in an 'Blink.Layout.Box.hBox'\/
--- 'Blink.Layout.Box.vBox' next to a taller\/wider sibling, 'Blink.Layout.Constraints.align'
--- picks where within that extra space the line sits.
-divider :: Ord e => e -> [Attribute (DividerConfig e msg)] -> Element e msg
-divider eid attrs = Element
+-- 'Blink.Layout.Box.vBox' next to a taller\/wider sibling,
+-- 'Blink.Layout.Constraints.align' picks where within that extra space the
+-- line sits.
+divider :: Ord e => [Attribute (DividerConfig e msg)] -> Element e msg
+divider attrs = Element
   { elLayout  = dcLayout cfg
   , elMeasure = measureChrome (ccStyleKey ctrl) (Element (dcLayout cfg) intrinsicSize (pure ()))
-  , elRun     = void (controlBase eid ctrl)
+  , elRun     = void (controlBase ctrl)
   }
   where
     cfg  = resolve defaultDividerConfig attrs

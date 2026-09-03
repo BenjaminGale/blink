@@ -7,8 +7,8 @@ import Test.Hspec
 
 import Blink.Controls.Control
   ( Attribute, ControlConfig (..), FocusOnClick (..)
-  , controlBase, defaultControlConfig, isEnabled, isFocusable
-  , onFocusGained, onFocusLost, onKeyPressed, resolve
+  , controlBase, defaultControlConfig, elementId, isEnabled, isFocusable
+  , onClicked, onFocusGained, onFocusLost, onKeyPressed, resolve
   )
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
@@ -75,16 +75,16 @@ onB = Point 60 50
 type Attribute' = Attribute (ControlConfig TestElement String)
 
 -- | Renders a single control at whatever bounds are current, with its
--- attrs resolved against 'defaultControlConfig'.
+-- attrs (plus 'elementId' @eid@) resolved against 'defaultControlConfig'.
 renderAt :: TestElement -> [Attribute'] -> UI TestElement String ()
-renderAt eid attrs = () <$ controlBase eid (resolve defaultControlConfig attrs)
+renderAt eid attrs = () <$ controlBase (resolve defaultControlConfig (elementId eid : attrs))
 
 -- | Renders a single control the same way, but with 'ccFocusOnClick'
 -- overridden afterward -- there's no @focusOnClick@ attribute any more (see
 -- "Blink.Controls.Control"), so a spec that wants to vary it constructs the
 -- config directly instead of resolving it as an attr.
 renderFoc :: FocusOnClick TestElement -> TestElement -> [Attribute'] -> UI TestElement String ()
-renderFoc foc eid attrs = () <$ controlBase eid (resolve defaultControlConfig attrs) { ccFocusOnClick = foc }
+renderFoc foc eid attrs = () <$ controlBase (resolve defaultControlConfig (elementId eid : attrs)) { ccFocusOnClick = foc }
 
 -- | Renders 'ElemA' at 'rectA' and 'ElemB' at 'rectB' with the given
 -- per-element 'FocusOnClick' and attrs.
@@ -131,6 +131,28 @@ spec = describe "Blink.Controls.Control.controlBase" $ do
     it "draws in its pressed style while the mouse is held down over it" $ do
       result <- runInteractions testBounds pressedSeedCtx (renderControl []) [] [MouseDown (Point 50 50)]
       getDrawCommands (resultContext result) `shouldContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
+
+  describe "no id" $ do
+    -- No 'elementId' at all, unlike 'renderAt'/'renderControl'.
+    let renderNoId attrs = () <$ controlBase (resolve defaultControlConfig attrs)
+
+    it "still draws chrome via renderStyled, inset by margin" $ do
+      ctx <- snd <$> runUI (renderNoId []) seedCtx
+      getDrawCommands ctx `shouldContain` [FillRect (insetRect (uniform 10) testBounds) testColour]
+
+    it "never draws its pressed style, even with the mouse held down over it" $ do
+      result <- runInteractions testBounds pressedSeedCtx (renderNoId []) [] [MouseDown (Point 50 50)]
+      getDrawCommands (resultContext result) `shouldNotContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
+
+    it "raises no focus gained event by rendering first, even though nothing else is focused" $ do
+      let attrs = [onFocusGained (const [OutMsg ("gained" :: String)])]
+      result <- runInteractions testBounds seedCtx (renderNoId attrs) [] []
+      resultMessages result `shouldBe` []
+
+    it "raises no click event for a press and release over it" $ do
+      let attrs = [onClicked (const [OutMsg ("clicked" :: String)])]
+      result <- runInteractions testBounds seedCtx (renderNoId attrs) [] [ClickAt (Point 50 50)]
+      resultMessages result `shouldBe` []
 
   describe "auto-claim" $
     it "raises a focus gained event for only the first of several simultaneously-eligible controls" $ do

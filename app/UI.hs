@@ -126,9 +126,9 @@ rowEditing s =
 
 -- | A plain full-width separator between the settings checkboxes above and
 -- the interactive controls below -- 'divider's own default orientation and
--- thickness, no attributes needed beyond fitting a vBox row.
+-- thickness, and (since nothing here reacts to it) no id either.
 rowDivider :: Element ControlId Msg
-rowDivider = divider DividerCtl []
+rowDivider = divider []
 
 rowButtons :: AppState -> Element ControlId Msg
 rowButtons s =
@@ -138,7 +138,7 @@ rowButtons s =
       , children
           [ button ClickButton [text "Click me", onActivated (post AddClick), isEnabled (editingEnabled s), width (exactly 100), height fill]
           , button ResetButton [text "Reset", onActivated (post ResetClicks), isEnabled (editingEnabled s), width (exactly 100), height fill]
-          , divider ButtonsDividerCtl [orientation Vertical, height fill]
+          , divider [orientation Vertical, height fill]
           , caption ("Clicks: " <> T.pack (show (clickCount s))) [width fill, height fill, align MiddleLeft]
           ]
       ]
@@ -215,8 +215,8 @@ rowAnimate s =
 rowProgress :: AppState -> Element ControlId Msg
 rowProgress s =
   if animating s
-    then progressBar ProgressCtl (rowLayout ++ [progress Indeterminate])
-    else progressBar ProgressCtl (rowLayout ++ [progress (Progress (fromIntegral (clickCount s) / 50))])
+    then progressBar (rowLayout ++ [progress Indeterminate])
+    else progressBar (rowLayout ++ [progress (Progress (fromIntegral (clickCount s) / 50))])
 
 rowSlider :: AppState -> Element ControlId Msg
 rowSlider s =

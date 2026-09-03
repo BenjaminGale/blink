@@ -4,11 +4,13 @@ module Blink.Controls.ProgressBarSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Element (Attribute)
+import Blink.Controls.Element (Attribute, elementId)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
+import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
+import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, progress, progressBar)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
@@ -67,7 +69,13 @@ seedCtx :: UIContext TestElement String
 seedCtx = emptyUIContext testBounds noInput testTheme noOpTextMeasurer
 
 run :: [Attribute'] -> IO (UIContext TestElement String)
-run attrs = snd <$> runUI (runElement (progressBar Bar attrs)) seedCtx
+run attrs = snd <$> runUI (runElement (progressBar attrs)) seedCtx
+
+-- | 'progressBar' with 'elementId' 'Bar' set -- for the shared behaviour
+-- contracts below, which need a real identity to track hover\/click\/focus
+-- against.
+renderWithId :: [Attribute'] -> UI TestElement String ()
+renderWithId attrs = runElement (progressBar (elementId Bar : attrs))
 
 -- | A context whose animation clock reads one elapsed second -- 'runUI'
 -- against this directly, rather than through 'runInteractions', since
@@ -79,9 +87,20 @@ elapsedCtx = nextFrameContext testBounds noInput testTheme (mkAnimationState 0 1
 spec :: Spec
 spec = describe "Blink.Controls.ProgressBar" $ do
   controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    testBounds seedCtx Bar (Point 5 5) hitRect (Point 200 200) (runElement . progressBar Bar)
+    testBounds seedCtx Bar (Point 5 5) hitRect (Point 200 200) renderWithId
 
-  fixedNotFocusableSpec testBounds seedCtx (runElement . progressBar Bar)
+  fixedNotFocusableSpec testBounds seedCtx renderWithId
+
+  describe "no id" $ do
+    -- No 'elementId' at all -- 'run' never adds one, unlike 'renderWithId'.
+    it "raises no events at all, even with every handler attached and the cursor pressed and released over it" $ do
+      result <- runInteractions testBounds seedCtx (runElement (progressBar tagged)) []
+                  [MouseDown (Point 50 50), MouseUp (Point 50 50)]
+      resultMessages result `shouldBe` []
+
+    it "still renders (in its resting style), just like it does with an id" $ do
+      ctx <- run [progress (Progress 0.5)]
+      getDrawCommands ctx `shouldContain` [FillRect (Rectangle 15 15 35 70) testColour]
 
   describe "Progress" $ do
     it "fills the correct proportion of the content area at 0.5" $ do
@@ -106,15 +125,15 @@ spec = describe "Blink.Controls.ProgressBar" $ do
 
   describe "Indeterminate" $ do
     it "sweeps the band using the default band speed (0.5)" $ do
-      ctx <- snd <$> runUI (runElement (progressBar Bar [progress Indeterminate])) elapsedCtx
+      ctx <- snd <$> runUI (runElement (progressBar [progress Indeterminate])) elapsedCtx
       getDrawCommands ctx `shouldContain` [FillRect (Rectangle 39.5 15 21 70) testColour]
 
     it "sweeps faster when a custom speed is given" $ do
-      ctx <- snd <$> runUI (runElement (progressBar Bar [progress Indeterminate, bandSpeed 1.0])) elapsedCtx
+      ctx <- snd <$> runUI (runElement (progressBar [progress Indeterminate, bandSpeed 1.0])) elapsedCtx
       getDrawCommands ctx `shouldContain` [FillRect (Rectangle (-6) 15 21 70) testColour]
 
     it "keeps the animation ticker alive" $ do
-      ctx <- snd <$> runUI (runElement (progressBar Bar [progress Indeterminate])) elapsedCtx
+      ctx <- snd <$> runUI (runElement (progressBar [progress Indeterminate])) elapsedCtx
       contextRequiresAnimation ctx `shouldBe` True
 
     it "does not request animation for a determinate bar" $ do

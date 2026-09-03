@@ -27,6 +27,7 @@ module Blink.Controls.Control
   , MouseActivation (..)
   , defaultElementConfig
   , elementBase
+  , elementId
   , onMouseEntered
   , onMouseExited
   , onMouseDown
@@ -307,31 +308,49 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
 -- Per "a layer fires only what it originates", never dispatches an element
 -- event itself: the click-to-focus effect it applies (per 'FocusOnClick')
 -- is a direct 'UiEffect', read off the wrapped element's own 'eiClicked'.
-controlBase :: Ord e => e -> ControlConfig e msg -> UI e msg (ControlInteraction e msg)
-controlBase eid cc = disableWhen (not (ccIsEnabled cc)) $ do
-  wasFocused   <- isFocused eid
-  currentScope <- getCurrentScope
-  applySelfFocus wasFocused
-  applyNavigationKeys wasFocused
-  nowFocused <- isFocused eid
-  fireFocusChangeDirect (ccElement cc) (focusTransition wasFocused nowFocused)
-  (m, styles) <- getStyleSet styleKey
-  hitBounds   <- marginInsetBounds m
-  ei          <- withBounds hitBounds (elementBase eid (ccElement cc))
-  when (eiClicked ei) (applyClickFocus currentScope)
-  disabled    <- isDisabled
-  let active = intrinsicStates disabled ei `Set.union` ccActiveStates cc
-      s      = resolveStyle styles active
-  renderStyled m s (ccContent cc)
-  when (ccIsFocusable cc && not disabled) (setPreviousTabStop eid)
-  pure (ControlInteraction ei s)
+--
+-- Identified by @cc@'s own element config ('ecElementId', see 'elementId').
+-- With no id set, the control still renders, in its resting (undisabled,
+-- unfocused, unhovered) style, but claims no focus, tracks no hover or
+-- press, and reports 'mempty' for its element interaction.
+controlBase :: Ord e => ControlConfig e msg -> UI e msg (ControlInteraction e msg)
+controlBase cc = disableWhen (not (ccIsEnabled cc)) $
+  case ecElementId (ccElement cc) of
+    Nothing  -> renderInert
+    Just eid -> renderTracked eid
   where
     styleKey = ccStyleKey cc
     foc      = ccFocusOnClick cc
 
+    renderInert = do
+      (m, styles) <- getStyleSet styleKey
+      disabled    <- isDisabled
+      let active = intrinsicStates disabled mempty `Set.union` ccActiveStates cc
+          s      = resolveStyle styles active
+      renderStyled m s (ccContent cc)
+      pure (ControlInteraction mempty s)
+
+    renderTracked eid = do
+      wasFocused   <- isFocused eid
+      currentScope <- getCurrentScope
+      applySelfFocus eid wasFocused
+      applyNavigationKeys wasFocused
+      nowFocused <- isFocused eid
+      fireFocusChangeDirect (ccElement cc) (focusTransition wasFocused nowFocused)
+      (m, styles) <- getStyleSet styleKey
+      hitBounds   <- marginInsetBounds m
+      ei          <- withBounds hitBounds (elementBase (ccElement cc))
+      when (eiClicked ei) (applyClickFocus eid currentScope)
+      disabled    <- isDisabled
+      let active = intrinsicStates disabled ei `Set.union` ccActiveStates cc
+          s      = resolveStyle styles active
+      renderStyled m s (ccContent cc)
+      when (ccIsFocusable cc && not disabled) (setPreviousTabStop eid)
+      pure (ControlInteraction ei s)
+
     -- Immediate, not deferred: needed so that when several controls are
     -- simultaneously eligible, only the first one to render claims focus.
-    applySelfFocus wasFocused = whenEnabled $ do
+    applySelfFocus eid wasFocused = whenEnabled $ do
       auto <- canAutoClaim eid foc cc
       when (wasFocused || auto) (setFocus eid)
 
@@ -347,7 +366,7 @@ controlBase eid cc = disableWhen (not (ccIsEnabled cc)) $ do
     -- 'getFocusChange'). Targets whichever scope was ambient when this
     -- control itself rendered (@currentScope@, read once up front), not
     -- always root.
-    applyClickFocus currentScope = case foc of
+    applyClickFocus eid currentScope = case foc of
       FocusSelf     | ccIsFocusable cc -> emitUi (Focus currentScope eid)
                     | otherwise        -> pure ()
       FocusTarget t -> emitUi (Focus currentScope t)
