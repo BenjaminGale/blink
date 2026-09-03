@@ -586,13 +586,13 @@ spec = describe "Blink.UI" $ do
   describe "keyboard" $ do
     describe "consumeKey" $ do
       it "removes all events for the given key from the queue" $ do
-        let input = noInput { inputKeyEvents = [ KeyEvent KeyTab [], KeyEvent KeyTab [] ] }
+        let input = noInput { inputKeyEvents = [ KeyEvent KeyTab [] False, KeyEvent KeyTab [] False ] }
         (remaining, _) <- runWith input (consumeKey KeyTab >> getInput)
         inputKeyEvents remaining `shouldBe` []
 
       it "leaves events for other keys in the queue" $ do
-        let tabEv    = KeyEvent KeyTab []
-            returnEv = KeyEvent KeyReturn []
+        let tabEv    = KeyEvent KeyTab [] False
+            returnEv = KeyEvent KeyReturn [] False
             input    = noInput { inputKeyEvents = [tabEv, returnEv] }
         (remaining, _) <- runWith input (consumeKey KeyTab >> getInput)
         inputKeyEvents remaining `shouldBe` [returnEv]

@@ -4,13 +4,12 @@
 -- | A button that keeps firing 'Blink.Controls.Button.onActivated' at a
 -- steady interval for as long as it's held down with the mouse -- the core
 -- building block behind e.g. a scrollbar's arrow buttons, or a stepper's
--- increment\/decrement. Built directly on 'controlBase', the same layer
--- 'Blink.Controls.Button.buttonBase' itself is built on -- not on
--- 'Blink.Controls.Button.buttonBase', since a repeat button's mouse
--- activation happens on press rather than on release (see 'repeatButton').
+-- increment\/decrement. Built on 'Blink.Controls.Button.buttonBase' the
+-- same way 'Blink.Controls.Button.button' is, configured with
+-- 'Blink.Controls.Button.ActivateOnPress' -- see 'repeatButton'.
 --
 -- @
--- controlBase --> repeatButton
+-- controlBase --> buttonBase --> repeatButton
 -- @
 --
 -- 'repeatButton' keeps no timer of its own that survives between frames --
@@ -41,11 +40,11 @@ module Blink.Controls.RepeatButton
 
 import Control.Monad (replicateM_, void, when)
 
-import Blink.Controls.Button (ButtonConfig (..), HasButtonConfig (..), defaultButtonConfig)
+import Blink.Controls.Button
+  (ButtonActivation (..), ButtonConfig (..), ButtonInteraction (..), HasButtonConfig (..), buttonBase, defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label
   (HasLabelledConfig (..), captionElement, lcText, renderLabelledContent)
-import Blink.Input (Key (KeyReturn), KeyEvent (..))
 import Blink.Layout.Constraints (HasLayoutConfig (..))
 import Blink.UI
 import Blink.UI.Element (Element (..))
@@ -162,17 +161,23 @@ repeatsDueBy cfg heldFor
 -- immediately on press (not on release, unlike
 -- 'Blink.Controls.Button.button' -- holding is the whole point, so waiting
 -- for a release first would miss the initial beat entirely), then again
--- after 'initialDelay', then every 'repeatInterval'
--- for as long as it's held. Releasing before 'initialDelay' elapses behaves
--- just like a plain button's single click. Pressing Enter while focused
--- also activates it once, same as 'Blink.Controls.Button.button' -- but
--- never repeats, since a key press carries no notion of being "held" the
--- way a mouse button does here.
+-- after 'initialDelay', then every 'repeatInterval' for as long as it's
+-- held. Releasing before 'initialDelay' elapses behaves just like a plain
+-- button's single click.
 --
--- The repeat cadence is computed fresh every frame from 'pressStartedAt',
--- 'firedCount', and the animation clock's current elapsed time -- see the
--- module header for why, and 'Blink.UI.requiresAnimation' for how it keeps
--- getting frames to compute it in while the mouse itself sits still.
+-- Holding Enter while focused repeats it too (via
+-- 'Blink.Controls.Button.ActivateOnPress', which this forces -- see
+-- 'Blink.Controls.Button.ButtonActivation'), but at whatever cadence the
+-- platform's own keyboard auto-repeat uses, not 'initialDelay'\/'repeatInterval':
+-- unlike the mouse, there's no continuous "is this key still down" state
+-- to compute our own cadence from, only a stream of discrete key events at
+-- whatever rate the platform delivers them.
+--
+-- The mouse-driven repeat cadence is computed fresh every frame from
+-- 'pressStartedAt', 'firedCount', and the animation clock's current
+-- elapsed time -- see the module header for why, and
+-- 'Blink.UI.requiresAnimation' for how it keeps getting frames to compute
+-- it in while the mouse itself sits still.
 repeatButton :: Ord e => e -> [Attribute (RepeatButtonConfig e msg)] -> Element e msg
 repeatButton eid attrs = Element
   { elLayout  = bcLayout btn
@@ -181,23 +186,21 @@ repeatButton eid attrs = Element
   }
   where
     cfg = resolve defaultRepeatButtonConfig attrs
-    btn = rbButton cfg
-    ctrl = (bcControl btn)
-      { ccElement = (ccElement (bcControl btn)) { ecElementId = Just eid }
-      , ccContent = renderLabelledContent (bcLabelled btn)
-      }
+    -- Always 'ActivateOnPress' -- fixed behaviour, not a default (same
+    -- idiom as 'Blink.Controls.RadioButton.radioButton' forcing 'tgcNext').
+    btn = (rbButton cfg) { bcActivation = ActivateOnPress }
+    ctrl = (bcControl btn) { ccContent = renderLabelledContent (bcLabelled btn) }
 
     run = do
-      r <- controlBase ctrl
-      let ei    = ciElement r
-          enter = any ((== KeyReturn) . key) (eiKeysPressed ei)
+      -- 'buttonBase' itself fires 'onActivated' once already, off
+      -- 'ActivateOnPress' (the press) or Enter-while-focused -- this only
+      -- adds the repeats past that first activation.
+      r <- buttonBase eid btn { bcControl = ctrl }
+      let ei = ciElement (biControl r)
 
       when (eiMouseDown ei) $ do
         now <- realToFrac <$> getAnimElapsed
-        runHandlers (bcOnActivated btn) ()
         runHandlers [rbOnPressStarted cfg] now
-
-      when (eiFocused ei && enter) $ runHandlers (bcOnActivated btn) ()
 
       -- Kept alive by 'eiHeld' alone, not by whether the anchor has
       -- arrived yet: the very frame a press starts, the caller hasn't had

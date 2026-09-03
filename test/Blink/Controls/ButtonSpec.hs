@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Button (ButtonConfig, button)
-import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec)
+import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec, defaultButtonBehaviourConfig)
 import Blink.Controls.Element (Attribute)
 import Blink.Controls.Label (text)
 import qualified Data.Text as T
@@ -79,7 +79,7 @@ start attrs = snd <$> runUI (fullSize attrs) seedCtx
 
 spec :: Spec
 spec = describe "Blink.Controls.Button" $ do
-  buttonBehaviourSpec testBounds seedCtx Ok (Point 5 5) hitRect (Point 200 200) fullSize
+  buttonBehaviourSpec defaultButtonBehaviourConfig testBounds seedCtx Ok (Point 5 5) hitRect (Point 200 200) fullSize
 
   it "draws its text in the resolved style" $ do
     ctx <- start [text "OK"]

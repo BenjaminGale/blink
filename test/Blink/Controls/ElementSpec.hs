@@ -112,8 +112,8 @@ spec = describe "Blink.Controls.Element.elementBase" $ do
       let attrs :: [Attribute (ElementConfig TestElement KeyEvent)]
           attrs = [onKeyPressed (\k -> [OutMsg k])]
       ctx0 <- snd <$> runUI (setFocus ElemA) (emptyUIContext testBounds noInput testTheme noOpTextMeasurer)
-      ctx  <- snd <$> runUI (render ElemA attrs) (advance (noInput { inputKeyEvents = [KeyEvent KeyReturn []] }) ctx0)
-      getMessages ctx `shouldBe` [KeyEvent KeyReturn []]
+      ctx  <- snd <$> runUI (render ElemA attrs) (advance (noInput { inputKeyEvents = [KeyEvent KeyReturn [] False] }) ctx0)
+      getMessages ctx `shouldBe` [KeyEvent KeyReturn [] False]
 
   describe "cross-element interaction" $ do
     it "reports MouseDown for the element the press started on, and MouseUp for whichever element the release happens over" $ do

@@ -16,7 +16,7 @@ module Blink.Controls.ToggleBehaviour
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec)
+import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec, defaultButtonBehaviourConfig)
 import Blink.Controls.Toggle (ToggleConfig, isSelected, onSelectedChanged)
 import Blink.Controls.Element (Attribute)
 import Blink.Controls.ElementBehaviour (tagged)
@@ -60,7 +60,8 @@ toggleBehaviourSpec
   -> ([Attribute (ToggleConfig e String)] -> UI e String ()) -- ^ render the control under test with these attrs
   -> Spec
 toggleBehaviourSpec next bounds ctx eid marginPoint insideRect outsidePoint render = do
-  buttonBehaviourSpec bounds ctx eid marginPoint insideRect outsidePoint (\attrs -> render (isSelected False : attrs))
+  buttonBehaviourSpec defaultButtonBehaviourConfig bounds ctx eid marginPoint insideRect outsidePoint
+    (\attrs -> render (isSelected False : attrs))
 
   describe "toggle" $ do
     it "reports the change from unselected" $ monadicIO $ do

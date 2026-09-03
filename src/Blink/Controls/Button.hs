@@ -8,9 +8,11 @@
 -- @
 -- controlBase --> buttonBase --> button
 --                             --> toggleBase  (see "Blink.Controls.Toggle")
+--                             --> repeatButton  (see "Blink.Controls.RepeatButton")
 -- @
 module Blink.Controls.Button
   ( ButtonConfig (..)
+  , ButtonActivation (..)
   , ButtonInteraction (..)
   , HasButtonConfig (..)
   , defaultButtonConfig
@@ -18,6 +20,7 @@ module Blink.Controls.Button
   , buttonBase
   , button
   , onActivated
+  , activation
   ) where
 
 import Control.Monad (void, when)
@@ -33,25 +36,54 @@ import Blink.UI.Element (Element (..))
 
 -- * Button
 
+-- | Which raw event(s) count as this control being "activated" -- set via
+-- 'activation'. 'buttonBase' is the only place that reads it.
+data ButtonActivation
+  = ActivateOnClick
+    -- ^ The default: a completed click (a release back within bounds, or --
+    -- per 'MouseActivation' -- any release while still holding capture), or
+    -- pressing Enter while focused. An Enter held long enough to trigger
+    -- the platform's own keyboard auto-repeat activates only once -- a
+    -- repeat 'Blink.Input.keyRepeat' event is never treated as a fresh
+    -- activation, since a single click or a single logical key press is
+    -- the whole interaction.
+  | ActivateOnPress
+    -- ^ Activates the instant the mouse goes down within bounds, rather
+    -- than waiting for a release -- for a control where holding is itself
+    -- part of the interaction (see
+    -- 'Blink.Controls.RepeatButton.repeatButton'). For the same reason,
+    -- Enter's own platform auto-repeat activates it again on every repeat,
+    -- unlike 'ActivateOnClick' -- holding Enter is this control's keyboard
+    -- equivalent of holding the mouse down, so it repeats too, just at
+    -- whatever cadence the platform's keyboard auto-repeat itself uses
+    -- rather than a cadence 'Blink.Controls.RepeatButton.repeatButton'
+    -- controls (there's no continuous
+    -- "is this key still down" state to compute one from, unlike the
+    -- mouse's).
+  deriving (Eq, Show)
+
 -- | Every capability 'button' (and anything built on 'buttonBase') resolves:
 -- the wrapped 'ControlConfig', its caption (see 'Blink.Controls.Label'),
--- and its 'onActivated' reactions. No content field and no override slot --
--- 'buttonBase' doesn't decide content, so it needs neither.
+-- what counts as activating it, and its 'onActivated' reactions. No content
+-- field and no override slot -- 'buttonBase' doesn't decide content, so it
+-- needs neither.
 data ButtonConfig e msg = ButtonConfig
   { bcControl     :: ControlConfig e msg
   , bcLabelled    :: LabelledConfig e msg
   , bcLayout      :: Layout
+  , bcActivation  :: ButtonActivation
   , bcOnActivated :: [EventHandler e msg]
   }
 
 -- | 'defaultControlConfig' (styled via 'buttonStyleKey'), an empty caption,
--- @Layout fill fitContent TopLeft@ (see 'button'), and no 'onActivated'
--- reactions.
+-- @Layout fill fitContent TopLeft@ (see 'button'), 'ActivateOnClick', and no
+-- 'onActivated' reactions.
 defaultButtonConfig :: ButtonConfig e msg
 defaultButtonConfig = ButtonConfig
   { bcControl     = defaultControlConfig { ccStyleKey = buttonStyleKey }
   , bcLabelled    = defaultLabelledConfig
   , bcLayout      = Layout fill fitContent TopLeft
+  , bcActivation  = ActivateOnClick
   , bcOnActivated = []
   }
 
@@ -88,6 +120,11 @@ instance HasButtonConfig e msg (ButtonConfig e msg) where
 onActivated :: HasButtonConfig e msg cfg => EventHandler e msg -> Attribute cfg
 onActivated f = overButton (Attribute (\bc -> bc { bcOnActivated = bcOnActivated bc ++ [f] }))
 
+-- | Which raw event counts as activating the control -- see
+-- 'ButtonActivation'. Defaults to 'ActivateOnClick'.
+activation :: HasButtonConfig e msg cfg => ButtonActivation -> Attribute cfg
+activation a = overButton (Attribute (\bc -> bc { bcActivation = a }))
+
 -- | What 'buttonBase' reports back: the wrapped control's own
 -- 'ControlInteraction', and whether it was activated this frame.
 data ButtonInteraction e msg = ButtonInteraction
@@ -107,8 +144,14 @@ buttonBase eid cfg = do
   let ctrl = bcControl cfg
   r <- controlBase ctrl { ccElement = (ccElement ctrl) { ecElementId = Just eid } }
   let e         = ciElement r
-      enter     = any ((== KeyReturn) . key) (eiKeysPressed e)
-      activated = eiClicked e || (eiFocused e && enter)
+      isEnter ev = key ev == KeyReturn && case bcActivation cfg of
+        ActivateOnClick -> not (keyRepeat ev)
+        ActivateOnPress -> True
+      enter     = any isEnter (eiKeysPressed e)
+      mouseHit  = case bcActivation cfg of
+        ActivateOnClick -> eiClicked e
+        ActivateOnPress -> eiMouseDown e
+      activated = mouseHit || (eiFocused e && enter)
   when activated $ runHandlers (bcOnActivated cfg) ()
   pure (ButtonInteraction r activated)
 

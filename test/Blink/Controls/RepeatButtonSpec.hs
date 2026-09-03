@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Button (onActivated)
-import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec)
+import Blink.Controls.ButtonBehaviour (ButtonBehaviourConfig (..), buttonBehaviourSpec, defaultButtonBehaviourConfig)
 import Blink.Controls.Control (elementId)
 import Blink.Controls.Element (Attribute)
 import Blink.Controls.RepeatButton
@@ -116,7 +116,8 @@ pressed action = snd <$> runUI action (nextFrameContext testBounds mouseDownInsi
 
 spec :: Spec
 spec = describe "Blink.Controls.RepeatButton" $ do
-  buttonBehaviourSpec testBounds seedCtx Ok (Point 5 5) hitRect (Point 200 200) (\attrs -> renderWithId (elementId Ok : attrs))
+  buttonBehaviourSpec (defaultButtonBehaviourConfig { bbcRepeatsOnHeldEnter = True })
+    testBounds seedCtx Ok (Point 5 5) hitRect (Point 200 200) (\attrs -> renderWithId (elementId Ok : attrs))
 
   describe "mouse activation" $ do
     it "fires onActivated immediately on press, not on release" $ do

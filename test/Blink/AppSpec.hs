@@ -263,7 +263,7 @@ spec = do
 
       it "key events are not replayed in the second render pass" $ do
         handle <- configureEventDriven keyCountApp (pure ()) nullMeasurer
-        let oneKey = normalInput { keyEvents = [KeyEvent KeyReturn []] }
+        let oneKey = normalInput { keyEvents = [KeyEvent KeyReturn [] False] }
         result <- stepFrame handle oneKey
         resultState result `shouldBe` 1
 

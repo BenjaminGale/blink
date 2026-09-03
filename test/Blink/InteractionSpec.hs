@@ -78,16 +78,16 @@ spec = describe "Blink.Interaction" $ do
   describe "Tab / ShiftTab" $ do
     it "Tab produces a single frame with an unmodified KeyTab event" $ do
       result <- runInteractions testBounds seedAt0 probe [] [Tab]
-      map inputKeyEvents (resultMessages result) `shouldBe` [[KeyEvent KeyTab []]]
+      map inputKeyEvents (resultMessages result) `shouldBe` [[KeyEvent KeyTab [] False]]
 
     it "ShiftTab produces a single frame with a Shift-modified KeyTab event" $ do
       result <- runInteractions testBounds seedAt0 probe [] [ShiftTab]
-      map inputKeyEvents (resultMessages result) `shouldBe` [[KeyEvent KeyTab [Shift]]]
+      map inputKeyEvents (resultMessages result) `shouldBe` [[KeyEvent KeyTab [Shift] False]]
 
   describe "key events and typed text do not leak between frames" $ do
     it "a PressKey's KeyEvent is gone on the following frame" $ do
       result <- runInteractions testBounds seedAt0 probe [] [PressKey KeyReturn [], Wait 1]
-      map inputKeyEvents (resultMessages result) `shouldBe` [[KeyEvent KeyReturn []], []]
+      map inputKeyEvents (resultMessages result) `shouldBe` [[KeyEvent KeyReturn [] False], []]
 
     it "a TypeText's text is gone on the following frame" $ do
       result <- runInteractions testBounds seedAt0 probe [] [TypeText "hi", Wait 1]

@@ -57,7 +57,8 @@ data Interaction
     -- ^ One frame: mouse at the given point, button forced down — continues
     -- a drag started by an earlier 'MouseDown'.
   | PressKey Key [Modifier]
-    -- ^ One frame: a single 'KeyEvent', mouse\/button unchanged.
+    -- ^ One frame: a single 'KeyEvent' with 'keyRepeat' 'False' (a fresh
+    -- press, never a platform auto-repeat), mouse\/button unchanged.
   | TypeText Text
     -- ^ One frame: the given text delivered as typed input, mouse\/button unchanged.
   | Tab
@@ -165,7 +166,7 @@ expand cur ix = case ix of
   ClickAt p    -> [bare { inputMousePosition = p, inputLeftButtonDown = True }
                   ,bare { inputMousePosition = p, inputLeftButtonDown = False }]
   DragTo p     -> [bare { inputMousePosition = p, inputLeftButtonDown = True }]
-  PressKey k m -> [bare { inputKeyEvents = [KeyEvent k m] }]
+  PressKey k m -> [bare { inputKeyEvents = [KeyEvent k m False] }]
   TypeText t   -> [bare { inputTypedText = [t] }]
   Tab          -> expand cur (PressKey KeyTab [])
   ShiftTab     -> expand cur (PressKey KeyTab [Shift])

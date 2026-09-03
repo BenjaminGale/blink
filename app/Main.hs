@@ -106,24 +106,25 @@ toKeyEvents :: SDL.Event -> [KeyEvent]
 toKeyEvents e = case SDL.eventPayload e of
   SDL.KeyboardEvent d
     | SDL.keyboardEventKeyMotion d == SDL.Pressed
-    -> case SDL.keysymKeycode (SDL.keyboardEventKeysym d) of
+    -> let rep = SDL.keyboardEventRepeat d
+       in case SDL.keysymKeycode (SDL.keyboardEventKeysym d) of
          SDL.KeycodeTab ->
            let mods    = SDL.keysymModifier (SDL.keyboardEventKeysym d)
                shifted = SDL.keyModifierLeftShift mods || SDL.keyModifierRightShift mods
-           in [KeyEvent { key = KeyTab, modifiers = [Shift | shifted] }]
-         SDL.KeycodeReturn    -> [KeyEvent { key = KeyReturn,    modifiers = [] }]
-         SDL.KeycodeBackspace -> [KeyEvent { key = KeyBackspace, modifiers = [] }]
-         SDL.KeycodeSpace     -> [KeyEvent { key = KeySpace,     modifiers = [] }]
+           in [KeyEvent { key = KeyTab, modifiers = [Shift | shifted], keyRepeat = rep }]
+         SDL.KeycodeReturn    -> [KeyEvent { key = KeyReturn,    modifiers = [], keyRepeat = rep }]
+         SDL.KeycodeBackspace -> [KeyEvent { key = KeyBackspace, modifiers = [], keyRepeat = rep }]
+         SDL.KeycodeSpace     -> [KeyEvent { key = KeySpace,     modifiers = [], keyRepeat = rep }]
          SDL.KeycodeLeft      ->
            let mods    = SDL.keysymModifier (SDL.keyboardEventKeysym d)
                shifted = SDL.keyModifierLeftShift mods || SDL.keyModifierRightShift mods
-           in [KeyEvent { key = KeyLeft,  modifiers = [Shift | shifted] }]
+           in [KeyEvent { key = KeyLeft,  modifiers = [Shift | shifted], keyRepeat = rep }]
          SDL.KeycodeRight     ->
            let mods    = SDL.keysymModifier (SDL.keyboardEventKeysym d)
                shifted = SDL.keyModifierLeftShift mods || SDL.keyModifierRightShift mods
-           in [KeyEvent { key = KeyRight, modifiers = [Shift | shifted] }]
-         SDL.KeycodeUp        -> [KeyEvent { key = KeyUp,        modifiers = [] }]
-         SDL.KeycodeDown      -> [KeyEvent { key = KeyDown,      modifiers = [] }]
+           in [KeyEvent { key = KeyRight, modifiers = [Shift | shifted], keyRepeat = rep }]
+         SDL.KeycodeUp        -> [KeyEvent { key = KeyUp,        modifiers = [], keyRepeat = rep }]
+         SDL.KeycodeDown      -> [KeyEvent { key = KeyDown,      modifiers = [], keyRepeat = rep }]
          _ -> []
   _ -> []
 

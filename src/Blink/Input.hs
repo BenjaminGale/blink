@@ -73,6 +73,15 @@ data KeyEvent = KeyEvent
     -- ^ The key that was pressed.
   , modifiers :: [Modifier]
     -- ^ Modifier keys held at the time of the press.
+  , keyRepeat :: Bool
+    -- ^ 'True' when this event was synthesized by the platform's own
+    -- keyboard auto-repeat (holding the key down), rather than the initial
+    -- physical press. Most consumers of a raw @['KeyEvent']@ want these --
+    -- holding Backspace\/an arrow key repeating is ordinary text-editing
+    -- behaviour (see "Blink.Controls.TextInput"). A control that only
+    -- wants to react once per physical press (e.g.
+    -- "Blink.Controls.Button"'s Enter-while-focused activation) checks
+    -- this and ignores the event when it's 'True'.
   } deriving (Eq, Show)
 
 -- | All per-frame input assembled by the backend. Passed to the UI tree
