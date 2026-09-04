@@ -24,6 +24,11 @@ and calls into Blink.
   continuously or only when input arrives, depending on how the backend
   drives it.
 
+- **Continuous or event-driven** — Two frame-driving modes: one that
+  redraws on every iteration regardless of input, suited to backends like
+  animated UIs, and one that only redraws when something's changed,
+  suited to backends that block on events.
+
 - **Controls** — A standard set of interactive controls: buttons,
   checkboxes, toggles, radio buttons, text inputs, sliders, progress bars,
   labels, dividers, and repeat buttons.
