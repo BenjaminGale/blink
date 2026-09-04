@@ -31,14 +31,14 @@ module Blink.Controls.Label
   , target
   ) where
 
-import Control.Monad (void)
+import Control.Monad (forM_)
 import Data.Text (Text)
 
 import Blink.Controls.Control
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Layout.Constraints (HasLayoutConfig (..), Layout (..), fill, fitContent)
 import Blink.Style (Style (..))
-import Blink.UI (UI, currentStyle, drawText, measureText)
+import Blink.UI (UI, currentStyle, drawText, getCurrentScope, measureText)
 import Blink.UI.Element (Element (..))
 
 -- * Caption fragment
@@ -133,7 +133,11 @@ target t = Attribute (\c -> c { lblTarget = Just t })
 -- or by being clicked: this is fixed behaviour, not a default -- 'label'
 -- always overrides 'isFocusable' to 'False' itself, so it wins regardless
 -- of what a caller passes. The only way a click on a label affects focus
--- at all is 'target', which redirects it to a different, named element.
+-- at all is 'target': unlike a control taking focus for itself, which
+-- happens on mouse-down, redirecting focus onto a /different/ element only
+-- takes effect once the click completes -- so dragging off the label
+-- before releasing backs out of the redirect, the same way dragging off
+-- any other clickable control backs out of its click.
 -- Defaults to sizing itself to its own chrome-wrapped caption on both axes
 -- -- unlike 'Blink.Controls.Button.button', a label is often placed beside
 -- other content in a row (a field name next to its input) rather than
@@ -143,14 +147,15 @@ label :: Ord e => e -> [Attribute (LabelConfig e msg)] -> Element e msg
 label eid attrs = Element
   { elLayout  = lblLayout cfg
   , elMeasure = measureChrome (ccStyleKey (lblControl cfg)) (captionElement (lcText (lblLabelled cfg)))
-  , elRun     = void (controlBase ctrl)
+  , elRun     = do
+      scope <- getCurrentScope
+      ci    <- controlBase ctrl
+      forM_ (lblTarget cfg) (\t -> focusTargetOnClick scope t (ciElement ci))
   }
   where
-    cfg   = resolve defaultLabelConfig attrs
-    focus = maybe NoFocus FocusTarget (lblTarget cfg)
-    ctrl  = (lblControl cfg)
+    cfg  = resolve defaultLabelConfig attrs
+    ctrl = (lblControl cfg)
       { ccIsFocusable  = False
-      , ccFocusOnClick = focus
       , ccContent      = renderLabelledContent (lblLabelled cfg)
       , ccElement      = (ccElement (lblControl cfg)) { ecElementId = Just eid }
       }

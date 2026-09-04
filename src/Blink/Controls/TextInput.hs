@@ -260,9 +260,8 @@ textInput eid attrs = Element
       wasFocused   <- isFocused eid
       wasCapturing <- isDragging eid
       let ctrl = (ticControl cfg)
-            { ccFocusOnClick = FocusSelf
-            , ccContent      = body wasFocused wasCapturing
-            , ccElement      = (ccElement (ticControl cfg)) { ecElementId = Just eid }
+            { ccContent = body wasFocused wasCapturing
+            , ccElement = (ccElement (ticControl cfg)) { ecElementId = Just eid }
             }
       void (controlBase ctrl)
   }

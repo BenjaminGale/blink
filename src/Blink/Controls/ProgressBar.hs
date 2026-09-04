@@ -95,7 +95,6 @@ progressBar attrs = Element
     cfg  = resolve defaultProgressBarConfig attrs
     ctrl = (pbControl cfg)
       { ccIsFocusable  = False
-      , ccFocusOnClick = NoFocus
       , ccContent      = body
       }
     body = do

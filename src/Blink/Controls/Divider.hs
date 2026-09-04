@@ -111,7 +111,6 @@ divider attrs = Element
     cfg  = resolve defaultDividerConfig attrs
     ctrl = (dcControl cfg)
       { ccIsFocusable  = False
-      , ccFocusOnClick = NoFocus
       , ccContent      = body
       }
     t = dcThickness cfg

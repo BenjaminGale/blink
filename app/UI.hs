@@ -122,14 +122,17 @@ caption t attrs = label Label (text t : attrs)
 -- control filling the rest. Takes 'rowLayout' (or another layout) so the
 -- row's own width\/height fit alongside its siblings. The label shares
 -- @enabled@ with @control@, so a disabled field's label stops redirecting
--- clicks to it too.
+-- clicks to it too. Identified by its own 'FieldLabel' id rather than
+-- 'caption's shared one -- a redirecting label needs its click tracked
+-- against its own row, not conflated with every other label on screen.
 field :: [Attribute (BoxConfig ControlId Msg)] -> Bool -> ControlId -> Text -> Element ControlId Msg -> Element ControlId Msg
 field layoutAttrs enabled targetId labelText control =
   hBox
     ( layoutAttrs ++
       [ spacing 8, alignment Center
       , children
-          [ caption labelText [target targetId, isEnabled enabled, width (exactly 120), height fill, align MiddleLeft]
+          [ label (FieldLabel targetId)
+              [text labelText, target targetId, isEnabled enabled, width (exactly 120), height fill, align MiddleLeft]
           , control
           ]
       ]

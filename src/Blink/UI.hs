@@ -375,9 +375,8 @@ data Selection = Selection
 -- immediately instead. 'Focus'\/'ClearFocus' are specifically for an
 -- explicit "make a different, named element focused (or clear whoever is)"
 -- change, triggered from a place that only knows the winner (or that
--- there's no winner), not who's currently focused — a click's
--- 'Blink.Controls.FocusTarget' handler, say, can be a plain pure reaction to
--- a click fact without needing to query current focus state. Whoever is
+-- there's no winner), not who's currently focused — 'Blink.Controls.Label.label'
+-- redirecting a click onto its 'Blink.Controls.Label.target', say. Whoever is
 -- displaced is looked up when the effect is *applied* (real 'UIContext'
 -- access, unlike the reaction that queued it), and deferring lets every
 -- affected element observe the change consistently regardless of render
@@ -563,7 +562,7 @@ data UIContext e msg = UIContext
     -- ^ The scope id currently ambient -- 'Nothing' for root, @'Just'
     -- scopeId@ while inside that scope's own 'withFocusScope' call. Lets
     -- an effect queued from deep inside a scope (a Shift-Tab retreat, a
-    -- click's 'Blink.Controls.Control.FocusTarget') address /that/ scope
+    -- click redirecting focus to a different element) address /that/ scope
     -- instead of always root. See 'getCurrentScope'.
   , ctxMouse           :: Mouse e
     -- ^ The left mouse button's state this frame (and which element, if
@@ -1028,14 +1027,14 @@ contextFocus = focusedElement . ftAmbient . ctxFocus
 -- whichever scope is ambient at the time — but it's useful for tests and
 -- debugging tools that want to see the whole nested claim at once.
 --
--- Guards against revisiting an id already on the chain: a control setting
--- 'Blink.Controls.ccFocusOnClick' to 'Blink.Controls.FocusTarget' lets a
--- click redirect focus onto any id, including an
--- enclosing composite's own — 'Blink.Controls.radioGroup' does exactly this
--- so that clicking an item leaves the group itself focused, not the item —
--- which writes that id into its own scope entry in @ftScopes@. That's
--- harmless for the single-hop checks every real caller uses, but would
--- otherwise send this walk into an infinite loop.
+-- Guards against revisiting an id already on the chain: a click can
+-- redirect focus onto any id (as 'Blink.Controls.Label.label' does with its
+-- own 'Blink.Controls.Label.target'), including an enclosing composite's
+-- own — a composite could use this so that clicking an item leaves the
+-- composite itself focused, not the item — which writes that id into its
+-- own scope entry in @ftScopes@. That's harmless for the single-hop checks
+-- every real caller uses, but would otherwise send this walk into an
+-- infinite loop.
 contextFocusChain :: Ord e => UIContext e msg -> [e]
 contextFocusChain ctx = go Set.empty (contextFocus ctx)
   where
@@ -1097,8 +1096,9 @@ disclaimFocus = modifyFocusState $ \fs -> fs
 -- scope — see 'withFocusScope'), taking effect at the next frame boundary.
 -- Unlike 'setFocus' (immediate, for a control's own auto-claim\/retain
 -- decision), this is for an explicit "make a different, specific element
--- focused" change — a click's 'Blink.Controls.FocusTarget', or Tab handing
--- off to a specific known element — triggered from a place that only knows
+-- focused" change — a click redirecting focus to a different element, or
+-- Tab handing off to a specific known element — triggered from a place
+-- that only knows
 -- the winner, not who's currently focused: whoever is displaced is looked
 -- up when the effect is applied, not supplied here, and deferring lets
 -- every affected element observe the change consistently regardless of

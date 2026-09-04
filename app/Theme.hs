@@ -21,6 +21,7 @@ import Blink.Style
 import Blink.Style.Defaults (defaultTheme)
 
 data ControlId = Label
+             | FieldLabel ControlId
              | StatusBar
              | DarkModeCheckbox
              | EditingCheckbox

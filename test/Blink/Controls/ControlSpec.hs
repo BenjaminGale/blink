@@ -6,8 +6,8 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Control
-  ( Attribute, ControlConfig (..), FocusOnClick (..)
-  , controlBase, defaultControlConfig, elementId, isEnabled, isFocusable
+  ( Attribute, ControlConfig (..), ControlInteraction (..)
+  , controlBase, defaultControlConfig, elementId, focusTargetOnClick, isEnabled, isFocusable
   , onClicked, onFocusGained, onFocusLost, onKeyPressed, resolve
   )
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
@@ -79,19 +79,23 @@ type Attribute' = Attribute (ControlConfig TestElement String)
 renderAt :: TestElement -> [Attribute'] -> UI TestElement String ()
 renderAt eid attrs = () <$ controlBase (resolve defaultControlConfig (elementId eid : attrs))
 
--- | Renders a single control the same way, but with 'ccFocusOnClick'
--- overridden afterward -- there's no @focusOnClick@ attribute any more (see
--- "Blink.Controls.Control"), so a spec that wants to vary it constructs the
--- config directly instead of resolving it as an attr.
-renderFoc :: FocusOnClick TestElement -> TestElement -> [Attribute'] -> UI TestElement String ()
-renderFoc foc eid attrs = () <$ controlBase (resolve defaultControlConfig (elementId eid : attrs)) { ccFocusOnClick = foc }
+-- | Renders 'ElemA' at 'rectA' and 'ElemB' at 'rectB' with the given attrs.
+both :: [Attribute'] -> [Attribute'] -> UI TestElement String ()
+both attrsA attrsB = do
+  withBounds rectA (renderAt ElemA attrsA)
+  withBounds rectB (renderAt ElemB attrsB)
 
--- | Renders 'ElemA' at 'rectA' and 'ElemB' at 'rectB' with the given
--- per-element 'FocusOnClick' and attrs.
-both :: FocusOnClick TestElement -> [Attribute'] -> FocusOnClick TestElement -> [Attribute'] -> UI TestElement String ()
-both focA attrsA focB attrsB = do
-  withBounds rectA (renderFoc focA ElemA attrsA)
-  withBounds rectB (renderFoc focB ElemB attrsB)
+-- | Renders @fromId@ non-focusable, redirecting its own click onto @toId@
+-- via 'focusTargetOnClick' -- the same shape 'Blink.Controls.Label.label'
+-- builds on top of 'controlBase', exercised here directly against the
+-- low-level primitive rather than through a label.
+renderRedirect :: TestElement -> [Attribute'] -> TestElement -> [Attribute'] -> UI TestElement String ()
+renderRedirect fromId attrsFrom toId attrsTo = do
+  withBounds rectA $ do
+    scope <- getCurrentScope
+    ci    <- controlBase (resolve defaultControlConfig (elementId fromId : isFocusable False : attrsFrom))
+    focusTargetOnClick scope toId (ciElement ci)
+  withBounds rectB (renderAt toId attrsTo)
 
 -- | Renders a single 'ElemA' at 'testBounds' with the given attrs -- the
 -- same way every real widget built on 'controlBase' does.
@@ -158,13 +162,13 @@ spec = describe "Blink.Controls.Control.controlBase" $ do
     it "raises a focus gained event for only the first of several simultaneously-eligible controls" $ do
       let attrsA = [onFocusGained (const [OutMsg ("A gained" :: String)])]
           attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
-      result <- runInteractions testBounds seedCtx (both FocusSelf attrsA FocusSelf attrsB) [] []
+      result <- runInteractions testBounds seedCtx (both attrsA attrsB) [] []
       resultMessages result `shouldBe` ["A gained"]
 
   describe "click-to-focus" $ do
     let attrsA = [onFocusLost   (const [OutMsg ("A lost"   :: String)])]
         attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
-        render = both FocusSelf attrsA FocusSelf attrsB
+        render = both attrsA attrsB
 
     it "does not take effect on the mouse-down's own frame" $ do
       result <- runInteractions testBounds seedCtx render [] [MouseDown onB]
@@ -174,29 +178,32 @@ spec = describe "Blink.Controls.Control.controlBase" $ do
       result <- runInteractions testBounds seedCtx render [] [MouseDown onB, Wait 1]
       resultMessages result `shouldBe` ["A lost", "B gained"]
 
-    it "FocusTarget redirects focus to the named element instead of the clicker" $ do
-      let taggedA = [isFocusable False, onFocusGained (const [OutMsg ("A gained" :: String)])]
-          taggedB = [isFocusable False, onFocusGained (const [OutMsg ("B gained" :: String)])]
-      result <- runInteractions testBounds seedCtx (both (FocusTarget ElemB) taggedA FocusSelf taggedB) [] [ClickAt onA, Wait 1]
+  describe "focusTargetOnClick" $ do
+    it "does not redirect on the mouse-down's own frame" $ do
+      let taggedB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
+      result <- runInteractions testBounds seedCtx (renderRedirect ElemA [] ElemB taggedB) [] [MouseDown onA]
+      resultMessages result `shouldBe` []
+
+    it "does not redirect on mouse-down alone, even a frame later -- only a full click" $ do
+      let taggedB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
+      result <- runInteractions testBounds seedCtx (renderRedirect ElemA [] ElemB taggedB) [] [MouseDown onA, Wait 1]
+      resultMessages result `shouldBe` []
+
+    it "redirects focus to the named element one frame after a full click" $ do
+      let taggedB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
+      result <- runInteractions testBounds seedCtx (renderRedirect ElemA [] ElemB taggedB) [] [ClickAt onA, Wait 1]
       resultMessages result `shouldBe` ["B gained"]
 
     it "does not redirect focus onto a disabled element" $ do
-      let taggedA = [isFocusable False]
-          taggedB = [isEnabled False, onFocusGained (const [OutMsg ("B gained" :: String)])]
-      result <- runInteractions testBounds seedCtx (both (FocusTarget ElemB) taggedA FocusSelf taggedB) [] [ClickAt onA, Wait 1]
+      let taggedB = [isEnabled False, onFocusGained (const [OutMsg ("B gained" :: String)])]
+      result <- runInteractions testBounds seedCtx (renderRedirect ElemA [] ElemB taggedB) [] [ClickAt onA, Wait 1]
       resultMessages result `shouldBe` []
       contextFocus (resultContext result) `shouldBe` Nothing
-
-    it "NoFocus leaves focus unchanged when clicked" $ do
-      let attrs :: [Attribute']
-          attrs = [isFocusable False, onFocusGained (const [OutMsg ("gained" :: String)])]
-      result <- runInteractions testBounds seedCtx (renderFoc NoFocus ElemA attrs) [] [ClickAt onA, Wait 1]
-      resultMessages result `shouldBe` []
 
   describe "keyboard navigation" $ do
     let attrsA = [onFocusLost   (const [OutMsg ("A lost"   :: String)])]
         attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
-        render = both FocusSelf attrsA FocusSelf attrsB
+        render = both attrsA attrsB
 
     it "Tab gives up focus immediately, letting the next control auto-claim in the same frame" $ do
       result <- runInteractions testBounds seedCtx render [Wait 1] [Tab]
@@ -212,12 +219,12 @@ spec = describe "Blink.Controls.Control.controlBase" $ do
 
     it "does not report Tab as a key event to the control it moves focus away from" $ do
       let keyAttrs = [onKeyPressed (\k -> [OutMsg (show k)])]
-      result <- runInteractions testBounds seedCtx (both FocusSelf keyAttrs FocusSelf []) [Wait 1] [Tab]
+      result <- runInteractions testBounds seedCtx (both keyAttrs []) [Wait 1] [Tab]
       resultMessages result `shouldBe` []
 
     it "does not report Shift-Tab as a key event to the control it moves focus away from" $ do
       let keyAttrs = [onKeyPressed (\k -> [OutMsg (show k)])]
-      result <- runInteractions testBounds seedCtx (both FocusSelf keyAttrs FocusSelf []) [Wait 1] [ShiftTab]
+      result <- runInteractions testBounds seedCtx (both keyAttrs []) [Wait 1] [ShiftTab]
       resultMessages result `shouldBe` []
 
     describe "Shift-Tab past a disabled control" $ do

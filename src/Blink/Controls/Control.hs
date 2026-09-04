@@ -7,14 +7,14 @@
 -- both layers share.
 --
 -- A control ('controlBase') wraps an element with focus management (claim
--- on render while nothing else holds it, give up on Tab, hand focus
--- elsewhere on Shift-Tab or a mouse-down, per 'FocusOnClick') and themed chrome
--- (background, border, padding, resolved from a 'Blink.Style.StyleKey' and
--- the element's own hover\/press\/focus state) around whatever content its
--- 'ControlConfig' carries. Per "a layer fires only what it originates",
--- 'controlBase' never dispatches an element event itself -- the one
--- side-effect it applies off a click (moving focus, per 'FocusOnClick') is
--- a direct 'UiEffect', not a handler call.
+-- on render while nothing else holds it, give up on Tab, hand focus to the
+-- previous tab stop on Shift-Tab, take focus itself on a mouse-down when
+-- 'isFocusable') and themed chrome (background, border, padding, resolved
+-- from a 'Blink.Style.StyleKey' and the element's own hover\/press\/focus
+-- state) around whatever content its 'ControlConfig' carries. Per "a layer
+-- fires only what it originates", 'controlBase' never dispatches an
+-- element event itself -- the one side-effect it applies off a click
+-- (self-focus on mouse-down) is a direct 'UiEffect', not a handler call.
 module Blink.Controls.Control
   ( -- * Re-exported from Blink.Controls.Element
     Attribute (..)
@@ -40,12 +40,12 @@ module Blink.Controls.Control
   , runHandlers
 
     -- * Control
-  , FocusOnClick (..)
   , ControlConfig (..)
   , ControlInteraction (..)
   , HasControlConfig (..)
   , defaultControlConfig
   , controlBase
+  , focusTargetOnClick
 
     -- ** Control attributes
   , isFocusable
@@ -73,26 +73,13 @@ import Blink.UI.Element (Element (..))
 
 -- * Control
 
--- | What clicking a control does to focus -- set by record update on
--- 'ccFocusOnClick'.
-data FocusOnClick e
-  = FocusSelf
-    -- ^ The control takes focus itself (the default for interactive controls).
-  | FocusTarget e
-    -- ^ The control hands focus to a different element instead of taking it
-    -- itself -- e.g. a label redirecting focus onto its target.
-  | NoFocus
-    -- ^ Clicking the control has no effect on focus at all.
-  deriving (Eq, Show)
-
 -- | Every capability a control resolves before rendering: whether it's
--- focusable and enabled, its style, what clicking it does to focus, its
--- content, and the element event handlers wrapped up inside it.
+-- focusable and enabled, its style, its content, and the element event
+-- handlers wrapped up inside it.
 data ControlConfig e msg = ControlConfig
   { ccIsFocusable  :: Bool
   , ccIsEnabled    :: Bool
   , ccStyleKey     :: StyleKey e
-  , ccFocusOnClick :: FocusOnClick e
   , ccActiveStates :: Set VisualState
     -- ^ Extra 'VisualState's contributed by a wrapping layer (e.g.
     -- 'Blink.Controls.Toggle.toggleBase' setting a checked\/unchecked
@@ -104,14 +91,13 @@ data ControlConfig e msg = ControlConfig
 
 -- | Focusable, enabled, styled via an arbitrary placeholder key (always
 -- overridden -- every real caller of 'controlBase' supplies its own via
--- 'style'), taking focus itself on click, no extra active states,
--- rendering nothing, and with no event handlers registered.
+-- 'style'), no extra active states, rendering nothing, and with no event
+-- handlers registered.
 defaultControlConfig :: ControlConfig e msg
 defaultControlConfig = ControlConfig
   { ccIsFocusable  = True
   , ccIsEnabled    = True
   , ccStyleKey     = Class ""
-  , ccFocusOnClick = FocusSelf
   , ccActiveStates = Set.empty
   , ccContent      = pure ()
   , ccElement      = defaultElementConfig
@@ -263,20 +249,20 @@ measureChrome k child ctx = do
     otherAxis Vertical   = Horizontal
 
 -- | Whether a control is eligible to claim focus purely by rendering first
--- while nothing else holds it: opted into keyboard focus at all
--- (@ccIsFocusable@) and configured to take focus itself on click ('FocusSelf').
-autoClaimsFocus :: Eq e => FocusOnClick e -> ControlConfig e msg -> Bool
-autoClaimsFocus foc cc = ccIsFocusable cc && foc == FocusSelf
+-- while nothing else holds it: opted into keyboard focus at all, via
+-- @ccIsFocusable@.
+autoClaimsFocus :: ControlConfig e msg -> Bool
+autoClaimsFocus cc = ccIsFocusable cc
 
 -- | 'True' when this element should take focus with nothing having asked
 -- for it: opted into auto-claiming (per 'autoClaimsFocus'), nothing else is
 -- currently focused, and the mouse isn't contested by another element's
 -- drag.
-canAutoClaim :: Ord e => e -> FocusOnClick e -> ControlConfig e msg -> UI e msg Bool
-canAutoClaim eid foc cc = do
+canAutoClaim :: Ord e => e -> ControlConfig e msg -> UI e msg Bool
+canAutoClaim eid cc = do
   nothingIsFocused <- isNothingFocused <$> getFocus
   uncontested      <- isMouseFreeFor eid
-  pure (autoClaimsFocus foc cc && nothingIsFocused && uncontested)
+  pure (autoClaimsFocus cc && nothingIsFocused && uncontested)
 
 -- | Gives up focus immediately when @wasFocused@ and one of @advanceKeys@
 -- was just pressed; hands focus to the previous tab stop, one frame later,
@@ -306,10 +292,10 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
 -- counts as "on" the control.
 --
 -- Per "a layer fires only what it originates", never dispatches an element
--- event itself: the click-to-focus effect it applies (per 'FocusOnClick')
--- is a direct 'UiEffect', read off the wrapped element's own 'eiMouseDown'
--- -- so focus moves on press, before any drag or release decides whether
--- the press itself counts as a click.
+-- event itself: the self-focus-on-click effect it applies (when
+-- @ccIsFocusable@) is a direct 'UiEffect', read off the wrapped element's
+-- own 'eiMouseDown' -- so focus moves on press, before any drag or release
+-- decides whether the press itself counts as a click.
 --
 -- Identified by @cc@'s own element config ('ecElementId', see 'elementId').
 -- With no id set, the control still renders, in its resting (undisabled,
@@ -322,7 +308,6 @@ controlBase cc = disableWhen (not (ccIsEnabled cc)) $
     Just eid -> renderTracked eid
   where
     styleKey = ccStyleKey cc
-    foc      = ccFocusOnClick cc
 
     renderInert = do
       (m, styles) <- getStyleSet styleKey
@@ -349,7 +334,7 @@ controlBase cc = disableWhen (not (ccIsEnabled cc)) $
       (m, styles) <- getStyleSet styleKey
       hitBounds   <- marginInsetBounds m
       ei          <- withBounds hitBounds (elementBase (ccElement cc))
-      when (eiMouseDown ei) (applyClickFocus eid currentScope)
+      when (eiMouseDown ei && ccIsFocusable cc) (emitUi (Focus currentScope eid))
       let active = intrinsicStates disabled ei `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
       renderStyled m s (ccContent cc)
@@ -359,7 +344,7 @@ controlBase cc = disableWhen (not (ccIsEnabled cc)) $
     -- Immediate, not deferred: needed so that when several controls are
     -- simultaneously eligible, only the first one to render claims focus.
     applySelfFocus eid wasFocused = whenEnabled $ do
-      auto <- canAutoClaim eid foc cc
+      auto <- canAutoClaim eid cc
       when (wasFocused || auto) (setFocus eid)
 
     -- This control's own reaction to whichever keys are currently ambient
@@ -369,13 +354,11 @@ controlBase cc = disableWhen (not (ccIsEnabled cc)) $
       keys <- getNavigationKeys
       advanceOrRetreat wasFocused (navAdvance keys) (navRetreat keys)
 
-    -- A press hands focus to whichever element FocusOnClick names, taking
-    -- effect one frame later (see 'elementBase's own deferred detection via
-    -- 'getFocusChange'). Targets whichever scope was ambient when this
-    -- control itself rendered (@currentScope@, read once up front), not
-    -- always root.
-    applyClickFocus eid currentScope = case foc of
-      FocusSelf     | ccIsFocusable cc -> emitUi (Focus currentScope eid)
-                    | otherwise        -> pure ()
-      FocusTarget t -> emitUi (Focus currentScope t)
-      NoFocus       -> pure ()
+-- | Sends focus to @target@, in @scope@, one frame after @ei@ reports a
+-- click on the control that produced it (a release back within bounds, or
+-- -- for a 'CaptureActivated' element -- any release while it still holds
+-- capture). For a control that hands focus to a different element than
+-- itself when clicked -- e.g. 'Blink.Controls.Label.label' redirecting
+-- onto its 'Blink.Controls.Label.target'.
+focusTargetOnClick :: Maybe e -> e -> ElementInteraction -> UI e msg ()
+focusTargetOnClick scope target ei = when (eiClicked ei) (emitUi (Focus scope target))
