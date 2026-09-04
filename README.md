@@ -23,6 +23,14 @@ and calls into Blink.
   commands and queue state changes by hand. Reach for it when you're
   building a custom control that the ready-made ones and layout combinators
   can't express.
+- **Rebuilt every frame** — The whole UI tree is rebuilt from your
+  application state each frame, rather than a retained tree you update
+  incrementally, so what you see is always a pure function of the current
+  state with no diffing to reason about. You can drive this continuously,
+  redrawing every frame regardless of input, which suits backends like
+  animated UIs, or only when something's changed, which suits backends
+  that block on events. Either way, you drive it the same way, one step
+  per iteration of your loop.
 - **Controls** — Blink ships with a standard set of interactive controls:
   buttons, checkboxes, toggles, radio buttons, text inputs, sliders,
   progress bars, labels, dividers, and repeat buttons.
