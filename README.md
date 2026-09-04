@@ -15,6 +15,11 @@ and calls into Blink.
   configuring controls and layout, covering appearance, sizing, and event
   handling together in one uniform way.
 
+- **Message-driven updates** — Controls emit typed messages on interaction
+  rather than mutating state directly; a single `update` function folds
+  every message queued during a frame into your application state once the
+  frame completes, in emission order.
+
 - **Immediate-mode API** — A lower-level, state-threading API for
   hand-writing custom controls, with direct access to bounds, input, the
   active theme, and focus.
