@@ -1,11 +1,13 @@
 # Blink
 
-Blink is an immediate-mode UI library for Haskell desktop applications: the
-whole UI tree is rebuilt from scratch every frame as a pure function of your
-application state, rather than retained and mutated incrementally. State
-changes only through modifiers dispatched by the UI. Blink does not own the
-main loop — a backend (SDL2, in the included demo) drives the loop and calls
-into Blink once per frame.
+Blink is a declarative, functional GUI library for Haskell desktop
+applications. You describe your interface as a tree of elements built from
+your application's state, and Blink handles turning that into what's drawn
+on screen and how it responds to input. That declarative layer sits on top
+of a lower-level immediate-mode API, which is there if you need to
+hand-write a custom control. Blink doesn't own the main loop itself; a
+backend, such as the SDL2 one used in the included demo, drives the loop
+and calls into Blink.
 
 ## Example
 
