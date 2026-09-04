@@ -180,6 +180,13 @@ spec = describe "Blink.Controls.Control.controlBase" $ do
       result <- runInteractions testBounds seedCtx (both (FocusTarget ElemB) taggedA FocusSelf taggedB) [] [ClickAt onA, Wait 1]
       resultMessages result `shouldBe` ["B gained"]
 
+    it "does not redirect focus onto a disabled element" $ do
+      let taggedA = [isFocusable False]
+          taggedB = [isEnabled False, onFocusGained (const [OutMsg ("B gained" :: String)])]
+      result <- runInteractions testBounds seedCtx (both (FocusTarget ElemB) taggedA FocusSelf taggedB) [] [ClickAt onA, Wait 1]
+      resultMessages result `shouldBe` []
+      contextFocus (resultContext result) `shouldBe` Nothing
+
     it "NoFocus leaves focus unchanged when clicked" $ do
       let attrs :: [Attribute']
           attrs = [isFocusable False, onFocusGained (const [OutMsg ("gained" :: String)])]

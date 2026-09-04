@@ -270,6 +270,7 @@ module Blink.UI
   , setFocus
   , setFocusWhen
   , clearFocus
+  , disclaimFocus
   , requestFocus
   , requestClearFocus
   , withFocusScope
@@ -1080,6 +1081,16 @@ setFocusWhen b eid = when b (setFocus eid)
 -- like 'setFocus'.
 clearFocus :: UI e msg ()
 clearFocus = modifyFocusState $ \fs -> fs { focusedElement = Nothing }
+
+-- | Rejects a 'Focus' grant that just landed on this element, restoring
+-- whoever held focus before it -- as if the grant had never been made.
+-- Call before anything else this frame reads focus state for the element.
+disclaimFocus :: UI e msg ()
+disclaimFocus = modifyFocusState $ \fs -> fs
+  { focusedElement   = focusChangeFrom =<< focusLastChange fs
+  , focusLastChange  = Nothing
+  , focusChangeFresh = False
+  }
 
 -- | Queues a 'Focus' effect: makes the given element focused within the
 -- given scope (@Nothing@ = root, @Just scopeId@ = a specific composite's

@@ -120,14 +120,16 @@ caption t attrs = label Label (text t : attrs)
 -- | A row pairing a caption with the control it describes: fixed-width
 -- label on the left (redirecting clicks to @targetId@ via 'target'),
 -- control filling the rest. Takes 'rowLayout' (or another layout) so the
--- row's own width\/height fit alongside its siblings.
-field :: [Attribute (BoxConfig ControlId Msg)] -> ControlId -> Text -> Element ControlId Msg -> Element ControlId Msg
-field layoutAttrs targetId labelText control =
+-- row's own width\/height fit alongside its siblings. The label shares
+-- @enabled@ with @control@, so a disabled field's label stops redirecting
+-- clicks to it too.
+field :: [Attribute (BoxConfig ControlId Msg)] -> Bool -> ControlId -> Text -> Element ControlId Msg -> Element ControlId Msg
+field layoutAttrs enabled targetId labelText control =
   hBox
     ( layoutAttrs ++
       [ spacing 8, alignment Center
       , children
-          [ caption labelText [target targetId, width (exactly 120), height fill, align MiddleLeft]
+          [ caption labelText [target targetId, isEnabled enabled, width (exactly 120), height fill, align MiddleLeft]
           , control
           ]
       ]
@@ -216,12 +218,12 @@ rowRadio s =
 
 rowTextInput :: AppState -> Element ControlId Msg
 rowTextInput s =
-  field rowLayout TextInputCtl "Text input"
+  field rowLayout (editingEnabled s) TextInputCtl "Text input"
     (textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText), isEnabled (editingEnabled s), height fill])
 
 rowPasswordInput :: AppState -> Element ControlId Msg
 rowPasswordInput s =
-  field rowLayout PasswordInputCtl "Password input"
+  field rowLayout (editingEnabled s) PasswordInputCtl "Password input"
     (textInput PasswordInputCtl
         [ value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)
         , isEnabled (editingEnabled s), height fill
@@ -240,7 +242,7 @@ rowProgress s =
 
 rowSlider :: AppState -> Element ControlId Msg
 rowSlider s =
-  field rowLayout SliderCtl "Slider"
+  field rowLayout (editingEnabled s) SliderCtl "Slider"
     ( hBox
         [ spacing 8, alignment Center
         , children

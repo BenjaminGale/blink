@@ -333,6 +333,13 @@ controlBase cc = disableWhen (not (ccIsEnabled cc)) $
       pure (ControlInteraction mempty s)
 
     renderTracked eid = do
+      disabled <- isDisabled
+      -- A click can't focus this control directly while disabled, but a
+      -- 'Blink.Controls.Label.target' pointed at it isn't stopped that
+      -- way -- so reject a freshly arrived grant here too.
+      change <- getFocusChange
+      let freshlyGranted = maybe False (\fc -> focusChangeTo fc == Just eid) change
+      when (disabled && freshlyGranted) disclaimFocus
       wasFocused   <- isFocused eid
       currentScope <- getCurrentScope
       applySelfFocus eid wasFocused
@@ -343,7 +350,6 @@ controlBase cc = disableWhen (not (ccIsEnabled cc)) $
       hitBounds   <- marginInsetBounds m
       ei          <- withBounds hitBounds (elementBase (ccElement cc))
       when (eiMouseDown ei) (applyClickFocus eid currentScope)
-      disabled    <- isDisabled
       let active = intrinsicStates disabled ei `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
       renderStyled m s (ccContent cc)
