@@ -17,12 +17,14 @@ and calls into Blink.
   declarative layer sits on top of a lower-level immediate-mode API, which
   you can use directly to hand-write a custom control when the ready-made
   ones don't fit.
+
 - **Immediate-mode API** — Underneath the declarative layer is a `UI` monad
   you can write against directly: a state-threading computation with access
   to bounds, input, the active theme, and focus, letting you append draw
   commands and queue state changes by hand. Reach for it when you're
   building a custom control that the ready-made ones and layout combinators
   can't express.
+
 - **Rebuilt every frame** — The whole UI tree is rebuilt from your
   application state each frame, rather than a retained tree you update
   incrementally, so what you see is always a pure function of the current
@@ -31,18 +33,22 @@ and calls into Blink.
   animated UIs, or only when something's changed, which suits backends
   that block on events. Either way, you drive it the same way, one step
   per iteration of your loop.
+
 - **Controls** — Blink ships with a standard set of interactive controls:
   buttons, checkboxes, toggles, radio buttons, text inputs, sliders,
   progress bars, labels, dividers, and repeat buttons.
+
 - **Layout** — Elements are arranged and sized declaratively rather than by
   hand-placing coordinates. You can lay children out in rows and columns
   with spacing and alignment, size them by rule (fill available space, an
   exact size, a minimum, a maximum, or fit their content), and split space
   into named regions, like a sidebar next to a main content area.
+
 - **Theming** — Themes are built from a small palette of colours plus a set
   of styles per control state, computed from your application state each
   frame. Every control can be styled individually or by class, and can fall
   back to a shared default.
+
 - **Backend-agnostic** — Blink doesn't own the main loop. A backend
   assembles input for a frame, calls into Blink, and draws the result, so
   Blink can run on top of whatever windowing and rendering setup you're
