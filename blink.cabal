@@ -6,14 +6,18 @@ license-file: LICENSE
 author: Benjamin Gale
 maintainer: benjaminiangale@gmail.com
 build-type: Simple
-synopsis: An immediate-mode UI library for Haskell desktop applications
+synopsis: A declarative, functional GUI library for Haskell desktop applications
 description:
-    Blink is an immediate-mode UI library for Haskell desktop applications:
-    the whole UI tree is rebuilt from scratch every frame as a pure function
-    of application state, rather than retained and mutated incrementally.
-    State changes only through modifiers dispatched by the UI. Blink does
-    not own the main loop -- a backend (SDL2, in the included demo) drives
-    the loop and calls into Blink once per frame.
+    Blink is a declarative, functional GUI library for Haskell desktop
+    applications. You describe your interface as a tree of elements built
+    from your application's state, and Blink handles turning that into
+    what's drawn on screen and how it responds to input. That declarative
+    layer sits on top of a lower-level immediate-mode API, which is there
+    if you need to hand-write a custom control. The whole UI tree is
+    rebuilt from application state each frame, rather than retained and
+    mutated incrementally. Blink does not own the main loop -- a backend
+    (SDL2, in the included demo) drives the loop and calls into Blink once
+    per frame.
 
     Start with "Blink" for the module guide, "Blink.App" for how to define
     an application and wire it up to a backend, and "Blink.UI" for the

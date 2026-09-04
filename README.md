@@ -11,48 +11,35 @@ and calls into Blink.
 
 ## Features
 
-- **Declarative view API** — You describe your interface as a tree of
-  elements built from your application's state, and Blink handles turning
-  that into what's drawn on screen and how it responds to input. That
-  declarative layer sits on top of a lower-level immediate-mode API, which
-  you can use directly to hand-write a custom control when the ready-made
-  ones don't fit.
+- **Declarative view API** — A lightweight, list-based syntax for
+  configuring controls and layout, covering appearance, sizing, and event
+  handling together in one uniform way.
 
-- **Immediate-mode API** — Underneath the declarative layer is a `UI` monad
-  you can write against directly: a state-threading computation with access
-  to bounds, input, the active theme, and focus, letting you append draw
-  commands and queue state changes by hand. Reach for it when you're
-  building a custom control that the ready-made ones and layout combinators
-  can't express.
+- **Immediate-mode API** — A lower-level, state-threading API for
+  hand-writing custom controls, with direct access to bounds, input, the
+  active theme, and focus.
 
-- **Rebuilt every frame** — The whole UI tree is rebuilt from your
-  application state each frame, rather than a retained tree you update
-  incrementally, so what you see is always a pure function of the current
-  state with no diffing to reason about. You can drive this continuously,
-  redrawing every frame regardless of input, which suits backends like
-  animated UIs, or only when something's changed, which suits backends
-  that block on events. Either way, you drive it the same way, one step
-  per iteration of your loop.
+- **Rebuilt every frame** — A per-frame rendering model: the whole UI tree
+  is recomputed from your application state every frame, either
+  continuously or only when input arrives, depending on how the backend
+  drives it.
 
-- **Controls** — Blink ships with a standard set of interactive controls:
-  buttons, checkboxes, toggles, radio buttons, text inputs, sliders,
-  progress bars, labels, dividers, and repeat buttons.
+- **Controls** — A standard set of interactive controls: buttons,
+  checkboxes, toggles, radio buttons, text inputs, sliders, progress bars,
+  labels, dividers, and repeat buttons.
 
-- **Layout** — Elements are arranged and sized declaratively rather than by
-  hand-placing coordinates. You can lay children out in rows and columns
-  with spacing and alignment, size them by rule (fill available space, an
-  exact size, a minimum, a maximum, or fit their content), and split space
-  into named regions, like a sidebar next to a main content area.
+- **Layout** — A layout system combining row and column arrangement with
+  spacing and alignment, size constraints (fill, exact size, minimum,
+  maximum, fit-to-content), and named regions for things like a sidebar
+  next to a main content area.
 
-- **Theming** — Themes are built from a small palette of colours plus a set
-  of styles per control state, computed from your application state each
-  frame. Every control can be styled individually or by class, and can fall
-  back to a shared default.
+- **Theming** — A theme system built from a small colour palette and a set
+  of per-control-state styles, computed from your application state each
+  frame, with per-instance or per-class overrides and a shared default.
 
-- **Backend-agnostic** — Blink doesn't own the main loop. A backend
-  assembles input for a frame, calls into Blink, and draws the result, so
-  Blink can run on top of whatever windowing and rendering setup you're
-  using. The included demo uses SDL2.
+- **Backend-agnostic** — A backend-driven architecture, with no main loop
+  of its own, so it can run on top of whatever windowing and rendering
+  setup you're using. The included demo uses SDL2.
 
 ## Example
 
@@ -147,3 +134,19 @@ sudo apt-get install libsdl2-dev libsdl2-ttf-dev
 ```
 cabal run demo
 ```
+
+### Running the tests
+
+```
+cabal test
+```
+
+### Building the documentation
+
+```
+cabal haddock
+```
+
+## License
+
+Blink is licensed under Apache-2.0. See [LICENSE](LICENSE).
