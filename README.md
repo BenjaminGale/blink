@@ -64,18 +64,23 @@ app = App
 ```
 
 `ControlId` identifies each interactive control, used to look up styles and
-route keyboard focus — note `ItemCheckbox Int`, one constructor covering
-every item's checkbox rather than a fixed control per row. `Msg` is what the
-view emits: `onInput (postWith SetNewItemText)` queues an updated draft as
-you type, `onActivated (post AddItem)` queues `AddItem` on click, and
-`onSelectedChanged (postWith (ToggleItem i))` queues which item changed and
-its new state. `AppState` is the application state, passed into `view`
-explicitly each frame and rebuilt into a fresh `Element`/child list every
-time — there's no manual diffing, since `items` in the view is just read
-straight off `AppState`. `update` folds each queued `Msg` into the state once
-the frame completes, in emission order. Pass `app` to `configureContinuous`
-or `configureEventDriven` to get a `BlinkHandle`, then drive it with
-`stepFrame` each iteration of your platform's event loop.
+route keyboard focus. A single constructor can cover a whole family of
+controls — `ItemCheckbox Int` stands for every item's checkbox rather than
+one constructor per row.
+
+`Msg` is what the view emits. `onInput (postWith SetNewItemText)` queues an
+updated draft as you type, `onActivated (post AddItem)` queues `AddItem` on
+click, and `onSelectedChanged (postWith (ToggleItem i))` queues which item
+changed and its new state.
+
+`view` takes `AppState` and rebuilds the full `Element` tree from it every
+frame — `items` in `todoView` is just read straight off `AppState`, with no
+manual diffing. `update` then folds each queued `Msg` into the state once the
+frame completes, in emission order.
+
+Pass `app` to `configureContinuous` or `configureEventDriven` to get a
+`BlinkHandle`, then drive it with `stepFrame` each iteration of your
+platform's event loop.
 
 See the top-level `Blink` module's Haddock documentation for the full module
 guide and package entry point.
