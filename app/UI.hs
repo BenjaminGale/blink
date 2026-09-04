@@ -8,7 +8,7 @@ import Blink.Controls.Button (onActivated)
 import Blink.Controls.Control (isEnabled)
 import Blink.Controls.Divider (orientation)
 import Blink.Controls.Element (post, postWith)
-import Blink.Controls.Label (LabelConfig, text)
+import Blink.Controls.Label (LabelConfig, target, text)
 import Blink.Controls.ProgressBar (ProgressValue (..), progress)
 import Blink.Controls.RepeatButton
   (firedCount, onFiredCountChanged, onPressEnded, onPressStarted, pressStartedAt)
@@ -117,6 +117,22 @@ type DemoUI = UI ControlId Msg
 caption :: Text -> [Attribute (LabelConfig ControlId Msg)] -> Element ControlId Msg
 caption t attrs = label Label (text t : attrs)
 
+-- | A row pairing a caption with the control it describes: fixed-width
+-- label on the left (redirecting clicks to @targetId@ via 'target'),
+-- control filling the rest. Takes 'rowLayout' (or another layout) so the
+-- row's own width\/height fit alongside its siblings.
+field :: [Attribute (BoxConfig ControlId Msg)] -> ControlId -> Text -> Element ControlId Msg -> Element ControlId Msg
+field layoutAttrs targetId labelText control =
+  hBox
+    ( layoutAttrs ++
+      [ spacing 8, alignment Center
+      , children
+          [ caption labelText [target targetId, width (exactly 120), height fill, align MiddleLeft]
+          , control
+          ]
+      ]
+    )
+
 rowHeight :: Length
 rowHeight = exactly 40
 
@@ -200,30 +216,16 @@ rowRadio s =
 
 rowTextInput :: AppState -> Element ControlId Msg
 rowTextInput s =
-  hBox
-    ( rowLayout ++
-      [ spacing 8, alignment Center
-      , children
-          [ caption "Text input" [width (exactly 120), height fill, align MiddleLeft]
-          , textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText), isEnabled (editingEnabled s), height fill]
-          ]
-      ]
-    )
+  field rowLayout TextInputCtl "Text input"
+    (textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText), isEnabled (editingEnabled s), height fill])
 
 rowPasswordInput :: AppState -> Element ControlId Msg
 rowPasswordInput s =
-  hBox
-    ( rowLayout ++
-      [ spacing 8, alignment Center
-      , children
-          [ caption "Password input" [width (exactly 120), height fill, align MiddleLeft]
-          , textInput PasswordInputCtl
-              [ value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)
-              , isEnabled (editingEnabled s), height fill
-              ]
-          ]
-      ]
-    )
+  field rowLayout PasswordInputCtl "Password input"
+    (textInput PasswordInputCtl
+        [ value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)
+        , isEnabled (editingEnabled s), height fill
+        ])
 
 rowAnimate :: AppState -> Element ControlId Msg
 rowAnimate s =
@@ -238,15 +240,14 @@ rowProgress s =
 
 rowSlider :: AppState -> Element ControlId Msg
 rowSlider s =
-  hBox
-    ( rowLayout ++
-      [ spacing 8, alignment Center
-      , children
-          [ caption "Slider" [width (exactly 120), height fill, align MiddleLeft]
-          , slider SliderCtl [Slider.value (sliderValue s), onValueChanged (postWith SetSlider), isEnabled (editingEnabled s), height fill]
-          , caption (T.pack (show (round (sliderValue s * 100) :: Int)) <> "%") [width (exactly 60), height fill, align MiddleLeft]
-          ]
-      ]
+  field rowLayout SliderCtl "Slider"
+    ( hBox
+        [ spacing 8, alignment Center
+        , children
+            [ slider SliderCtl [Slider.value (sliderValue s), onValueChanged (postWith SetSlider), isEnabled (editingEnabled s), height fill]
+            , caption (T.pack (show (round (sliderValue s * 100) :: Int)) <> "%") [width (exactly 60), height fill, align MiddleLeft]
+            ]
+        ]
     )
 
 -- Footer
