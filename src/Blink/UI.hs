@@ -498,6 +498,11 @@ data FocusTracker e = FocusTracker
 emptyFocusTracker :: FocusTracker e
 emptyFocusTracker = FocusTracker { ftAmbient = emptyFocusState, ftScopes = Map.empty }
 
+-- | A composite scope's own persisted 'FocusState', or 'emptyFocusState' if
+-- it hasn't rendered yet.
+lookupScope :: Ord e => e -> FocusTracker e -> FocusState e
+lookupScope scopeId ft = Map.findWithDefault emptyFocusState scopeId (ftScopes ft)
+
 -- | Advances a 'FocusTracker' to the next frame by applying 'nextFocusFrame'
 -- to the ambient scope and every persisted composite scope.
 nextFocusTrackerFrame :: FocusTracker e -> FocusTracker e
@@ -1038,11 +1043,10 @@ contextFocus = focusedElement . ftAmbient . ctxFocus
 contextFocusChain :: Ord e => UIContext e msg -> [e]
 contextFocusChain ctx = go Set.empty (contextFocus ctx)
   where
-    scopes = ftScopes (ctxFocus ctx)
     go _    Nothing  = []
     go seen (Just x)
       | x `Set.member` seen = []
-      | otherwise            = x : go (Set.insert x seen) (focusedElement (Map.findWithDefault emptyFocusState x scopes))
+      | otherwise            = x : go (Set.insert x seen) (focusedElement (lookupScope x (ctxFocus ctx)))
 
 -- | 'True' when the given element id is the currently ambient scope's
 -- focused element. For a leaf, this is exactly "am I focused"; for a
@@ -1186,7 +1190,7 @@ withFocusScope scopeId blockFreshClaim (UI f) = UI $ \ctx ->
     -- pointing here.
     runClaimed ctx = do
       let enclosing = ftAmbient (ctxFocus ctx)
-          child0    = Map.findWithDefault emptyFocusState scopeId (ftScopes (ctxFocus ctx))
+          child0    = lookupScope scopeId (ctxFocus ctx)
       (a, ctx', after) <- runWithAmbient child0 ctx
       pure (a, foldBackAsClaim enclosing after ctx')
 
@@ -1434,7 +1438,7 @@ setFocusChange scopeId newFocus ctx = ctx { ctxFocus = updateScope (ctxFocus ctx
   where
     updateScope ft = case scopeId of
       Nothing  -> ft { ftAmbient = setIt (ftAmbient ft) }
-      Just sid -> ft { ftScopes = Map.insert sid (setIt (Map.findWithDefault emptyFocusState sid (ftScopes ft))) (ftScopes ft) }
+      Just sid -> ft { ftScopes = Map.insert sid (setIt (lookupScope sid ft)) (ftScopes ft) }
     setIt fs = fs
       { focusedElement   = newFocus
       , focusedThisFrame = True
