@@ -281,7 +281,7 @@ module Blink.UI
   , setPreviousTabStop
   , contextFocus
   , contextFocusChain
-  , contextPrevTabStop
+  , contextPreviousTabStop
   , NavigationKeys (..)
   , defaultNavigationKeys
   , getNavigationKeys
@@ -852,12 +852,12 @@ withoutKeyEvents keys (UI f) = UI $ \ctx ->
 -- inside 'withFocusScope') — used by 'Blink.Controls.control' to implement
 -- Shift-Tab navigation.
 getPreviousTabStop :: UI e msg (Maybe e)
-getPreviousTabStop = gets contextPrevTabStop
+getPreviousTabStop = gets contextPreviousTabStop
 
 -- | The element that was the most recent tab stop before the current one,
 -- read directly from a 'UIContext' outside the 'UI' monad.
-contextPrevTabStop :: UIContext e msg -> Maybe e
-contextPrevTabStop = previousTabStop . ftAmbient . ctxFocus
+contextPreviousTabStop :: UIContext e msg -> Maybe e
+contextPreviousTabStop = previousTabStop . ftAmbient . ctxFocus
 
 -- | Records the current element as the previous tab stop, scoped to the
 -- currently ambient scope. Called automatically by 'Blink.Controls.control';
