@@ -1192,8 +1192,8 @@ withFocusScope scopeId freshClaim (UI f) = UI $ \ctx ->
     runClaimed ctx = do
       let enclosing = ftAmbient (ctxFocus ctx)
           child0    = lookupScope scopeId (ctxFocus ctx)
-      (a, ctx', after) <- runWithAmbient child0 ctx
-      pure (a, foldBackAsClaim enclosing after ctx')
+      (a, ctx') <- runWithAmbient child0 ctx
+      pure (a, foldBackAsClaim enclosing (ftAmbient (ctxFocus ctx')) ctx')
 
     -- The blocked scope's descendants run against a value nothing inside
     -- recognises as itself, so nothing reads as an invitation to
@@ -1202,7 +1202,8 @@ withFocusScope scopeId freshClaim (UI f) = UI $ \ctx ->
     -- folded back exactly as 'runClaimed' would.
     runBlocked ctx blockValue = do
       let real = ftAmbient (ctxFocus ctx)
-      (a, ctx', after) <- runWithAmbient (real { focusedElement = blockValue }) ctx
+      (a, ctx') <- runWithAmbient (real { focusedElement = blockValue }) ctx
+      let after = ftAmbient (ctxFocus ctx')
       if focusedElement after == blockValue
         then pure (a, ctx' { ctxFocus = (ctxFocus ctx') { ftAmbient = real } })
         else pure (a, foldBackAsClaim real after ctx')
@@ -1210,11 +1211,10 @@ withFocusScope scopeId freshClaim (UI f) = UI $ \ctx ->
     -- Swaps the ambient 'FocusState' for @ambient@, and 'ctxCurrentScope'
     -- to this scope's own id, while @f@ runs -- restoring the previous
     -- scope id after, so nesting reports each level's own immediate scope,
-    -- not just the outermost one. Reports what the 'FocusState' became by
-    -- the time @f@ finishes, alongside the resulting context.
+    -- not just the outermost one.
     runWithAmbient ambient ctx = do
       (a, ctx') <- f (ctx { ctxFocus = (ctxFocus ctx) { ftAmbient = ambient }, ctxCurrentScope = Just scopeId })
-      pure (a, ctx' { ctxCurrentScope = ctxCurrentScope ctx }, ftAmbient (ctxFocus ctx'))
+      pure (a, ctx' { ctxCurrentScope = ctxCurrentScope ctx })
 
     -- Records @after@ as this scope's own persisted state, and points
     -- @base@ (the value to restore around this scope) at this scope's id —
