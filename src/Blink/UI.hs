@@ -261,7 +261,9 @@ module Blink.UI
   , getMouse
   , contextMouse
     -- * Focus and keyboard navigation
-  , FocusState (focusedElement, previousTabStop)
+  , FocusState (previousTabStop)
+  , FocusClaim (..)
+  , currentFocus
   , isNothingFocused
   , getFocus
   , isFocused
@@ -428,23 +430,50 @@ data Out e msg
   | OutUi (UiEffect e)
   deriving (Eq, Show)
 
+-- | Which element (if any) a scope currently has focused, and whether that
+-- claim has been reaffirmed since it was set. A claim must be reaffirmed
+-- every frame by whatever holds it actually rendering and re-claiming it
+-- (see 'setFocus'); one frame of grace ('ClaimedLastFrame') is given before
+-- an unreaffirmed claim is dropped, so a claim surviving exactly one frame
+-- without a render in between (e.g. the frame a queued 'Focus' effect is
+-- applied, before the new holder has rendered even once) isn't mistaken for
+-- abandonment.
+data FocusClaim e
+  = Unclaimed
+  | ClaimedLastFrame e
+    -- ^ Held as of the previous frame boundary but not yet reaffirmed this
+    -- pass; dropped to 'Unclaimed' if still unreaffirmed at the next boundary.
+  | ClaimedThisFrame e
+    -- ^ Reaffirmed during the current frame (or just granted).
+  deriving (Eq, Show)
+
+-- | The element currently focused, regardless of reaffirmation status.
+currentFocus :: FocusClaim e -> Maybe e
+currentFocus Unclaimed             = Nothing
+currentFocus (ClaimedLastFrame e)  = Just e
+currentFocus (ClaimedThisFrame e)  = Just e
+
+-- | Advances a 'FocusClaim' to the next frame: a reaffirmed claim gets one
+-- frame of grace before it must be reaffirmed again; a claim already on
+-- grace that wasn't reaffirmed again is dropped.
+tickFocusClaim :: FocusClaim e -> FocusClaim e
+tickFocusClaim (ClaimedThisFrame e) = ClaimedLastFrame e
+tickFocusClaim (ClaimedLastFrame _) = Unclaimed
+tickFocusClaim Unclaimed            = Unclaimed
+
 -- | Per-scope focus bookkeeping: which single child (if any) currently holds
 -- focus within this scope, the last tab stop visited within it (for
--- Shift-Tab), and whether this scope's claim was reaffirmed during the
--- current frame's render pass. Root and every composite (a list, a tree —
--- anything with sub-items, see 'withFocusScope') each own one of these; a
--- composite's own is persisted in @ftScopes@ between frames, the same
--- way scroll and selection state persist per element.
+-- Shift-Tab), and any pending focus-change notice. Root and every composite
+-- (a list, a tree — anything with sub-items, see 'withFocusScope') each own
+-- one of these; a composite's own is persisted in @ftScopes@ between
+-- frames, the same way scroll and selection state persist per element.
 data FocusState e = FocusState
-  { focusedElement   :: Maybe e
-    -- ^ The element this scope currently has focused, if any.
+  { focusClaim       :: FocusClaim e
+    -- ^ The element this scope currently has focused, if any, and its
+    -- reaffirmation status. See 'FocusClaim'.
   , previousTabStop  :: Maybe e
     -- ^ The element visited just before the current one, scoped to this
     -- level, for Shift-Tab.
-  , focusedThisFrame :: Bool
-    -- ^ 'True' if this scope's claim was reaffirmed during this frame's
-    -- render pass. Used to clear stale focus when whatever held it is no
-    -- longer present in the UI.
   , focusLastChange  :: Maybe (FocusChange e)
     -- ^ The most recently applied 'Focus'\/'ClearFocus' for this scope.
     -- 'Nothing' when there's no change pending observation. See
@@ -459,9 +488,8 @@ data FocusState e = FocusState
 -- composite's the first time it renders.
 emptyFocusState :: FocusState e
 emptyFocusState = FocusState
-  { focusedElement   = Nothing
+  { focusClaim       = Unclaimed
   , previousTabStop  = Nothing
-  , focusedThisFrame = False
   , focusLastChange  = Nothing
   , focusChangeFresh = False
   }
@@ -1024,7 +1052,7 @@ getFocus = gets contextFocus
 -- | The currently ambient scope's focused element, read directly from a
 -- 'UIContext' outside the 'UI' monad.
 contextFocus :: UIContext e msg -> Maybe e
-contextFocus = focusedElement . ftAmbient . ctxFocus
+contextFocus = currentFocus . focusClaim . ftAmbient . ctxFocus
 
 -- | The full root-to-leaf focus chain, read directly from a 'UIContext'
 -- outside the 'UI' monad by following each scope's own focused element into
@@ -1047,7 +1075,7 @@ contextFocusChain ctx = go Set.empty (contextFocus ctx)
     go _    Nothing  = []
     go seen (Just x)
       | x `Set.member` seen = []
-      | otherwise            = x : go (Set.insert x seen) (focusedElement (lookupScope x (ctxFocus ctx)))
+      | otherwise            = x : go (Set.insert x seen) (currentFocus (focusClaim (lookupScope x (ctxFocus ctx))))
 
 -- | 'True' when the given element id is the currently ambient scope's
 -- focused element. For a leaf, this is exactly "am I focused"; for a
@@ -1074,7 +1102,7 @@ getFocusChange = gets (focusLastChange . ftAmbient . ctxFocus)
 -- on Tab) is only correct if the next sibling in the same tree walk can see
 -- it happened.
 setFocus :: e -> UI e msg ()
-setFocus eid = modifyFocusState $ \fs -> fs { focusedElement = Just eid, focusedThisFrame = True }
+setFocus eid = modifyFocusState $ \fs -> fs { focusClaim = ClaimedThisFrame eid }
 
 -- | Transfers keyboard focus to the given element when the condition is
 -- 'True'.
@@ -1084,14 +1112,14 @@ setFocusWhen b eid = when b (setFocus eid)
 -- | Removes keyboard focus from the currently ambient scope. Immediate,
 -- like 'setFocus'.
 clearFocus :: UI e msg ()
-clearFocus = modifyFocusState $ \fs -> fs { focusedElement = Nothing }
+clearFocus = modifyFocusState $ \fs -> fs { focusClaim = Unclaimed }
 
 -- | Rejects a 'Focus' grant that just landed on this element, restoring
 -- whoever held focus before it -- as if the grant had never been made.
 -- Call before anything else this frame reads focus state for the element.
 disclaimFocus :: UI e msg ()
 disclaimFocus = modifyFocusState $ \fs -> fs
-  { focusedElement   = focusChangeFrom =<< focusLastChange fs
+  { focusClaim       = maybe Unclaimed ClaimedThisFrame (focusChangeFrom =<< focusLastChange fs)
   , focusLastChange  = Nothing
   , focusChangeFresh = False
   }
@@ -1202,9 +1230,9 @@ withFocusScope scopeId freshClaim (UI f) = UI $ \ctx ->
     -- folded back exactly as 'runClaimed' would.
     runBlocked ctx blockValue = do
       let real = ftAmbient (ctxFocus ctx)
-      (a, ctx') <- runWithAmbient (real { focusedElement = blockValue }) ctx
+      (a, ctx') <- runWithAmbient (real { focusClaim = maybe Unclaimed ClaimedThisFrame blockValue }) ctx
       let after = ftAmbient (ctxFocus ctx')
-      if focusedElement after == blockValue
+      if currentFocus (focusClaim after) == blockValue
         then pure (a, ctx' { ctxFocus = (ctxFocus ctx') { ftAmbient = real } })
         else pure (a, foldBackAsClaim real after ctx')
 
@@ -1222,9 +1250,12 @@ withFocusScope scopeId freshClaim (UI f) = UI $ \ctx ->
     -- resolution alike.
     foldBackAsClaim base after ctx' = ctx'
       { ctxFocus = (ctxFocus ctx')
-          { ftAmbient = base { focusedElement = Just scopeId, focusedThisFrame = True }
-          , ftScopes  = Map.insert scopeId (after { focusedThisFrame = True }) (ftScopes (ctxFocus ctx'))
+          { ftAmbient = base { focusClaim = ClaimedThisFrame scopeId }
+          , ftScopes  = Map.insert scopeId (after { focusClaim = reaffirm (focusClaim after) }) (ftScopes (ctxFocus ctx'))
           } }
+    reaffirm Unclaimed              = Unclaimed
+    reaffirm (ClaimedLastFrame e) = ClaimedThisFrame e
+    reaffirm (ClaimedThisFrame e) = ClaimedThisFrame e
 
 -- | Whether a fresh (unclaimed) ambient may be read as an invitation for a
 -- scope to auto-claim focus this frame — see 'withFocusScope'.
@@ -1244,26 +1275,25 @@ scopeMode scopeId freshClaim currentAmbient = case currentAmbient of
   Nothing                            -> Blocked (Just scopeId)
   real                               -> Blocked real
 
--- | Advances a 'FocusState' to the next frame: carries it forward if it was
--- reaffirmed this frame, otherwise clears it back to @emptyFocusState@.
--- Applied to the root scope and every entry in @ftScopes@ — a scope
--- that stops being reaffirmed (its composite removed from the tree, or its
--- specific focused child gone while the composite itself still renders)
+-- | Advances a 'FocusState' to the next frame: ticks 'focusClaim' via
+-- 'tickFocusClaim', so a claim not reaffirmed for a full frame expires to
+-- 'Unclaimed'. Applied to the root scope and every entry in @ftScopes@ — a
+-- scope that stops being reaffirmed (its composite removed from the tree, or
+-- its specific focused child gone while the composite itself still renders)
 -- expires independently, the same way root-level focus already did.
+-- 'previousTabStop' is untouched here and simply persists, the same way
+-- @elmScrollStates@ is never purged for elements that stop rendering.
 --
--- Also advances 'focusLastChange' independently of that reset: a change
+-- Also advances 'focusLastChange' independently of that: a change
 -- just recorded this frame ('focusChangeFresh') stays visible for exactly
 -- one more frame so every element gets a chance to observe it regardless of
 -- render order, then is cleared the frame after.
 nextFocusFrame :: FocusState e -> FocusState e
-nextFocusFrame fs = advanced
-  { focusLastChange  = if focusChangeFresh fs then focusLastChange fs else Nothing
+nextFocusFrame fs = fs
+  { focusClaim       = tickFocusClaim (focusClaim fs)
+  , focusLastChange  = if focusChangeFresh fs then focusLastChange fs else Nothing
   , focusChangeFresh = False
   }
-  where
-    advanced
-      | focusedThisFrame fs = fs { focusedThisFrame = False }
-      | otherwise           = emptyFocusState
 
 -- | Runs a sub-tree within a different bounding rectangle. The previous bounds
 -- are restored when the sub-tree completes. Used by the layout system to
@@ -1446,9 +1476,8 @@ setFocusChange scopeId newFocus ctx = ctx { ctxFocus = updateScope (ctxFocus ctx
       Nothing  -> ft { ftAmbient = setIt (ftAmbient ft) }
       Just sid -> ft { ftScopes = Map.insert sid (setIt (lookupScope sid ft)) (ftScopes ft) }
     setIt fs = fs
-      { focusedElement   = newFocus
-      , focusedThisFrame = True
-      , focusLastChange  = Just (FocusChange (focusedElement fs) newFocus)
+      { focusClaim       = maybe Unclaimed ClaimedThisFrame newFocus
+      , focusLastChange  = Just (FocusChange (currentFocus (focusClaim fs)) newFocus)
       , focusChangeFresh = True
       }
 
