@@ -273,6 +273,7 @@ module Blink.UI
   , disclaimFocus
   , requestFocus
   , requestClearFocus
+  , FreshClaim (..)
   , withFocusScope
   , consumeKey
   , withoutKeyEvents
@@ -1144,7 +1145,7 @@ requestClearFocus scopeId = emitUi (ClearFocus scopeId)
 --     block, that claim is honoured and folded back in as if this scope had
 --     been the live target all along.
 --
--- @blockFreshClaim@ overrides the "nothing is focused, free to claim" half
+-- 'BlockFreshClaim' overrides the "nothing is focused, free to claim" half
 -- of the first case for one frame, and changes what "blocking" value gets
 -- used in the second. It exists for a caller (see
 -- 'Blink.Controls.compositeControl') that gives the composite's own id an
@@ -1157,8 +1158,8 @@ requestClearFocus scopeId = emitUi (ClearFocus scopeId)
 -- instead given this scope's own id as the blocking value (nothing they
 -- recognise as themselves), the same placeholder the old chain-based model
 -- used for exactly this. Standalone use (no such outer claim of its own)
--- always passes 'False', so the blocking value is always the literal real
--- ambient there.
+-- always passes 'AllowFreshClaim', so the blocking value is always the
+-- literal real ambient there.
 --
 -- Composes for arbitrary nesting: a composite inside another's
 -- 'withFocusScope' only ever swaps\/restores its own scope, and does the
@@ -1176,11 +1177,11 @@ requestClearFocus scopeId = emitUi (ClearFocus scopeId)
 -- convention every caller (present or future) has to uphold on its own —
 -- see the integration coverage in "Blink.ControlsSpec" for the regression
 -- this guards against.
-withFocusScope :: Ord e => e -> Bool -> UI e msg a -> UI e msg a
-withFocusScope scopeId blockFreshClaim (UI f) = UI $ \ctx ->
+withFocusScope :: Ord e => e -> FreshClaim -> UI e msg a -> UI e msg a
+withFocusScope scopeId freshClaim (UI f) = UI $ \ctx ->
   if ctxDisabled ctx
     then f ctx
-    else case scopeMode scopeId blockFreshClaim (contextFocus ctx) of
+    else case scopeMode scopeId freshClaim (contextFocus ctx) of
       Claim         -> runClaimed ctx
       Blocked blockValue -> runBlocked ctx blockValue
   where
@@ -1225,18 +1226,23 @@ withFocusScope scopeId blockFreshClaim (UI f) = UI $ \ctx ->
           , ftScopes  = Map.insert scopeId (after { focusedThisFrame = True }) (ftScopes (ctxFocus ctx'))
           } }
 
+-- | Whether a fresh (unclaimed) ambient may be read as an invitation for a
+-- scope to auto-claim focus this frame — see 'withFocusScope'.
+data FreshClaim = AllowFreshClaim | BlockFreshClaim
+  deriving (Eq, Show)
+
 -- | Which of the two policies documented on 'withFocusScope' applies this
 -- frame: 'Claim' if the scope is (or is free to become) the live focus
 -- target, 'Blocked' with the ambient value descendants should see
 -- otherwise.
 data ScopeMode e = Claim | Blocked (Maybe e)
 
-scopeMode :: Eq e => e -> Bool -> Maybe e -> ScopeMode e
-scopeMode scopeId blockFreshClaim currentAmbient = case currentAmbient of
-  Just cid | cid == scopeId      -> Claim
-  Nothing  | not blockFreshClaim -> Claim
-  Nothing                        -> Blocked (Just scopeId)
-  real                           -> Blocked real
+scopeMode :: Eq e => e -> FreshClaim -> Maybe e -> ScopeMode e
+scopeMode scopeId freshClaim currentAmbient = case currentAmbient of
+  Just cid | cid == scopeId          -> Claim
+  Nothing  | freshClaim == AllowFreshClaim -> Claim
+  Nothing                            -> Blocked (Just scopeId)
+  real                               -> Blocked real
 
 -- | Advances a 'FocusState' to the next frame: carries it forward if it was
 -- reaffirmed this frame, otherwise clears it back to @emptyFocusState@.

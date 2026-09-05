@@ -491,7 +491,7 @@ spec = describe "Blink.UI" $ do
     it "a scoped focus request updates only that scope's FocusState, not root's" $ do
       let ctx0 = emptyUIContext testBounds noInput scopeTheme noOpTextMeasurer :: UIContext ScopeElems ()
           ctx1 = applyUiEffects [Focus (Just Group) ItemB] ctx0
-      (insideChange, _) <- runUI (withFocusScope Group False getFocusChange) ctx1
+      (insideChange, _) <- runUI (withFocusScope Group AllowFreshClaim getFocusChange) ctx1
       (rootChange, _)   <- runUI getFocusChange ctx1
       insideChange `shouldBe` Just (FocusChange Nothing (Just ItemB))
       rootChange   `shouldBe` Nothing
