@@ -1,10 +1,9 @@
-# 5. The frame loop
+# 1. The frame loop
 
-Sections 3 and 4 covered layout in isolation — how one control's bounds
-work, and how several are arranged relative to each other. This section
-zooms out to the frame as a whole: Blink doesn't own the main loop — a
-backend (SDL2, in the included demo) calls into Blink once per frame. Each
-call does the same three things:
+The previous areas covered what `Blink.UI`, `Element`, layout, and
+controls each provide. This one zooms out to the frame as a whole: Blink
+doesn't own the main loop — a backend (SDL2, in the included demo) calls
+into Blink once per frame. Each call does the same three things:
 
 ```
 +---------------+     +---------------+     +---------------+
@@ -21,9 +20,9 @@ call does the same three things:
    from the previous frame and produces the starting point for this one:
    input state is refreshed, any focus/scroll/selection changes that were
    *queued* last frame get applied now (more on that distinction in
-   [section 7](07-focus-and-timing.md)), and the animation clock advances.
-   On the very first frame there is no previous context, so `emptyUIContext`
-   is used instead.
+   [the effects concept](../01-immediate-mode-api/04-effects.md)), and the
+   animation clock advances. On the very first frame there is no previous
+   context, so `emptyUIContext` is used instead.
 2. **Run the view.** `runUI` walks the UI tree your `view` function
    produces, threading that context through it. Controls read from it
    (is this element focused? what are the current bounds?) and write to it
@@ -40,8 +39,10 @@ remembered; if it isn't in that context, it doesn't exist to Blink.
 ## What's actually inside that context
 
 The context (`UIContext`) is not application data — it's the small set of
-bookkeeping listed in [section 1](01-why-immediate-mode.md) that has to
-survive between frames for the immediate-mode model to work at all:
+bookkeeping covered by
+[`01-immediate-mode-api`](../01-immediate-mode-api/01-introduction.md)
+that has to survive between frames for the immediate-mode model to work
+at all:
 
 * Which element (if any) currently holds keyboard focus, per focus scope.
 * Scroll position and text selection, keyed by element ID.
@@ -50,8 +51,8 @@ survive between frames for the immediate-mode model to work at all:
 * The animation clock.
 
 Your application's own state (`s` in `App e msg s`) is deliberately *not*
-part of this context — see [section 6](06-elements-and-messages.md) for why
-that's a separate mechanism with a different owner.
+part of this context — see [the next section](02-application-and-backend.md)
+for why that's a separate mechanism with a different owner.
 
 ## Two ways a frame gets triggered
 
@@ -68,6 +69,6 @@ with `configureContinuous` or `configureEventDriven`:
 
 See `Blink.App`'s Haddocks for the exact sequencing of each.
 
-Next: [section 6](06-elements-and-messages.md) covers how a view reports
-that something happened — a click, a text edit — without mutating anything
-directly.
+Next: [section 2](02-application-and-backend.md) covers how a view's
+messages actually become a new application state, and what a real backend
+does with this loop.

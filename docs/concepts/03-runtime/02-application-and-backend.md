@@ -1,16 +1,15 @@
-# 8. Application, update, and the backend loop
+# 2. Application, update, and the backend loop
 
-The previous sections cover the view side of Blink: how a single frame is
-built, how it reports change via messages, and how presentational state
-persists. This section closes the loop — how those messages actually
-become a new application state, and how a frame gets triggered by a real
-backend in the first place, rather than by an imagined caller.
+[The frame loop](01-the-frame-loop.md) covered how a single frame is
+built. This section closes the loop — how the messages a view emits
+actually become a new application state, and how a frame gets triggered
+by a real backend in the first place, rather than by an imagined caller.
 
 ## The `Update` monad
 
-[Section 6](06-elements-and-messages.md) established that `update` folds
-each queued message into your application state, once per message, in
-emission order. `Update s` is the monad that runs in: a small
+[Effects](../01-immediate-mode-api/04-effects.md) established that
+`update` folds each queued message into your application state, once per
+message, in emission order. `Update s` is the monad that runs in: a small
 state-threading computation over your state `s`, with `get`/`put`/`gets`/
 `modify` — the same shape as any state monad you've used before.
 
@@ -79,9 +78,9 @@ turned into something a backend can drive by calling
 `BlinkHandle` is what threads the state between calls to `stepFrame` — the
 backend's own loop only ever passes the handle around; it never sees or
 stores `s` itself. Inside `stepFrame`, one call runs exactly the three
-frame-loop steps from [section 5](05-the-frame-loop.md), then folds every
-message the view emitted into the state with `update` before handing back
-a `FrameResult`.
+frame-loop steps from [the frame loop](01-the-frame-loop.md), then folds
+every message the view emitted into the state with `update` before
+handing back a `FrameResult`.
 
 ## Two ways a backend can drive that loop
 
@@ -102,15 +101,15 @@ single call actually does:
   something stale.
 
 Either way, the messages produced and the state they fold into are exactly
-what sections 1–5 describe — this choice only changes *when* one round of
-that happens relative to a real input event, not what happens inside it.
-See `Blink.App`'s Haddocks for the exact call sequence of each, and for
-`FrameInput`/`FrameResult`, the types a backend actually constructs and
-receives.
+what the rest of these concepts describe — this choice only changes *when*
+one round of that happens relative to a real input event, not what
+happens inside it. See `Blink.App`'s Haddocks for the exact call sequence
+of each, and for `FrameInput`/`FrameResult`, the types a backend actually
+constructs and receives.
 
 ## Writing a new backend
 
 Everything above is what a backend author needs to drive Blink; writing
-one is a task, not a concept, so it isn't covered further here. Study the
-included SDL2 backend (`app/`) as a working example if you're building a
-new one.
+one is a task, not a concept, so it isn't covered further here. See
+[the backend guide](../../guides/writing-a-backend.md) for that, and the
+included SDL2 backend (`app/`) as a working example.

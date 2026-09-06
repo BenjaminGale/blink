@@ -1,12 +1,9 @@
-# 7. Focus and timing
+# 5. Focus
 
-[Section 5](05-the-frame-loop.md) mentioned that some presentational state
-— focus, scroll, selection — persists across frames, and that changes to it
-are applied at different times: focus changes **immediately**, mid-frame;
-scroll and selection are **queued** and only take effect on the *next*
-frame. This section is about why that split exists, since it's the one
-piece of Blink's timing model that isn't obvious just from "state persists
-between frames."
+[Section 4](04-effects.md) covered Effects: describe a change now, let
+something else apply it later. Focus is the one piece of Blink's own
+state that breaks that rule — `setFocus`/`clearFocus` apply immediately,
+mid-frame, rather than queuing. This section is about why.
 
 ## The problem: two controls, one frame, one race
 
@@ -17,10 +14,10 @@ frame, in the order the tree is walked — `buttonA` first, then `buttonB`.
 `buttonA`'s logic is roughly "if I'm focused and Tab was pressed, give up
 focus." `buttonB`'s logic is roughly "if nothing is focused, take it."
 Both of those checks run **in the same frame**, moments apart. If focus
-changes were queued the same way scroll is — applied only on the *next*
-frame — then `buttonB`'s check would still see `buttonA` as focused, because
-the frame it's reading state from is the one *before* `buttonA`'s change
-takes effect:
+changes were queued the same way effects are — applied only on the *next*
+frame — then `buttonB`'s check would still see `buttonA` as focused,
+because the frame it's reading state from is the one *before* `buttonA`'s
+change takes effect:
 
 ```
   buttonA (frame N)                          buttonB (frame N)
@@ -82,20 +79,14 @@ deciding "should I take the mouse?" needs to see what the *previous*
 sibling in this same frame just decided, or two overlapping elements could
 both believe they have it.
 
-## Why scroll and selection don't need this
+## Why effects don't have this problem
 
-Scroll position and text selection aren't contended for the way focus is.
-Nothing else in the tree is racing to claim "the" scroll offset of a
-particular list — only that list's own state is at stake, and only *it*
-ever reads or writes it. There's no sibling whose correctness this frame
-depends on seeing the change, so there's nothing to race.
-
-Because of that, these are queued (`emitUi`, applied by
-`nextFrameContext` at the start of the *next* frame) rather than applied
-immediately. That's a strictly easier model to reason about — a write
-made partway through a frame simply isn't visible to anything reading in
-that same frame — and correctness doesn't depend on same-frame visibility
-here the way it does for focus.
+Contrast this with [Effects](04-effects.md): nothing else in the tree is
+racing to claim "the" scroll offset of a particular list — only that
+list's own state is at stake, and only *it* ever reads or writes it.
+There's no sibling whose correctness this frame depends on seeing the
+change, so there's nothing to race, which is exactly why effects can
+afford to queue and focus can't.
 
 ## The practical rule
 
@@ -108,12 +99,9 @@ When writing a custom control:
 * If it's local, single-owner state that nothing else reads — like a
   list's own scroll offset — queue it with `emitUi` instead.
 
-Next: [section 8](08-application-and-backend.md) closes the loop — how the
-messages controls like this one emit actually turn into a new application
-state, and how a real backend drives the frames described in
-[section 5](05-the-frame-loop.md) in the first place.
-
-See also
-[../guides/building-a-custom-control.md](../guides/building-a-custom-control.md)
-for a worked example that puts sections 1–5 together to hand-write a
-minimal button from these primitives.
+That's everything `Blink.UI` itself provides: identity, bounds, effects,
+and focus. See [`../02-elements/01-introduction.md`](../02-elements/01-introduction.md)
+for what's built on top of these five capabilities, and
+[`../../guides/building-a-custom-control.md`](../../guides/building-a-custom-control.md)
+for a worked example that puts all of them together to hand-write a
+minimal button.

@@ -56,7 +56,7 @@ before. The application never sees any of this traffic.
 Focus ('setFocus', 'clearFocus') changes immediately, exactly like
 'registerMouseOver' and mouse capture, because sibling arbitration within a
 single tree walk depends on it (see the
-<https://github.com/BenjaminGale/blink/blob/main/docs/concepts/07-focus-and-timing.md concepts guide's section on focus and timing>
+<https://github.com/BenjaminGale/blink/blob/main/docs/concepts/01-immediate-mode-api/05-focus.md concepts guide's section on focus>
 for why). Scroll and selection have no such sibling-arbitration
 requirement, so they queue a 'UiEffect' with 'emitUi' instead of mutating
 immediately; a write made partway through a frame is not visible to a read

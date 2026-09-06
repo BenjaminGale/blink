@@ -1,10 +1,4 @@
-# 3. Layout primitives: current bounds
-
-Before covering how `hBox`, `vBox`, and sizing constraints let you compose
-multiple children ([section 4](04-layout-composition.md)), it's worth
-seeing what "layout" means at the bare immediate-mode level, with none of
-that machinery — because everything in section 4 is built on top of this,
-not a replacement for it.
+# 3. Bounds
 
 ## There is no layout tree — just a rectangle
 
@@ -69,12 +63,21 @@ replacement is scoped exactly to the sub-tree `withBounds` wraps:
 measurement: it wraps a sub-tree so that anything it draws outside the
 current bounds is discarded, rather than spilling over a sibling.
 
-## Where this leaves you
+## Bounds don't persist — unlike what's next
 
-`getBounds`/`withBounds`/`clipToCurrent` are the entire layout vocabulary
-at this level — there's no concept here of a child "requesting" a size, or
-of a parent negotiating space among several children at once. That's
-precisely the gap [section 4](04-layout-composition.md) fills: `Element`
-adds a size request on top of a plain `UI` action, which is what lets
-`hBox`/`vBox` compute a `withBounds` rectangle for each child in the first
-place, rather than every child just filling whatever it's handed.
+Unlike element identity's bookkeeping, or the effects and focus state
+covered next, bounds are not carried across frames at all: they're
+recomputed top-down, fresh, every single frame, from whatever the root
+bounds are this time. There's nothing to key by element identity here,
+because there's nothing to remember between frames in the first place.
+
+`getBounds`/`withBounds`/`clipToCurrent` are the entire vocabulary at this
+level — there's no concept here of a child "requesting" a size, or of a
+parent negotiating space among several children at once. That gap is
+filled by `Element`, one layer up — see
+[`../02-elements/01-introduction.md`](../02-elements/01-introduction.md), once
+you've read the rest of this folder.
+
+Next: [section 4](04-effects.md) covers the first kind of state that
+*does* persist — and how a view changes it without mutating anything
+directly.

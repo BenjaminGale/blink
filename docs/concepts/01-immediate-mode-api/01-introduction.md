@@ -58,25 +58,26 @@ runs again with the new state and draws the new text directly.
   nothing relevant changed. In practice this is cheap for typical UI sizes,
   and Blink's layout and draw-command generation are designed to be fast
   enough that this isn't a bottleneck.
-* **Anything that must survive between frames — has to be stored
-  explicitly somewhere**, since nothing is retained implicitly. Blink
-  provides two places for this: the application state you own (via
-  messages — see [section 6](06-elements-and-messages.md)), and a small
-  set of *presentational* slots Blink itself owns, like focus and scroll
-  position (see [section 7](07-focus-and-timing.md)).
+* **Anything that must survive between frames has to be stored
+  explicitly somewhere**, since nothing is retained implicitly. The rest
+  of this folder is about exactly that: the handful of capabilities
+  `Blink.UI` provides for state that needs to persist — or at least be
+  reported — across the boundary between one frame and the next.
 
 ## Where this shows up in the API
 
 Because there's no persistent widget tree, there are no widget objects to
 hold a reference to. Instead:
 
-* Controls are identified by a value *you* define (an `e` — see
-  [section 6](06-elements-and-messages.md)), not an object handle, because
-  there's no object for a handle to point to.
+* Controls are identified by a value *you* define, not an object handle,
+  because there's no object for a handle to point to — see
+  [section 2](02-identity.md).
 * The handful of things that genuinely need to persist across frames
   (focus, scroll, selection) live in a context Blink threads through the
-  frame for you, keyed by that same element identity — not in the tree,
-  because there is no tree to attach them to.
+  frame for you, keyed by that same identity — not in a tree, because
+  there is no tree to attach them to. See
+  [section 4](04-effects.md) and [section 5](05-focus.md) for how and when
+  those changes actually take effect.
 
-The next section walks through exactly what that threading looks like,
-frame by frame.
+Next: [section 2](02-identity.md) covers that identity value in detail —
+why it's needed, and how Blink uses it.

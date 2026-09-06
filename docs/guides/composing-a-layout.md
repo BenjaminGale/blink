@@ -6,7 +6,7 @@ panel with a header, a sidebar, and a content area — to cover the layout
 decisions that come up once you're nesting containers rather than using
 one in isolation.
 
-Read [the declarative-controls concept](../concepts/02-declarative-controls.md)
+Read [the elements concept](../concepts/02-elements/01-introduction.md)
 first if you haven't — this guide assumes you're comfortable with
 attribute lists and `resolve`.
 
