@@ -6,7 +6,7 @@
 -- controls that track a selected\/unselected state instead.
 --
 -- @
--- controlBase --> buttonBase --> button
+-- control --> buttonBase --> button
 --                             --> toggleBase  (see "Blink.View.Controls.Toggle")
 --                             --> repeatButton  (see "Blink.View.Controls.RepeatButton")
 -- @
@@ -92,9 +92,6 @@ defaultButtonConfig = ButtonConfig
 buttonStyleKey :: StyleKey e
 buttonStyleKey = Class "button"
 
-instance HasElementConfig e msg (ButtonConfig e msg) where
-  overElement attr = Attribute (\bc -> bc { bcControl = runAttribute (overElement attr) (bcControl bc) })
-
 instance HasControlConfig e msg (ButtonConfig e msg) where
   overControl attr = Attribute (\bc -> bc { bcControl = runAttribute attr (bcControl bc) })
 
@@ -132,7 +129,7 @@ data ButtonInteraction e msg = ButtonInteraction
   , biActivated :: Bool
   }
 
--- | Runs @cfg@ as a 'controlBase', and additionally fires every
+-- | Runs @cfg@ as a 'control', and additionally fires every
 -- 'onActivated' handler in @cfg@ when activated: by a click, or by
 -- pressing Enter while it holds focus and isn't disabled. The shape every
 -- button-like control ('button', 'Blink.View.Controls.Toggle.toggleButton', and
@@ -142,16 +139,16 @@ data ButtonInteraction e msg = ButtonInteraction
 buttonBase :: Ord e => e -> ButtonConfig e msg -> View e msg (ButtonInteraction e msg)
 buttonBase eid cfg = do
   let ctrl = bcControl cfg
-  r <- controlBase ctrl { ccElement = (ccElement ctrl) { ecElementId = Just eid } }
-  let e         = ciElement r
+  r <- control ctrl { ccElementId = Just eid }
+  let e         = r
       isEnter ev = key ev == KeyReturn && case bcActivation cfg of
         ActivateOnClick -> not (keyRepeat ev)
         ActivateOnPress -> True
-      enter     = any isEnter (eiKeysPressed e)
+      enter     = any isEnter (ciKeysPressed e)
       mouseHit  = case bcActivation cfg of
-        ActivateOnClick -> eiClicked e
-        ActivateOnPress -> eiMouseDown e
-      activated = mouseHit || (eiFocused e && enter)
+        ActivateOnClick -> ciClicked e
+        ActivateOnPress -> ciMouseDown e
+      activated = mouseHit || (ciFocused e && enter)
   when activated $ runHandlers (bcOnActivated cfg) ()
   pure (ButtonInteraction r activated)
 

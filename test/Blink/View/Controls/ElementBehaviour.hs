@@ -1,12 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 -- | The shared "raises the right raw event for the right interaction"
--- contract every 'Blink.View.Controls.Control.elementBase'-based primitive must
--- satisfy. 'Blink.View.Controls.ElementSpec' runs this against
--- 'Blink.View.Controls.Control.elementBase' directly; anything built on top (a
--- control, and every widget built on that) reuses it to confirm the same
--- raw facts still surface through its own config type, on top of whatever
--- that layer adds.
+-- contract every 'Blink.View.Controls.Control.control'-based widget must
+-- satisfy. 'Blink.View.Controls.ControlSpec' runs this against
+-- 'Blink.View.Controls.Control.control' directly; every widget built on
+-- top reuses it to confirm the same raw facts still surface through its
+-- own config type, on top of whatever that layer adds.
 module Blink.View.Controls.ElementBehaviour
   ( elementBehaviourSpec
   , tagged
@@ -17,7 +16,7 @@ import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
 import Blink.View.Controls.Control
-  ( Attribute, HasElementConfig
+  ( Attribute, HasControlConfig
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed
   , onFocusGained, onFocusLost
   )
@@ -27,11 +26,11 @@ import Blink.Input (Key (KeySpace))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.View
 
--- | Tags every raw event a reaction built on 'Blink.View.Controls.Control.elementBase'
+-- | Tags every raw event a reaction built on 'Blink.View.Controls.Control.control'
 -- can raise with a plain label naming it, discarding any payload -- enough
 -- to assert "this fired" declaratively without a bespoke message type per
 -- caller.
-tagged :: HasElementConfig e String cfg => [Attribute cfg]
+tagged :: HasControlConfig e String cfg => [Attribute cfg]
 tagged =
   [ onMouseEntered (const [OutMsg "MouseEntered"])
   , onMouseExited  (const [OutMsg "MouseExited"])
@@ -52,7 +51,7 @@ tagged =
 -- distinct part (e.g. a checkbox's glyph and caption) can't pass just
 -- because one particular point happens to work.
 elementBehaviourSpec
-  :: (Ord e, HasElementConfig e String cfg)
+  :: (Ord e, HasControlConfig e String cfg)
   => Rectangle                                    -- ^ bounds the thing under test renders at
   -> ViewContext e String                           -- ^ starting context (theme\/measurer already set up)
   -> e                                             -- ^ element id under test

@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | A plain visual separator: a thin line drawn along the full length of
 -- whichever axis it's not thin on. A leaf, built directly on
--- 'controlBase' -- nothing derives from it, it displays no label, and
+-- 'control' -- nothing derives from it, it displays no label, and
 -- it's never a tab stop (see 'divider'). The simplest control in
 -- "Blink.View.Controls": no value, and -- unlike every other control -- no id
 -- required.
@@ -50,9 +50,6 @@ defaultDividerConfig = DividerConfig
   , dcThickness   = 1
   , dcLayout      = layoutFor Horizontal
   }
-
-instance HasElementConfig e msg (DividerConfig e msg) where
-  overElement attr = Attribute (\dc -> dc { dcControl = runAttribute (overElement attr) (dcControl dc) })
 
 instance HasControlConfig e msg (DividerConfig e msg) where
   overControl attr = Attribute (\dc -> dc { dcControl = runAttribute attr (dcControl dc) })
@@ -105,7 +102,7 @@ divider :: Ord e => [Attribute (DividerConfig e msg)] -> Element e msg
 divider attrs = Element
   { elLayout  = dcLayout cfg
   , elMeasure = measureChrome (ccStyleKey ctrl) (Element (dcLayout cfg) intrinsicSize (pure ()))
-  , elRun     = void (controlBase ctrl)
+  , elRun     = void (control ctrl)
   }
   where
     cfg  = resolve defaultDividerConfig attrs

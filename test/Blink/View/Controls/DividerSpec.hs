@@ -52,7 +52,7 @@ testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMet
 
 -- | Same as 'testTheme' but with no border colour set, so the "draws
 -- nothing" tests below can confirm the line itself goes undrawn -- the
--- chrome background\/border 'controlBase' always draws is unaffected.
+-- chrome background\/border 'control' always draws is unaffected.
 noLineTheme :: Theme TestElement
 noLineTheme = Theme
   { themeElementStyles = Map.empty

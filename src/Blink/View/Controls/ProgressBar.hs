@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | A progress indicator: a filled bar for a known 'Progress' value, or a
 -- continuously animating band while 'Indeterminate'. A leaf, built
--- directly on 'controlBase' -- nothing derives from it, and it displays no
+-- directly on 'control' -- nothing derives from it, and it displays no
 -- label, so it has no 'Blink.View.Controls.Label.LabelledConfig' either.
 module Blink.View.Controls.ProgressBar
   ( ProgressBarConfig (..)
@@ -56,9 +56,6 @@ defaultProgressBarConfig = ProgressBarConfig
   , pbLayout    = Layout fill fill TopLeft
   }
 
-instance HasElementConfig e msg (ProgressBarConfig e msg) where
-  overElement attr = Attribute (\pc -> pc { pbControl = runAttribute (overElement attr) (pbControl pc) })
-
 instance HasControlConfig e msg (ProgressBarConfig e msg) where
   overControl attr = Attribute (\pc -> pc { pbControl = runAttribute attr (pbControl pc) })
 
@@ -89,7 +86,7 @@ progressBar :: Ord e => [Attribute (ProgressBarConfig e msg)] -> Element e msg
 progressBar attrs = Element
   { elLayout  = pbLayout cfg
   , elMeasure = measureChrome (ccStyleKey ctrl) (Element (pbLayout cfg) noIntrinsicSize (pure ()))
-  , elRun     = void (controlBase ctrl)
+  , elRun     = void (control ctrl)
   }
   where
     cfg  = resolve defaultProgressBarConfig attrs

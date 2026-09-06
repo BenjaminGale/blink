@@ -3,15 +3,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | Text drawn in the resolved style, with no interactive behaviour of its
 -- own. 'LabelledConfig' is the reusable fragment behind 'text': not a
--- 'Blink.View.Controls.Control.elementBase'\/'Blink.View.Controls.Control.controlBase'-style
--- layer itself (nothing calls into it the way a @Base@ primitive is called
--- into), just a nested field plus a rendering helper, the same category as
--- 'Blink.View.Controls.Control.ElementConfig'\/'Blink.View.Controls.Control.ControlConfig'.
+-- 'Blink.View.Controls.Control.control'-style layer itself (nothing calls
+-- into it the way a @Base@ primitive is called into), just a nested field
+-- plus a rendering helper, the same category as
+-- 'Blink.View.Controls.Control.ControlConfig'.
 -- Anything that wants a caption nests a 'LabelledConfig' field, declares
 -- 'HasLabelledConfig', and calls 'renderLabelledContent' itself when
 -- building its own content.
 --
--- 'label' is a leaf, built directly on 'controlBase'; it needs its own
+-- 'label' is a leaf, built directly on 'control'; it needs its own
 -- 'LabelConfig' only because 'target' is a label-only capability
 -- 'LabelledConfig' has no concept of.
 module Blink.View.Controls.Label
@@ -109,9 +109,6 @@ defaultLabelConfig = LabelConfig
 labelStyleKey :: StyleKey e
 labelStyleKey = Class "label"
 
-instance HasElementConfig e msg (LabelConfig e msg) where
-  overElement attr = Attribute (\c -> c { lblControl = runAttribute (overElement attr) (lblControl c) })
-
 instance HasControlConfig e msg (LabelConfig e msg) where
   overControl attr = Attribute (\c -> c { lblControl = runAttribute attr (lblControl c) })
 
@@ -129,7 +126,7 @@ target :: e -> Attribute (LabelConfig e msg)
 target t = Attribute (\c -> c { lblTarget = Just t })
 
 -- | Displays text (see 'text'). Unlike every other control built on
--- 'controlBase', a label never takes keyboard focus itself, whether by Tab
+-- 'control', a label never takes keyboard focus itself, whether by Tab
 -- or by being clicked: this is fixed behaviour, not a default -- 'label'
 -- always overrides 'isFocusable' to 'False' itself, so it wins regardless
 -- of what a caller passes. The only way a click on a label affects focus
@@ -149,13 +146,13 @@ label eid attrs = Element
   , elMeasure = measureChrome (ccStyleKey (lblControl cfg)) (captionElement (lcText (lblLabelled cfg)))
   , elRun     = do
       scope <- getCurrentScope
-      ci    <- controlBase ctrl
-      forM_ (lblTarget cfg) (\t -> focusTargetOnClick scope t (ciElement ci))
+      ci    <- control ctrl
+      forM_ (lblTarget cfg) (\t -> focusTargetOnClick scope t ci)
   }
   where
     cfg  = resolve defaultLabelConfig attrs
     ctrl = (lblControl cfg)
-      { ccIsFocusable  = False
-      , ccContent      = renderLabelledContent (lblLabelled cfg)
-      , ccElement      = (ccElement (lblControl cfg)) { ecElementId = Just eid }
+      { ccIsFocusable = False
+      , ccContent     = renderLabelledContent (lblLabelled cfg)
+      , ccElementId   = Just eid
       }

@@ -20,7 +20,7 @@ module Blink.View.Controls.ButtonBehaviour
 import Test.Hspec
 
 import Blink.View.Controls.Button (HasButtonConfig, onActivated)
-import Blink.View.Controls.Control (Attribute, HasControlConfig, HasElementConfig, isFocusable)
+import Blink.View.Controls.Control (Attribute, HasControlConfig, isFocusable)
 import Blink.View.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.View.Controls.ElementBehaviour (tagged)
 import Blink.Geometry (Point, Rectangle)
@@ -30,7 +30,7 @@ import Blink.View
 
 -- | Every raw\/focus reaction (including 'Blink.View.Controls.Control.onClicked',
 -- via 'tagged'), plus a tagged reaction to 'onActivated'.
-taggedActivated :: (HasElementConfig e String cfg, HasButtonConfig e String cfg) => [Attribute cfg]
+taggedActivated :: (HasControlConfig e String cfg, HasButtonConfig e String cfg) => [Attribute cfg]
 taggedActivated = onActivated (const [OutMsg "Activated"]) : tagged
 
 -- | How a control's Enter-activation deviates from the plain
@@ -60,7 +60,7 @@ defaultButtonBehaviourConfig = ButtonBehaviourConfig { bbcRepeatsOnHeldEnter = F
 -- 'Blink.View.Controls.Control.onClicked' (mouse-only, per the split between the
 -- two).
 buttonBehaviourSpec
-  :: (Ord e, Show e, HasControlConfig e String cfg, HasElementConfig e String cfg, HasButtonConfig e String cfg)
+  :: (Ord e, Show e, HasControlConfig e String cfg, HasButtonConfig e String cfg)
   => ButtonBehaviourConfig                       -- ^ how this control's Enter-repeat behaviour deviates, if at all
   -> Rectangle                                   -- ^ bounds the control renders at
   -> ViewContext e String                          -- ^ starting context (theme\/measurer already set up)

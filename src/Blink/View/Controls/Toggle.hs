@@ -11,7 +11,7 @@
 -- instead.
 --
 -- @
--- controlBase --> buttonBase --> button                    (see "Blink.View.Controls.Button")
+-- control --> buttonBase --> button                    (see "Blink.View.Controls.Button")
 --                             --> toggleBase --> toggleButton
 --                                             --> checkbox     (see "Blink.View.Controls.Checkbox")
 --                                             --> radioButton  (see "Blink.View.Controls.RadioButton")
@@ -109,9 +109,6 @@ toggleChecked = Custom toggleGroup "Checked"
 -- -- the plain base look already reads as "unchecked".
 toggleUnchecked :: VisualState
 toggleUnchecked = Custom toggleGroup "Unchecked"
-
-instance HasElementConfig e msg (ToggleConfig e msg) where
-  overElement attr = Attribute (\tc -> tc { tgcButton = runAttribute (overElement attr) (tgcButton tc) })
 
 instance HasControlConfig e msg (ToggleConfig e msg) where
   overControl attr = Attribute (\tc -> tc { tgcButton = runAttribute (overControl attr) (tgcButton tc) })

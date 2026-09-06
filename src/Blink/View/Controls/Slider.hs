@@ -4,7 +4,7 @@
 -- | A continuous-value slider: a thin filled track up to the current
 -- value, with a square thumb straddling it at that point -- the
 -- traditional thin-bar-plus-thumb slider look, rather than one solid
--- block. A leaf, built directly on 'controlBase' -- nothing derives from
+-- block. A leaf, built directly on 'control' -- nothing derives from
 -- it, and it displays no label, so it has no
 -- 'Blink.View.Controls.Label.LabelledConfig' either. The interactive
 -- counterpart to 'Blink.View.Controls.ProgressBar.progressBar': where a
@@ -108,17 +108,14 @@ sliderStyleKey = Class "slider"
 defaultSliderConfig :: SliderConfig e msg
 defaultSliderConfig = SliderConfig
   { scControl        = defaultControlConfig
-      { ccStyleKey = sliderStyleKey
-      , ccElement  = defaultElementConfig { ecMouseActivation = CaptureActivated }
+      { ccStyleKey        = sliderStyleKey
+      , ccMouseActivation = CaptureActivated
       }
   , scValue          = 0
   , scStep           = 0.1
   , scOnValueChanged = []
   , scLayout         = Layout fill fill TopLeft
   }
-
-instance HasElementConfig e msg (SliderConfig e msg) where
-  overElement attr = Attribute (\sc -> sc { scControl = runAttribute (overElement attr) (scControl sc) })
 
 instance HasControlConfig e msg (SliderConfig e msg) where
   overControl attr = Attribute (\sc -> sc { scControl = runAttribute attr (scControl sc) })
@@ -202,13 +199,13 @@ slider :: Ord e => e -> [Attribute (SliderConfig e msg)] -> Element e msg
 slider eid attrs = Element
   { elLayout  = scLayout cfg
   , elMeasure = measureChrome (ccStyleKey ctrl) (Element (scLayout cfg) noIntrinsicSize (pure ()))
-  , elRun     = void (controlBase ctrl)
+  , elRun     = void (control ctrl)
   }
   where
     cfg  = resolve defaultSliderConfig attrs
     ctrl = (scControl cfg)
-      { ccContent = body
-      , ccElement = (ccElement (scControl cfg)) { ecElementId = Just eid }
+      { ccContent   = body
+      , ccElementId = Just eid
       }
     body = do
       s         <- currentStyle

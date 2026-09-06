@@ -1,9 +1,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | The shared focus\/hit-region contract every 'Blink.View.Controls.Control.controlBase'-based
+-- | The shared focus\/hit-region contract every 'Blink.View.Controls.Control.control'-based
 -- control must satisfy, on top of the raw-event contract every element
 -- already satisfies (see 'Blink.View.Controls.ElementBehaviour.elementBehaviourSpec').
--- 'Blink.View.Controls.ControlSpec' runs this against 'Blink.View.Controls.Control.controlBase'
+-- 'Blink.View.Controls.ControlSpec' runs this against 'Blink.View.Controls.Control.control'
 -- directly; any widget built on top reuses it to confirm the same
 -- focus\/hit-region behaviour still holds through its own config type -- a
 -- widget whose focus behaviour genuinely differs (e.g.
@@ -20,7 +20,7 @@ import Control.Monad (when)
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.View.Controls.Control (Attribute, HasControlConfig, HasElementConfig, isEnabled, isFocusable)
+import Blink.View.Controls.Control (Attribute, HasControlConfig, isEnabled, isFocusable)
 import Blink.View.Controls.ElementBehaviour (elementBehaviourSpec, tagged)
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)
@@ -51,7 +51,7 @@ defaultControlBehaviourConfig = ControlBehaviourConfig { cbcAutoClaims = True, c
 -- one at random from @insideRect@ on each run -- see
 -- 'Blink.View.Controls.ElementBehaviour.elementBehaviourSpec'.
 controlBehaviourSpec
-  :: (Ord e, Show e, HasControlConfig e String cfg, HasElementConfig e String cfg)
+  :: (Ord e, Show e, HasControlConfig e String cfg)
   => ControlBehaviourConfig                      -- ^ how this control's focus behaviour deviates, if at all
   -> Rectangle                                   -- ^ bounds the control renders at
   -> ViewContext e String                          -- ^ starting context (theme\/measurer already set up)
@@ -65,8 +65,9 @@ controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint rend
   -- A control auto-claims focus the moment nothing else holds it, which
   -- would otherwise leak an incidental focus-gained event into every one
   -- of these raw-fact checks. 'isFocusable' 'False' keeps the reused
-  -- contract about the same raw facts 'Blink.View.Controls.ElementSpec' checks, not
-  -- about this control's own focus-claiming behaviour (covered below).
+  -- contract about the same raw facts 'Blink.View.Controls.ElementBehaviour.elementBehaviourSpec'
+  -- checks, not about this control's own focus-claiming behaviour (covered
+  -- below).
   elementBehaviourSpec bounds ctx eid insideRect outsidePoint (\attrs -> render (isFocusable False : attrs))
 
   describe "focus claiming" $ do

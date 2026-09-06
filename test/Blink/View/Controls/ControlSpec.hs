@@ -7,12 +7,13 @@ import Test.Hspec
 
 import Blink.View.Controls.Control
   ( Attribute, ControlConfig (..), ControlInteraction (..)
-  , controlBase, defaultControlConfig, elementId, focusTargetOnClick, isEnabled, isFocusable
-  , onClicked, onFocusGained, onFocusLost, onKeyPressed, resolve
+  , control, defaultControlConfig, elementId, focusTargetOnClick, isEnabled, isFocusable
+  , onClicked, onFocusGained, onFocusLost, onKeyPressed
+  , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, resolve
   )
 import Blink.View.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
-import Blink.Input (InputState (..))
+import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.View.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.View.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonPressed))
@@ -77,7 +78,7 @@ type Attribute' = Attribute (ControlConfig TestElement String)
 -- | Renders a single control at whatever bounds are current, with its
 -- attrs (plus 'elementId' @eid@) resolved against 'defaultControlConfig'.
 renderAt :: TestElement -> [Attribute'] -> View TestElement String ()
-renderAt eid attrs = () <$ controlBase (resolve defaultControlConfig (elementId eid : attrs))
+renderAt eid attrs = () <$ control (resolve defaultControlConfig (elementId eid : attrs))
 
 -- | Renders 'ElemA' at 'rectA' and 'ElemB' at 'rectB' with the given attrs.
 both :: [Attribute'] -> [Attribute'] -> View TestElement String ()
@@ -87,18 +88,18 @@ both attrsA attrsB = do
 
 -- | Renders @fromId@ non-focusable, redirecting its own click onto @toId@
 -- via 'focusTargetOnClick' -- the same shape 'Blink.View.Controls.Label.label'
--- builds on top of 'controlBase', exercised here directly against the
+-- builds on top of 'control', exercised here directly against the
 -- low-level primitive rather than through a label.
 renderRedirect :: TestElement -> [Attribute'] -> TestElement -> [Attribute'] -> View TestElement String ()
 renderRedirect fromId attrsFrom toId attrsTo = do
   withBounds rectA $ do
     scope <- getCurrentScope
-    ci    <- controlBase (resolve defaultControlConfig (elementId fromId : isFocusable False : attrsFrom))
-    focusTargetOnClick scope toId (ciElement ci)
+    ci    <- control (resolve defaultControlConfig (elementId fromId : isFocusable False : attrsFrom))
+    focusTargetOnClick scope toId ci
   withBounds rectB (renderAt toId attrsTo)
 
 -- | Renders a single 'ElemA' at 'testBounds' with the given attrs -- the
--- same way every real widget built on 'controlBase' does.
+-- same way every real widget built on 'control' does.
 renderControl :: [Attribute'] -> View TestElement String ()
 renderControl = renderAt ElemA
 
@@ -124,7 +125,7 @@ hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
 spec :: Spec
-spec = describe "Blink.View.Controls.Control.controlBase" $ do
+spec = describe "Blink.View.Controls.Control.control" $ do
   controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx ElemA (Point 5 5) hitRect (Point 200 200) renderControl
 
   describe "chrome" $ do
@@ -138,7 +139,7 @@ spec = describe "Blink.View.Controls.Control.controlBase" $ do
 
   describe "no id" $ do
     -- No 'elementId' at all, unlike 'renderAt'/'renderControl'.
-    let renderNoId attrs = () <$ controlBase (resolve defaultControlConfig attrs)
+    let renderNoId attrs = () <$ control (resolve defaultControlConfig attrs)
 
     it "still draws chrome via renderStyled, inset by margin" $ do
       ctx <- snd <$> runView (renderNoId []) seedCtx
@@ -164,6 +165,30 @@ spec = describe "Blink.View.Controls.Control.controlBase" $ do
           attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
       result <- runInteractions testBounds seedCtx (both attrsA attrsB) [] []
       resultMessages result `shouldBe` ["A gained"]
+
+  describe "cross-element interaction" $
+    it "reports MouseDown for the element the press started on, and MouseUp for whichever element the release happens over" $ do
+      -- Mouse goes down over ElemA, is dragged (still held) onto ElemB, and
+      -- released there. ElemA should only ever see MouseDown (it's not hit
+      -- by the time the button comes up); ElemB should only ever see
+      -- MouseUp (it wasn't hit when the button went down) -- confirming a
+      -- drag begun on one element and released over another doesn't count
+      -- as a click for the second. The mouse also crosses from A into B
+      -- along the way, so both elements' hover edges fire too.
+      let attrsA =
+            [ isFocusable False
+            , onMouseEntered (const [OutMsg ("A entered" :: String)])
+            , onMouseExited  (const [OutMsg "A exited"])
+            , onMouseDown    (const [OutMsg "A down"])
+            ]
+          attrsB =
+            [ isFocusable False
+            , onMouseEntered (const [OutMsg ("B entered" :: String)])
+            , onMouseUp      (const [OutMsg "B up"])
+            ]
+      result <- runInteractions testBounds seedCtx (both attrsA attrsB) []
+        [MouseDown onA, DragTo onB, MouseUp onB]
+      resultMessages result `shouldBe` ["A entered", "A down", "A exited", "B entered", "B up"]
 
   describe "click-to-focus" $ do
     let attrsA = [onFocusLost   (const [OutMsg ("A lost"   :: String)])]
@@ -226,6 +251,11 @@ spec = describe "Blink.View.Controls.Control.controlBase" $ do
       let keyAttrs = [onKeyPressed (\k -> [OutMsg (show k)])]
       result <- runInteractions testBounds seedCtx (both keyAttrs []) [Wait 1] [ShiftTab]
       resultMessages result `shouldBe` []
+
+    it "reports an ordinary key press with its triggering KeyEvent" $ do
+      let keyAttrs = [onKeyPressed (\k -> [OutMsg (show k)])]
+      result <- runInteractions testBounds seedCtx (renderControl keyAttrs) [Wait 1] [PressKey KeyReturn []]
+      resultMessages result `shouldBe` [show (KeyEvent KeyReturn [] False)]
 
     describe "Shift-Tab past a disabled control" $ do
       let tagged e = [onFocusGained (const [OutMsg (show e ++ " gained")]), onFocusLost (const [OutMsg (show e ++ " lost")])]

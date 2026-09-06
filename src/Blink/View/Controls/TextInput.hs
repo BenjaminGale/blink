@@ -4,7 +4,7 @@
 -- | A single-line text entry field: click-to-place cursor, drag selection,
 -- Shift+arrow extension, and selection-aware editing. Long text scrolls
 -- horizontally to keep the cursor visible. A leaf, built directly on
--- 'controlBase'. Its own value isn't a 'Blink.View.Controls.Label.LabelledConfig'
+-- 'control'. Its own value isn't a 'Blink.View.Controls.Label.LabelledConfig'
 -- field -- it's edited, not just displayed -- so it has its own 'value'
 -- attribute rather than 'Blink.View.Controls.Label.text'.
 module Blink.View.Controls.TextInput
@@ -65,9 +65,6 @@ defaultTextInputConfig = TextInputConfig
   , ticOnSubmit      = []
   , ticLayout        = Layout fill fitContent TopLeft
   }
-
-instance HasElementConfig e msg (TextInputConfig e msg) where
-  overElement attr = Attribute (\tc -> tc { ticControl = runAttribute (overElement attr) (ticControl tc) })
 
 instance HasControlConfig e msg (TextInputConfig e msg) where
   overControl attr = Attribute (\tc -> tc { ticControl = runAttribute attr (ticControl tc) })
@@ -306,10 +303,10 @@ textInput eid attrs = Element
       wasFocused   <- isFocused eid
       wasCapturing <- isDragging eid
       let ctrl = (ticControl cfg)
-            { ccContent = body wasFocused wasCapturing
-            , ccElement = (ccElement (ticControl cfg)) { ecElementId = Just eid }
+            { ccContent   = body wasFocused wasCapturing
+            , ccElementId = Just eid
             }
-      void (controlBase ctrl)
+      void (control ctrl)
   }
   where
     cfg = resolve defaultTextInputConfig attrs

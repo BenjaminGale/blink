@@ -9,7 +9,7 @@
 -- 'Blink.View.Controls.Button.ActivateOnPress' -- see 'repeatButton'.
 --
 -- @
--- controlBase --> buttonBase --> repeatButton
+-- control --> buttonBase --> repeatButton
 -- @
 --
 -- 'repeatButton' keeps no timer of its own that survives between frames --
@@ -87,9 +87,6 @@ defaultRepeatButtonConfig = RepeatButtonConfig
   , rbOnPressEnded        = []
   }
 
-instance HasElementConfig e msg (RepeatButtonConfig e msg) where
-  overElement attr = Attribute (\rc -> rc { rbButton = runAttribute (overElement attr) (rbButton rc) })
-
 instance HasControlConfig e msg (RepeatButtonConfig e msg) where
   overControl attr = Attribute (\rc -> rc { rbButton = runAttribute (overControl attr) (rbButton rc) })
 
@@ -142,7 +139,7 @@ onFiredCountChanged :: (Int -> [Out e msg]) -> Attribute (RepeatButtonConfig e m
 onFiredCountChanged f = Attribute (\rc -> rc { rbOnFiredCountChanged = f })
 
 -- | Fires once, the frame the press ends (release, or the pointer leaving
--- while held -- anything that drops 'Blink.View.Controls.Control.eiHeld').
+-- while held -- anything that drops 'Blink.View.Controls.Control.ciHeld').
 -- React by clearing whatever 'pressStartedAt' currently holds.
 onPressEnded :: [Out e msg] -> Attribute (RepeatButtonConfig e msg)
 onPressEnded hs = Attribute (\rc -> rc { rbOnPressEnded = hs })
@@ -196,22 +193,22 @@ repeatButton eid attrs = Element
       -- 'ActivateOnPress' (the press) or Enter-while-focused -- this only
       -- adds the repeats past that first activation.
       r <- buttonBase eid btn { bcControl = ctrl }
-      let ei = ciElement (biControl r)
+      let ei = biControl r
 
-      when (eiMouseDown ei) $ do
+      when (ciMouseDown ei) $ do
         now <- realToFrac <$> getAnimElapsed
         runHandlers [rbOnPressStarted cfg] now
 
-      -- Kept alive by 'eiHeld' alone, not by whether the anchor has
+      -- Kept alive by 'ciHeld' alone, not by whether the anchor has
       -- arrived yet: the very frame a press starts, the caller hasn't had
       -- a chance to feed 'pressStartedAt' back in, but the ticker still
       -- needs to already be running so the *next* frame -- the first one
       -- with an anchor to work from -- is a real animation tick rather
       -- than an idle one.
-      when (eiHeld ei) requiresAnimation
+      when (ciHeld ei) requiresAnimation
 
       case rbPressStartedAt cfg of
-        Just started | eiHeld ei -> do
+        Just started | ciHeld ei -> do
           now <- realToFrac <$> getAnimElapsed
           let heldFor = now - started
               due     = repeatsDueBy cfg heldFor

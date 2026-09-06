@@ -291,10 +291,10 @@ shrink _ Unbounded   = Unbounded
 
 -- | Implemented by any config type that nests a 'Layout', letting 'width'\/
 -- 'height'\/'align' be applied to it directly -- the same delegation
--- pattern as 'Blink.View.Controls.Control.HasControlConfig'\/
--- 'Blink.View.Controls.Control.HasElementConfig', minus the @e@\/@msg@
--- functional dependency those need and this doesn't: a 'Layout' is pure
--- geometry, with no element-identity or message type of its own to fix.
+-- pattern as 'Blink.View.Controls.Control.HasControlConfig', minus the
+-- @e@\/@msg@ functional dependency that needs and this doesn't: a 'Layout'
+-- is pure geometry, with no element-identity or message type of its own to
+-- fix.
 class HasLayoutConfig cfg where
   overLayout :: Attribute Layout -> Attribute cfg
 

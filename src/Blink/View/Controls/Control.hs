@@ -8,50 +8,40 @@
 --
 -- = The attribute mechanism
 --
--- Each layer's own config type gets a one-method typeclass
--- (@HasElementConfig@, 'HasControlConfig') so an attribute defined once
--- against that layer's config (e.g. 'onClicked' against 'ElementConfig')
--- can be applied to any config that nests one, however deep, via the
--- class's @over...@ method. A config that itself /is/ the target type
--- delegates with 'id'; a config that nests one delegates by rewriting just
--- that field. 'over...' composes through arbitrary nesting depth, so an
--- attribute's reach is decided by where its field sits, not by which
--- instances a widget declines to declare.
---
--- = Element
---
--- An element ('elementBase') watches whether the pointer is over it,
--- whether a mouse button is pressed or released on it, what keys are typed
--- while it holds focus, and whether focus moves onto or off of it, and
--- returns all of that as an 'ElementInteraction' -- firing the matching
--- handler from its 'ElementConfig' for each, once, in one place, after
--- every flag has been computed.
+-- Every widget's own config type gets a one-method typeclass instance
+-- ('HasControlConfig') so an attribute defined once against 'ControlConfig'
+-- (e.g. 'onClicked') can be applied to any config that nests one, however
+-- deep, via the class's 'overControl' method. A config that itself /is/
+-- 'ControlConfig' delegates with 'id'; a config that nests one delegates by
+-- rewriting just that field. 'overControl' composes through arbitrary
+-- nesting depth, so an attribute's reach is decided by where its field
+-- sits, not by which instances a widget declines to declare.
 --
 -- = Control
 --
--- A control ('controlBase') wraps an element with focus management (claim
--- on render while nothing else holds it, give up on Tab, hand focus to the
--- previous tab stop on Shift-Tab, take focus itself on a mouse-down when
--- 'isFocusable') and themed chrome (background, border, padding, resolved
--- from a 'Blink.View.Style.StyleKey' and the element's own hover\/press\/focus
--- state) around whatever content its 'ControlConfig' carries. Per "a layer
--- fires only what it originates", 'controlBase' never dispatches an
--- element event itself -- the one side-effect it applies off a click
--- (self-focus on mouse-down) is a direct 'UiEffect', not a handler call.
+-- A control ('control') watches whether the pointer is over it, whether a
+-- mouse button is pressed or released on it, what keys are typed while it
+-- holds focus, and whether focus moves onto or off of it -- firing the
+-- matching handler from @cc@'s own handler fields for each, once, in one
+-- place, after every flag has been computed -- manages its own keyboard
+-- focus (claim on render while nothing else holds it, give up on Tab, hand
+-- focus to the previous tab stop on Shift-Tab, take focus itself on a
+-- mouse-down when 'isFocusable'), and draws themed chrome (background,
+-- border, padding, resolved from a 'Blink.View.Style.StyleKey' and its own
+-- hover\/press\/focus state) around whatever content its 'ControlConfig'
+-- carries. Per "a layer fires only what it originates", 'control' never
+-- dispatches a raw event itself -- the one side-effect it applies off a
+-- click (self-focus on mouse-down) is a direct 'UiEffect', not a handler
+-- call.
 module Blink.View.Controls.Control
   ( -- * Attributes
     Attribute (..)
   , resolve
 
-    -- * Element
+    -- * Raw events
   , EventHandler
   , KeyEventHandler
-  , ElementConfig (..)
-  , ElementInteraction (..)
-  , HasElementConfig (..)
   , MouseActivation (..)
-  , defaultElementConfig
-  , elementBase
   , elementId
   , onMouseEntered
   , onMouseExited
@@ -71,7 +61,7 @@ module Blink.View.Controls.Control
   , ControlInteraction (..)
   , HasControlConfig (..)
   , defaultControlConfig
-  , controlBase
+  , control
   , focusTargetOnClick
 
     -- ** Control attributes
@@ -98,7 +88,7 @@ import Blink.View.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..),
 import Blink.View
 import Blink.View.Element (Element (..))
 
--- * Element
+-- * Raw events
 
 -- | A handler for an element event with no data of its own.
 type EventHandler e msg = () -> [Out e msg]
@@ -106,18 +96,18 @@ type EventHandler e msg = () -> [Out e msg]
 -- | A handler for 'onKeyPressed', with the triggering 'KeyEvent'.
 type KeyEventHandler e msg = KeyEvent -> [Out e msg]
 
--- | How an element's own mouse-button activity translates into
--- 'eiClicked' -- and, transitively, into 'controlBase's own click-to-focus.
--- A control declares this once, up front, as part of its own interaction
--- model; it is never inferred from what a particular drag happened to do.
+-- | How a control's own mouse-button activity translates into 'ciClicked'
+-- -- and, transitively, into 'control's own click-to-focus. A control
+-- declares this once, up front, as part of its own interaction model; it
+-- is never inferred from what a particular drag happened to do.
 data MouseActivation
   = ClickActivated
-    -- ^ Activated only by a release that lands back within the element's
+    -- ^ Activated only by a release that lands back within the control's
     -- bounds -- the default. Dragging off before releasing cancels the
     -- press without side effects, the conventional way to back out of a
     -- click (buttons, checkboxes, and most other controls).
   | CaptureActivated
-    -- ^ Activated by any release while the element still holds mouse
+    -- ^ Activated by any release while the control still holds mouse
     -- capture, even once the pointer has left its bounds. For a control
     -- whose drag movement is itself the interaction (e.g.
     -- 'Blink.View.Controls.Slider.slider'), the value has already changed by
@@ -126,148 +116,65 @@ data MouseActivation
     -- just be a drag with no activation at all.
   deriving (Eq, Show)
 
--- | One element's handlers, grouped by event, plus its 'MouseActivation'
--- and its identity ('ecElementId').
-data ElementConfig e msg = ElementConfig
-  { ecElementId       :: Maybe e
-  , ecOnMouseEntered  :: [EventHandler e msg]
-  , ecOnMouseExited   :: [EventHandler e msg]
-  , ecOnMouseDown     :: [EventHandler e msg]
-  , ecOnMouseUp       :: [EventHandler e msg]
-  , ecOnClicked       :: [EventHandler e msg]
-  , ecOnKeyPressed    :: [KeyEventHandler e msg]
-  , ecOnFocusGained   :: [EventHandler e msg]
-  , ecOnFocusLost     :: [EventHandler e msg]
-  , ecMouseActivation :: MouseActivation
-  }
-
--- | No 'ecElementId', every handler field empty, 'ClickActivated' for
--- 'ecMouseActivation'.
-defaultElementConfig :: ElementConfig e msg
-defaultElementConfig = ElementConfig
-  { ecElementId       = Nothing
-  , ecOnMouseEntered  = []
-  , ecOnMouseExited   = []
-  , ecOnMouseDown     = []
-  , ecOnMouseUp       = []
-  , ecOnClicked       = []
-  , ecOnKeyPressed    = []
-  , ecOnFocusGained   = []
-  , ecOnFocusLost     = []
-  , ecMouseActivation = ClickActivated
-  }
-
--- | What 'elementBase' reports about the current frame's mouse, keyboard,
--- and focus activity: three steady interaction states (@eiHovered@,
--- @eiHeld@, @eiFocused@), and the discrete events that fired this frame.
---
--- @eiClicked@'s exact trigger depends on the 'ElementConfig's own
--- 'ecMouseActivation': a release back within bounds by default, or (for
--- 'CaptureActivated') any release while this element still holds capture,
--- even outside them.
-data ElementInteraction = ElementInteraction
-  { eiHovered       :: Bool
-  , eiHeld          :: Bool
-  , eiFocused       :: Bool
-  , eiMouseEntered  :: Bool
-  , eiMouseExited   :: Bool
-  , eiMouseDown     :: Bool
-  , eiMouseUp       :: Bool
-  , eiClicked       :: Bool
-  , eiFocusGained   :: Bool
-  , eiFocusLost     :: Bool
-  , eiKeysPressed   :: [KeyEvent]
-  }
-
--- | Field-by-field: @||@ for flags, concatenation for key events. Combining
--- a report against 'mempty' leaves it unchanged, so a report that only
--- knows about some fields can be merged with others covering the rest.
-instance Semigroup ElementInteraction where
-  a <> b = ElementInteraction
-    { eiHovered      = eiHovered a      || eiHovered b
-    , eiHeld         = eiHeld a         || eiHeld b
-    , eiFocused      = eiFocused a      || eiFocused b
-    , eiMouseEntered = eiMouseEntered a || eiMouseEntered b
-    , eiMouseExited  = eiMouseExited a  || eiMouseExited b
-    , eiMouseDown    = eiMouseDown a    || eiMouseDown b
-    , eiMouseUp      = eiMouseUp a      || eiMouseUp b
-    , eiClicked      = eiClicked a      || eiClicked b
-    , eiFocusGained  = eiFocusGained a  || eiFocusGained b
-    , eiFocusLost    = eiFocusLost a    || eiFocusLost b
-    , eiKeysPressed  = eiKeysPressed a  ++ eiKeysPressed b
-    }
-
-instance Monoid ElementInteraction where
-  mempty = ElementInteraction False False False False False False False False False False []
-
--- | Implemented by any config type that nests an 'ElementConfig', letting
--- an element attribute (e.g. 'onClicked') be applied to it directly. Every
--- instance but the base case delegates one hop into its own nested field.
-class HasElementConfig e msg cfg | cfg -> e msg where
-  overElement :: Attribute (ElementConfig e msg) -> Attribute cfg
-
-instance HasElementConfig e msg (ElementConfig e msg) where
-  overElement = id
-
--- | Appends a handler to whichever 'ElementConfig' field @get@\/@set@
+-- | Appends a handler to whichever 'ControlConfig' field @get@\/@set@
 -- address, wrapping the result as an 'Attribute'. The shared plumbing
 -- behind every @onX@ builder below.
-addHandler :: HasElementConfig e msg cfg
-           => (ElementConfig e msg -> [h]) -> (ElementConfig e msg -> [h] -> ElementConfig e msg)
+addHandler :: HasControlConfig e msg cfg
+           => (ControlConfig e msg -> [h]) -> (ControlConfig e msg -> [h] -> ControlConfig e msg)
            -> h -> Attribute cfg
-addHandler get set h = overElement (Attribute (\ec -> set ec (get ec ++ [h])))
+addHandler get set h = overControl (Attribute (\cc -> set cc (get cc ++ [h])))
 
--- | Gives the element a stable identity, keying its hover\/capture\/focus
--- tracking across frames -- see 'elementBase'. Unset by default, in which
--- case the element raises no events and takes no part in focus at all,
+-- | Gives the control a stable identity, keying its hover\/capture\/focus
+-- tracking across frames -- see 'control'. Unset by default, in which case
+-- the control raises no events and takes no part in focus at all,
 -- regardless of any handler attached to it.
-elementId :: HasElementConfig e msg cfg => e -> Attribute cfg
-elementId eid = overElement (Attribute (\ec -> ec { ecElementId = Just eid }))
+elementId :: HasControlConfig e msg cfg => e -> Attribute cfg
+elementId eid = overControl (Attribute (\cc -> cc { ccElementId = Just eid }))
 
--- | Reacts when the pointer starts being over the element this frame.
-onMouseEntered :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onMouseEntered = addHandler ecOnMouseEntered (\ec hs -> ec { ecOnMouseEntered = hs })
+-- | Reacts when the pointer starts being over the control this frame.
+onMouseEntered :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onMouseEntered = addHandler ccOnMouseEntered (\cc hs -> cc { ccOnMouseEntered = hs })
 
--- | Reacts when the pointer stops being over the element this frame.
-onMouseExited :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onMouseExited = addHandler ecOnMouseExited (\ec hs -> ec { ecOnMouseExited = hs })
+-- | Reacts when the pointer stops being over the control this frame.
+onMouseExited :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onMouseExited = addHandler ccOnMouseExited (\cc hs -> cc { ccOnMouseExited = hs })
 
--- | Reacts when the mouse button goes down while the element is hit.
-onMouseDown :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onMouseDown = addHandler ecOnMouseDown (\ec hs -> ec { ecOnMouseDown = hs })
+-- | Reacts when the mouse button goes down while the control is hit.
+onMouseDown :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onMouseDown = addHandler ccOnMouseDown (\cc hs -> cc { ccOnMouseDown = hs })
 
--- | Reacts when the mouse button comes up while the element is hit, even
+-- | Reacts when the mouse button comes up while the control is hit, even
 -- if the press started elsewhere. See 'onClicked' for the click-only
 -- version.
-onMouseUp :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onMouseUp = addHandler ecOnMouseUp (\ec hs -> ec { ecOnMouseUp = hs })
+onMouseUp :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onMouseUp = addHandler ccOnMouseUp (\cc hs -> cc { ccOnMouseUp = hs })
 
--- | Reacts when the element is clicked -- by default (see
+-- | Reacts when the control is clicked -- by default (see
 -- 'MouseActivation'), the mouse button pressed and released on it without
--- leaving; a 'CaptureActivated' element instead fires this on any release
+-- leaving; a 'CaptureActivated' control instead fires this on any release
 -- while it still holds capture, even outside its bounds. Mouse-only -- see
 -- 'Blink.View.Controls.Button.onActivated' for the event that also fires on
 -- Enter while a button-like control holds focus.
-onClicked :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onClicked = addHandler ecOnClicked (\ec hs -> ec { ecOnClicked = hs })
+onClicked :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onClicked = addHandler ccOnClicked (\cc hs -> cc { ccOnClicked = hs })
 
--- | Reacts to a key event while the element holds focus, with the
+-- | Reacts to a key event while the control holds focus, with the
 -- triggering 'KeyEvent'.
-onKeyPressed :: HasElementConfig e msg cfg => KeyEventHandler e msg -> Attribute cfg
-onKeyPressed = addHandler ecOnKeyPressed (\ec hs -> ec { ecOnKeyPressed = hs })
+onKeyPressed :: HasControlConfig e msg cfg => KeyEventHandler e msg -> Attribute cfg
+onKeyPressed = addHandler ccOnKeyPressed (\cc hs -> cc { ccOnKeyPressed = hs })
 
--- | Reacts when the element is named the winner of a focus transfer.
-onFocusGained :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onFocusGained = addHandler ecOnFocusGained (\ec hs -> ec { ecOnFocusGained = hs })
+-- | Reacts when the control is named the winner of a focus transfer.
+onFocusGained :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onFocusGained = addHandler ccOnFocusGained (\cc hs -> cc { ccOnFocusGained = hs })
 
--- | Reacts when the element loses focus, whether to a transfer or a clear.
-onFocusLost :: HasElementConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onFocusLost = addHandler ecOnFocusLost (\ec hs -> ec { ecOnFocusLost = hs })
+-- | Reacts when the control loses focus, whether to a transfer or a clear.
+onFocusLost :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onFocusLost = addHandler ccOnFocusLost (\cc hs -> cc { ccOnFocusLost = hs })
 
--- | Which way this element's own mouse-button activity turns into a click
+-- | Which way this control's own mouse-button activity turns into a click
 -- -- see 'MouseActivation'. Defaults to 'ClickActivated'.
-mouseActivation :: HasElementConfig e msg cfg => MouseActivation -> Attribute cfg
-mouseActivation a = overElement (Attribute (\ec -> ec { ecMouseActivation = a }))
+mouseActivation :: HasControlConfig e msg cfg => MouseActivation -> Attribute cfg
+mouseActivation a = overControl (Attribute (\cc -> cc { ccMouseActivation = a }))
 
 -- | Runs every handler in @hs@ on @a@, dispatching the resulting 'Out's.
 runHandlers :: [a -> [Out e msg]] -> a -> View e msg ()
@@ -287,70 +194,53 @@ post msg = const [OutMsg msg]
 postWith :: (a -> msg) -> a -> [Out e msg]
 postWith f a = [OutMsg (f a)]
 
--- | 'True' when nothing else holds mouse capture, or this element itself
--- does (a drag in progress on this element doesn't count as contention).
--- Shared by 'controlBase's own auto-claim logic.
+-- | 'True' when nothing else holds mouse capture, or this control itself
+-- does (a drag in progress on this control doesn't count as contention).
+-- Shared by 'control's own auto-claim logic.
 isMouseFreeFor :: Eq e => e -> View e msg Bool
 isMouseFreeFor eid = do
   capturedByMe <- isDragging eid
   (|| capturedByMe) <$> isMouseFree
 
--- | Watches this element's hover, mouse-button, keyboard, and focus
--- activity for the current frame -- within whatever bounds and scope its
--- caller has established via 'withBounds' -- and calls the matching
--- handler in @ec@ for each. Returns the full picture as an
--- 'ElementInteraction' so a caller built on top (e.g. 'controlBase') can
--- read the same flags back without re-querying the context itself. @ec@'s
--- own 'ecMouseActivation' decides what counts as a click -- see
--- 'MouseActivation'.
---
--- Identified by @ec@'s own 'ecElementId' (see 'elementId'). With no id set,
--- this raises no events and reports 'mempty' -- fully inert, not an error.
-elementBase :: Ord e => ElementConfig e msg -> View e msg ElementInteraction
-elementBase ec = case ecElementId ec of
-  Nothing  -> pure mempty
-  Just eid -> do
-    disabled <- isDisabled
-    hit      <- isRegionHit
-    let eligible = not disabled && hit
-
-    hoverI <- watchHover eid eligible
-    mouseI <- watchMouseButton eid (ecMouseActivation ec) eligible
-    focusI <- watchFocus eid disabled
-
-    let interaction = hoverI <> mouseI <> focusI
-
-    fireElementEvents ec interaction
-    pure interaction
+-- | 'watchHover's own report: hovered, plus the enter\/exit edges against
+-- last frame's hover state.
+data HoverInteraction = HoverInteraction
+  { hiHovered      :: Bool
+  , hiMouseEntered :: Bool
+  , hiMouseExited  :: Bool
+  }
 
 -- | Registers this frame's hover, claiming mouse-over and capture when the
--- element is eligible, and reports hovered plus the enter\/exit edges
--- against last frame's hover state. Only fills in 'eiHovered',
--- 'eiMouseEntered', and 'eiMouseExited' -- the rest is 'mempty'.
-watchHover :: Ord e => e -> Bool -> View e msg ElementInteraction
+-- control is eligible, and reports hovered plus the enter\/exit edges
+-- against last frame's hover state.
+watchHover :: Ord e => e -> Bool -> View e msg HoverInteraction
 watchHover eid eligible = do
   when eligible $ do
     registerMouseOver eid
     acquireCapture eid
   wasOver <- wasMouseOverLastFrame eid
-  let mouseEntered = not wasOver && eligible
-      mouseExited  = wasOver && not eligible
-  pure mempty
-    { eiHovered      = eligible
-    , eiMouseEntered = mouseEntered
-    , eiMouseExited  = mouseExited
+  pure HoverInteraction
+    { hiHovered      = eligible
+    , hiMouseEntered = not wasOver && eligible
+    , hiMouseExited  = wasOver && not eligible
     }
 
--- | Reports this frame's mouse-button activity against the element: down,
--- up (always bounds-gated), click, and held (button down with capture free
--- or held by this element). Only fills in 'eiMouseDown', 'eiMouseUp',
--- 'eiClicked', and 'eiHeld' -- the rest is 'mempty'.
+-- | 'watchMouseButton's own report: down, up (always bounds-gated), click,
+-- and held (button down with capture free or held by this control).
+data MouseButtonInteraction = MouseButtonInteraction
+  { mbiMouseDown :: Bool
+  , mbiMouseUp   :: Bool
+  , mbiClicked   :: Bool
+  , mbiHeld      :: Bool
+  }
+
+-- | Reports this frame's mouse-button activity against the control.
 --
 -- @clicked@ reads differently depending on @activation@: for
 -- 'ClickActivated', a release only counts while still within bounds (the
--- same release 'eiMouseUp' reports); for 'CaptureActivated', a release
--- while this element holds capture counts regardless of bounds.
-watchMouseButton :: Eq e => e -> MouseActivation -> Bool -> View e msg ElementInteraction
+-- same release 'mbiMouseUp' reports); for 'CaptureActivated', a release
+-- while this control holds capture counts regardless of bounds.
+watchMouseButton :: Eq e => e -> MouseActivation -> Bool -> View e msg MouseButtonInteraction
 watchMouseButton eid activation eligible = do
   mouse <- getMouse
   let capturedByMe  = captureOf (mouseButton mouse) == MouseCapturedBy eid
@@ -365,11 +255,11 @@ watchMouseButton eid activation eligible = do
   down <- isButtonDown
   let held = eligible && free && down
 
-  pure mempty
-    { eiMouseDown = mouseDown
-    , eiMouseUp   = mouseUp
-    , eiClicked   = clicked
-    , eiHeld      = held
+  pure MouseButtonInteraction
+    { mbiMouseDown = mouseDown
+    , mbiMouseUp   = mouseUp
+    , mbiClicked   = clicked
+    , mbiHeld      = held
     }
   where
     isButtonDownEvent (ButtonDown _) = True
@@ -377,12 +267,20 @@ watchMouseButton eid activation eligible = do
     isButtonReleasedEvent (ButtonReleased _) = True
     isButtonReleasedEvent _                  = False
 
--- | Reports whether the element is focused this frame, the key events it
+-- | 'watchFocus's own report: whether the control is focused this frame,
+-- the key events it received, and whether a focus transfer this frame
+-- named it winner or loser.
+data FocusInteraction = FocusInteraction
+  { fiFocused     :: Bool
+  , fiFocusGained :: Bool
+  , fiFocusLost   :: Bool
+  , fiKeysPressed :: [KeyEvent]
+  }
+
+-- | Reports whether the control is focused this frame, the key events it
 -- received (empty when disabled or unfocused), and whether a focus
--- transfer this frame named it winner or loser. Only fills in
--- 'eiFocused', 'eiFocusGained', 'eiFocusLost', and 'eiKeysPressed' -- the
--- rest is 'mempty'.
-watchFocus :: Eq e => e -> Bool -> View e msg ElementInteraction
+-- transfer this frame named it winner or loser.
+watchFocus :: Eq e => e -> Bool -> View e msg FocusInteraction
 watchFocus eid disabled = do
   focused <- isFocused eid
   input   <- getInput
@@ -391,83 +289,131 @@ watchFocus eid disabled = do
   focusGained <- hasGainedFocus eid
   focusLost   <- hasLostFocus eid
 
-  pure mempty
-    { eiFocused     = focused
-    , eiFocusGained = focusGained
-    , eiFocusLost   = focusLost
-    , eiKeysPressed = keysPressed
+  pure FocusInteraction
+    { fiFocused     = focused
+    , fiFocusGained = focusGained
+    , fiFocusLost   = focusLost
+    , fiKeysPressed = keysPressed
     }
 
--- | Fires the handler matching each flag set on @ei@ -- the one place
--- 'elementBase' dispatches anything, run once every flag has been
--- computed.
-fireElementEvents :: ElementConfig e msg -> ElementInteraction -> View e msg ()
-fireElementEvents ec ei = do
+-- | Fires the handler matching each flag set on @ci@ -- the one place raw
+-- events are dispatched, run once every flag has been computed.
+fireElementEvents :: ControlConfig e msg -> ControlInteraction e msg -> View e msg ()
+fireElementEvents cc ci = do
   mapM_ (\(fired, hs) -> when fired $ runHandlers hs ()) events
-  mapM_ (runHandlers (ecOnKeyPressed ec)) (eiKeysPressed ei)
+  mapM_ (runHandlers (ccOnKeyPressed cc)) (ciKeysPressed ci)
   where
     events =
-      [ (eiMouseEntered ei, ecOnMouseEntered ec)
-      , (eiMouseExited  ei, ecOnMouseExited  ec)
-      , (eiMouseDown    ei, ecOnMouseDown    ec)
-      , (eiMouseUp      ei, ecOnMouseUp      ec)
-      , (eiClicked      ei, ecOnClicked      ec)
-      , (eiFocusGained  ei, ecOnFocusGained  ec)
-      , (eiFocusLost    ei, ecOnFocusLost    ec)
+      [ (ciMouseEntered ci, ccOnMouseEntered cc)
+      , (ciMouseExited  ci, ccOnMouseExited  cc)
+      , (ciMouseDown    ci, ccOnMouseDown    cc)
+      , (ciMouseUp      ci, ccOnMouseUp      cc)
+      , (ciClicked      ci, ccOnClicked      cc)
+      , (ciFocusGained  ci, ccOnFocusGained  cc)
+      , (ciFocusLost    ci, ccOnFocusLost    cc)
       ]
 
 -- * Control
 
--- | Every capability a control resolves before rendering: whether it's
--- focusable and enabled, its style, its content, and the element event
--- handlers wrapped up inside it.
+-- | Every capability a control resolves before rendering: its identity and
+-- raw-event handlers, whether it's focusable and enabled, its style, and
+-- its content.
 data ControlConfig e msg = ControlConfig
-  { ccIsFocusable  :: Bool
-  , ccIsEnabled    :: Bool
-  , ccStyleKey     :: StyleKey e
-  , ccActiveStates :: Set VisualState
+  { ccElementId       :: Maybe e
+  , ccOnMouseEntered  :: [EventHandler e msg]
+  , ccOnMouseExited   :: [EventHandler e msg]
+  , ccOnMouseDown     :: [EventHandler e msg]
+  , ccOnMouseUp       :: [EventHandler e msg]
+  , ccOnClicked       :: [EventHandler e msg]
+  , ccOnKeyPressed    :: [KeyEventHandler e msg]
+  , ccOnFocusGained   :: [EventHandler e msg]
+  , ccOnFocusLost     :: [EventHandler e msg]
+  , ccMouseActivation :: MouseActivation
+  , ccIsFocusable     :: Bool
+  , ccIsEnabled       :: Bool
+  , ccStyleKey        :: StyleKey e
+  , ccActiveStates    :: Set VisualState
     -- ^ Extra 'VisualState's contributed by a wrapping layer (e.g.
     -- 'Blink.View.Controls.Toggle.toggleBase' setting a checked\/unchecked
-    -- pseudo-state), unioned with the common\/focus states 'controlBase'
+    -- pseudo-state), unioned with the common\/focus states 'control'
     -- derives itself. Defaults to empty.
-  , ccContent      :: View e msg ()
-  , ccElement      :: ElementConfig e msg
+  , ccContent         :: View e msg ()
   }
 
--- | Focusable, enabled, styled via an arbitrary placeholder key (always
--- overridden -- every real caller of 'controlBase' supplies its own via
--- 'style'), no extra active states, rendering nothing, and with no event
--- handlers registered.
+-- | No identity, every handler field empty, 'ClickActivated', focusable,
+-- enabled, styled via an arbitrary placeholder key (always overridden --
+-- every real caller of 'control' supplies its own via 'style'), no extra
+-- active states, and rendering nothing.
 defaultControlConfig :: ControlConfig e msg
 defaultControlConfig = ControlConfig
-  { ccIsFocusable  = True
-  , ccIsEnabled    = True
-  , ccStyleKey     = Class ""
-  , ccActiveStates = Set.empty
-  , ccContent      = pure ()
-  , ccElement      = defaultElementConfig
+  { ccElementId       = Nothing
+  , ccOnMouseEntered  = []
+  , ccOnMouseExited   = []
+  , ccOnMouseDown     = []
+  , ccOnMouseUp       = []
+  , ccOnClicked       = []
+  , ccOnKeyPressed    = []
+  , ccOnFocusGained   = []
+  , ccOnFocusLost     = []
+  , ccMouseActivation = ClickActivated
+  , ccIsFocusable     = True
+  , ccIsEnabled       = True
+  , ccStyleKey        = Class ""
+  , ccActiveStates    = Set.empty
+  , ccContent         = pure ()
   }
 
--- | What 'controlBase' reports back: the wrapped element's own
--- 'ElementInteraction', and the 'Style' it resolved and drew with this
--- frame.
+-- | What 'control' reports back: three steady interaction states
+-- (@ciHovered@, @ciHeld@, @ciFocused@), the discrete events that fired
+-- this frame, and the 'Style' it resolved and drew with.
+--
+-- @ciClicked@'s exact trigger depends on 'ControlConfig's own
+-- 'ccMouseActivation': a release back within bounds by default, or (for
+-- 'CaptureActivated') any release while this control still holds capture,
+-- even outside them.
 data ControlInteraction e msg = ControlInteraction
-  { ciElement :: ElementInteraction
-  , ciStyle   :: Style
+  { ciHovered      :: Bool
+  , ciHeld         :: Bool
+  , ciFocused      :: Bool
+  , ciMouseEntered :: Bool
+  , ciMouseExited  :: Bool
+  , ciMouseDown    :: Bool
+  , ciMouseUp      :: Bool
+  , ciClicked      :: Bool
+  , ciFocusGained  :: Bool
+  , ciFocusLost    :: Bool
+  , ciKeysPressed  :: [KeyEvent]
+  , ciStyle        :: Style
+  }
+
+-- | The report a disabled or unidentified control gets: nothing was
+-- watched, so nothing is hovered, held, focused, or reports any event --
+-- drawn with @s@ regardless.
+noInteraction :: Style -> ControlInteraction e msg
+noInteraction s = ControlInteraction
+  { ciHovered      = False
+  , ciHeld         = False
+  , ciFocused      = False
+  , ciMouseEntered = False
+  , ciMouseExited  = False
+  , ciMouseDown    = False
+  , ciMouseUp      = False
+  , ciClicked      = False
+  , ciFocusGained  = False
+  , ciFocusLost    = False
+  , ciKeysPressed  = []
+  , ciStyle        = s
   }
 
 -- | Implemented by any config type that nests a 'ControlConfig', letting a
--- control attribute (e.g. 'isFocusable') be applied to it directly. Also
--- gives every such config an 'HasElementConfig' instance for free, one hop
--- further in through 'ccElement'.
+-- control attribute (e.g. 'isFocusable', 'onClicked') be applied to it
+-- directly. Every instance but the base case delegates one hop into its
+-- own nested field.
 class HasControlConfig e msg cfg | cfg -> e msg where
   overControl :: Attribute (ControlConfig e msg) -> Attribute cfg
 
 instance HasControlConfig e msg (ControlConfig e msg) where
   overControl = id
-
-instance HasElementConfig e msg (ControlConfig e msg) where
-  overElement (Attribute f) = Attribute (\cc -> cc { ccElement = f (ccElement cc) })
 
 -- | Whether this control participates in keyboard focus at all: Tab\/
 -- Shift-Tab cycling onto it, and auto-claiming focus by rendering first
@@ -487,9 +433,9 @@ isEnabled b = overControl (Attribute (\cc -> cc { ccIsEnabled = b }))
 style :: HasControlConfig e msg cfg => StyleKey e -> Attribute cfg
 style k = overControl (Attribute (\cc -> cc { ccStyleKey = k }))
 
--- | Which way, if any, focus just moved, for 'controlBase's own immediate
+-- | Which way, if any, focus just moved, for 'control's own immediate
 -- self-claim\/self-give-up notifications -- distinct from the deferred
--- focus handoffs 'elementBase' itself detects via 'hasGainedFocus'\/'hasLostFocus'.
+-- focus handoffs 'control' itself detects via 'hasGainedFocus'\/'hasLostFocus'.
 data FocusTransition = FocusUnchanged | GainedFocus | LostFocus
 
 focusTransition :: Bool -> Bool -> FocusTransition
@@ -498,19 +444,20 @@ focusTransition was now
   | was && not now  = LostFocus
   | otherwise       = FocusUnchanged
 
--- | Fires 'ecOnFocusGained'\/'ecOnFocusLost' directly from a given
--- 'FocusTransition', immediately rather than through 'elementBase's own
--- deferred detection -- for a control's self-claim (auto-claiming focus by
--- rendering first) or immediate self-give-up (Tab), neither of which goes
--- through the 'Focus'\/'ClearFocus' 'UiEffect' 'elementBase' watches for.
-fireFocusChangeDirect :: ElementConfig e msg -> FocusTransition -> View e msg ()
-fireFocusChangeDirect ec t = case t of
-  GainedFocus    -> runHandlers (ecOnFocusGained ec) ()
-  LostFocus      -> runHandlers (ecOnFocusLost ec) ()
+-- | Fires 'ccOnFocusGained'\/'ccOnFocusLost' directly from a given
+-- 'FocusTransition', immediately rather than through the deferred
+-- detection watching raw focus transitions uses -- for a control's
+-- self-claim (auto-claiming focus by rendering first) or immediate
+-- self-give-up (Tab), neither of which goes through the
+-- 'Focus'\/'ClearFocus' 'UiEffect' that deferred detection watches for.
+fireFocusChangeDirect :: ControlConfig e msg -> FocusTransition -> View e msg ()
+fireFocusChangeDirect cc t = case t of
+  GainedFocus    -> runHandlers (ccOnFocusGained cc) ()
+  LostFocus      -> runHandlers (ccOnFocusLost cc) ()
   FocusUnchanged -> pure ()
 
 -- | The control-specific hit area: the current bounds inset by the
--- element's margin -- the margin itself is never part of the control, so a
+-- control's margin -- the margin itself is never part of the control, so a
 -- mouse position within it counts as "outside" for hovering, clicking, and
 -- focus-claiming alike.
 --
@@ -523,18 +470,18 @@ marginInsetBounds m = do
   pure (insetRect (metricsMargin m) r)
 
 -- | The common\/focus 'VisualState's derived from a control's own disabled
--- reading and its wrapped element's held\/hovered\/focused reading, before
--- any 'ccActiveStates' contributed by a wrapping layer are unioned in.
-intrinsicStates :: Bool -> ElementInteraction -> Set VisualState
-intrinsicStates disabled ei = Set.fromList
+-- reading and its held\/hovered\/focused reading, before any
+-- 'ccActiveStates' contributed by a wrapping layer are unioned in.
+intrinsicStates :: Bool -> ControlInteraction e msg -> Set VisualState
+intrinsicStates disabled ci = Set.fromList
   [ common
-  , if eiFocused ei then FocusFocused else FocusUnfocused
+  , if ciFocused ci then FocusFocused else FocusUnfocused
   ]
   where
     common
       | disabled       = CommonDisabled
-      | eiHeld ei      = CommonPressed
-      | eiHovered ei   = CommonMouseOver
+      | ciHeld ci      = CommonPressed
+      | ciHovered ci   = CommonMouseOver
       | otherwise      = CommonNormal
 
 -- | Draws a control's background and border from its resolved 'Metrics'
@@ -599,9 +546,9 @@ measureChrome k child ctx = do
 autoClaimsFocus :: ControlConfig e msg -> Bool
 autoClaimsFocus cc = ccIsFocusable cc
 
--- | 'True' when this element should take focus with nothing having asked
+-- | 'True' when this control should take focus with nothing having asked
 -- for it: opted into auto-claiming (per 'autoClaimsFocus'), nothing else is
--- currently focused, and the mouse isn't contested by another element's
+-- currently focused, and the mouse isn't contested by another control's
 -- drag.
 canAutoClaim :: Ord e => e -> ControlConfig e msg -> View e msg Bool
 canAutoClaim eid cc = do
@@ -612,7 +559,7 @@ canAutoClaim eid cc = do
 -- | Gives up focus immediately when @wasFocused@ and one of @advanceKeys@
 -- was just pressed; hands focus to the previous tab stop, one frame later,
 -- when @wasFocused@ and one of @retreatKeys@ was pressed instead (deferred
--- so that whichever element is gaining or losing focus reports it
+-- so that whichever control is gaining or losing focus reports it
 -- consistently regardless of render order). Consumes whichever specific
 -- key matched, so nothing else reacts to the same press. Disabled controls
 -- never react.
@@ -630,25 +577,26 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
       (True, _, Just e) -> forM_ prevCtrl (requestFocus scopeId) >> consumeKey (key e)
       _                 -> pure ()
 
--- | Manages this element's keyboard focus, reports its element interaction,
--- and draws its chrome around its content -- all configured entirely by
--- @cc@. Hovering, clicking, and focus-claiming all respect the same
--- margin-inset hit area chrome resolution uses -- the margin itself never
--- counts as "on" the control.
+-- | Watches this control's hover, mouse-button, keyboard, and focus
+-- activity for the current frame, manages its keyboard focus, reports the
+-- raw interaction it saw, and draws its chrome around its content -- all
+-- configured entirely by @cc@. Hovering, clicking, and focus-claiming all
+-- respect the same margin-inset hit area chrome resolution uses -- the
+-- margin itself never counts as "on" the control.
 --
--- Per "a layer fires only what it originates", never dispatches an element
+-- Per "a layer fires only what it originates", never dispatches a raw
 -- event itself: the self-focus-on-click effect it applies (when
--- @ccIsFocusable@) is a direct 'UiEffect', read off the wrapped element's
--- own 'eiMouseDown' -- so focus moves on press, before any drag or release
--- decides whether the press itself counts as a click.
+-- @ccIsFocusable@) is a direct 'UiEffect', read off its own 'ciMouseDown'
+-- -- so focus moves on press, before any drag or release decides whether
+-- the press itself counts as a click.
 --
--- Identified by @cc@'s own element config ('ecElementId', see 'elementId').
--- With no id set, the control still renders, in its resting (undisabled,
--- unfocused, unhovered) style, but claims no focus, tracks no hover or
--- press, and reports 'mempty' for its element interaction.
-controlBase :: Ord e => ControlConfig e msg -> View e msg (ControlInteraction e msg)
-controlBase cc = disableWhen (not (ccIsEnabled cc)) $
-  case ecElementId (ccElement cc) of
+-- Identified by @cc@'s own 'ccElementId' (see 'elementId'). With no id set,
+-- the control still renders, in its resting (undisabled, unfocused,
+-- unhovered) style, but claims no focus, tracks no hover or press, and
+-- reports @noInteraction@.
+control :: Ord e => ControlConfig e msg -> View e msg (ControlInteraction e msg)
+control cc = disableWhen (not (ccIsEnabled cc)) $
+  case ccElementId cc of
     Nothing  -> renderInert
     Just eid -> renderTracked eid
   where
@@ -657,10 +605,10 @@ controlBase cc = disableWhen (not (ccIsEnabled cc)) $
     renderInert = do
       (m, styles) <- getStyleSet styleKey
       disabled    <- isDisabled
-      let active = intrinsicStates disabled mempty `Set.union` ccActiveStates cc
+      let active = intrinsicStates disabled (noInteraction (styleBase styles)) `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
       renderStyled m s (ccContent cc)
-      pure (ControlInteraction mempty s)
+      pure (noInteraction s)
 
     renderTracked eid = do
       disabled <- isDisabled
@@ -674,16 +622,45 @@ controlBase cc = disableWhen (not (ccIsEnabled cc)) $
       applySelfFocus eid wasFocused
       applyNavigationKeys wasFocused
       nowFocused <- isFocused eid
-      fireFocusChangeDirect (ccElement cc) (focusTransition wasFocused nowFocused)
+      fireFocusChangeDirect cc (focusTransition wasFocused nowFocused)
       (m, styles) <- getStyleSet styleKey
       hitBounds   <- marginInsetBounds m
-      ei          <- withBounds hitBounds (elementBase (ccElement cc))
-      when (eiMouseDown ei && ccIsFocusable cc) (emitUi (Focus currentScope eid))
-      let active = intrinsicStates disabled ei `Set.union` ccActiveStates cc
+      raw         <- withBounds hitBounds (watchInteraction eid disabled (styleBase styles))
+      when (ciMouseDown raw && ccIsFocusable cc) (emitUi (Focus currentScope eid))
+      let active = intrinsicStates disabled raw `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
       renderStyled m s (ccContent cc)
       when (ccIsFocusable cc && not disabled) (setPreviousTabStop eid)
-      pure (ControlInteraction ei s)
+      pure raw { ciStyle = s }
+
+    -- The raw hover\/mouse-button\/keyboard\/focus watching every
+    -- identified control does, regardless of its focus-management or
+    -- chrome -- assembles each watcher's own report into one
+    -- 'ControlInteraction' (@placeholderStyle@ standing in for 'ciStyle'
+    -- until the caller resolves and overwrites it, since style resolution
+    -- itself depends on these flags), fires @cc@'s own handlers, and
+    -- reports the full picture.
+    watchInteraction eid disabled placeholderStyle = do
+      hit <- isRegionHit
+      let eligible = not disabled && hit
+      hoverI <- watchHover eid eligible
+      mouseI <- watchMouseButton eid (ccMouseActivation cc) eligible
+      focusI <- watchFocus eid disabled
+      let interaction = (noInteraction placeholderStyle)
+            { ciHovered      = hiHovered hoverI
+            , ciMouseEntered = hiMouseEntered hoverI
+            , ciMouseExited  = hiMouseExited hoverI
+            , ciMouseDown    = mbiMouseDown mouseI
+            , ciMouseUp      = mbiMouseUp mouseI
+            , ciClicked      = mbiClicked mouseI
+            , ciHeld         = mbiHeld mouseI
+            , ciFocused      = fiFocused focusI
+            , ciFocusGained  = fiFocusGained focusI
+            , ciFocusLost    = fiFocusLost focusI
+            , ciKeysPressed  = fiKeysPressed focusI
+            }
+      fireElementEvents cc interaction
+      pure interaction
 
     -- Immediate, not deferred: needed so that when several controls are
     -- simultaneously eligible, only the first one to render claims focus.
@@ -700,9 +677,9 @@ controlBase cc = disableWhen (not (ccIsEnabled cc)) $
 
 -- | Sends focus to @target@, in @scope@, one frame after @ei@ reports a
 -- click on the control that produced it (a release back within bounds, or
--- -- for a 'CaptureActivated' element -- any release while it still holds
--- capture). For a control that hands focus to a different element than
+-- -- for a 'CaptureActivated' control -- any release while it still holds
+-- capture). For a control that hands focus to a different control than
 -- itself when clicked -- e.g. 'Blink.View.Controls.Label.label' redirecting
 -- onto its 'Blink.View.Controls.Label.target'.
-focusTargetOnClick :: Maybe e -> e -> ElementInteraction -> View e msg ()
-focusTargetOnClick scope target ei = when (eiClicked ei) (emitUi (Focus scope target))
+focusTargetOnClick :: Maybe e -> e -> ControlInteraction e msg -> View e msg ()
+focusTargetOnClick scope target ci = when (ciClicked ci) (emitUi (Focus scope target))

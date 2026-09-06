@@ -207,7 +207,7 @@ spec = describe "Blink.View.Controls.TextInput" $ do
   describe "arrow navigation" $ do
     -- Renders the field alongside the seeding 'emitUi' so 'Field' reconfirms
     -- its focus this frame -- unrendered, its focus would expire (see
-    -- 'controlBase'), and a freshly claimed focus selects the whole value.
+    -- 'control'), and a freshly claimed focus selects the whole value.
     let seeded a v = do
           focused <- runInteractions testBounds seedCtx (fullSizeTextInput Field [value "hello"]) [] [ClickAt focusPt]
           settled <- runInteractions testBounds (resultContext focused)

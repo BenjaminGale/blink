@@ -13,7 +13,7 @@ module Blink.View.Controls.FixedFocusBehaviour
 
 import Test.Hspec
 
-import Blink.View.Controls.Control (Attribute, HasControlConfig, HasElementConfig, isFocusable)
+import Blink.View.Controls.Control (Attribute, HasControlConfig, isFocusable)
 import Blink.View.Controls.ElementBehaviour (tagged)
 import Blink.Geometry (Rectangle)
 import Blink.Interaction (InteractionResult (..), runInteractions)
@@ -23,7 +23,7 @@ import Blink.View
 -- whose focus behaviour is fixed to never-focusable: it still doesn't
 -- auto-claim focus when nothing else holds it.
 fixedNotFocusableSpec
-  :: (Ord e, HasControlConfig e String cfg, HasElementConfig e String cfg)
+  :: (Ord e, HasControlConfig e String cfg)
   => Rectangle                          -- ^ bounds the control renders at
   -> ViewContext e String                 -- ^ starting context (theme\/measurer already set up)
   -> ([Attribute cfg] -> View e String ())     -- ^ render the control under test with these attrs
