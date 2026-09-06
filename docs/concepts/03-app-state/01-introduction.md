@@ -28,9 +28,8 @@ needs to trigger a side effect (writing a file, making a network call),
 that belongs in your backend's loop, driven by the resulting state, not
 inside `Update` itself.
 
-This is currently the entire vocabulary for application-state logic in
-Blink — there's no built-in equivalent of commands, subscriptions, or
-effect-tracking yet. As that grows, it belongs in this area rather than
-[`04-runtime`](../04-runtime/01-the-frame-loop.md), which stays scoped to
-the infrastructure that drives Blink rather than how you write your own
-application logic.
+Application-state logic in Blink is expressed entirely as `Update`
+handlers built from `get`/`put`/`gets`/`modify`. Growth in this area
+(commands, subscriptions, effect-tracking) belongs here rather than in
+[`04-runtime`](../04-runtime/01-the-frame-loop.md), which is scoped to
+the infrastructure that drives Blink, not your application logic.
