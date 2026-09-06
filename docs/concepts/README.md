@@ -1,4 +1,4 @@
-# Blink: a guided tour
+# Blink: core concepts
 
 This is a narrative walkthrough of Blink's paradigm — immediate-mode
 rendering, the frame loop, and how state and focus flow through it. It's
@@ -20,7 +20,8 @@ because some of that reference material — correctly, for reference material
    value you define rather than an object reference.
 4. [Focus and timing](04-focus-and-timing.md) — why some state changes take
    effect immediately, mid-frame, while others wait for the next one.
-5. [Building a custom control](05-building-a-custom-control.md) — putting
-   the previous four sections together to hand-write a minimal button.
 
 Each section builds on the ones before it — read in order the first time.
+
+Once you have this model, [../guides/building-a-custom-control.md](../guides/building-a-custom-control.md)
+puts it to work hand-writing a minimal button from these primitives.

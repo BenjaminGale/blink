@@ -108,5 +108,7 @@ When writing a custom control:
 * If it's local, single-owner state that nothing else reads — like a
   list's own scroll offset — queue it with `emitUi` instead.
 
-Next: [section 5](05-building-a-custom-control.md) puts sections 1–4
-together to hand-write a minimal button from these primitives.
+That's the whole conceptual model. See
+[../guides/building-a-custom-control.md](../guides/building-a-custom-control.md)
+for a worked example that puts sections 1–4 together to hand-write a
+minimal button from these primitives.

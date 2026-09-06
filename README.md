@@ -126,10 +126,12 @@ Pass `app` to `configureContinuous` or `configureEventDriven` to get a
 `BlinkHandle`, then drive it with `stepFrame` each iteration of your
 platform's event loop.
 
-New to Blink? [`docs/guide`](docs/guide/README.md) is a narrative
+New to Blink? [`docs/concepts`](docs/concepts/README.md) is a narrative
 walkthrough of the paradigm — immediate mode, the frame loop, and how focus
-and messages flow through it. The top-level `Blink` module's Haddock
-documentation is the reference material once you have that model in hand.
+and messages flow through it — and [`docs/guides`](docs/guides/) covers
+specific tasks, like hand-writing a custom control. The top-level `Blink`
+module's Haddock documentation is the reference material once you have
+that model in hand.
 
 ## Getting Started
 

@@ -1,4 +1,4 @@
-# 5. Building a custom control
+# Building a custom control
 
 Everything so far has been building toward one thing: enough of a mental
 model to write a control from scratch, rather than only composing the
@@ -19,10 +19,10 @@ miniButton eid label = do
   pure (isHit && released)
 ```
 
-Walking through it against the previous four sections:
+Walking through it against the concepts covered so far:
 
 * **`eid :: e`** — the element identity from
-  [section 3](03-elements-and-messages.md). This function doesn't own any
+  [the elements-and-messages concept](../concepts/03-elements-and-messages.md). This function doesn't own any
   persistent state itself; `eid` is how Blink's own bookkeeping (hover,
   focus, if this button used it) knows which control a given frame's
   hit-test result belongs to.
@@ -31,7 +31,7 @@ Walking through it against the previous four sections:
   this frame's mouse position. It's a pure query against this frame's
   context; nothing is written yet.
 * **`registerMouseOver eid`** is the first write. Per
-  [section 4](04-focus-and-timing.md)'s rule, this is a candidate for
+  [the focus-and-timing concept](../concepts/04-focus-and-timing.md)'s rule, this is a candidate for
   "does a sibling need to see this later in the same frame?" — and the
   answer is no, hover has no cross-element arbitration the way focus does
   — so it doesn't need to be immediate the way `setFocus` does. (It's
@@ -39,7 +39,7 @@ Walking through it against the previous four sections:
   for hover's purposes.)
 * **`fillRect` / `drawText`** don't touch any persisted state at all —
   they just append draw commands for *this* frame, read back in step 3 of
-  the frame loop ([section 2](02-the-frame-loop.md)).
+  the frame loop ([the frame-loop concept](../concepts/02-the-frame-loop.md)).
 * **`isButtonReleased`** reads this frame's input state — was the mouse
   button released this frame, full stop, with no element-specific
   targeting.
@@ -52,7 +52,7 @@ Walking through it against the previous four sections:
   when clicked (emit Incremented)
   ```
 
-  This is [section 3](03-elements-and-messages.md)'s emit step, just
+  This is [the elements-and-messages concept](../concepts/03-elements-and-messages.md)'s emit step, just
   deferred to the call site instead of baked into `miniButton` itself —
   which is what lets the same button shape be reused for any message type.
 
@@ -60,7 +60,7 @@ Walking through it against the previous four sections:
 
 None of the above touches focus. Adding "Enter activates this button when
 it's focused" means pulling in the immediate primitives from
-[section 4](04-focus-and-timing.md):
+[the focus-and-timing concept](../concepts/04-focus-and-timing.md):
 
 ```haskell
 miniButton :: Ord e => e -> Text -> UI e msg Bool
@@ -81,7 +81,8 @@ miniButton eid label = do
 ```
 
 `setFocus` is called immediately, not queued, for exactly the reason
-worked through in section 4: if this button and a sibling both react to
+worked through in [the focus-and-timing concept](../concepts/04-focus-and-timing.md):
+if this button and a sibling both react to
 the same click in the same frame, the sibling's `isFocused` check needs to
 see this button's claim right away, not one frame late.
 
@@ -94,13 +95,15 @@ only when a custom control's shape doesn't fit that abstraction.
 
 ## Where to go from here
 
-That's the whole model: an immediate-mode view rebuilt every frame
-([1](01-why-immediate-mode.md)), threaded through a small persistent
-context across a three-step loop ([2](02-the-frame-loop.md)), reporting
-change through messages rather than mutation
-([3](03-elements-and-messages.md)), with a deliberate split between
-immediate and queued state changes for anything contended between siblings
-([4](04-focus-and-timing.md)).
+That draws on the whole conceptual model: an immediate-mode view rebuilt
+every frame ([why immediate mode](../concepts/01-why-immediate-mode.md)),
+threaded through a small persistent context across a three-step loop
+([the frame loop](../concepts/02-the-frame-loop.md)), reporting change
+through messages rather than mutation
+([elements and messages](../concepts/03-elements-and-messages.md)), with a
+deliberate split between immediate and queued state changes for anything
+contended between siblings
+([focus and timing](../concepts/04-focus-and-timing.md)).
 
 From here, the Haddocks — starting from the `Blink` module — are reference
 material for the exact primitives available in each area, now with the
