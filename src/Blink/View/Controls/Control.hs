@@ -70,6 +70,12 @@ module Blink.View.Controls.Control
   , style
   , StyleKey (..)
 
+    -- * Focus scope
+  , TabPolicy (..)
+  , EntryPolicy (..)
+  , ChildNavigation (..)
+  , WrapPolicy (..)
+
     -- * Measurement
   , chromeInsets
   , measureChrome
@@ -312,6 +318,65 @@ fireElementEvents cc ci = do
       , (ciFocusGained  ci, ccOnFocusGained  cc)
       , (ciFocusLost    ci, ccOnFocusLost    cc)
       ]
+
+-- * Focus scope
+
+-- | How Tab\/Shift-Tab traverse a control and its children. Attached via
+-- the @ccFocusScope@ field of 'ControlConfig' (defaulting to 'TabUnit',
+-- the degenerate case every control with no nested children already
+-- behaves as).
+data TabPolicy
+  = TabFlatten
+    -- ^ No scope of its own. Tab passes straight through, unmodified, as
+    -- if this control didn't exist -- its children's own policies (if any)
+    -- join the surrounding order directly. For pure layout containers, not
+    -- controls in the focus-participating sense.
+  | TabUnit
+    -- ^ A live scope that consumes Tab\/Shift-Tab unconditionally at its
+    -- boundary -- always exits to the control's sibling, regardless of
+    -- which descendant (if any) is focused. Descendants never see Tab at
+    -- all; a descendant can still be focused directly by a click. The
+    -- default for every control, since a control with no nested children
+    -- has nothing for this to act on and simply behaves as it always has.
+  | TabScoped EntryPolicy ChildNavigation
+    -- ^ A live scope that hands Tab\/Shift-Tab (per the keys named in
+    -- 'ChildNavigation') to its children, per 'EntryPolicy' when the scope
+    -- gains focus from outside with nothing already focused inside.
+  deriving (Eq, Show)
+
+-- | Which child a 'TabScoped' scope targets when it gains focus from
+-- outside (a forward-Tab arriving at the boundary) with nothing already
+-- focused inside.
+data EntryPolicy
+  = EnterRemembered
+    -- ^ Targets whichever child was focused last time the scope was live
+    -- (persisted indefinitely, independent of focus decay).
+  | EnterFirst
+    -- ^ Ignores history; whichever child is first eligible to auto-claim
+    -- during this render gets it, the same way focus already resolves
+    -- today.
+  deriving (Eq, Show)
+
+-- | How Tab moves among a 'TabScoped' scope's own children once it owns
+-- the key.
+data ChildNavigation = ChildNavigation
+  { childForward  :: (Key, [Modifier])
+    -- ^ Moves to the next child. Not necessarily Tab -- e.g. a toolbar
+    -- might use Right\/Left instead.
+  , childBackward :: (Key, [Modifier])
+    -- ^ Moves to the previous child.
+  , childWrap     :: WrapPolicy
+  } deriving (Eq, Show)
+
+-- | What happens when 'ChildNavigation' runs off the first\/last child.
+data WrapPolicy
+  = WrapCycle
+    -- ^ Wraps around to the opposite child; the scope is never left via
+    -- 'ChildNavigation' alone.
+  | WrapStop
+    -- ^ Hands off to the surrounding order, the same way a plain Tab
+    -- exit already does.
+  deriving (Eq, Show)
 
 -- * Control
 
