@@ -359,9 +359,8 @@ watchFocus eid disabled = do
   input   <- getInput
   let keysPressed = if not disabled && focused then inputKeyEvents input else []
 
-  change <- getFocusChange
-  let focusGained = maybe False (\fc -> focusChangeTo fc == Just eid) change
-      focusLost   = maybe False (\fc -> focusChangeFrom fc == Just eid) change
+  focusGained <- hasGainedFocus eid
+  focusLost   <- hasLostFocus eid
 
   pure mempty
     { eiFocused     = focused

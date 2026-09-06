@@ -51,9 +51,13 @@ probe = getInput >>= emit
 tick :: UI () () ()
 tick = emit ()
 
--- | Reports the most recent focus change still visible this frame, if any.
-probeFocusChange :: UI () (Maybe (FocusChange ())) ()
-probeFocusChange = getFocusChange >>= emit
+-- | Reports whether the sole element gained and\/or lost focus this frame,
+-- via the most recent redirect still visible.
+probeFocusChange :: UI () (Bool, Bool) ()
+probeFocusChange = do
+  gained <- hasGainedFocus ()
+  lost   <- hasLostFocus ()
+  emit (gained, lost)
 
 posDown :: InputState -> (Point, Bool)
 posDown i = (inputMousePosition i, inputLeftButtonDown i)
@@ -125,13 +129,13 @@ spec = describe "Blink.Interaction" $ do
       result <- runInteractions testBounds (resultContext seeded) tick [] []
       contextScrollState () (resultContext result) `shouldBe` 0.5
 
-    it "reports a focus change as coming from nowhere when carried into a second call, even though it really came from a focused element" $ do
+    it "reports no loser when carried into a second call, even though it really came from a focused element" $ do
       seeded  <- runInteractions testBounds seedAt0 (setFocus () >> requestClearFocus Nothing) [] []
       chained <- runInteractions testBounds (resultContext seeded) probeFocusChange [] []
-      resultMessages chained `shouldBe` [Just (FocusChange Nothing Nothing)]
+      resultMessages chained `shouldBe` [(False, False)]
 
     it "reports the real origin when the change is primed and observed within one continuous call instead" $ do
       result <- runInteractions testBounds seedAt0
                   (setFocus () >> requestClearFocus Nothing >> probeFocusChange)
                   [Wait 1] []
-      resultMessages result `shouldBe` [Just (FocusChange (Just ()) Nothing)]
+      resultMessages result `shouldBe` [(False, True)]

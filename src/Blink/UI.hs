@@ -267,8 +267,8 @@ module Blink.UI
   , isNothingFocused
   , getFocus
   , isFocused
-  , FocusChange (..)
-  , getFocusChange
+  , hasGainedFocus
+  , hasLostFocus
   , setFocus
   , setFocusWhen
   , clearFocus
@@ -315,7 +315,7 @@ module Blink.UI
   , contextAnimation
   ) where
 
-import Control.Monad (when, unless)
+import Control.Monad (when, unless, join)
 import Data.List (foldl')
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
@@ -383,7 +383,7 @@ data Selection = Selection
 -- displaced is looked up when the effect is *applied* (real 'UIContext'
 -- access, unlike the reaction that queued it), and deferring lets every
 -- affected element observe the change consistently regardless of render
--- order — see 'FocusChange'.
+-- order — see 'FocusClaim' and @LostFocus@.
 data UiEffect e
   = ScrollTo e Double
     -- ^ Sets the scroll position to an absolute value, clamped to @[0, 1]@
@@ -410,18 +410,6 @@ data UiEffect e
     -- "clear" counterpart to 'Focus'. See 'requestClearFocus'.
   deriving (Eq, Show)
 
--- | What happened to a scope's focus as the result of one element
--- redirecting it onto another (or clearing it), as opposed to an element
--- simply claiming focus for itself -- recorded so any element affected by
--- the redirect can observe it for the one frame it's visible (see
--- 'getFocusChange'), regardless of render order.
--- 'focusChangeFrom' is 'Nothing' when nothing was previously focused;
--- 'focusChangeTo' is 'Nothing' when focus was cleared rather than moved.
-data FocusChange e = FocusChange
-  { focusChangeFrom :: Maybe e
-  , focusChangeTo   :: Maybe e
-  }
-  deriving (Eq, Show)
 
 -- | One item from the frame's output queue: either an application message or
 -- a 'UiEffect'. A single ordered queue holds both so that the relative
@@ -440,6 +428,9 @@ data Out e msg
 -- without a render in between (e.g. the frame a queued 'Focus' effect is
 -- applied, before the new holder has rendered even once) isn't mistaken for
 -- abandonment.
+-- 'GainedThisFrame'\/'GainedLastFrame' are only ever entered by an explicit
+-- 'Focus' effect (see @setFocusChange@), never by 'setFocus' reaffirming a
+-- claim -- that's what keeps a self-claim from masquerading as a redirect.
 data FocusClaim e
   = Unclaimed
   | ClaimedLastFrame e
@@ -447,6 +438,12 @@ data FocusClaim e
     -- pass; dropped to 'Unclaimed' if still unreaffirmed at the next boundary.
   | ClaimedThisFrame e
     -- ^ Reaffirmed during the current frame (or just granted).
+  | GainedLastFrame e
+    -- ^ Landed via a 'Focus' effect as of the previous frame boundary; its
+    -- final frame of visibility to 'hasGainedFocus', then it fades to
+    -- 'ClaimedThisFrame' -- an ordinary held claim from here on.
+  | GainedThisFrame e
+    -- ^ Landed via a 'Focus' effect this frame boundary.
   deriving (Eq, Show)
 
 -- | The element currently focused, regardless of reaffirmation status.
@@ -454,54 +451,73 @@ currentFocus :: FocusClaim e -> Maybe e
 currentFocus Unclaimed             = Nothing
 currentFocus (ClaimedLastFrame e)  = Just e
 currentFocus (ClaimedThisFrame e)  = Just e
+currentFocus (GainedLastFrame e)   = Just e
+currentFocus (GainedThisFrame e)   = Just e
+
+-- | 'True' when this element is the target of a 'Focus' effect that landed
+-- within the last two frames.
+isGained :: Eq e => e -> FocusClaim e -> Bool
+isGained eid (GainedLastFrame e) = e == eid
+isGained eid (GainedThisFrame e) = e == eid
+isGained _   _                   = False
 
 -- | Claims focus for @eid@ (see 'setFocus'): succeeds when nothing currently
 -- holds it, or @eid@ is reaffirming itself; refused, unchanged, when a
 -- different element already holds it this frame -- so an element calling
 -- 'setFocus' for itself can never steal focus out from under whoever
--- legitimately has it, regardless of render order.
+-- legitimately has it, regardless of render order. Reaffirming a still-fresh
+-- 'Gained*' claim for the same element leaves it exactly as it was, so a
+-- control reaffirming itself every frame doesn't cut short its own
+-- 'hasGainedFocus' visibility window.
 tryClaim :: Eq e => e -> FocusClaim e -> FocusClaim e
-tryClaim eid claim = case currentFocus claim of
-  Nothing                     -> ClaimedThisFrame eid
-  Just holder | holder == eid -> ClaimedThisFrame eid
-              | otherwise     -> claim
+tryClaim eid claim
+  | isGained eid claim = claim
+  | otherwise = case currentFocus claim of
+      Nothing                     -> ClaimedThisFrame eid
+      Just holder | holder == eid -> ClaimedThisFrame eid
+                  | otherwise     -> claim
 
 -- | Advances a 'FocusClaim' to the next frame: a reaffirmed claim gets one
 -- frame of grace before it must be reaffirmed again; a claim already on
--- grace that wasn't reaffirmed again is dropped.
+-- grace that wasn't reaffirmed again is dropped. A 'Gained*' claim ages down
+-- the same way, but past 'GainedLastFrame' it settles into an ordinary
+-- 'ClaimedThisFrame' rather than being dropped -- it's still held, just no
+-- longer freshly granted.
 tickFocusClaim :: FocusClaim e -> FocusClaim e
+tickFocusClaim (GainedThisFrame e)  = GainedLastFrame e
+tickFocusClaim (GainedLastFrame e)  = ClaimedThisFrame e
 tickFocusClaim (ClaimedThisFrame e) = ClaimedLastFrame e
 tickFocusClaim (ClaimedLastFrame _) = Unclaimed
 tickFocusClaim Unclaimed            = Unclaimed
 
--- | Whether a scope has a 'FocusChange' pending observation, and for how
--- much longer. A redirect is visible for exactly one full frame regardless
--- of when during that frame it happened, so every element gets a chance to
--- see it however render order falls; the two "pending" constructors carry
--- the same 'FocusChange' but tell 'nextFocusFrame' whether this is its
--- first or last frame of visibility.
-data PendingFocusChange e
-  = NoFocusChange
-  | FocusChangeLastFrame (FocusChange e)
+-- | Whether a scope has a displaced element pending observation, and for
+-- how much longer. A redirect is visible for exactly one full frame
+-- regardless of when during that frame it happened, so every element gets a
+-- chance to see it however render order falls; the two "pending"
+-- constructors carry the same @Maybe e@ but tell 'nextFocusFrame' whether
+-- this is its first or last frame of visibility.
+data LostFocus e
+  = NothingLost
+  | LostLastFrame (Maybe e)
     -- ^ Was pending as of the previous frame boundary; this is its final
-    -- frame of visibility, then it expires to 'NoFocusChange'.
-  | FocusChangeThisFrame (FocusChange e)
+    -- frame of visibility, then it expires to 'NothingLost'.
+  | LostThisFrame (Maybe e)
     -- ^ Just happened during the current frame.
   deriving (Eq, Show)
 
--- | The redirect a scope's elements may still observe, if any. See
--- 'getFocusChange'.
-pendingFocusChange :: PendingFocusChange e -> Maybe (FocusChange e)
-pendingFocusChange NoFocusChange            = Nothing
-pendingFocusChange (FocusChangeLastFrame c) = Just c
-pendingFocusChange (FocusChangeThisFrame c) = Just c
+-- | The element a scope's elements may still observe as displaced, if any.
+-- See 'hasLostFocus'.
+pendingLostFocus :: LostFocus e -> Maybe (Maybe e)
+pendingLostFocus NothingLost       = Nothing
+pendingLostFocus (LostLastFrame f) = Just f
+pendingLostFocus (LostThisFrame f) = Just f
 
--- | Advances a 'PendingFocusChange' to the next frame: a change just noticed
--- gets one more frame of visibility before it expires.
-tickPendingFocusChange :: PendingFocusChange e -> PendingFocusChange e
-tickPendingFocusChange (FocusChangeThisFrame c) = FocusChangeLastFrame c
-tickPendingFocusChange (FocusChangeLastFrame _) = NoFocusChange
-tickPendingFocusChange NoFocusChange            = NoFocusChange
+-- | Advances a @LostFocus@ to the next frame: a loss just noticed gets one
+-- more frame of visibility before it expires.
+tickLostFocus :: LostFocus e -> LostFocus e
+tickLostFocus (LostThisFrame f) = LostLastFrame f
+tickLostFocus (LostLastFrame _) = NothingLost
+tickLostFocus NothingLost       = NothingLost
 
 -- | Per-scope focus bookkeeping: which single child (if any) currently holds
 -- focus within this scope, the last tab stop visited within it (for
@@ -516,9 +532,9 @@ data FocusState e = FocusState
   , previousTabStop :: Maybe e
     -- ^ The element visited just before the current one, scoped to this
     -- level, for Shift-Tab.
-  , focusChange     :: PendingFocusChange e
-    -- ^ The most recent focus redirect for this scope, if still within its
-    -- one-frame observation window. See 'PendingFocusChange'.
+  , focusLost       :: LostFocus e
+    -- ^ The element this scope's most recent redirect displaced, if still
+    -- within its one-frame observation window. See @LostFocus@.
   }
 
 -- | The empty, never-focused 'FocusState' — root's initial value, and every
@@ -527,7 +543,7 @@ emptyFocusState :: FocusState e
 emptyFocusState = FocusState
   { focusClaim      = Unclaimed
   , previousTabStop = Nothing
-  , focusChange     = NoFocusChange
+  , focusLost       = NothingLost
   }
 
 -- | 'True' when nothing is focused in the given scope. Pattern-matches
@@ -1132,21 +1148,25 @@ contextFocusChain ctx = go Set.empty (contextFocus ctx)
 isFocused :: Eq e => e -> UI e msg Bool
 isFocused eid = (== Just eid) <$> getFocus
 
--- | The most recent focus change ('Focus'\/'ClearFocus') still visible to
--- the currently ambient scope, if any. Single-hop against whichever scope is
--- ambient, exactly like 'isFocused'. A caller (see 'Blink.Controls.Element.element')
--- compares the given element against both sides of the reported
--- 'FocusChange' itself, rather than this function pre-deciding "gained or
--- lost" on its behalf.
-getFocusChange :: UI e msg (Maybe (FocusChange e))
-getFocusChange = gets (pendingFocusChange . focusChange . ftAmbient . ctxFocus)
+-- | 'True' when the currently ambient scope's most recent redirect (a
+-- 'Focus' effect landing within the last two frames -- see 'FocusClaim')
+-- granted this element focus. Single-hop, exactly like 'isFocused'; never
+-- 'True' from 'setFocus' reaffirming a claim, only from an explicit 'Focus'.
+hasGainedFocus :: Eq e => e -> UI e msg Bool
+hasGainedFocus eid = gets (isGained eid . focusClaim . ftAmbient . ctxFocus)
+
+-- | 'True' when the currently ambient scope's most recent redirect (a
+-- 'Focus'\/'ClearFocus' effect, still within its one-frame observation
+-- window -- see @LostFocus@) displaced this element.
+hasLostFocus :: Eq e => e -> UI e msg Bool
+hasLostFocus eid = gets ((== Just (Just eid)) . pendingLostFocus . focusLost . ftAmbient . ctxFocus)
 
 -- | Transfers keyboard focus to the given element, in the currently ambient
 -- scope. Takes effect immediately — like 'registerMouseOver' and mouse
 -- capture, not like the deferred scroll\/selection writes — because a
 -- control's own focus decision (take it when nothing else has it, hand off
 -- on Tab) is only correct if the next sibling in the same tree walk can see
--- it happened. Refused (see 'tryClaim') if a different element already
+-- it happened. Refused (see @tryClaim@) if a different element already
 -- holds it this frame, so it can never steal focus out from under whoever
 -- legitimately has it.
 setFocus :: Eq e => e -> UI e msg ()
@@ -1167,8 +1187,8 @@ clearFocus = modifyFocusState $ \fs -> fs { focusClaim = Unclaimed }
 -- Call before anything else this frame reads focus state for the element.
 disclaimFocus :: UI e msg ()
 disclaimFocus = modifyFocusState $ \fs -> fs
-  { focusClaim  = maybe Unclaimed ClaimedThisFrame (focusChangeFrom =<< pendingFocusChange (focusChange fs))
-  , focusChange = NoFocusChange
+  { focusClaim = maybe Unclaimed ClaimedThisFrame (join (pendingLostFocus (focusLost fs)))
+  , focusLost  = NothingLost
   }
 
 -- | Queues a 'Focus' effect: makes the given element focused within the
@@ -1182,7 +1202,7 @@ disclaimFocus = modifyFocusState $ \fs -> fs
 -- the winner, not who's currently focused: whoever is displaced is looked
 -- up when the effect is applied, not supplied here, and deferring lets
 -- every affected element observe the change consistently regardless of
--- render order (see 'getFocusChange').
+-- render order (see 'hasGainedFocus'\/'hasLostFocus').
 requestFocus :: Maybe e -> e -> UI e msg ()
 requestFocus scopeId target = emitUi (Focus scopeId target)
 
@@ -1297,12 +1317,14 @@ withFocusScope scopeId freshClaim (UI f) = UI $ \ctx ->
     -- resolution alike.
     foldBackAsClaim base after ctx' = ctx'
       { ctxFocus = (ctxFocus ctx')
-          { ftAmbient = base { focusClaim = ClaimedThisFrame scopeId }
+          { ftAmbient = base { focusClaim = tryClaim scopeId (focusClaim base) }
           , ftScopes  = Map.insert scopeId (after { focusClaim = reaffirm (focusClaim after) }) (ftScopes (ctxFocus ctx'))
           } }
-    reaffirm Unclaimed              = Unclaimed
-    reaffirm (ClaimedLastFrame e) = ClaimedThisFrame e
-    reaffirm (ClaimedThisFrame e) = ClaimedThisFrame e
+    reaffirm Unclaimed             = Unclaimed
+    reaffirm (ClaimedLastFrame e)  = ClaimedThisFrame e
+    reaffirm (ClaimedThisFrame e)  = ClaimedThisFrame e
+    reaffirm (GainedLastFrame e)   = GainedLastFrame e
+    reaffirm (GainedThisFrame e)   = GainedThisFrame e
 
 -- | Whether a fresh (unclaimed) ambient may be read as an invitation for a
 -- scope to auto-claim focus this frame — see 'withFocusScope'.
@@ -1331,14 +1353,14 @@ scopeMode scopeId freshClaim currentAmbient = case currentAmbient of
 -- 'previousTabStop' is untouched here and simply persists, the same way
 -- @elmScrollStates@ is never purged for elements that stop rendering.
 --
--- Also advances 'focusChange' independently of that, via
--- 'tickPendingFocusChange': a change just noticed stays visible for exactly
--- one more frame so every element gets a chance to observe it regardless of
--- render order, then expires the frame after.
+-- Also advances 'focusLost' independently of that, via 'tickLostFocus': a
+-- loss just noticed stays visible for exactly one more frame so every
+-- element gets a chance to observe it regardless of render order, then
+-- expires the frame after.
 nextFocusFrame :: FocusState e -> FocusState e
 nextFocusFrame fs = fs
-  { focusClaim  = tickFocusClaim (focusClaim fs)
-  , focusChange = tickPendingFocusChange (focusChange fs)
+  { focusClaim = tickFocusClaim (focusClaim fs)
+  , focusLost  = tickLostFocus (focusLost fs)
   }
 
 -- | Runs a sub-tree within a different bounding rectangle. The previous bounds
@@ -1503,9 +1525,9 @@ applyUiEffects effects ctx0 = foldl' step ctx0 effects
 
 -- | Applies a 'Focus'\/'ClearFocus' effect to whichever scope it targets —
 -- root's 'ftAmbient' (@Nothing@) or a specific composite's entry in
--- @ftScopes@ (@Just scopeId@) — setting the new focus holder (if any) and
--- recording the resulting 'FocusChange' (looking up whoever was previously
--- focused in that scope, to fill in 'focusChangeFrom') for one frame's
+-- @ftScopes@ (@Just scopeId@) — setting the new focus holder (if any, as a
+-- fresh 'GainedThisFrame' claim) and recording whoever it displaced (looking
+-- up the scope's previous holder to fill in 'focusLost') for one frame's
 -- observation. Used only by 'applyUiEffects'.
 setFocusChange :: Ord e => Maybe e -> Maybe e -> UIContext e msg -> UIContext e msg
 setFocusChange scopeId newFocus ctx = ctx { ctxFocus = updateScope (ctxFocus ctx) }
@@ -1514,8 +1536,8 @@ setFocusChange scopeId newFocus ctx = ctx { ctxFocus = updateScope (ctxFocus ctx
       Nothing  -> ft { ftAmbient = setIt (ftAmbient ft) }
       Just sid -> ft { ftScopes = Map.insert sid (setIt (lookupScope sid ft)) (ftScopes ft) }
     setIt fs = fs
-      { focusClaim  = maybe Unclaimed ClaimedThisFrame newFocus
-      , focusChange = FocusChangeThisFrame (FocusChange (currentFocus (focusClaim fs)) newFocus)
+      { focusClaim = maybe Unclaimed GainedThisFrame newFocus
+      , focusLost  = LostThisFrame (currentFocus (focusClaim fs))
       }
 
 -- | 'True' when the mouse cursor is within the current bounds and within the

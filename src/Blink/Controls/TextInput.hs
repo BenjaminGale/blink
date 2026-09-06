@@ -283,7 +283,7 @@ textInput eid attrs = Element
       input    <- getInput
       sel      <- getSelection eid
       frac     <- getScrollState eid
-      focusChg <- getFocusChange
+      gained   <- hasGainedFocus eid
 
       let displayValue = ticDisplayFilter cfg currentValue
           w           = rectWidth bounds
@@ -292,9 +292,8 @@ textInput eid attrs = Element
           -- same-frame claim (auto-claim, or Tab landing here) or a 'Focus'
           -- effect applied between frames (a click on this control, or
           -- Shift-Tab) -- 'hasFocus'\/'wasFocused' alone catch the former;
-          -- 'getFocusChange' reports the latter on the frame it takes effect.
-          justFocused = (hasFocus && not wasFocused)
-                     || maybe False (\c -> focusChangeTo c == Just eid) focusChg
+          -- 'hasGainedFocus' reports the latter on the frame it takes effect.
+          justFocused = (hasFocus && not wasFocused) || gained
           canEdit     = hasFocus && not disabled
 
       contentW <- realToFrac <$> charOffset displayValue (T.length displayValue)

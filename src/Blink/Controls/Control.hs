@@ -144,7 +144,7 @@ style k = overControl (Attribute (\cc -> cc { ccStyleKey = k }))
 
 -- | Which way, if any, focus just moved, for 'controlBase's own immediate
 -- self-claim\/self-give-up notifications -- distinct from the deferred
--- focus handoffs 'elementBase' itself detects via 'getFocusChange'.
+-- focus handoffs 'elementBase' itself detects via 'hasGainedFocus'\/'hasLostFocus'.
 data FocusTransition = FocusUnchanged | GainedFocus | LostFocus
 
 focusTransition :: Bool -> Bool -> FocusTransition
@@ -322,8 +322,7 @@ controlBase cc = disableWhen (not (ccIsEnabled cc)) $
       -- A click can't focus this control directly while disabled, but a
       -- 'Blink.Controls.Label.target' pointed at it isn't stopped that
       -- way -- so reject a freshly arrived grant here too.
-      change <- getFocusChange
-      let freshlyGranted = maybe False (\fc -> focusChangeTo fc == Just eid) change
+      freshlyGranted <- hasGainedFocus eid
       when (disabled && freshlyGranted) disclaimFocus
       wasFocused   <- isFocused eid
       currentScope <- getCurrentScope

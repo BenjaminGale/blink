@@ -462,47 +462,63 @@ spec = describe "Blink.UI" $ do
       f `shouldBe` Nothing
 
   describe "focus change (Focus / ClearFocus)" $ do
-    it "a focus request sets the new focus and records who won and lost, without being told who lost" $ do
+    it "a focus request sets the new focus and reports it to the winner and the loser" $ do
       (_, ctx0) <- runTwoElem (setFocus ElemA)
       let ctx1 = applyUiEffects [Focus Nothing ElemB] ctx0
-      (newFocus, _) <- runUI getFocus ctx1
-      (change, _)   <- runUI getFocusChange ctx1
-      newFocus `shouldBe` Just ElemB
-      change   `shouldBe` Just (FocusChange (Just ElemA) (Just ElemB))
+      (newFocus, _)      <- runUI getFocus ctx1
+      (winnerGained, _)  <- runUI (hasGainedFocus ElemB) ctx1
+      (loserLost, _)     <- runUI (hasLostFocus ElemA) ctx1
+      (loserGained, _)   <- runUI (hasGainedFocus ElemA) ctx1
+      (winnerLost, _)    <- runUI (hasLostFocus ElemB) ctx1
+      newFocus     `shouldBe` Just ElemB
+      winnerGained `shouldBe` True
+      loserLost    `shouldBe` True
+      loserGained  `shouldBe` False
+      winnerLost   `shouldBe` False
 
-    it "a clear removes focus and records who lost it, with no winner" $ do
+    it "a clear removes focus and reports it to the loser, with no winner" $ do
       (_, ctx0) <- runTwoElem (setFocus ElemA)
       let ctx1 = applyUiEffects [ClearFocus Nothing] ctx0
-      (newFocus, _) <- runUI getFocus ctx1
-      (change, _)   <- runUI getFocusChange ctx1
-      newFocus `shouldBe` Nothing
-      change   `shouldBe` Just (FocusChange (Just ElemA) Nothing)
+      (newFocus, _)  <- runUI getFocus ctx1
+      (loserLost, _) <- runUI (hasLostFocus ElemA) ctx1
+      (anyGained, _) <- runUI (or <$> traverse hasGainedFocus [ElemA, ElemB]) ctx1
+      newFocus  `shouldBe` Nothing
+      loserLost `shouldBe` True
+      anyGained `shouldBe` False
 
-    it "a focus request with nothing previously focused records no loser" $ do
+    it "a focus request with nothing previously focused reports no loser" $ do
       ctx0 <- snd <$> runTwoElem (pure ())
       let ctx1 = applyUiEffects [Focus Nothing ElemB] ctx0
-      (change, _) <- runUI getFocusChange ctx1
-      change `shouldBe` Just (FocusChange Nothing (Just ElemB))
+      (winnerGained, _) <- runUI (hasGainedFocus ElemB) ctx1
+      (anyLost, _)      <- runUI (or <$> traverse hasLostFocus [ElemA, ElemB]) ctx1
+      winnerGained `shouldBe` True
+      anyLost      `shouldBe` False
 
     it "the recorded change stays visible for exactly one more frame, then is cleared" $ do
       (_, ctx0) <- runTwoElem (setFocus ElemA)
       let ctx1 = applyUiEffects [Focus Nothing ElemB] ctx0
           ctx2 = advance noInput ctx1
           ctx3 = advance noInput ctx2
-      (changeAtApply, _) <- runUI getFocusChange ctx1
-      (changeNextFrame, _) <- runUI getFocusChange ctx2
-      (changeFrameAfter, _) <- runUI getFocusChange ctx3
-      changeAtApply    `shouldBe` Just (FocusChange (Just ElemA) (Just ElemB))
-      changeNextFrame  `shouldBe` Just (FocusChange (Just ElemA) (Just ElemB))
-      changeFrameAfter `shouldBe` Nothing
+      (gainedAtApply, _)    <- runUI (hasGainedFocus ElemB) ctx1
+      (lostAtApply, _)      <- runUI (hasLostFocus ElemA) ctx1
+      (gainedNextFrame, _)  <- runUI (hasGainedFocus ElemB) ctx2
+      (lostNextFrame, _)    <- runUI (hasLostFocus ElemA) ctx2
+      (gainedFrameAfter, _) <- runUI (hasGainedFocus ElemB) ctx3
+      (lostFrameAfter, _)   <- runUI (hasLostFocus ElemA) ctx3
+      gainedAtApply    `shouldBe` True
+      lostAtApply      `shouldBe` True
+      gainedNextFrame  `shouldBe` True
+      lostNextFrame    `shouldBe` True
+      gainedFrameAfter `shouldBe` False
+      lostFrameAfter   `shouldBe` False
 
     it "a scoped focus request updates only that scope's FocusState, not root's" $ do
       let ctx0 = emptyUIContext testBounds noInput scopeTheme noOpTextMeasurer :: UIContext ScopeElems ()
           ctx1 = applyUiEffects [Focus (Just Group) ItemB] ctx0
-      (insideChange, _) <- runUI (withFocusScope Group AllowFreshClaim getFocusChange) ctx1
-      (rootChange, _)   <- runUI getFocusChange ctx1
-      insideChange `shouldBe` Just (FocusChange Nothing (Just ItemB))
-      rootChange   `shouldBe` Nothing
+      (insideGained, _) <- runUI (withFocusScope Group AllowFreshClaim (hasGainedFocus ItemB)) ctx1
+      (rootGained, _)   <- runUI (hasGainedFocus ItemB) ctx1
+      insideGained `shouldBe` True
+      rootGained   `shouldBe` False
 
   describe "drawing" $ do
     it "fillRect emits a FillRect command for the current bounds" $ do
