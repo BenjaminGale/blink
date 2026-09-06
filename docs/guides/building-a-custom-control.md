@@ -2,7 +2,7 @@
 
 Everything so far has been building toward one thing: enough of a mental
 model to write a control from scratch, rather than only composing the
-ready-made ones in `Blink.Controls`. This is what you reach for when the
+ready-made ones in `Blink.UI.Controls`. This is what you reach for when the
 provided controls don't fit — a custom visualization that also needs to be
 clickable, say.
 
@@ -90,11 +90,11 @@ this button and a sibling both react to the same click in the same frame,
 the sibling's `isFocused` check needs to see this button's claim right
 away, not one frame late.
 
-This is still far short of what `Blink.Controls.control` actually
+This is still far short of what `Blink.UI.Controls.control` actually
 provides — Tab/Shift-Tab navigation, themed style resolution, disabled
 state — see
 [the control-primitive concept](../concepts/02-elements/03-controls.md)
-for what that adds. Reach for `Blink.Controls.control` once you need
+for what that adds. Reach for `Blink.UI.Controls.control` once you need
 those; reach for these primitives directly only when a custom control's
 shape doesn't fit that abstraction.
 

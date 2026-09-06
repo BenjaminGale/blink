@@ -25,13 +25,13 @@ Before reaching for `hBox`/`vBox`, sketch the regions:
 ```
 
 That's a header spanning the top, with a fixed-width sidebar and a
-flexible content area beneath it — exactly what `Blink.Layout.Border`'s
+flexible content area beneath it — exactly what `Blink.UI.Layout.Border`'s
 named regions are for, so reach for `borderLayout` at the outermost level
 rather than hand-nesting `vBox`/`hBox` to get the same shape:
 
 ```haskell
-import Blink.Layout (fill, Layout (..))
-import Blink.Layout.Border (borderLayout, top, left, centre)
+import Blink.UI.Layout (fill, Layout (..))
+import Blink.UI.Layout.Border (borderLayout, top, left, centre)
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.UI.Element (elementWithLayout)
 
@@ -99,7 +99,7 @@ The three you'll reach for most:
 * `fitContent` — take exactly the space the widget's own content needs.
 
 `atLeast`/`atMost`/`between` cover the cases in between (expand, but never
-below/above a bound) — see `Blink.Layout.Constraints`'s Haddocks for exact
+below/above a bound) — see `Blink.UI.Layout.Constraints`'s Haddocks for exact
 resolution behaviour against different amounts of available space.
 
 ## When children don't fit
@@ -109,7 +109,7 @@ space it has, and it's worth being able to tell them apart:
 
 * **Children take less space than the box.** `alignment` on the box
   controls where the leftover whitespace goes (`TopLeft`, `Center`,
-  `BottomRight` on the main axis) — see `Blink.Layout.Box`'s Haddocks for
+  `BottomRight` on the main axis) — see `Blink.UI.Layout.Box`'s Haddocks for
   the worked diagrams of each.
 * **Children take more space than the box.** The overflow is clipped, not
   scrolled — Blink's layout doesn't introduce scrolling on its own. A

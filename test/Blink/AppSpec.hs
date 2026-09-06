@@ -10,7 +10,7 @@ import Test.Hspec
 import Blink.App
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
-import Blink.Layout.Constraints (Layout (..), fill)
+import Blink.UI.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
 import Blink.UI

@@ -71,7 +71,7 @@ it's given, rather than clipping or overflowing:
   layout bounds each frame rather than being cached
 
 ### Disable-aware panel control
-Building on the `enabled` attribute every widget in the `Blink.Controls.Control`
+Building on the `enabled` attribute every widget in the `Blink.UI.Controls.Control`
 stack already has: a higher-level panel control that, when disabled,
 automatically disables its content — every child control nested inside it
 — rather than requiring each child to be disabled individually. This would

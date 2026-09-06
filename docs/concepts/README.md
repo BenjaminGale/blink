@@ -17,7 +17,7 @@ then read each area's own files in order:
    (element identity, bounds, effects, focus).
 2. [`02-elements`](02-elements/01-introduction.md) — `Element` and the
    attribute mechanism, and the two concrete systems built from them:
-   `Blink.Layout`'s containers and `Blink.Controls`' ready-made widgets.
+   `Blink.UI.Layout`'s containers and `Blink.UI.Controls`' ready-made widgets.
 3. [`03-app-state`](03-app-state/01-introduction.md) — `Blink.Update`: how
    an emitted message becomes a new application state.
 4. [`04-runtime`](04-runtime/01-the-frame-loop.md) — `Blink.App`: the

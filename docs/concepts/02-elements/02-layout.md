@@ -1,6 +1,6 @@
 # 2. Composing containers
 
-`hBox`, `vBox`, and `borderLayout` are `Blink.Layout`'s concrete
+`hBox`, `vBox`, and `borderLayout` are `Blink.UI.Layout`'s concrete
 application of [`Element` and the attribute mechanism](01-introduction.md)
 to one specific problem: arranging several children within one parent's
 space. This section covers the rules each uses to do that; see
@@ -18,7 +18,7 @@ split whatever's left equally (capped by their own `atMost`/`between`
 ceiling if they have one), and the whole group is then positioned
 according to the box's `alignment` (where leftover whitespace goes, or
 which side clips on overflow). This is worth reading in
-`Blink.Layout.Box`'s own Haddocks rather than restating here — `hBox`'s
+`Blink.UI.Layout.Box`'s own Haddocks rather than restating here — `hBox`'s
 module documentation walks through it with worked diagrams, now that you
 have the `elMeasure`/`Available` vocabulary those examples assume.
 
@@ -29,7 +29,7 @@ sidebars, and a content area, rather than a single row or column. Its
 panels (`top`/`bottom`/`left`/`right`/`centre`) each take a fixed size (or,
 for `centre`, whatever's left) rather than negotiating through
 `elMeasure` the way a box child does — there's nothing to measure when a
-panel's size is already decided up front. See `Blink.Layout.Border`'s
+panel's size is already decided up front. See `Blink.UI.Layout.Border`'s
 Haddocks for the exact region diagram and clipping behaviour.
 
 ## Converting between `Element` and a bare `UI` action

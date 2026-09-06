@@ -1,6 +1,6 @@
 # 3. The control primitive
 
-Every ready-made widget in `Blink.Controls` — button, checkbox, toggle,
+Every ready-made widget in `Blink.UI.Controls` — button, checkbox, toggle,
 radio button, slider, text input — needs the same handful of things:
 focus management, tab navigation, hover/press styling, and a consistent
 way to report mouse and keyboard activity. Rather than each widget
@@ -68,7 +68,7 @@ in the same tree walk, which a queued handler dispatch couldn't guarantee.
 
 ## Where this leaves you
 
-Every ready-made control in `Blink.Controls` is `controlBase` (or
-`elementBase` directly, for something simpler like `Blink.Controls.Label`)
+Every ready-made control in `Blink.UI.Controls` is `controlBase` (or
+`elementBase` directly, for something simpler like `Blink.UI.Controls.Label`)
 plus its own visual content and attributes — see each widget's own module
 for what it adds on top of this shared foundation.

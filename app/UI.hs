@@ -3,22 +3,22 @@ module UI (ControlId, AppState (..), demoApp) where
 
 import Blink.App
 import Blink.Attribute (Attribute)
-import Blink.Controls
-import Blink.Controls.Button (onActivated)
-import Blink.Controls.Control (isEnabled)
-import Blink.Controls.Divider (orientation)
-import Blink.Controls.Element (post, postWith)
-import Blink.Controls.Label (LabelConfig, target, text)
-import Blink.Controls.ProgressBar (ProgressValue (..), progress)
-import Blink.Controls.RepeatButton
+import Blink.UI.Controls
+import Blink.UI.Controls.Button (onActivated)
+import Blink.UI.Controls.Control (isEnabled)
+import Blink.UI.Controls.Divider (orientation)
+import Blink.UI.Controls.Element (post, postWith)
+import Blink.UI.Controls.Label (LabelConfig, target, text)
+import Blink.UI.Controls.ProgressBar (ProgressValue (..), progress)
+import Blink.UI.Controls.RepeatButton
   (firedCount, onFiredCountChanged, onPressEnded, onPressStarted, pressStartedAt)
-import Blink.Controls.Slider (onValueChanged)
-import qualified Blink.Controls.Slider as Slider (value)
-import Blink.Controls.TextInput (displayFilter, onInput, value)
-import Blink.Controls.Toggle (isSelected, onSelectedChanged)
+import Blink.UI.Controls.Slider (onValueChanged)
+import qualified Blink.UI.Controls.Slider as Slider (value)
+import Blink.UI.Controls.TextInput (displayFilter, onInput, value)
+import Blink.UI.Controls.Toggle (isSelected, onSelectedChanged)
 import Blink.Geometry
 import Blink.Input
-import Blink.Layout
+import Blink.UI.Layout
 import Blink.Rendering
 import Blink.UI
 import Blink.UI.Element (Element, elementWithLayout, runElement)

@@ -91,11 +91,11 @@ states are simultaneously active) simply has no entry in
 = Control-specific pseudo-states
 
 A control that needs a look beyond the common\/focus states its
-'Blink.Controls.Control.controlBase' already tracks (e.g. a toggle
+'Blink.UI.Controls.Control.controlBase' already tracks (e.g. a toggle
 button's checked\/unchecked look) defines its own pre-built 'Custom'
 values in its own module and exports them as opaque constants, the same
 way a control exports its default 'StyleKey' — callers never construct
-'Custom' values themselves. See "Blink.Controls.Toggle" for
+'Custom' values themselves. See "Blink.UI.Controls.Toggle" for
 @toggleChecked@\/@toggleUnchecked@, a worked example.
 -}
 module Blink.Style

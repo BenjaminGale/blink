@@ -1,5 +1,5 @@
 -- | The generic attribute mechanism used throughout Blink's own combinators
--- (widgets in "Blink.Controls", box layout in "Blink.Layout.Box") to let a
+-- (widgets in "Blink.UI.Controls", box layout in "Blink.UI.Layout.Box") to let a
 -- caller configure something with an ordinary list rather than a single
 -- record: build the list with whatever list machinery is convenient
 -- (@++@, list comprehensions, @Data.Maybe.catMaybes@, ...), and 'resolve'
@@ -9,8 +9,8 @@
 -- An attribute is @'Attribute' cfg@: a function @cfg -> cfg@, wrapped in a
 -- newtype so it can be given its own instances. This module only defines
 -- the mechanism itself; each config type's own module defines the actual
--- attribute functions (e.g. "Blink.Controls.Control"'s 'Blink.Controls.Control.isFocusable',
--- "Blink.Layout.Box"'s 'Blink.Layout.Box.boxSpacing').
+-- attribute functions (e.g. "Blink.UI.Controls.Control"'s 'Blink.UI.Controls.Control.isFocusable',
+-- "Blink.UI.Layout.Box"'s 'Blink.UI.Layout.Box.boxSpacing').
 module Blink.Attribute
   ( Attribute (..)
   , resolve

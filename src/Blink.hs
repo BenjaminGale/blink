@@ -66,19 +66,19 @@ instead.
                        module qualified alongside "Blink".
   * "Blink.Update"   — The Update monad: turns a message emitted by the view
                        into an updated application state.
-  * "Blink.Controls.Control" — The shared control primitive every
+  * "Blink.UI.Controls.Control" — The shared control primitive every
                        ready-made widget is built from: focus, chrome, and
                        events. Import alongside whichever of
-                       "Blink.Controls.Button", "Blink.Controls.Toggle",
-                       "Blink.Controls.Checkbox",
-                       "Blink.Controls.RadioButton",
-                       "Blink.Controls.TextInput",
-                       "Blink.Controls.ProgressBar",
-                       "Blink.Controls.Slider", or
-                       "Blink.Controls.Label" a view actually uses — their
+                       "Blink.UI.Controls.Button", "Blink.UI.Controls.Toggle",
+                       "Blink.UI.Controls.Checkbox",
+                       "Blink.UI.Controls.RadioButton",
+                       "Blink.UI.Controls.TextInput",
+                       "Blink.UI.Controls.ProgressBar",
+                       "Blink.UI.Controls.Slider", or
+                       "Blink.UI.Controls.Label" a view actually uses — their
                        overlapping attribute names (e.g. @text@) mean they
                        aren't re-exported together here.
-  * "Blink.Layout"   — Box layout and constraint-based sizing.
+  * "Blink.UI.Layout"   — Box layout and constraint-based sizing.
   * "Blink.Style"    — Themes and per-state styles.
   * "Blink.Rendering"— The draw command list produced each frame.
   * "Blink.Geometry" — Primitive geometry types.
@@ -89,7 +89,7 @@ module Blink
   ( module Blink.App
   , module Blink.Geometry
   , module Blink.Input
-  , module Blink.Layout
+  , module Blink.UI.Layout
   , module Blink.Rendering
   , module Blink.Style
   , module Blink.UI
@@ -99,7 +99,7 @@ module Blink
 import Blink.App
 import Blink.Geometry
 import Blink.Input
-import Blink.Layout
+import Blink.UI.Layout
 import Blink.Rendering
 import Blink.Style
 import Blink.UI

@@ -115,7 +115,7 @@ region is discarded.
 Interaction queries are scoped to an element ID. 'registerMouseOver' \/
 'wasMouseOverLastFrame' \/ 'isAnyMouseOver' let any number of elements
 independently register and query "over" this frame, with no shared slot to
-contend over — this is what 'Blink.Controls.control' uses.
+contend over — this is what 'Blink.UI.Controls.control' uses.
 
 'isRegionHit' is the lower-level primitive this builds on: it checks whether
 the mouse is within the /current bounds/, without reference to any element ID.
@@ -140,7 +140,7 @@ for its own while its children render, and folds the result back.
     handled by multiple controls in the same frame.
 
 Tab and Shift-Tab navigation between controls is managed automatically by
-'Blink.Controls.control'.
+'Blink.UI.Controls.control'.
 
 = Styles
 
@@ -166,7 +166,7 @@ when disabled.
 
 = Putting it together
 
-Higher-level controls in "Blink.Controls" are built entirely from the
+Higher-level controls in "Blink.UI.Controls" are built entirely from the
 primitives above, using the geometric hover model. A minimal button,
 stripped of styling and focus handling, shows how the pieces interlock:
 
@@ -183,7 +183,7 @@ miniButton eid label = do
 
 'registerMouseOver' records the hit so a later frame can look back at it via
 'wasMouseOverLastFrame'; 'fillRect' and 'drawText' read the current bounds
-implicitly. See 'Blink.Controls.control' for the full version, which adds
+implicitly. See 'Blink.UI.Controls.control' for the full version, which adds
 focus, tab navigation, and style-driven chrome on top of exactly this shape.
 -}
 module Blink.UI
@@ -377,8 +377,8 @@ data Selection = Selection
 -- immediately instead. 'Focus'\/'ClearFocus' are specifically for an
 -- explicit "make a different, named element focused (or clear whoever is)"
 -- change, triggered from a place that only knows the winner (or that
--- there's no winner), not who's currently focused — 'Blink.Controls.Label.label'
--- redirecting a click onto its 'Blink.Controls.Label.target', say. Whoever is
+-- there's no winner), not who's currently focused — 'Blink.UI.Controls.Label.label'
+-- redirecting a click onto its 'Blink.UI.Controls.Label.target', say. Whoever is
 -- displaced is looked up when the effect is *applied* (real 'UIContext'
 -- access, unlike the reaction that queued it), and deferring lets every
 -- affected element observe the change consistently regardless of render
@@ -387,9 +387,9 @@ data UiEffect e
   = ScrollTo e Double
     -- ^ Sets the scroll position to an absolute value, clamped to @[0, 1]@
     -- by 'applyUiEffects' when the effect is applied. Every caller
-    -- ('Blink.Controls.scrollBar', 'Blink.Controls.textInputControl')
+    -- ('Blink.UI.Controls.scrollBar', 'Blink.UI.Controls.textInputControl')
     -- already passes a value in the @[0, 1]@ convention documented on
-    -- 'ScrollState'; 'Blink.Controls.textInputControl' converts to and from
+    -- 'ScrollState'; 'Blink.UI.Controls.textInputControl' converts to and from
     -- pixels locally since its selection\/cursor math is naturally
     -- pixel-based.
   | ScrollBy e Double
@@ -665,7 +665,7 @@ data UIContext e msg = UIContext
 -- | The UI monad. A state-threading computation in 'IO' that reads from a
 -- 'UIContext' and emits draw commands and messages as a side effect. Use the
 -- 'Functor', 'Applicative', and 'Monad' instances to compose UI trees. See
--- 'Blink.Controls.control' for higher-level building blocks.
+-- 'Blink.UI.Controls.control' for higher-level building blocks.
 --
 -- [@e@] Element identity type.
 -- [@msg@] Message type emitted via 'emit'.
@@ -921,7 +921,7 @@ consumeKey k = modify $ \ctx ->
   in ctx { ctxInput = input { inputKeyEvents = filter (\e -> key e /= k) (inputKeyEvents input) } }
 
 -- | Hides the given key\/modifier combinations from 'getInput' -- and so
--- from anything reading raw key events, e.g. 'Blink.Controls.Element.onKeyPressed'
+-- from anything reading raw key events, e.g. 'Blink.UI.Controls.Element.onKeyPressed'
 -- -- for the duration of @action@, restoring the real input once it
 -- completes. Unlike 'consumeKey', this doesn't affect what anyone else
 -- sees: a control that itself observes some keys as reserved navigation
@@ -940,7 +940,7 @@ withoutKeyEvents keys (UI f) = UI $ \ctx ->
 
 -- | The element that was the most recent tab stop before the current one,
 -- scoped to the currently ambient scope (root, or a composite's own while
--- inside 'withFocusScope') — used by 'Blink.Controls.control' to implement
+-- inside 'withFocusScope') — used by 'Blink.UI.Controls.control' to implement
 -- Shift-Tab navigation.
 getPreviousTabStop :: UI e msg (Maybe e)
 getPreviousTabStop = gets contextPreviousTabStop
@@ -951,7 +951,7 @@ contextPreviousTabStop :: UIContext e msg -> Maybe e
 contextPreviousTabStop = previousTabStop . ftAmbient . ctxFocus
 
 -- | Records the current element as the previous tab stop, scoped to the
--- currently ambient scope. Called automatically by 'Blink.Controls.control';
+-- currently ambient scope. Called automatically by 'Blink.UI.Controls.control';
 -- call manually when building custom focusable controls.
 setPreviousTabStop :: e -> UI e msg ()
 setPreviousTabStop eid = modifyFocusState $ \fs -> fs { previousTabStop = Just eid }
@@ -967,7 +967,7 @@ getCurrentScope = gets ctxCurrentScope
 -- | The specific key\/modifier combinations that currently mean "give up
 -- focus here and let the next render claim it" ('navAdvance') or "return to
 -- whichever tab stop was previous" ('navRetreat'). Every
--- 'Blink.Controls.Control.control' consults this instead of a hardcoded Tab\/
+-- 'Blink.UI.Controls.Control.control' consults this instead of a hardcoded Tab\/
 -- Shift-Tab, so a container can redefine it for its own children by
 -- opening a new ambient set around them with 'withNavigationKeys'.
 data NavigationKeys = NavigationKeys
@@ -1051,7 +1051,7 @@ isDragging eid = (== MouseCapturedBy eid) <$> gets contextCaptured
 
 -- | Which element currently holds mouse capture, if any. Exported for
 -- control authors that need to inspect capture state directly, e.g. when
--- implementing focus-on-click without using 'Blink.Controls.control'.
+-- implementing focus-on-click without using 'Blink.UI.Controls.control'.
 getCaptured :: UI e msg (MouseCapture e)
 getCaptured = gets contextCaptured
 
@@ -1123,8 +1123,8 @@ contextFocus = currentFocus . focusClaim . ftAmbient . ctxFocus
 -- debugging tools that want to see the whole nested claim at once.
 --
 -- Guards against revisiting an id already on the chain: a click can
--- redirect focus onto any id (as 'Blink.Controls.Label.label' does with its
--- own 'Blink.Controls.Label.target'), including an enclosing composite's
+-- redirect focus onto any id (as 'Blink.UI.Controls.Label.label' does with its
+-- own 'Blink.UI.Controls.Label.target'), including an enclosing composite's
 -- own — a composite could use this so that clicking an item leaves the
 -- composite itself focused, not the item — which writes that id into its
 -- own scope entry in @ftScopes@. That's harmless for the single-hop checks
@@ -1242,7 +1242,7 @@ requestClearFocus scopeId = emitUi (ClearFocus scopeId)
 -- 'BlockFreshClaim' overrides the "nothing is focused, free to claim" half
 -- of the first case for one frame, and changes what "blocking" value gets
 -- used in the second. It exists for a caller (see
--- 'Blink.Controls.compositeControl') that gives the composite's own id an
+-- 'Blink.UI.Controls.compositeControl') that gives the composite's own id an
 -- ordinary focus claim of its own, ahead of this call: if that claim was
 -- just given up via Tab this very frame, real ambient reads empty for an
 -- instant reason that has nothing to do with "nothing was ever focused" —
@@ -1269,7 +1269,7 @@ requestClearFocus scopeId = emitUi (ClearFocus scopeId)
 -- ambient says and regardless of whether the caller remembered to check
 -- 'isDisabled' itself. This is enforced here, once, rather than left as a
 -- convention every caller (present or future) has to uphold on its own —
--- see the integration coverage in "Blink.ControlsSpec" for the regression
+-- see the integration coverage in "Blink.UI.ControlsSpec" for the regression
 -- this guards against.
 withFocusScope :: Ord e => e -> FreshClaim -> UI e msg a -> UI e msg a
 withFocusScope scopeId freshClaim (UI f) = UI $ \ctx ->
@@ -1460,7 +1460,7 @@ emit msg = modifyOut $ \out -> out { outEvents = OutMsg msg : outEvents out }
 
 -- | Queues a 'UiEffect' — a focus, scroll, or selection change — to be
 -- applied by 'applyUiEffects' between this frame and the next. 'setFocus',
--- 'clearFocus', and the scroll\/selection writes inside "Blink.Controls" are
+-- 'clearFocus', and the scroll\/selection writes inside "Blink.UI.Controls" are
 -- built on this; reach for it directly only when writing a custom control.
 emitUi :: UiEffect e -> UI e msg ()
 emitUi eff = modifyOut $ \out -> out { outEvents = OutUi eff : outEvents out }
@@ -1542,7 +1542,7 @@ setFocusChange scopeId newFocus ctx = ctx { ctxFocus = updateScope (ctxFocus ctx
 -- | 'True' when the mouse cursor is within the current bounds and within the
 -- active interaction clip region (set by 'clipToCurrent'). This is the
 -- lower-level, element-agnostic primitive; for a specific control's hit area
--- (bounds inset by its margin), see 'Blink.Controls.isMouseOver'.
+-- (bounds inset by its margin), see 'Blink.UI.Controls.isMouseOver'.
 isRegionHit :: UI e msg Bool
 isRegionHit = do
   r    <- getBounds

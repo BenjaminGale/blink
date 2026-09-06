@@ -22,8 +22,8 @@ myButtonStyle = (buttonStyle AlignCenter myPalette)
 @
 
 Register it under whichever 'StyleKey' the control resolves to (e.g.
-'Blink.Controls.Button.buttonStyleKey', or a different 'Class'\/'ElementId'
-passed via 'Blink.Controls.Control.style') in 'themeElementStyles'.
+'Blink.UI.Controls.Button.buttonStyleKey', or a different 'Class'\/'ElementId'
+passed via 'Blink.UI.Controls.Control.style') in 'themeElementStyles'.
 -}
 module Blink.Style.Defaults
   ( defaultTheme
@@ -37,15 +37,15 @@ module Blink.Style.Defaults
 
 import qualified Data.Map.Strict as Map
 
-import Blink.Controls.Button (buttonStyleKey)
-import Blink.Controls.Checkbox (checkboxStyleKey)
-import Blink.Controls.Divider (dividerStyleKey)
-import Blink.Controls.Label (labelStyleKey)
-import Blink.Controls.ProgressBar (progressBarStyleKey)
-import Blink.Controls.RadioButton (radioButtonStyleKey)
-import Blink.Controls.Slider (sliderStyleKey)
-import Blink.Controls.TextInput (textInputStyleKey)
-import Blink.Controls.Toggle (toggleButtonStyleKey, toggleChecked)
+import Blink.UI.Controls.Button (buttonStyleKey)
+import Blink.UI.Controls.Checkbox (checkboxStyleKey)
+import Blink.UI.Controls.Divider (dividerStyleKey)
+import Blink.UI.Controls.Label (labelStyleKey)
+import Blink.UI.Controls.ProgressBar (progressBarStyleKey)
+import Blink.UI.Controls.RadioButton (radioButtonStyleKey)
+import Blink.UI.Controls.Slider (sliderStyleKey)
+import Blink.UI.Controls.TextInput (textInputStyleKey)
+import Blink.UI.Controls.Toggle (toggleButtonStyleKey, toggleChecked)
 import Blink.Geometry (uniform)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style
@@ -95,7 +95,7 @@ dividerMetrics = Metrics
 
 -- | A bordered-box control style: background/border step through
 -- hover/press/focus/disabled, with a bold accent fill both on press and
--- while selected (see 'Blink.Controls.Toggle.toggleChecked'). Used for
+-- while selected (see 'Blink.UI.Controls.Toggle.toggleChecked'). Used for
 -- buttons, toggle buttons, and (left-aligned) text inputs.
 buttonStyle :: TextAlign -> Palette -> StyleSet
 buttonStyle align p = StyleSet
@@ -166,7 +166,7 @@ sliderStyle p = StyleSet
 
 -- | A divider's line style: transparent background, 'paletteBorder' for
 -- the line itself (drawn via 'styleBorderColour', same as
--- 'Blink.Controls.Slider.Slider's groove).
+-- 'Blink.UI.Controls.Slider.Slider's groove).
 dividerStyle :: Palette -> StyleSet
 dividerStyle p = StyleSet
   { styleBase = Style
@@ -192,7 +192,7 @@ labelStyle p = StyleSet
 
 -- | A complete 'Theme' for every built-in control, built entirely from
 -- @p@ -- registers each control's default 'StyleKey' (see each control
--- module's own @*StyleKey@, e.g. 'Blink.Controls.Button.buttonStyleKey')
+-- module's own @*StyleKey@, e.g. 'Blink.UI.Controls.Button.buttonStyleKey')
 -- with its shape above. Works for any element type @e@ since every entry
 -- is 'Class'-keyed, never 'ElementId'-keyed. 'themeDefaultStyle' falls
 -- back to the boxed-control look.
