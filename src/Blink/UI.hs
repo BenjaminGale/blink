@@ -754,6 +754,16 @@ gets f = UI $ \ctx -> pure (f ctx, ctx)
 modify :: (UIContext e msg -> UIContext e msg) -> UI e msg ()
 modify f = UI $ \ctx -> pure ((), f ctx)
 
+-- | Runs @action@ with a single context field temporarily overridden via
+-- @set@, restoring the field to whatever @get@ read from the original
+-- context once @action@ completes. Shared save\/run\/restore shape behind
+-- 'withBounds', 'withStyle', 'withMetrics', 'withNavigationKeys', and
+-- 'disableWhen'.
+withField :: (UIContext e msg -> a) -> (a -> UIContext e msg -> UIContext e msg) -> a -> UI e msg b -> UI e msg b
+withField get set v (UI f) = UI $ \ctx -> do
+  (a, ctx') <- f (set v ctx)
+  pure (a, set (get ctx) ctx')
+
 -- | Modifies the currently ambient scope's own 'FocusState'.
 modifyFocusState :: (FocusState e -> FocusState e) -> UI e msg ()
 modifyFocusState f = modify $ \ctx -> ctx { ctxFocus = (ctxFocus ctx) { ftAmbient = f (ftAmbient (ctxFocus ctx)) } }
@@ -957,9 +967,7 @@ getNavigationKeys = gets ctxNavigationKeys
 -- container fully redefines what its own children treat as navigation
 -- keys, it doesn't merely add to an outer scope's set.
 withNavigationKeys :: NavigationKeys -> UI e msg a -> UI e msg a
-withNavigationKeys keys (UI f) = UI $ \ctx -> do
-  (a, ctx') <- f (ctx { ctxNavigationKeys = keys })
-  pure (a, ctx' { ctxNavigationKeys = ctxNavigationKeys ctx })
+withNavigationKeys = withField ctxNavigationKeys (\v c -> c { ctxNavigationKeys = v })
 
 getTheme :: UI e msg (Theme e)
 getTheme = gets contextTheme
@@ -1324,16 +1332,12 @@ nextFocusFrame fs = fs
 -- are restored when the sub-tree completes. Used by the layout system to
 -- assign each child its allocated slot.
 withBounds :: Rectangle -> UI e msg a -> UI e msg a
-withBounds r (UI f) = UI $ \ctx -> do
-  (a, ctx') <- f (ctx { ctxBounds = r })
-  pure (a, ctx' { ctxBounds = ctxBounds ctx })
+withBounds = withField ctxBounds (\v c -> c { ctxBounds = v })
 
 -- | Runs a sub-tree with the given 'Style' as the one 'currentStyle' reads
 -- back. The previous style is restored once the sub-tree completes.
 withStyle :: Style -> UI e msg a -> UI e msg a
-withStyle style (UI f) = UI $ \ctx -> do
-  (a, ctx') <- f (ctx { ctxStyle = style })
-  pure (a, ctx' { ctxStyle = ctxStyle ctx })
+withStyle = withField ctxStyle (\v c -> c { ctxStyle = v })
 
 -- | The 'Style' set by the nearest enclosing 'withStyle'.
 currentStyle :: UI e msg Style
@@ -1343,9 +1347,7 @@ currentStyle = gets ctxStyle
 -- reads back. The previous metrics are restored once the sub-tree
 -- completes.
 withMetrics :: Metrics -> UI e msg a -> UI e msg a
-withMetrics m (UI f) = UI $ \ctx -> do
-  (a, ctx') <- f (ctx { ctxMetrics = m })
-  pure (a, ctx' { ctxMetrics = ctxMetrics ctx })
+withMetrics = withField ctxMetrics (\v c -> c { ctxMetrics = v })
 
 -- | The 'Metrics' set by the nearest enclosing 'withMetrics'.
 currentMetrics :: UI e msg Metrics
@@ -1358,10 +1360,8 @@ isDisabled = gets ctxDisabled
 -- | Marks a sub-tree as disabled when the condition is 'True'. The flag is
 -- restored to its previous value once the sub-tree completes.
 disableWhen :: Bool -> UI e msg a -> UI e msg a
-disableWhen True (UI f) = UI $ \ctx -> do
-  (a, ctx') <- f (ctx { ctxDisabled = True })
-  pure (a, ctx' { ctxDisabled = ctxDisabled ctx })
-disableWhen False action = action
+disableWhen True  = withField ctxDisabled (\v c -> c { ctxDisabled = v }) True
+disableWhen False = id
 
 draw :: DrawCommand -> UI e msg ()
 draw cmd = modifyOut $ \out -> out { outDrawCommands = cmd : outDrawCommands out }
