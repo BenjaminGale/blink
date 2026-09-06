@@ -216,7 +216,7 @@ module Blink.UI
   , ScrollState
   , getScrollState
   , clampScrollPos
-  , contextScrollPosition
+  , contextScrollState
     -- * Selection
   , Selection (..)
   , getSelection
@@ -254,7 +254,7 @@ module Blink.UI
   , isDragging
   , isMouseFree
   , MouseCapture (..)
-  , getCapturedElement
+  , getCaptured
   , contextCaptured
   , contextButtonDown
   , contextButtonReleased
@@ -788,14 +788,14 @@ contextMouse = ctxMouse
 -- | The current scroll position for the given element, in @[0, 1]@. Returns
 -- @0@ when no position has been recorded yet.
 getScrollState :: Ord e => e -> UI e msg Double
-getScrollState eid = gets (contextScrollPosition eid)
+getScrollState eid = gets (contextScrollState eid)
 
 -- | The current scroll position for the given element, in @[0, 1]@, read
 -- directly from a 'UIContext' outside the 'UI' monad — e.g. to assert on the
 -- result of a completed frame. Returns @0@ when no position has been
 -- recorded yet.
-contextScrollPosition :: Ord e => e -> UIContext e msg -> Double
-contextScrollPosition eid ctx =
+contextScrollState :: Ord e => e -> UIContext e msg -> Double
+contextScrollState eid ctx =
   scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
 -- | The given element's selection, or 'Nothing' if it isn't the element
@@ -1026,8 +1026,8 @@ isDragging eid = (== MouseCapturedBy eid) <$> gets contextCaptured
 -- | Which element currently holds mouse capture, if any. Exported for
 -- control authors that need to inspect capture state directly, e.g. when
 -- implementing focus-on-click without using 'Blink.Controls.control'.
-getCapturedElement :: UI e msg (MouseCapture e)
-getCapturedElement = gets contextCaptured
+getCaptured :: UI e msg (MouseCapture e)
+getCaptured = gets contextCaptured
 
 -- | Which element currently holds mouse capture, if any, read directly from
 -- a 'UIContext' outside the 'UI' monad.
