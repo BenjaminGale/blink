@@ -24,7 +24,7 @@ and calls into Blink.
   hand-writing custom controls, with direct access to bounds, input, the
   active theme, and focus.
 
-- **Rebuilt every frame** — A per-frame rendering model: the whole UI tree
+- **Rebuilt every frame** — A per-frame rendering model: the whole view tree
   is recomputed from your application state every frame, either
   continuously or only when input arrives, depending on how the backend
   drives it.
@@ -57,7 +57,7 @@ A minimal todo list, showing the shape of a Blink application:
 
 ```haskell
 import Blink
-import Blink.UI.Element (Element)
+import Blink.View.Element (Element)
 
 data ControlId = NewItemInput | AddButton | ItemCheckbox Int
   deriving (Eq, Ord)

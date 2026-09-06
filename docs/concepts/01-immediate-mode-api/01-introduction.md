@@ -61,7 +61,7 @@ runs again with the new state and draws the new text directly.
 * **Anything that must survive between frames has to be stored
   explicitly somewhere**, since nothing is retained implicitly. The rest
   of this folder is about exactly that: the handful of capabilities
-  `Blink.UI` provides for state that needs to persist — or at least be
+  `Blink.View` provides for state that needs to persist — or at least be
   reported — across the boundary between one frame and the next.
 
 ## Where this shows up in the API

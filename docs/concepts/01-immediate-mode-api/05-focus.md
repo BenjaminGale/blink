@@ -99,7 +99,7 @@ When writing a custom control:
 * If it's local, single-owner state that nothing else reads — like a
   list's own scroll offset — queue it with `emitUi` instead.
 
-That's everything `Blink.UI` itself provides: identity, bounds, effects,
+That's everything `Blink.View` itself provides: identity, bounds, effects,
 and focus. See [`../02-elements/01-introduction.md`](../02-elements/01-introduction.md)
 for what's built on top of these five capabilities, and
 [`../../guides/building-a-custom-control.md`](../../guides/building-a-custom-control.md)

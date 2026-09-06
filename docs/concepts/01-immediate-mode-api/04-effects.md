@@ -7,7 +7,7 @@ anything?
 It doesn't — not directly. A control never mutates state itself. Instead,
 it queues a description of a change — an **effect** — for something else
 to apply once this frame's tree walk is finished. There are two flavours
-of this in `Blink.UI`, aimed at two different owners:
+of this in `Blink.View`, aimed at two different owners:
 
 * **`emit`** queues a `msg`: a value describing *what happened*, applied
   to your *application* state by the host's `update` function.
@@ -75,7 +75,7 @@ Blink's own, and the applier is `nextFrameContext` rather than your host's
 `update`:
 
 ```haskell
-emitUi :: UiEffect e -> UI e msg ()
+emitUi :: UiEffect e -> View e msg ()
 ```
 
 A write made partway through a frame with `emitUi` is not visible to a

@@ -2,14 +2,14 @@
 
 ## There is no layout tree — just a rectangle
 
-At the `Blink.UI` level, "layout" is nothing more than a single
+At the `Blink.View` level, "layout" is nothing more than a single
 `Rectangle` — the *current bounds* — carried in context. `getBounds`
 reads it; every drawing primitive (`fillRect`, `strokeRect`, `drawText`)
 and every hit-test (`isRegionHit`) operates against whatever it currently
 is, with no separate coordinate system to reconcile:
 
 ```haskell
-myControl :: UI e msg ()
+myControl :: View e msg ()
 myControl = do
   bounds <- getBounds
   fillRect (colourFor bounds)
@@ -20,7 +20,7 @@ asks "what space do I currently have?" and draws within it.
 
 ## A plain action fills whatever it's given
 
-By default, a `UI` action doesn't shrink, centre, or otherwise adjust
+By default, a `View` action doesn't shrink, centre, or otherwise adjust
 those bounds for its own content — it fills the entire space its caller
 happened to give it:
 
@@ -41,7 +41,7 @@ only thing that happens unless something changes the bounds first.
 ## `withBounds` changes bounds for a sub-tree
 
 `withBounds` is how that changes: it replaces the current bounds for the
-UI action passed to it, without affecting anything outside that action.
+view action passed to it, without affecting anything outside that action.
 Nothing about `getBounds` elsewhere in the tree is disturbed — the
 replacement is scoped exactly to the sub-tree `withBounds` wraps:
 

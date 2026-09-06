@@ -7,9 +7,9 @@ import Test.Hspec
 import Blink.Geometry (Point (..), Rectangle (..), uniform, noBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
 import Blink.Interaction
-import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
-import Blink.UI
+import Blink.View.Rendering (Colour (..), TextAlign (..))
+import Blink.View.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.View
 
 emptyStyle :: Style
 emptyStyle = Style
@@ -34,26 +34,26 @@ testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (emptyMe
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
-seedAt :: Point -> UIContext () msg
-seedAt p = emptyUIContext testBounds (InputState p False [] []) testTheme noOpTextMeasurer
+seedAt :: Point -> ViewContext () msg
+seedAt p = emptyViewContext testBounds (InputState p False [] []) testTheme noOpTextMeasurer
 
-seedAt0 :: UIContext () msg
+seedAt0 :: ViewContext () msg
 seedAt0 = seedAt (Point 0 0)
 
 -- | Records the frame's raw input as a message every time it runs — lets
 -- these tests observe exactly which frames 'runInteractions' drove, and
 -- with what input, purely through the public 'resultMessages' output.
-probe :: UI () InputState ()
+probe :: View () InputState ()
 probe = getInput >>= emit
 
 -- | Emits a fixed value every frame it runs, for tests only interested in
 -- how many frames ran and when.
-tick :: UI () () ()
+tick :: View () () ()
 tick = emit ()
 
 -- | Reports whether the sole element gained and\/or lost focus this frame,
 -- via the most recent redirect still visible.
-probeFocusChange :: UI () (Bool, Bool) ()
+probeFocusChange :: View () (Bool, Bool) ()
 probeFocusChange = do
   gained <- hasGainedFocus ()
   lost   <- hasLostFocus ()

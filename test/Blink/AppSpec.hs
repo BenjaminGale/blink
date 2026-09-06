@@ -10,16 +10,16 @@ import Test.Hspec
 import Blink.App
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
-import Blink.UI.Layout.Constraints (Layout (..), fill)
-import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
-import Blink.UI
-import Blink.UI.Element (Element, elementWithLayout)
+import Blink.View.Layout.Constraints (Layout (..), fill)
+import Blink.View.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
+import Blink.View.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
+import Blink.View
+import Blink.View.Element (Element, elementWithLayout)
 import Blink.Update (modify)
 
 -- | Every test app below fills the whole test bounds; only the body of the
 -- wrapped action varies per app.
-fullView :: UI e msg a -> Element e msg
+fullView :: View e msg a -> Element e msg
 fullView = elementWithLayout (Layout fill fill TopLeft) . void
 
 -- Test infrastructure
@@ -268,7 +268,7 @@ spec = do
         resultState result `shouldBe` 1
 
     describe "frame context progression" $ do
-      it "UI state written in frame N is readable in frame N+1" $ do
+      it "view state written in frame N is readable in frame N+1" $ do
         handle <- configureContinuous uiStateApp nullMeasurer
         r1 <- stepFrame handle normalInput
         r2 <- stepFrame handle normalInput

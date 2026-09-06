@@ -1,12 +1,12 @@
 # 1. `Element` and the attribute mechanism
 
 [`01-immediate-mode-api`](../01-immediate-mode-api/01-introduction.md)
-covered what `Blink.UI` itself provides: a monad that draws directly
+covered what `Blink.View` itself provides: a monad that draws directly
 against a current-bounds rectangle, with identity, effects, and focus as
 its only persistent bookkeeping. In practice, you'll rarely write at that
 level directly. Both of the systems built on top of it —
-[`Blink.UI.Layout`](02-layout.md)'s containers and
-[`Blink.UI.Controls`](03-controls.md)'s ready-made widgets — share one
+[`Blink.View.Layout`](02-layout.md)'s containers and
+[`Blink.View.Controls`](03-controls.md)'s ready-made widgets — share one
 common piece of machinery: `Element`, and the attribute mechanism used to
 configure one.
 
@@ -30,7 +30,7 @@ by hand:
 |   ]                                             |
 +------------------------------------------------+
                         |
-            resolved into a UI action,
+            resolved into a View action,
                rebuilt fresh every frame
                         v
 +------------------------------------------------+
@@ -42,24 +42,24 @@ by hand:
 ## `Element`: a size request alongside the action
 
 Bounds ([`01-immediate-mode-api/03-bounds.md`](../01-immediate-mode-api/03-bounds.md))
-gave every `UI` action a rectangle to draw within, but no way to *ask* for
+gave every `View` action a rectangle to draw within, but no way to *ask* for
 a particular size — a plain action just fills whatever it's given.
 `Element` is the type that adds that ask:
 
 ```haskell
 data Element e msg = Element
   { elLayout  :: Layout                     -- this element's size request
-  , elMeasure :: MeasureCtx -> UI e msg Size -- its preferred size, if asked
-  , elRun     :: UI e msg ()                 -- runs it for this frame
+  , elMeasure :: MeasureCtx -> View e msg Size -- its preferred size, if asked
+  , elRun     :: View e msg ()                 -- runs it for this frame
   }
 ```
 
-You don't construct one by hand unless you're placing a hand-written `UI`
+You don't construct one by hand unless you're placing a hand-written `View`
 action as a container child (`elementWithLayout`, covered in
 [the layout guide](../../guides/composing-a-layout.md)). The `elLayout`
 field is a `Layout`: a `Length` for each axis (`exactly n`, `fill`,
 `atLeast`/`atMost`/`between`, or `fitContent`) plus an alignment — see
-`Blink.UI.Layout.Constraints`'s Haddocks for the exact resolution rules of
+`Blink.View.Layout.Constraints`'s Haddocks for the exact resolution rules of
 each, worked through with diagrams.
 
 Most `Length`s (`exactly`, `fill`, `atLeast`, ...) can be resolved from

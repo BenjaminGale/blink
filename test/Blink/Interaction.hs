@@ -1,14 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | A small DSL for driving a 'UI' action through a sequence of real,
--- simulated input frames instead of poking 'UIContext' fields directly.
+-- | A small DSL for driving a 'View' action through a sequence of real,
+-- simulated input frames instead of poking 'ViewContext' fields directly.
 --
--- A test provides a chunk of UI (a 'UI' action), a list of /setup/
+-- A test provides a chunk of view (a 'View' action), a list of /setup/
 -- 'Interaction's that simulate real input to reach a starting state, and a
 -- list of /test/ 'Interaction's whose resulting messages, draw commands, and
 -- final context are what the test actually asserts on.
 --
 -- Every 'Interaction' expands to one or more real 'InputState' frames,
--- driven through the same 'nextFrameContext' \/ 'runUI' machinery
+-- driven through the same 'nextFrameContext' \/ 'runView' machinery
 -- production code uses — there is no shortcut path that skips a real frame
 -- transition. A synthetic pre-condition that no real input sequence through
 -- the action under test could produce on its own (e.g. "some other,
@@ -36,12 +36,12 @@ module Blink.Interaction
 import Data.Text (Text)
 import Blink.Geometry (Point, Rectangle)
 import Blink.Input (Key (..), Modifier (..), InputState (..), KeyEvent (..))
-import Blink.Rendering (DrawCommand)
-import Blink.UI
+import Blink.View.Rendering (DrawCommand)
+import Blink.View
 
 -- | One simulated real-input step. A list of these is expanded into one or
 -- more raw 'InputState' frames, each driven through 'nextFrameContext' \/
--- 'runUI' in turn.
+-- 'runView' in turn.
 data Interaction
   = MoveTo Point
     -- ^ One frame: reposition the mouse, button state unchanged.
@@ -72,11 +72,11 @@ data Interaction
     -- 'Interaction' always advances at least one real frame.
   deriving (Eq, Show)
 
--- | The outcome of driving a 'UI' action through 'runInteractions'.
+-- | The outcome of driving a 'View' action through 'runInteractions'.
 data InteractionResult e msg a = InteractionResult
   { resultValue    :: a
     -- ^ The value produced by the final test-phase frame.
-  , resultContext  :: UIContext e msg
+  , resultContext  :: ViewContext e msg
     -- ^ The context after the test phase, with pending 'UiEffect's applied.
   , resultMessages :: [msg]
     -- ^ Every message emitted during the test phase, across every simulated
@@ -90,7 +90,7 @@ data InteractionResult e msg a = InteractionResult
 -- | Drives @action@ through @setup@ (messages discarded, only the resulting
 -- context carried forward) and then @test@ (messages accumulated across
 -- every frame, draws taken from the last), starting from @seed@ — a
--- 'UIContext' obtained from 'emptyUIContext' or a prior 'runInteractions'
+-- 'ViewContext' obtained from 'emptyViewContext' or a prior 'runInteractions'
 -- call's 'resultContext'. @action@ is re-run once per simulated frame, the
 -- same way a real host re-runs its view every frame; the test phase always
 -- runs @action@ at least once, even when @test@ is @[]@, so its value\/draws
@@ -99,8 +99,8 @@ data InteractionResult e msg a = InteractionResult
 runInteractions
   :: Ord e
   => Rectangle
-  -> UIContext e msg
-  -> UI e msg a
+  -> ViewContext e msg
+  -> View e msg a
   -> [Interaction]
   -> [Interaction]
   -> IO (InteractionResult e msg a)
@@ -117,7 +117,7 @@ runInteractions bounds seed action setupIxns testIxns = do
     testFrames = if null testIxns then [Wait 1] else testIxns
     settle ctx = applyUiEffects (getUiEffects ctx) ctx
 
-    step ctx frame = runUI action (nextFrameContext bounds frame (contextTheme ctx) (contextAnimation ctx) ctx)
+    step ctx frame = runView action (nextFrameContext bounds frame (contextTheme ctx) (contextAnimation ctx) ctx)
 
     -- Setup: discard every frame's value/messages/draws, keep only the
     -- resulting context. Re-derives the "current" InputState from the

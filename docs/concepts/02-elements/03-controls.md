@@ -1,6 +1,6 @@
 # 3. The control primitive
 
-Every ready-made widget in `Blink.UI.Controls` — button, checkbox, toggle,
+Every ready-made widget in `Blink.View.Controls` — button, checkbox, toggle,
 radio button, slider, text input — needs the same handful of things:
 focus management, tab navigation, hover/press styling, and a consistent
 way to report mouse and keyboard activity. Rather than each widget
@@ -44,7 +44,7 @@ so the release should count regardless of where the pointer ends up.
   it, giving it up on Tab, handing it to the previous tab stop on
   Shift-Tab, and taking it on a mouse-down when the control is focusable.
 * **Themed chrome** — background, border, and padding resolved from a
-  `Blink.Style.StyleKey` and the element's current hover/press/focus
+  `Blink.View.Style.StyleKey` and the element's current hover/press/focus
   state, drawn around whatever content the control's own config carries.
 
 ## A layer fires only what it originates
@@ -68,7 +68,7 @@ in the same tree walk, which a queued handler dispatch couldn't guarantee.
 
 ## Where this leaves you
 
-Every ready-made control in `Blink.UI.Controls` is `controlBase` (or
-`elementBase` directly, for something simpler like `Blink.UI.Controls.Label`)
+Every ready-made control in `Blink.View.Controls` is `controlBase` (or
+`elementBase` directly, for something simpler like `Blink.View.Controls.Label`)
 plus its own visual content and attributes — see each widget's own module
 for what it adds on top of this shared foundation.

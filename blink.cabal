@@ -13,14 +13,14 @@ description:
     from your application's state, and Blink handles turning that into
     what's drawn on screen and how it responds to input. That declarative
     layer sits on top of a lower-level immediate-mode API, which is there
-    if you need to hand-write a custom control. The whole UI tree is
+    if you need to hand-write a custom control. The whole view tree is
     rebuilt from application state each frame, rather than retained and
     mutated incrementally. Blink does not own the main loop -- a backend
     (SDL2, in the included demo) drives the loop and calls into Blink once
     per frame.
 
     Start with "Blink" for the module guide, "Blink.App" for how to define
-    an application and wire it up to a backend, and "Blink.UI" for the
+    an application and wire it up to a backend, and "Blink.View" for the
     monad views are built from.
 
 common defaults
@@ -39,29 +39,29 @@ library
         Blink.Attribute
         Blink.Geometry
         Blink.Input
-        Blink.Rendering
-        Blink.Style
-        Blink.Style.Defaults
-        Blink.UI
-        Blink.UI.Controls
-        Blink.UI.Controls.Button
-        Blink.UI.Controls.Checkbox
-        Blink.UI.Controls.Control
-        Blink.UI.Controls.Divider
-        Blink.UI.Controls.Element
-        Blink.UI.Controls.Label
-        Blink.UI.Controls.ProgressBar
-        Blink.UI.Controls.RadioButton
-        Blink.UI.Controls.RepeatButton
-        Blink.UI.Controls.Slider
-        Blink.UI.Controls.TextInput
-        Blink.UI.Controls.Toggle
-        Blink.UI.Element
-        Blink.UI.Layout
-        Blink.UI.Layout.Border
-        Blink.UI.Layout.Box
-        Blink.UI.Layout.Constraints
         Blink.Update
+        Blink.View
+        Blink.View.Controls
+        Blink.View.Controls.Button
+        Blink.View.Controls.Checkbox
+        Blink.View.Controls.Control
+        Blink.View.Controls.Divider
+        Blink.View.Controls.Element
+        Blink.View.Controls.Label
+        Blink.View.Controls.ProgressBar
+        Blink.View.Controls.RadioButton
+        Blink.View.Controls.RepeatButton
+        Blink.View.Controls.Slider
+        Blink.View.Controls.TextInput
+        Blink.View.Controls.Toggle
+        Blink.View.Element
+        Blink.View.Layout
+        Blink.View.Layout.Border
+        Blink.View.Layout.Box
+        Blink.View.Layout.Constraints
+        Blink.View.Rendering
+        Blink.View.Style
+        Blink.View.Style.Defaults
     hs-source-dirs: src
 
 executable demo
@@ -90,27 +90,27 @@ test-suite blink-tests
         Blink.InputSpec
         Blink.Interaction
         Blink.InteractionSpec
-        Blink.Style.DefaultsSpec
-        Blink.UI.Controls.ButtonBehaviour
-        Blink.UI.Controls.ButtonSpec
-        Blink.UI.Controls.CheckboxSpec
-        Blink.UI.Controls.ControlBehaviour
-        Blink.UI.Controls.ControlSpec
-        Blink.UI.Controls.DividerSpec
-        Blink.UI.Controls.ElementBehaviour
-        Blink.UI.Controls.ElementSpec
-        Blink.UI.Controls.FixedFocusBehaviour
-        Blink.UI.Controls.LabelSpec
-        Blink.UI.Controls.ProgressBarSpec
-        Blink.UI.Controls.RadioButtonSpec
-        Blink.UI.Controls.RepeatButtonSpec
-        Blink.UI.Controls.SliderSpec
-        Blink.UI.Controls.TextInputSpec
-        Blink.UI.Controls.ToggleBehaviour
-        Blink.UI.Controls.ToggleSpec
-        Blink.UI.LayoutSpec
-        Blink.UISpec
         Blink.UpdateSpec
+        Blink.View.Controls.ButtonBehaviour
+        Blink.View.Controls.ButtonSpec
+        Blink.View.Controls.CheckboxSpec
+        Blink.View.Controls.ControlBehaviour
+        Blink.View.Controls.ControlSpec
+        Blink.View.Controls.DividerSpec
+        Blink.View.Controls.ElementBehaviour
+        Blink.View.Controls.ElementSpec
+        Blink.View.Controls.FixedFocusBehaviour
+        Blink.View.Controls.LabelSpec
+        Blink.View.Controls.ProgressBarSpec
+        Blink.View.Controls.RadioButtonSpec
+        Blink.View.Controls.RepeatButtonSpec
+        Blink.View.Controls.SliderSpec
+        Blink.View.Controls.TextInputSpec
+        Blink.View.Controls.ToggleBehaviour
+        Blink.View.Controls.ToggleSpec
+        Blink.View.LayoutSpec
+        Blink.View.Style.DefaultsSpec
+        Blink.ViewSpec
     build-depends:
         blink,
         hspec ^>=2.11.17,

@@ -1,6 +1,6 @@
 # 1. The frame loop
 
-The previous areas covered what `Blink.UI`, `Element`, layout, controls,
+The previous areas covered what `Blink.View`, `Element`, layout, controls,
 and application-state updates each provide. This one zooms out to the
 frame as a whole: Blink doesn't own the main loop — a backend (SDL2, in
 the included demo) calls into Blink once per frame. Each call does the
@@ -8,9 +8,9 @@ same three things:
 
 ```
 +---------------+     +---------------+     +---------------+
-|   nextFrame-  |     |     runUI     |     |    extract    |
+|   nextFrame-  |     |     runView     |     |    extract    |
 |    Context    | --> |   (walk the   | --> |    (draws,    |
-| (advance ctx) |     |    UI tree)   |     |   messages)   |
+| (advance ctx) |     |   view tree)  |     |   messages)   |
 +---------------+     +---------------+     +---------------+
         ^                                           |
         +-------------------------------------------+
@@ -23,8 +23,8 @@ same three things:
    *queued* last frame get applied now (more on that distinction in
    [the effects concept](../01-immediate-mode-api/04-effects.md)), and the
    animation clock advances. On the very first frame there is no previous
-   context, so `emptyUIContext` is used instead.
-2. **Run the view.** `runUI` walks the UI tree your `view` function
+   context, so `emptyViewContext` is used instead.
+2. **Run the view.** `runView` walks the view tree your `view` function
    produces, threading that context through it. Controls read from it
    (is this element focused? what are the current bounds?) and write to it
    (append a draw command, queue a message, claim focus).
@@ -39,7 +39,7 @@ remembered; if it isn't in that context, it doesn't exist to Blink.
 
 ## What's actually inside that context
 
-The context (`UIContext`) is not application data — it's the small set of
+The context (`ViewContext`) is not application data — it's the small set of
 bookkeeping covered by
 [`01-immediate-mode-api`](../01-immediate-mode-api/01-introduction.md)
 that has to survive between frames for the immediate-mode model to work

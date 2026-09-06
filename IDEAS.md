@@ -71,7 +71,7 @@ it's given, rather than clipping or overflowing:
   layout bounds each frame rather than being cached
 
 ### Disable-aware panel control
-Building on the `enabled` attribute every widget in the `Blink.UI.Controls.Control`
+Building on the `enabled` attribute every widget in the `Blink.View.Controls.Control`
 stack already has: a higher-level panel control that, when disabled,
 automatically disables its content — every child control nested inside it
 — rather than requiring each child to be disabled individually. This would
@@ -189,17 +189,17 @@ should be constrained to non-negative values when they're constructed.
 
 ## Architecture
 
-### Split `Blink.UI` into topic modules
-`Blink.UI` bundles several disjoint concerns that only live together because
-they all need `UIContext`'s internals — the monad itself, mouse/button
+### Split `Blink.View` into topic modules
+`Blink.View` bundles several disjoint concerns that only live together because
+they all need `ViewContext`'s internals — the monad itself, mouse/button
 accessors, focus/scope handling, scroll/selection, drawing primitives,
 animation, text measurement. The size of the file is a symptom of that, not
 just a big-file smell.
 
-The idea: an internal `Blink.UI.Context` (or similar) holding `UI`/
-`UIContext`/the raw `gets`/`modify`, with topic modules (`Blink.UI.Mouse`,
-`Blink.UI.Focus`, `Blink.UI.Scroll`, `Blink.UI.Drawing`, `Blink.UI.Animation`,
-...) importing it for context access, and `Blink.UI` itself becoming a thin
+The idea: an internal `Blink.View.Context` (or similar) holding `View`/
+`ViewContext`/the raw `gets`/`modify`, with topic modules (`Blink.View.Mouse`,
+`Blink.View.Focus`, `Blink.View.Scroll`, `Blink.View.Drawing`, `Blink.View.Animation`,
+...) importing it for context access, and `Blink.View` itself becoming a thin
 re-exporting shell — the same shape the top-level `Blink` module guide
 already has.
 

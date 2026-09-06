@@ -4,7 +4,7 @@ Module: Blink.App
 = Application structure
 
 'App' bundles everything Blink needs to run: the startup action that
-produces the initial state, a function from state to 'Theme', the UI tree,
+produces the initial state, a function from state to 'Theme', the view tree,
 and the message handler.
 
 @
@@ -17,11 +17,11 @@ data App e msg s = App
 @
 
   * @e@ is the element type — a sum type identifying each interactive control
-    (see "Blink.UI").
-  * @msg@ is the type of messages the view emits (see "Blink.UI").
+    (see "Blink.View").
+  * @msg@ is the type of messages the view emits (see "Blink.View").
   * @s@ is the application state, owned by the host and passed into 'view'
     explicitly each frame. The view never mutates it directly; it queues
-    @msg@ values with 'Blink.UI.emit', which @update@ folds into the state
+    @msg@ values with 'Blink.View.emit', which @update@ folds into the state
     once the frame completes, in emission order.
 
 = Configuration
@@ -107,23 +107,23 @@ import GHC.Clock (getMonotonicTimeNSec)
 
 import Blink.Geometry (Point (..), Rectangle, Size (..), rectFromSize)
 import Blink.Input (KeyEvent, InputState (..))
-import Blink.Rendering (DrawCommand, TextMeasurer (..))
-import Blink.Style (Theme)
-import Blink.UI
-  ( UIContext
+import Blink.View.Rendering (DrawCommand, TextMeasurer (..))
+import Blink.View.Style (Theme)
+import Blink.View
+  ( ViewContext
   , AnimationState (animElapsed)
   , mkAnimationState
-  , emptyUIContext, nextFrameContext, rerenderContext
-  , runUI, getDrawCommands, getMessages, getUiEffects
+  , emptyViewContext, nextFrameContext, rerenderContext
+  , runView, getDrawCommands, getMessages, getUiEffects
   , contextAnimation, contextRequiresAnimation
   )
-import Blink.UI.Element (Element, runElement)
+import Blink.View.Element (Element, runElement)
 import Blink.Update (Update, runUpdate)
 
 -- | Describes a complete Blink application.
 --
 -- @e@ is the element type, @msg@ the type of messages emitted by the view,
--- and @s@ the application state. See "Blink.UI" for an explanation of
+-- and @s@ the application state. See "Blink.View" for an explanation of
 -- element IDs and messages.
 data App e msg s = App
   { startUp :: IO s
@@ -132,8 +132,8 @@ data App e msg s = App
     -- ^ Derives the active 'Theme' from the current state. Called each frame,
     -- allowing the theme to change in response to state changes.
   , view :: s -> Element e msg
-    -- ^ The UI tree, given the application state as it was at the start of
-    -- the frame. Queues messages with 'Blink.UI.emit'; run once or twice per
+    -- ^ The view tree, given the application state as it was at the start of
+    -- the frame. Queues messages with 'Blink.View.emit'; run once or twice per
     -- frame depending on the render mode.
   , update :: msg -> Update s ()
     -- ^ Folds one message emitted by 'view' into the application state.
@@ -146,7 +146,7 @@ configureContinuous :: Ord e => App e msg s -> TextMeasurer -> IO (BlinkHandle s
 configureContinuous app measurer = do
   s <- startUp app
   refs <- AppRefs
-    <$> newIORef (emptyUIContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) measurer)
+    <$> newIORef (emptyViewContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) measurer)
     <*> newIORef s
     <*> newIORef False
     <*> newIORef Nothing
@@ -159,7 +159,7 @@ configureEventDriven :: Ord e => App e msg s -> IO () -> TextMeasurer -> IO (Bli
 configureEventDriven app notify measurer = do
   s <- startUp app
   refs <- AppRefs
-    <$> newIORef (emptyUIContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) measurer)
+    <$> newIORef (emptyViewContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) measurer)
     <*> newIORef s
     <*> newIORef False
     <*> newIORef Nothing
@@ -208,8 +208,8 @@ data FrameResult s
 -- | Mutable state carried between frames, allocated once at configure time
 -- and threaded through every 'stepFrame' call via closure.
 data AppRefs e msg s = AppRefs
-  { refsCtx        :: IORef (UIContext e msg)
-    -- The UIContext carried over from the previous frame.
+  { refsCtx        :: IORef (ViewContext e msg)
+    -- The ViewContext carried over from the previous frame.
   , refsState      :: IORef s
     -- The application state as of the end of the previous frame.
   , refsAnimActive :: IORef Bool
@@ -222,7 +222,7 @@ data AppRefs e msg s = AppRefs
     -- sequentially, so no concurrent access concerns.
   }
 
-buildCtx :: Ord e => App e msg s -> Rectangle -> InputState -> Float -> Bool -> s -> UIContext e msg -> UIContext e msg
+buildCtx :: Ord e => App e msg s -> Rectangle -> InputState -> Float -> Bool -> s -> ViewContext e msg -> ViewContext e msg
 buildCtx app winRect inputState delta isAnimTick state prevCtx =
   let elapsed   = animElapsed (contextAnimation prevCtx) + delta
       animState = mkAnimationState delta elapsed isAnimTick
@@ -233,7 +233,7 @@ runFrame
   => App e msg s
   -> AppRefs e msg s
   -> FrameInput
-  -> IO (UIContext e msg, s)
+  -> IO (ViewContext e msg, s)
 runFrame app refs input = do
   let winRect    = rectFromSize (windowSize input)
       inputState = toInputState input
@@ -244,7 +244,7 @@ runFrame app refs input = do
 
   prevCtx <- readIORef (refsCtx refs)
   let ctx = buildCtx app winRect inputState delta (isAnimationTick input) state prevCtx
-  ((), ctx') <- runUI (runElement (view app state)) ctx
+  ((), ctx') <- runView (runElement (view app state)) ctx
   let state' = foldl' (\s msg -> runUpdate (update app msg) s) state (getMessages ctx')
 
   writeIORef (refsState refs) state'
@@ -262,7 +262,7 @@ doStepEventDriven app refs notify input = do
   (firstPassCtx, state') <- runFrame app refs input
   renderedCtx <-
     if null (getMessages firstPassCtx) && null (getUiEffects firstPassCtx)
-      -- Nothing was queued, so nothing about the app or UI state changed —
+      -- Nothing was queued, so nothing about the app or view state changed —
       -- a second pass would run the same view against the same state and
       -- input and produce byte-identical output. Reuse the first pass's
       -- context and draws instead of paying for a pointless re-render.
@@ -272,7 +272,7 @@ doStepEventDriven app refs notify input = do
             inputState = toInputState input
             freshCtx   = rerenderContext winRect (clearKeyEvents inputState)
                            (theme app state') (contextAnimation firstPassCtx) firstPassCtx
-        snd <$> runUI (runElement (view app state')) freshCtx
+        snd <$> runView (runElement (view app state')) freshCtx
   writeIORef (refsCtx refs) renderedCtx
   wasActive <- readIORef (refsAnimActive refs)
   let nowActive = contextRequiresAnimation renderedCtx

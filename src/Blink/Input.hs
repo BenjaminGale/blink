@@ -9,7 +9,7 @@ events for a single frame.
 Also home to pure mouse state built from that raw input: which element (if
 any) holds the mouse button's capture, and each element's hover state,
 together with the per-frame transition functions that advance them. No
-dependency on the 'Blink.UI' monad -- 'Blink.UI' holds a 'Mouse' in its
+dependency on the 'Blink.View' monad -- 'Blink.View' holds a 'Mouse' in its
 context and exposes monadic accessors built on top of what's defined here.
 -}
 module Blink.Input
@@ -78,13 +78,13 @@ data KeyEvent = KeyEvent
     -- keyboard auto-repeat (holding the key down), rather than the initial
     -- physical press. Most consumers of a raw @['KeyEvent']@ want these --
     -- holding Backspace\/an arrow key repeating is ordinary text-editing
-    -- behaviour (see "Blink.UI.Controls.TextInput"). A control that only
+    -- behaviour (see "Blink.View.Controls.TextInput"). A control that only
     -- wants to react once per physical press (e.g.
-    -- "Blink.UI.Controls.Button"'s Enter-while-focused activation) checks
+    -- "Blink.View.Controls.Button"'s Enter-while-focused activation) checks
     -- this and ignores the event when it's 'True'.
   } deriving (Eq, Show)
 
--- | All per-frame input assembled by the backend. Passed to the UI tree
+-- | All per-frame input assembled by the backend. Passed to the view tree
 -- via the 'Blink.App.FrameInput' each frame.
 data InputState = InputState
   { inputMousePosition   :: Point
@@ -92,7 +92,7 @@ data InputState = InputState
   , inputLeftButtonDown  :: Bool
     -- ^ 'True' while the primary (left) mouse button is physically held.
     -- Button transition state (pressed\/released this frame) is derived by
-    -- 'Blink.UI' from this value compared against the previous frame.
+    -- 'Blink.View' from this value compared against the previous frame.
   , inputKeyEvents       :: [KeyEvent]
     -- ^ Key-press events for this frame.
   , inputTypedText     :: [Text]
@@ -149,7 +149,7 @@ captureOf (ButtonReleased cap) = cap
 -- frame -- both when it's fully up and on a fresh press -- so a new press
 -- never inherits a stale capture left over from a previous drag\/click
 -- cycle. Acquisition -- setting capture in the first place -- happens
--- elsewhere (see 'Blink.UI.acquireCapture').
+-- elsewhere (see 'Blink.View.acquireCapture').
 nextButtonState :: Bool -> Bool -> MouseCapture e -> ButtonState e
 nextButtonState prevDown currDown existingCapture
   | currDown && not prevDown = ButtonDown carriedCapture
@@ -219,7 +219,7 @@ emptyMouse = Mouse
 -- 'mouseHoverPrev' for the next frame to read, starting a fresh empty
 -- 'mouseHoverNext'. Leaves 'mouseButton' untouched -- used on its own when
 -- re-rendering the current frame rather than advancing to a new one (see
--- 'Blink.UI.rerenderContext'), where the button reading shouldn't be
+-- 'Blink.View.rerenderContext'), where the button reading shouldn't be
 -- re-derived a second time against itself.
 advanceHover :: Mouse e -> Mouse e
 advanceHover mouse = mouse

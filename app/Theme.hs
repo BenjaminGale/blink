@@ -2,7 +2,7 @@
 -- | The sample app's theme.
 --
 -- Both 'lightTheme' and 'darkTheme' are built from the library's
--- 'Blink.Style.Defaults.defaultTheme', each fed a 'Palette' sampled from a
+-- 'Blink.View.Style.Defaults.defaultTheme', each fed a 'Palette' sampled from a
 -- reference screenshot ('lightPalette'\/'darkPalette') -- see
 -- 'withStatusBar' for the one entry added on top of what 'defaultTheme'
 -- registers ('StatusBar' is an app-specific 'ElementId', not a built-in
@@ -16,9 +16,9 @@ module Theme
 import qualified Data.Map.Strict as Map
 
 import Blink.Geometry
-import Blink.Rendering
-import Blink.Style
-import Blink.Style.Defaults (defaultTheme)
+import Blink.View.Rendering
+import Blink.View.Style
+import Blink.View.Style.Defaults (defaultTheme)
 
 data ControlId = Label
              | FieldLabel ControlId
@@ -76,7 +76,7 @@ statusBarMetrics = Metrics
   }
 
 -- | Inserts the status bar's look -- an 'ElementId'-keyed entry, not a
--- built-in control class, so 'Blink.Style.Defaults.defaultTheme' doesn't
+-- built-in control class, so 'Blink.View.Style.Defaults.defaultTheme' doesn't
 -- (and can't) register it itself.
 withStatusBar :: Palette -> Theme ControlId -> Theme ControlId
 withStatusBar p thm = thm

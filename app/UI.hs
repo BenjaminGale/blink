@@ -3,25 +3,25 @@ module UI (ControlId, AppState (..), demoApp) where
 
 import Blink.App
 import Blink.Attribute (Attribute)
-import Blink.UI.Controls
-import Blink.UI.Controls.Button (onActivated)
-import Blink.UI.Controls.Control (isEnabled)
-import Blink.UI.Controls.Divider (orientation)
-import Blink.UI.Controls.Element (post, postWith)
-import Blink.UI.Controls.Label (LabelConfig, target, text)
-import Blink.UI.Controls.ProgressBar (ProgressValue (..), progress)
-import Blink.UI.Controls.RepeatButton
+import Blink.View.Controls
+import Blink.View.Controls.Button (onActivated)
+import Blink.View.Controls.Control (isEnabled)
+import Blink.View.Controls.Divider (orientation)
+import Blink.View.Controls.Element (post, postWith)
+import Blink.View.Controls.Label (LabelConfig, target, text)
+import Blink.View.Controls.ProgressBar (ProgressValue (..), progress)
+import Blink.View.Controls.RepeatButton
   (firedCount, onFiredCountChanged, onPressEnded, onPressStarted, pressStartedAt)
-import Blink.UI.Controls.Slider (onValueChanged)
-import qualified Blink.UI.Controls.Slider as Slider (value)
-import Blink.UI.Controls.TextInput (displayFilter, onInput, value)
-import Blink.UI.Controls.Toggle (isSelected, onSelectedChanged)
+import Blink.View.Controls.Slider (onValueChanged)
+import qualified Blink.View.Controls.Slider as Slider (value)
+import Blink.View.Controls.TextInput (displayFilter, onInput, value)
+import Blink.View.Controls.Toggle (isSelected, onSelectedChanged)
 import Blink.Geometry
 import Blink.Input
-import Blink.UI.Layout
-import Blink.Rendering
-import Blink.UI
-import Blink.UI.Element (Element, elementWithLayout, runElement)
+import Blink.View.Layout
+import Blink.View.Rendering
+import Blink.View
+import Blink.View.Element (Element, elementWithLayout, runElement)
 import Blink.Update
 import Theme (ControlId (..), lightTheme, darkTheme)
 import Control.Monad (when)
@@ -109,7 +109,7 @@ updateApp msg = case msg of
                        else 1
     }
 
-type DemoUI = UI ControlId Msg
+type DemoUI = View ControlId Msg
 
 -- Shell
 

@@ -1,11 +1,11 @@
 {- |
 Module: Blink.Update
 
-The host-side counterpart to 'Blink.UI.UI': a small state-threading monad
+The host-side counterpart to 'Blink.View.View': a small state-threading monad
 for turning a @msg@ emitted by the view into an updated application state.
-It mirrors 'Blink.UI.UI's shape (a pure state-threading computation with
+It mirrors 'Blink.View.View's shape (a pure state-threading computation with
 'modify'\/'gets' primitives) but over the application state @s@ rather than
-'Blink.UI.UIContext', and carries no 'IO' — nothing in an @update@ handler
+'Blink.View.ViewContext', and carries no 'IO' — nothing in an @update@ handler
 touches text measurement or any other backend concern.
 
 = Writing an update function
