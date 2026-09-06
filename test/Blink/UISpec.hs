@@ -427,6 +427,14 @@ spec = describe "Blink.UI" $ do
       (b, _) <- runTwoElem (setFocus ElemA >> isFocused ElemB)
       b `shouldBe` False
 
+    it "setFocus refuses to steal focus from a different element that already holds it this frame" $ do
+      (f, _) <- runTwoElem (setFocus ElemA >> setFocus ElemB >> getFocus)
+      f `shouldBe` Just ElemA
+
+    it "setFocus still lets an element reaffirm itself after already claiming it this frame" $ do
+      (f, _) <- runTwoElem (setFocus ElemA >> setFocus ElemA >> getFocus)
+      f `shouldBe` Just ElemA
+
     it "clearFocus removes the focused element" $ do
       (f, _) <- run0 (setFocus () >> clearFocus >> getFocus)
       f `shouldBe` Nothing

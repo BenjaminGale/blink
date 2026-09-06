@@ -455,6 +455,17 @@ currentFocus Unclaimed             = Nothing
 currentFocus (ClaimedLastFrame e)  = Just e
 currentFocus (ClaimedThisFrame e)  = Just e
 
+-- | Claims focus for @eid@ (see 'setFocus'): succeeds when nothing currently
+-- holds it, or @eid@ is reaffirming itself; refused, unchanged, when a
+-- different element already holds it this frame -- so an element calling
+-- 'setFocus' for itself can never steal focus out from under whoever
+-- legitimately has it, regardless of render order.
+tryClaim :: Eq e => e -> FocusClaim e -> FocusClaim e
+tryClaim eid claim = case currentFocus claim of
+  Nothing                     -> ClaimedThisFrame eid
+  Just holder | holder == eid -> ClaimedThisFrame eid
+              | otherwise     -> claim
+
 -- | Advances a 'FocusClaim' to the next frame: a reaffirmed claim gets one
 -- frame of grace before it must be reaffirmed again; a claim already on
 -- grace that wasn't reaffirmed again is dropped.
@@ -1135,13 +1146,15 @@ getFocusChange = gets (pendingFocusChange . focusChange . ftAmbient . ctxFocus)
 -- capture, not like the deferred scroll\/selection writes — because a
 -- control's own focus decision (take it when nothing else has it, hand off
 -- on Tab) is only correct if the next sibling in the same tree walk can see
--- it happened.
-setFocus :: e -> UI e msg ()
-setFocus eid = modifyFocusState $ \fs -> fs { focusClaim = ClaimedThisFrame eid }
+-- it happened. Refused (see 'tryClaim') if a different element already
+-- holds it this frame, so it can never steal focus out from under whoever
+-- legitimately has it.
+setFocus :: Eq e => e -> UI e msg ()
+setFocus eid = modifyFocusState $ \fs -> fs { focusClaim = tryClaim eid (focusClaim fs) }
 
 -- | Transfers keyboard focus to the given element when the condition is
 -- 'True'.
-setFocusWhen :: Bool -> e -> UI e msg ()
+setFocusWhen :: Eq e => Bool -> e -> UI e msg ()
 setFocusWhen b eid = when b (setFocus eid)
 
 -- | Removes keyboard focus from the currently ambient scope. Immediate,
