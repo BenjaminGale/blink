@@ -23,10 +23,10 @@ update Increment   = modify (\s -> s { counter = counter s + 1 })
 update (SetName t) = modify (\s -> s { name = t })
 ```
 
-`Update` only reads and modifies your state — nothing else. If a handler
-needs to trigger a side effect (writing a file, making a network call),
-that belongs in your backend's loop, driven by the resulting state, not
-inside `Update` itself.
+`Update` currently only reads and modifies your state. Until it supports
+`IO`/async work directly, a handler that needs a side effect (writing a
+file, making a network call) should trigger it from your backend's loop
+instead, driven by the resulting state.
 
 Application-state logic in Blink is expressed entirely as `Update`
 handlers built from `get`/`put`/`gets`/`modify`. Growth in this area
