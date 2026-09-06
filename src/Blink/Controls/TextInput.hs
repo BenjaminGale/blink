@@ -106,6 +106,15 @@ onInput f = Attribute (\tc -> tc { ticOnInput = ticOnInput tc ++ [f] })
 onSubmit :: EventHandler e msg -> Attribute (TextInputConfig e msg)
 onSubmit f = Attribute (\tc -> tc { ticOnSubmit = ticOnSubmit tc ++ [f] })
 
+-- | Whether a click/drag this frame is continuing a drag already in
+-- progress, or arriving alongside a fresh focus change -- the two facts
+-- 'resolveMouseSelection' needs from before the frame started, since
+-- neither is recoverable from this frame's own state alone.
+data SelectionGesture = SelectionGesture
+  { sgWasCapturing :: Bool  -- ^ control was already being dragged last frame
+  , sgJustFocused  :: Bool  -- ^ control just gained focus this frame
+  }
+
 -- | Click sets both selection ends at the clicked character; dragging
 -- extends only the active end, keeping the anchor from before the drag
 -- started. Gaining focus with no drag in progress -- Tab\/Shift-Tab, or the
@@ -114,25 +123,24 @@ onSubmit f = Attribute (\tc -> tc { ticOnSubmit = ticOnSubmit tc ++ [f] })
 -- focused and enabled.
 resolveMouseSelection
   :: Ord e
-  => e           -- ^ element ID
-  -> Rectangle   -- ^ control's bounds
-  -> Bool        -- ^ control was already being dragged last frame
-  -> Bool        -- ^ control just gained focus this frame
-  -> Text        -- ^ displayed value (post-'displayFilter')
-  -> Double      -- ^ current horizontal scroll offset
-  -> Selection   -- ^ current selection
+  => e                -- ^ element ID
+  -> Rectangle        -- ^ control's bounds
+  -> SelectionGesture
+  -> Text             -- ^ displayed value (post-'displayFilter')
+  -> Double           -- ^ current horizontal scroll offset
+  -> Selection        -- ^ current selection
   -> UI e msg Selection
-resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX sel = do
+resolveMouseSelection eid bounds gesture displayValue scrollX sel = do
   isCapturing <- isDragging eid
   if isCapturing
     then do
       mousePos <- getMousePos
       let localX = realToFrac (pointX mousePos - rectX bounds) + realToFrac scrollX :: Float
       clickedPos <- charAtOffset displayValue localX
-      pure $ if not wasCapturing || justFocused
+      pure $ if not (sgWasCapturing gesture) || sgJustFocused gesture
         then cursor clickedPos
         else extendActive (const clickedPos) sel
-    else pure $ if justFocused
+    else pure $ if sgJustFocused gesture
       then Selection 0 (T.length displayValue)
       else sel
 
@@ -302,7 +310,7 @@ textInput eid attrs = Element
 
       selAfterMouse <-
         if canEdit
-          then resolveMouseSelection eid bounds wasCapturing justFocused displayValue scrollX selInit
+          then resolveMouseSelection eid bounds (SelectionGesture wasCapturing justFocused) displayValue scrollX selInit
           else pure selInit
 
       let selAfterKeys = resolveKeyboardSelection canEdit (inputKeyEvents input) (T.length currentValue) selAfterMouse
