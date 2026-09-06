@@ -71,9 +71,10 @@ module Blink.View.Controls.Control
 
     -- * Focus scope
   , FocusPolicy (..)
-  , EntryPolicy (..)
   , ChildNavigation (..)
+  , ContainedNavigation (..)
   , WrapPolicy (..)
+  , EntryPolicy (..)
   , focusPolicy
 
     -- * Measurement
@@ -341,19 +342,50 @@ data FocusPolicy
     -- the way every focusable control already works: auto-claimed by
     -- rendering first while nothing else holds focus, given up on Tab,
     -- taken on click. The default.
-  | FocusScope EntryPolicy ChildNavigation
-    -- ^ Also exactly one focus stop from outside, but once entered, hands
-    -- Tab\/Shift-Tab (per the keys named in 'ChildNavigation') to this
-    -- control's own distinctly-identified children instead of giving up
-    -- immediately -- per 'EntryPolicy' when it gains focus from outside
-    -- with nothing already focused inside. The only case that needs a
-    -- real focus scope; 'NotFocusable'\/'Focusable' need no scope
-    -- machinery at all.
+  | FocusScope ChildNavigation
+    -- ^ Also exactly one focus stop from outside; 'ChildNavigation'
+    -- decides what Tab does once focus is inside -- keep moving through
+    -- this control's own distinctly-identified children ('Continue'), or
+    -- stay contained within them using a separate key scheme
+    -- ('Contained').
   deriving (Eq, Show)
 
--- | Which child a 'FocusScope' targets when it gains focus from outside
--- (a forward-Tab arriving at the boundary) with nothing already focused
--- inside.
+-- | What Tab does once focus is inside a 'FocusScope'.
+data ChildNavigation
+  = Continue
+    -- ^ Tab keeps moving through this control's own children and on into
+    -- the surrounding order at the ends, exactly as if this control
+    -- weren't there at all. No scope of its own is needed for this.
+  | Contained ContainedNavigation
+    -- ^ Tab never reaches the children at all -- it stays owned by this
+    -- control as a single stop, the same as 'Focusable'. Movement between
+    -- children uses its own separate key scheme instead.
+  deriving (Eq, Show)
+
+-- | The key scheme and behaviour for 'Contained' navigation.
+data ContainedNavigation = ContainedNavigation
+  { navForward  :: (Key, [Modifier])
+    -- ^ Moves to the next child. Never Tab -- that stays owned by this
+    -- control as a whole.
+  , navBackward :: (Key, [Modifier])
+    -- ^ Moves to the previous child.
+  , navWrap     :: WrapPolicy
+  , navEntry    :: EntryPolicy
+  } deriving (Eq, Show)
+
+-- | What happens when 'ContainedNavigation' runs off the first\/last
+-- child.
+data WrapPolicy
+  = WrapCycle
+    -- ^ Wraps around to the opposite child.
+  | WrapStop
+    -- ^ Stops there -- the boundary child stays focused. Tab remains the
+    -- only way to leave a 'Contained' scope.
+  deriving (Eq, Show)
+
+-- | Which child 'Contained' navigation targets when the scope gains focus
+-- from outside (a Tab arriving at the boundary) with nothing already
+-- focused inside.
 data EntryPolicy
   = EnterRemembered
     -- ^ Targets whichever child was focused last time the scope was live
@@ -362,27 +394,6 @@ data EntryPolicy
     -- ^ Ignores history; whichever child is first eligible to auto-claim
     -- during this render gets it, the same way focus already resolves
     -- today.
-  deriving (Eq, Show)
-
--- | How Tab moves among a 'FocusScope' scope's own children once it owns
--- the key.
-data ChildNavigation = ChildNavigation
-  { childForward  :: (Key, [Modifier])
-    -- ^ Moves to the next child. Not necessarily Tab -- e.g. a toolbar
-    -- might use Right\/Left instead.
-  , childBackward :: (Key, [Modifier])
-    -- ^ Moves to the previous child.
-  , childWrap     :: WrapPolicy
-  } deriving (Eq, Show)
-
--- | What happens when 'ChildNavigation' runs off the first\/last child.
-data WrapPolicy
-  = WrapCycle
-    -- ^ Wraps around to the opposite child; the scope is never left via
-    -- 'ChildNavigation' alone.
-  | WrapStop
-    -- ^ Hands off to the surrounding order, the same way a plain Tab
-    -- exit already does.
   deriving (Eq, Show)
 
 -- | Wraps a control's own content per its resolved 'FocusPolicy'. Every
@@ -406,9 +417,10 @@ data WrapPolicy
 -- same id would swap the ambient out from under those checks.
 applyFocusPolicy :: Ord e => e -> FocusPolicy -> View e msg a -> View e msg a
 applyFocusPolicy _eid policy body = case policy of
-  NotFocusable  -> body
-  Focusable     -> body
-  FocusScope {} -> error "applyFocusPolicy: FocusScope is not yet implemented"
+  NotFocusable                -> body
+  Focusable                   -> body
+  FocusScope Continue         -> error "applyFocusPolicy: FocusScope Continue is not yet implemented"
+  FocusScope (Contained {})   -> error "applyFocusPolicy: FocusScope (Contained _) is not yet implemented"
 
 -- * Control
 
