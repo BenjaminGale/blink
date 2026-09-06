@@ -2,7 +2,7 @@
 module UI (ControlId, AppState (..), demoApp) where
 
 import Blink.App
-import Blink.Attribute (Attribute)
+import Blink.View.Attribute (Attribute)
 import Blink.View.Controls
 import Blink.View.Controls.Button (onActivated)
 import Blink.View.Controls.Control (isEnabled)

@@ -11,7 +11,7 @@
 -- the mechanism itself; each config type's own module defines the actual
 -- attribute functions (e.g. "Blink.View.Controls.Control"'s 'Blink.View.Controls.Control.isFocusable',
 -- "Blink.View.Layout.Box"'s 'Blink.View.Layout.Box.boxSpacing').
-module Blink.Attribute
+module Blink.View.Attribute
   ( Attribute (..)
   , resolve
   ) where

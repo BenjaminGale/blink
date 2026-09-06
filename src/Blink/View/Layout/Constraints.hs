@@ -27,7 +27,7 @@ module Blink.View.Layout.Constraints
   , align
   ) where
 
-import Blink.Attribute (Attribute (..))
+import Blink.View.Attribute (Attribute (..))
 import Blink.Geometry
   (Alignment (..), Orientation (..), Rectangle (..), Size (..), alignRect)
 import Blink.View (View, getBounds, withBounds)

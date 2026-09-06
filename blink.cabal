@@ -36,11 +36,11 @@ library
     exposed-modules:
         Blink
         Blink.App
-        Blink.Attribute
         Blink.Geometry
         Blink.Input
         Blink.Update
         Blink.View
+        Blink.View.Attribute
         Blink.View.Controls
         Blink.View.Controls.Button
         Blink.View.Controls.Checkbox

@@ -18,7 +18,7 @@ import Data.Ord      (comparing)
 
 import qualified Data.IntMap.Strict as IntMap
 
-import Blink.Attribute (Attribute (..), resolve)
+import Blink.View.Attribute (Attribute (..), resolve)
 import Blink.Geometry (Alignment (..), Orientation (..), Rectangle (..), Size (..), alignRect, insetRect, uniform)
 import Blink.View.Layout.Constraints
   ( Available (..), HasLayoutConfig (..), Layout (..), Length, MeasureCtx (..)

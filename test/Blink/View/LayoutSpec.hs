@@ -6,7 +6,7 @@ import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (Gen, NonNegative (..), choose, forAll, ioProperty)
 
-import Blink.Attribute (Attribute)
+import Blink.View.Attribute (Attribute)
 import Blink.Generators ()
 import Blink.Geometry (Alignment (..), Point (..), Rectangle (..), uniform)
 import Blink.Input (KeyEvent, InputState (..))

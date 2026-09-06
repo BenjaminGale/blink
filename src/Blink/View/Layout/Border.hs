@@ -12,7 +12,7 @@ module Blink.View.Layout.Border
 
 import Data.Maybe (catMaybes)
 
-import Blink.Attribute (Attribute (..), resolve)
+import Blink.View.Attribute (Attribute (..), resolve)
 import Blink.Geometry (Alignment (..))
 import Blink.View.Layout.Box (children, hBox, vBox)
 import Blink.View.Layout.Constraints (Layout (..), exactly, fill)

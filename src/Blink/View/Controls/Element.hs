@@ -2,7 +2,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 -- | The lowest of the two building-block layers every widget in
 -- "Blink.View.Controls" is built on -- see "Blink.View.Controls.Control" for the one
--- above it. Re-exports "Blink.Attribute"'s 'Attribute'\/'resolve' mechanism, which
+-- above it. Re-exports "Blink.View.Attribute"'s 'Attribute'\/'resolve' mechanism, which
 -- every layer here (and "Blink.View.Layout.Box") is configured through.
 --
 -- = The attribute mechanism
@@ -63,7 +63,7 @@ module Blink.View.Controls.Element
 
 import Control.Monad (when)
 
-import Blink.Attribute (Attribute (..), resolve)
+import Blink.View.Attribute (Attribute (..), resolve)
 import Blink.Input (ButtonState (..), InputState (..), KeyEvent (..), Mouse (..), captureOf)
 import Blink.View
 
