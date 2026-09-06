@@ -336,7 +336,7 @@ import Blink.Style (Style, StyleSet, Metrics, StyleKey (..), Theme (..), resolve
 data AnimationState = AnimationState
   { animDelta   :: Float
     -- ^ Wall-clock seconds elapsed since the previous frame, clamped to
-    -- 100 ms. Zero on the first frame.
+    -- @[0, 0.1]@ seconds. Zero on the first frame.
   , animElapsed :: Float
     -- ^ Total wall-clock seconds elapsed since the application started,
     -- accumulated from 'animDelta' each frame.
@@ -345,12 +345,12 @@ data AnimationState = AnimationState
     -- than a platform input event.
   }
 
--- | Constructs an 'AnimationState', clamping the delta to 100 ms so the
--- bound documented on 'animDelta' holds regardless of caller — the
+-- | Constructs an 'AnimationState', clamping the delta to @[0, 0.1]@ seconds
+-- so the bound documented on 'animDelta' holds regardless of caller — the
 -- constructor itself isn't exported, so this is the only way to build one.
 mkAnimationState :: Float -> Float -> Bool -> AnimationState
 mkAnimationState delta elapsed isTick = AnimationState
-  { animDelta   = min 0.1 delta
+  { animDelta   = max 0 (min 0.1 delta)
   , animElapsed = elapsed
   , animIsTick  = isTick
   }
@@ -1547,8 +1547,8 @@ withAnimationFrame action = do
   isTick <- gets (animIsTick . ctxAnimation)
   when isTick action
 
--- | Wall-clock seconds elapsed since the previous frame, clamped to 100 ms.
--- Zero on the first frame. Use inside 'withAnimationFrame' to advance
+-- | Wall-clock seconds elapsed since the previous frame, clamped to
+-- @[0, 0.1]@ seconds. Zero on the first frame. Use inside 'withAnimationFrame' to advance
 -- animation state by the correct amount regardless of ticker jitter.
 getAnimDelta :: UI e msg Float
 getAnimDelta = gets (animDelta . ctxAnimation)

@@ -657,6 +657,16 @@ spec = describe "Blink.UI" $ do
         ((_, ss), _) <- run0 (getStyleSet (ElementId ()))
         styleBackground (styleBase ss) `shouldBe` styleBackground (styleBase emptyStyleSet)
 
+  describe "mkAnimationState" $ do
+    it "leaves a delta within [0, 0.1] unchanged" $ do
+      animDelta (mkAnimationState 0.016 0 False) `shouldBe` 0.016
+
+    it "clamps a delta above 100ms down to 0.1" $ do
+      animDelta (mkAnimationState 5 0 False) `shouldBe` 0.1
+
+    it "clamps a negative delta up to 0" $ do
+      animDelta (mkAnimationState (-1) 0 False) `shouldBe` 0
+
   describe "animation" $ do
     let animState isTick = mkAnimationState 0.016 1.5 isTick
         seedWith :: Bool -> UIContext () Int
