@@ -1,4 +1,4 @@
-# 6. Application, update, and the backend loop
+# 8. Application, update, and the backend loop
 
 The previous sections cover the view side of Blink: how a single frame is
 built, how it reports change via messages, and how presentational state
@@ -8,7 +8,7 @@ backend in the first place, rather than by an imagined caller.
 
 ## The `Update` monad
 
-[Section 4](04-elements-and-messages.md) established that `update` folds
+[Section 6](06-elements-and-messages.md) established that `update` folds
 each queued message into your application state, once per message, in
 emission order. `Update s` is the monad that runs in: a small
 state-threading computation over your state `s`, with `get`/`put`/`gets`/
@@ -79,7 +79,7 @@ turned into something a backend can drive by calling
 `BlinkHandle` is what threads the state between calls to `stepFrame` — the
 backend's own loop only ever passes the handle around; it never sees or
 stores `s` itself. Inside `stepFrame`, one call runs exactly the three
-frame-loop steps from [section 3](03-the-frame-loop.md), then folds every
+frame-loop steps from [section 5](05-the-frame-loop.md), then folds every
 message the view emitted into the state with `update` before handing back
 a `FrameResult`.
 

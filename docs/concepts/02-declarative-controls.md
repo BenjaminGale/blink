@@ -89,10 +89,10 @@ button, a text input, or a whole box.
 
 You can build an entire application — the todo list in the top-level
 README is a complete example — using only this declarative layer and never
-call an immediate-mode primitive directly. The remaining sections
-([the frame loop](03-the-frame-loop.md),
-[elements and messages](04-elements-and-messages.md), and
-[focus and timing](05-focus-and-timing.md)) describe the layer underneath
-that this one compiles into — worth understanding even if you never write
-a `UI` action by hand, since it's what every declarative control you use is
-actually doing each frame.
+call an immediate-mode primitive directly. The remaining sections describe
+the layer underneath that this one compiles into — worth understanding
+even if you never write a `UI` action by hand, since it's what every
+declarative control you use is actually doing each frame. Next:
+[section 3](03-layout-primitives.md) starts with the part of that layer
+this section touched on but didn't explain — how "space" itself works
+underneath `width`/`height`/`fill`.
