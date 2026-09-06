@@ -75,6 +75,7 @@ module Blink.View.Controls.Control
   , EntryPolicy (..)
   , ChildNavigation (..)
   , WrapPolicy (..)
+  , focusScope
 
     -- * Measurement
   , chromeInsets
@@ -403,12 +404,15 @@ data ControlConfig e msg = ControlConfig
     -- pseudo-state), unioned with the common\/focus states 'control'
     -- derives itself. Defaults to empty.
   , ccContent         :: View e msg ()
+  , ccFocusScope      :: TabPolicy
+    -- ^ How Tab\/Shift-Tab traverse this control and its children. See
+    -- 'focusScope'.
   }
 
 -- | No identity, every handler field empty, 'ClickActivated', focusable,
 -- enabled, styled via an arbitrary placeholder key (always overridden --
 -- every real caller of 'control' supplies its own via 'style'), no extra
--- active states, and rendering nothing.
+-- active states, rendering nothing, and 'TabUnit'.
 defaultControlConfig :: ControlConfig e msg
 defaultControlConfig = ControlConfig
   { ccElementId       = Nothing
@@ -426,6 +430,7 @@ defaultControlConfig = ControlConfig
   , ccStyleKey        = Class ""
   , ccActiveStates    = Set.empty
   , ccContent         = pure ()
+  , ccFocusScope      = TabUnit
   }
 
 -- | What 'control' reports back: three steady interaction states
@@ -497,6 +502,12 @@ isEnabled b = overControl (Attribute (\cc -> cc { ccIsEnabled = b }))
 -- instance differently, or a different 'Class' to group it with others.
 style :: HasControlConfig e msg cfg => StyleKey e -> Attribute cfg
 style k = overControl (Attribute (\cc -> cc { ccStyleKey = k }))
+
+-- | How Tab\/Shift-Tab traverse this control and its children -- see
+-- 'TabPolicy'. Defaults to 'TabUnit', under which a control with no nested
+-- children behaves exactly as it always has.
+focusScope :: HasControlConfig e msg cfg => TabPolicy -> Attribute cfg
+focusScope p = overControl (Attribute (\cc -> cc { ccFocusScope = p }))
 
 -- | Which way, if any, focus just moved, for 'control's own immediate
 -- self-claim\/self-give-up notifications -- distinct from the deferred
