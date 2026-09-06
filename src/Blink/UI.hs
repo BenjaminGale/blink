@@ -54,16 +54,15 @@ has one; writing a new element's selection replaces whichever one was there
 before. The application never sees any of this traffic.
 
 Focus ('setFocus', 'clearFocus') changes immediately, exactly like
-'registerMouseOver' and mouse capture: a control's decision (take focus when
-nothing else has it, hand off on Tab) is only correct if the next sibling in
-the same tree walk can see it, the same way capture arbitration needs a
-later hoverer to see that an earlier one already has the mouse. Scroll and
-selection have no such sibling-arbitration requirement — each write targets
-a specific element nobody else is contending for — so they queue a
-'UiEffect' with 'emitUi' instead of mutating immediately; a write made
-partway through a frame is not visible to a read later in that same frame.
-'nextFrameContext' applies the queued effects via 'applyUiEffects' when
-building the next frame's context, so the change takes effect starting then.
+'registerMouseOver' and mouse capture, because sibling arbitration within a
+single tree walk depends on it (see the
+<https://github.com/BenjaminGale/blink/blob/main/docs/guide/04-focus-and-timing.md guide's section on focus and timing>
+for why). Scroll and selection have no such sibling-arbitration
+requirement, so they queue a 'UiEffect' with 'emitUi' instead of mutating
+immediately; a write made partway through a frame is not visible to a read
+later in that same frame. 'nextFrameContext' applies the queued effects via
+'applyUiEffects' when building the next frame's context, so the change
+takes effect starting then.
 
 = The render loop
 

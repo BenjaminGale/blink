@@ -44,6 +44,12 @@ Every 'App' is parameterised over three types:
 
 = Module guide
 
+New to Blink? The module docs below are reference material; for a narrative
+walkthrough of the paradigm — immediate mode, the frame loop, and how focus
+and messages flow through it — start with the
+<https://github.com/BenjaminGale/blink/blob/main/docs/guide/README.md guide>
+instead.
+
   * "Blink.App"      — Application definition and backend integration.
                        Start here when implementing a new backend.
   * "Blink.UI"       — The UI monad: drawing, interaction, focus, and style
