@@ -410,11 +410,13 @@ data UiEffect e
     -- "clear" counterpart to 'Focus'. See 'requestClearFocus'.
   deriving (Eq, Show)
 
--- | What happened to a scope's focus via the most recently applied 'Focus'
--- or 'ClearFocus', recorded so any element can observe it for the one frame
--- it's visible (see 'getFocusChange'), regardless of render order.
+-- | What happened to a scope's focus as the result of one element
+-- redirecting it onto another (or clearing it), as opposed to an element
+-- simply claiming focus for itself -- recorded so any element affected by
+-- the redirect can observe it for the one frame it's visible (see
+-- 'getFocusChange'), regardless of render order.
 -- 'focusChangeFrom' is 'Nothing' when nothing was previously focused;
--- 'focusChangeTo' is 'Nothing' for a 'ClearFocus'.
+-- 'focusChangeTo' is 'Nothing' when focus was cleared rather than moved.
 data FocusChange e = FocusChange
   { focusChangeFrom :: Maybe e
   , focusChangeTo   :: Maybe e
@@ -461,6 +463,35 @@ tickFocusClaim (ClaimedThisFrame e) = ClaimedLastFrame e
 tickFocusClaim (ClaimedLastFrame _) = Unclaimed
 tickFocusClaim Unclaimed            = Unclaimed
 
+-- | Whether a scope has a 'FocusChange' pending observation, and for how
+-- much longer. A redirect is visible for exactly one full frame regardless
+-- of when during that frame it happened, so every element gets a chance to
+-- see it however render order falls; the two "pending" constructors carry
+-- the same 'FocusChange' but tell 'nextFocusFrame' whether this is its
+-- first or last frame of visibility.
+data PendingFocusChange e
+  = NoFocusChange
+  | FocusChangeLastFrame (FocusChange e)
+    -- ^ Was pending as of the previous frame boundary; this is its final
+    -- frame of visibility, then it expires to 'NoFocusChange'.
+  | FocusChangeThisFrame (FocusChange e)
+    -- ^ Just happened during the current frame.
+  deriving (Eq, Show)
+
+-- | The redirect a scope's elements may still observe, if any. See
+-- 'getFocusChange'.
+pendingFocusChange :: PendingFocusChange e -> Maybe (FocusChange e)
+pendingFocusChange NoFocusChange            = Nothing
+pendingFocusChange (FocusChangeLastFrame c) = Just c
+pendingFocusChange (FocusChangeThisFrame c) = Just c
+
+-- | Advances a 'PendingFocusChange' to the next frame: a change just noticed
+-- gets one more frame of visibility before it expires.
+tickPendingFocusChange :: PendingFocusChange e -> PendingFocusChange e
+tickPendingFocusChange (FocusChangeThisFrame c) = FocusChangeLastFrame c
+tickPendingFocusChange (FocusChangeLastFrame _) = NoFocusChange
+tickPendingFocusChange NoFocusChange            = NoFocusChange
+
 -- | Per-scope focus bookkeeping: which single child (if any) currently holds
 -- focus within this scope, the last tab stop visited within it (for
 -- Shift-Tab), and any pending focus-change notice. Root and every composite
@@ -468,30 +499,24 @@ tickFocusClaim Unclaimed            = Unclaimed
 -- one of these; a composite's own is persisted in @ftScopes@ between
 -- frames, the same way scroll and selection state persist per element.
 data FocusState e = FocusState
-  { focusClaim       :: FocusClaim e
+  { focusClaim      :: FocusClaim e
     -- ^ The element this scope currently has focused, if any, and its
     -- reaffirmation status. See 'FocusClaim'.
-  , previousTabStop  :: Maybe e
+  , previousTabStop :: Maybe e
     -- ^ The element visited just before the current one, scoped to this
     -- level, for Shift-Tab.
-  , focusLastChange  :: Maybe (FocusChange e)
-    -- ^ The most recently applied 'Focus'\/'ClearFocus' for this scope.
-    -- 'Nothing' when there's no change pending observation. See
-    -- 'getFocusChange'.
-  , focusChangeFresh :: Bool
-    -- ^ 'True' for the one frame after 'focusLastChange' was set; lets
-    -- 'nextFocusFrame' tell "just set, keep it visible one more frame" apart
-    -- from "already had its frame, clear it now."
+  , focusChange     :: PendingFocusChange e
+    -- ^ The most recent focus redirect for this scope, if still within its
+    -- one-frame observation window. See 'PendingFocusChange'.
   }
 
 -- | The empty, never-focused 'FocusState' — root's initial value, and every
 -- composite's the first time it renders.
 emptyFocusState :: FocusState e
 emptyFocusState = FocusState
-  { focusClaim       = Unclaimed
-  , previousTabStop  = Nothing
-  , focusLastChange  = Nothing
-  , focusChangeFresh = False
+  { focusClaim      = Unclaimed
+  , previousTabStop = Nothing
+  , focusChange     = NoFocusChange
   }
 
 -- | 'True' when nothing is focused in the given scope. Pattern-matches
@@ -1093,7 +1118,7 @@ isFocused eid = (== Just eid) <$> getFocus
 -- 'FocusChange' itself, rather than this function pre-deciding "gained or
 -- lost" on its behalf.
 getFocusChange :: UI e msg (Maybe (FocusChange e))
-getFocusChange = gets (focusLastChange . ftAmbient . ctxFocus)
+getFocusChange = gets (pendingFocusChange . focusChange . ftAmbient . ctxFocus)
 
 -- | Transfers keyboard focus to the given element, in the currently ambient
 -- scope. Takes effect immediately — like 'registerMouseOver' and mouse
@@ -1119,9 +1144,8 @@ clearFocus = modifyFocusState $ \fs -> fs { focusClaim = Unclaimed }
 -- Call before anything else this frame reads focus state for the element.
 disclaimFocus :: UI e msg ()
 disclaimFocus = modifyFocusState $ \fs -> fs
-  { focusClaim       = maybe Unclaimed ClaimedThisFrame (focusChangeFrom =<< focusLastChange fs)
-  , focusLastChange  = Nothing
-  , focusChangeFresh = False
+  { focusClaim  = maybe Unclaimed ClaimedThisFrame (focusChangeFrom =<< pendingFocusChange (focusChange fs))
+  , focusChange = NoFocusChange
   }
 
 -- | Queues a 'Focus' effect: makes the given element focused within the
@@ -1284,15 +1308,14 @@ scopeMode scopeId freshClaim currentAmbient = case currentAmbient of
 -- 'previousTabStop' is untouched here and simply persists, the same way
 -- @elmScrollStates@ is never purged for elements that stop rendering.
 --
--- Also advances 'focusLastChange' independently of that: a change
--- just recorded this frame ('focusChangeFresh') stays visible for exactly
+-- Also advances 'focusChange' independently of that, via
+-- 'tickPendingFocusChange': a change just noticed stays visible for exactly
 -- one more frame so every element gets a chance to observe it regardless of
--- render order, then is cleared the frame after.
+-- render order, then expires the frame after.
 nextFocusFrame :: FocusState e -> FocusState e
 nextFocusFrame fs = fs
-  { focusClaim       = tickFocusClaim (focusClaim fs)
-  , focusLastChange  = if focusChangeFresh fs then focusLastChange fs else Nothing
-  , focusChangeFresh = False
+  { focusClaim  = tickFocusClaim (focusClaim fs)
+  , focusChange = tickPendingFocusChange (focusChange fs)
   }
 
 -- | Runs a sub-tree within a different bounding rectangle. The previous bounds
@@ -1476,9 +1499,8 @@ setFocusChange scopeId newFocus ctx = ctx { ctxFocus = updateScope (ctxFocus ctx
       Nothing  -> ft { ftAmbient = setIt (ftAmbient ft) }
       Just sid -> ft { ftScopes = Map.insert sid (setIt (lookupScope sid ft)) (ftScopes ft) }
     setIt fs = fs
-      { focusClaim       = maybe Unclaimed ClaimedThisFrame newFocus
-      , focusLastChange  = Just (FocusChange (currentFocus (focusClaim fs)) newFocus)
-      , focusChangeFresh = True
+      { focusClaim  = maybe Unclaimed ClaimedThisFrame newFocus
+      , focusChange = FocusChangeThisFrame (FocusChange (currentFocus (focusClaim fs)) newFocus)
       }
 
 -- | 'True' when the mouse cursor is within the current bounds and within the
