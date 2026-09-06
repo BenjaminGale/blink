@@ -70,11 +70,11 @@ data MyElem = IncButton | DecButton | NameInput
 Each frame, when a control renders, it says "I am `IncButton`" and Blink
 uses that value as the key into its own bookkeeping (focus, scroll,
 hover) — the presentational state introduced in
-[section 2](02-the-frame-loop.md) that survives across frames despite
+[section 3](03-the-frame-loop.md) that survives across frames despite
 nothing else doing so. Because `e` is just a value with `Eq`/`Ord`, "is
 this the same control as last frame" is exactly value equality — no object
 identity, no reconciliation, no diffing.
 
-Next: [section 4](04-focus-and-timing.md) covers *when* changes to that
+Next: [section 5](05-focus-and-timing.md) covers *when* changes to that
 bookkeeping actually take effect — and why the answer isn't the same for
 every kind of presentational state.

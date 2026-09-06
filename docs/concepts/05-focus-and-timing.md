@@ -1,6 +1,6 @@
 # 4. Focus and timing
 
-[Section 2](02-the-frame-loop.md) mentioned that some presentational state
+[Section 3](03-the-frame-loop.md) mentioned that some presentational state
 — focus, scroll, selection — persists across frames, and that changes to it
 are applied at different times: focus changes **immediately**, mid-frame;
 scroll and selection are **queued** and only take effect on the *next*
@@ -108,7 +108,12 @@ When writing a custom control:
 * If it's local, single-owner state that nothing else reads — like a
   list's own scroll offset — queue it with `emitUi` instead.
 
-That's the whole conceptual model. See
+Next: [section 6](06-application-and-backend.md) closes the loop — how the
+messages controls like this one emit actually turn into a new application
+state, and how a real backend drives the frames described in
+[section 3](03-the-frame-loop.md) in the first place.
+
+See also
 [../guides/building-a-custom-control.md](../guides/building-a-custom-control.md)
-for a worked example that puts sections 1–4 together to hand-write a
+for a worked example that puts sections 1–5 together to hand-write a
 minimal button from these primitives.

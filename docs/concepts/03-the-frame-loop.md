@@ -18,7 +18,7 @@ calls into Blink once per frame. Each call does the same three things:
    from the previous frame and produces the starting point for this one:
    input state is refreshed, any focus/scroll/selection changes that were
    *queued* last frame get applied now (more on that distinction in
-   [section 4](04-focus-and-timing.md)), and the animation clock advances.
+   [section 5](05-focus-and-timing.md)), and the animation clock advances.
    On the very first frame there is no previous context, so `emptyUIContext`
    is used instead.
 2. **Run the view.** `runUI` walks the UI tree your `view` function
@@ -47,7 +47,7 @@ survive between frames for the immediate-mode model to work at all:
 * The animation clock.
 
 Your application's own state (`s` in `App e msg s`) is deliberately *not*
-part of this context — see [section 3](03-elements-and-messages.md) for why
+part of this context — see [section 4](04-elements-and-messages.md) for why
 that's a separate mechanism with a different owner.
 
 ## Two ways a frame gets triggered
@@ -65,6 +65,6 @@ with `configureContinuous` or `configureEventDriven`:
 
 See `Blink.App`'s Haddocks for the exact sequencing of each.
 
-Next: [section 3](03-elements-and-messages.md) covers how a view reports
+Next: [section 4](04-elements-and-messages.md) covers how a view reports
 that something happened — a click, a text edit — without mutating anything
 directly.

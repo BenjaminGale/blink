@@ -61,9 +61,9 @@ runs again with the new state and draws the new text directly.
 * **Anything that must survive between frames — has to be stored
   explicitly somewhere**, since nothing is retained implicitly. Blink
   provides two places for this: the application state you own (via
-  messages — see [section 3](03-elements-and-messages.md)), and a small
+  messages — see [section 4](04-elements-and-messages.md)), and a small
   set of *presentational* slots Blink itself owns, like focus and scroll
-  position (see [section 4](04-focus-and-timing.md)).
+  position (see [section 5](05-focus-and-timing.md)).
 
 ## Where this shows up in the API
 
@@ -71,7 +71,7 @@ Because there's no persistent widget tree, there are no widget objects to
 hold a reference to. Instead:
 
 * Controls are identified by a value *you* define (an `e` — see
-  [section 3](03-elements-and-messages.md)), not an object handle, because
+  [section 4](04-elements-and-messages.md)), not an object handle, because
   there's no object for a handle to point to.
 * The handful of things that genuinely need to persist across frames
   (focus, scroll, selection) live in a context Blink threads through the

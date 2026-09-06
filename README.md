@@ -126,6 +126,8 @@ Pass `app` to `configureContinuous` or `configureEventDriven` to get a
 `BlinkHandle`, then drive it with `stepFrame` each iteration of your
 platform's event loop.
 
+## Documentation
+
 New to Blink? [`docs/concepts`](docs/concepts/README.md) is a narrative
 walkthrough of the paradigm — immediate mode, the frame loop, and how focus
 and messages flow through it — and [`docs/guides`](docs/guides/) covers
