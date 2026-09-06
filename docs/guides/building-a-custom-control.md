@@ -40,7 +40,7 @@ Walking through it against the concepts covered so far:
   `wasMouseOverLastFrame`, which is enough for hover's purposes.)
 * **`fillRect` / `drawText`** don't touch any persisted state at all —
   they just append draw commands for *this* frame, read back in step 3 of
-  [the frame loop](../concepts/03-runtime/01-the-frame-loop.md).
+  [the frame loop](../concepts/04-runtime/01-the-frame-loop.md).
 * **`isButtonReleased`** reads this frame's input state — was the mouse
   button released this frame, full stop, with no element-specific
   targeting.
@@ -110,9 +110,11 @@ change through effects rather than mutation
 deliberate exception for anything contended between siblings
 ([focus](../concepts/01-immediate-mode-api/05-focus.md)), threaded through
 a small persistent context across a three-step loop
-([the frame loop](../concepts/03-runtime/01-the-frame-loop.md)). See
-[application, update, and the backend loop](../concepts/03-runtime/02-application-and-backend.md)
-for how those messages become a running application in the first place.
+([the frame loop](../concepts/04-runtime/01-the-frame-loop.md)). See
+[the `Update` monad](../concepts/03-app-state/01-introduction.md) for how
+those messages become a new application state, and
+[`App` and the backend pipeline](../concepts/04-runtime/03-application-and-backend.md)
+for how a real backend drives the whole thing.
 
 From here, the Haddocks — starting from the `Blink` module — are reference
 material for the exact primitives available in each area, now with the

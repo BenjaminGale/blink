@@ -4,7 +4,7 @@ Blink doesn't own a main loop, a window, or a renderer — a backend
 supplies all three and calls into Blink once per frame. This guide walks
 through what a backend actually has to do, using the included SDL2 backend
 (`app/Main.hs`, `app/Rendering.hs`) as the worked example. Read
-[the application-and-backend concept](../concepts/03-runtime/02-application-and-backend.md)
+[the application-and-backend concept](../concepts/04-runtime/03-application-and-backend.md)
 first if you haven't already — this guide assumes you know what `App`,
 `BlinkHandle`, and `stepFrame` are for.
 
@@ -35,7 +35,7 @@ backend running before text layout needs to be pixel-accurate.
 
 Decide whether your platform's event loop blocks waiting for input, or
 redraws unconditionally every iteration (see
-[the application-and-backend concept](../concepts/03-runtime/02-application-and-backend.md)
+[the application-and-backend concept](../concepts/04-runtime/03-application-and-backend.md)
 for what each implies), then call the matching function once at startup:
 
 ```haskell

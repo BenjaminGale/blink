@@ -65,7 +65,7 @@ already have, and the messages that will produce the next state.
 If more than one message is queued in a single frame (two clicks landed
 the same frame, say), `update` runs once per message, in the order they
 were emitted — never batched or reordered. See
-[`../03-runtime/02-application-and-backend.md`](../03-runtime/02-application-and-backend.md)
+[`../03-app-state/01-introduction.md`](../03-app-state/01-introduction.md)
 for the full `Update` monad this runs in.
 
 ## `emitUi`: reporting a presentational change

@@ -1,9 +1,10 @@
 # 1. The frame loop
 
-The previous areas covered what `Blink.UI`, `Element`, layout, and
-controls each provide. This one zooms out to the frame as a whole: Blink
-doesn't own the main loop — a backend (SDL2, in the included demo) calls
-into Blink once per frame. Each call does the same three things:
+The previous areas covered what `Blink.UI`, `Element`, layout, controls,
+and application-state updates each provide. This one zooms out to the
+frame as a whole: Blink doesn't own the main loop — a backend (SDL2, in
+the included demo) calls into Blink once per frame. Each call does the
+same three things:
 
 ```
 +---------------+     +---------------+     +---------------+
@@ -51,24 +52,10 @@ at all:
 * The animation clock.
 
 Your application's own state (`s` in `App e msg s`) is deliberately *not*
-part of this context — see [the next section](02-application-and-backend.md)
-for why that's a separate mechanism with a different owner.
+part of this context — see
+[`03-app-state`](../03-app-state/01-introduction.md) for why that's a
+separate mechanism with a different owner.
 
-## Two ways a frame gets triggered
-
-Backends drive this loop in one of two ways, chosen at configuration time
-with `configureContinuous` or `configureEventDriven`:
-
-* **Continuous** — redraw every frame regardless of input (game-style
-  loops). Simple, but state changed by a message this frame won't be
-  visible in this frame's own draw commands — only the next one.
-* **Event-driven** — block until an input event arrives, then run the view
-  twice: once to collect the messages that event produced, once more on
-  the resulting state, so what's drawn always reflects the very latest
-  state rather than flashing something stale for one frame.
-
-See `Blink.App`'s Haddocks for the exact sequencing of each.
-
-Next: [section 2](02-application-and-backend.md) covers how a view's
-messages actually become a new application state, and what a real backend
-does with this loop.
+Next: [section 2](02-frame-management.md) covers *when* a backend actually
+makes this call — the two ways `stepFrame` can be triggered, and why they
+change what a single call does.
