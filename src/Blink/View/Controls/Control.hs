@@ -379,6 +379,27 @@ data WrapPolicy
     -- exit already does.
   deriving (Eq, Show)
 
+-- | Wraps a control's own content per its resolved 'TabPolicy'. Every
+-- control (leaf or composite) runs its content through this, uniformly --
+-- 'TabPolicy' decides what, if anything, changes for whatever renders
+-- inside.
+--
+-- 'TabUnit' is a no-op: no scope, @body@ unchanged. A control's own
+-- content routinely reads its own focus\/key state directly (e.g.
+-- 'Blink.View.Controls.TextInput.textInput' checking 'isFocused' on its
+-- own id) -- wrapping that in a real focus scope keyed by the same id
+-- would swap the ambient out from under those checks, breaking a plain
+-- leaf that has no nested, separately-identified children for a scope to
+-- ever have acted on in the first place. 'TabUnit' only has real work to
+-- do once a composite actually renders such children (see 'TabScoped'),
+-- which doesn't exist yet -- until then it's correctly indistinguishable
+-- from not having this mechanism at all.
+applyFocusScope :: Ord e => e -> TabPolicy -> View e msg a -> View e msg a
+applyFocusScope _eid policy body = case policy of
+  TabUnit          -> body
+  TabFlatten       -> error "applyFocusScope: TabFlatten is not yet implemented"
+  TabScoped {}     -> error "applyFocusScope: TabScoped is not yet implemented"
+
 -- * Control
 
 -- | Every capability a control resolves before rendering: its identity and
@@ -705,7 +726,7 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       when (ciMouseDown raw && ccIsFocusable cc) (emitUi (Focus currentScope eid))
       let active = intrinsicStates disabled raw `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
-      renderStyled m s (ccContent cc)
+      renderStyled m s (applyFocusScope eid (ccFocusScope cc) (ccContent cc))
       when (ccIsFocusable cc && not disabled) (setPreviousTabStop eid)
       pure raw { ciStyle = s }
 
