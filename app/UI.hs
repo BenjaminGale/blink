@@ -5,9 +5,8 @@ import Blink.App
 import Blink.View.Attribute (Attribute)
 import Blink.View.Controls
 import Blink.View.Controls.Button (onActivated)
-import Blink.View.Controls.Control (isEnabled)
+import Blink.View.Controls.Control (isEnabled, post, postWith)
 import Blink.View.Controls.Divider (orientation)
-import Blink.View.Controls.Element (post, postWith)
 import Blink.View.Controls.Label (LabelConfig, target, text)
 import Blink.View.Controls.ProgressBar (ProgressValue (..), progress)
 import Blink.View.Controls.RepeatButton

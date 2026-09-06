@@ -4,7 +4,7 @@ module Blink.View.Controls.ProgressBarSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.View.Controls.Element (Attribute, elementId)
+import Blink.View.Controls.Control (Attribute, elementId)
 import Blink.View.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.View.Controls.ElementBehaviour (tagged)
 import Blink.View.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)

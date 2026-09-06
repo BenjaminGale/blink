@@ -28,7 +28,7 @@ import Blink.Input (InputState (..), Key (KeyReturn), KeyEvent (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.View
 
--- | Every raw\/focus reaction (including 'Blink.View.Controls.Element.onClicked',
+-- | Every raw\/focus reaction (including 'Blink.View.Controls.Control.onClicked',
 -- via 'tagged'), plus a tagged reaction to 'onActivated'.
 taggedActivated :: (HasElementConfig e String cfg, HasButtonConfig e String cfg) => [Attribute cfg]
 taggedActivated = onActivated (const [OutMsg "Activated"]) : tagged
@@ -57,7 +57,7 @@ defaultButtonBehaviourConfig = ButtonBehaviourConfig { bbcRepeatsOnHeldEnter = F
 -- with a given attrs list, asserts it's activated by Enter while focused
 -- the same way it's activated by a click -- and not while unfocused or
 -- disabled -- and that Enter raises 'onActivated' only, never
--- 'Blink.View.Controls.Element.onClicked' (mouse-only, per the split between the
+-- 'Blink.View.Controls.Control.onClicked' (mouse-only, per the split between the
 -- two).
 buttonBehaviourSpec
   :: (Ord e, Show e, HasControlConfig e String cfg, HasElementConfig e String cfg, HasButtonConfig e String cfg)

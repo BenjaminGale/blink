@@ -6,8 +6,7 @@ import Test.Hspec
 
 import Blink.View.Controls.Button (onActivated)
 import Blink.View.Controls.ButtonBehaviour (ButtonBehaviourConfig (..), buttonBehaviourSpec, defaultButtonBehaviourConfig)
-import Blink.View.Controls.Control (elementId)
-import Blink.View.Controls.Element (Attribute)
+import Blink.View.Controls.Control (Attribute, elementId)
 import Blink.View.Controls.RepeatButton
   (RepeatButtonConfig, firedCount, onPressEnded, onPressStarted, pressStartedAt, repeatButton)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)

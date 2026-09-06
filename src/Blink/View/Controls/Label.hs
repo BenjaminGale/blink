@@ -3,10 +3,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | Text drawn in the resolved style, with no interactive behaviour of its
 -- own. 'LabelledConfig' is the reusable fragment behind 'text': not a
--- 'Blink.View.Controls.Element.elementBase'\/'Blink.View.Controls.Control.controlBase'-style
+-- 'Blink.View.Controls.Control.elementBase'\/'Blink.View.Controls.Control.controlBase'-style
 -- layer itself (nothing calls into it the way a @Base@ primitive is called
 -- into), just a nested field plus a rendering helper, the same category as
--- 'Blink.View.Controls.Element.ElementConfig'\/'Blink.View.Controls.Control.ControlConfig'.
+-- 'Blink.View.Controls.Control.ElementConfig'\/'Blink.View.Controls.Control.ControlConfig'.
 -- Anything that wants a caption nests a 'LabelledConfig' field, declares
 -- 'HasLabelledConfig', and calls 'renderLabelledContent' itself when
 -- building its own content.

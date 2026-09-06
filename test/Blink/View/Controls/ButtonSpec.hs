@@ -6,7 +6,7 @@ import Test.Hspec
 
 import Blink.View.Controls.Button (ButtonConfig, button)
 import Blink.View.Controls.ButtonBehaviour (buttonBehaviourSpec, defaultButtonBehaviourConfig)
-import Blink.View.Controls.Element (Attribute)
+import Blink.View.Controls.Control (Attribute)
 import Blink.View.Controls.Label (text)
 import qualified Data.Text as T
 

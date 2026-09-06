@@ -4,7 +4,7 @@ module Blink.View.Controls.LabelSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.View.Controls.Element (Attribute)
+import Blink.View.Controls.Control (Attribute)
 import Blink.View.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.View.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)

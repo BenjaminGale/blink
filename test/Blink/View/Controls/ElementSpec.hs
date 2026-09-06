@@ -3,7 +3,7 @@ module Blink.View.Controls.ElementSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.View.Controls.Element
+import Blink.View.Controls.Control
   ( Attribute, ElementConfig
   , defaultElementConfig, elementBase, elementId, onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, resolve
@@ -64,14 +64,14 @@ offBoth = Point 200 200
 onB     = Point 60 50
 
 -- | Runs 'elementBase' with @attrs@ resolved against 'defaultElementConfig'
--- plus 'elementId' @eid@, discarding the 'Blink.View.Controls.Element.ElementInteraction'
+-- plus 'elementId' @eid@, discarding the 'ElementInteraction'
 -- it returns -- the render function every behaviour spec in this module
 -- drives.
 render :: Ord e => e -> [Attribute (ElementConfig e msg)] -> View e msg ()
 render eid attrs = () <$ elementBase (resolve defaultElementConfig (elementId eid : attrs))
 
 -- | Every raw event a reaction built on 'elementBase' can raise, tagged
--- with @e@ and a plain label naming which one it was -- "Blink.View.Controls.Element"
+-- with @e@ and a plain label naming which one it was -- "Blink.View.Controls.Control"
 -- has no symbolic event type to tag with (each smart constructor reacts to
 -- exactly one event, so this lists all eight rather than reacting
 -- generically the way an old @onEvent@ escape hatch once did).
@@ -104,7 +104,7 @@ seedBothCtx :: ViewContext TestElement (TestElement, String)
 seedBothCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
 
 spec :: Spec
-spec = describe "Blink.View.Controls.Element.elementBase" $ do
+spec = describe "Blink.View.Controls.Control.elementBase" $ do
   elementBehaviourSpec testBounds seedCtx ElemA testBounds offBoth (render ElemA)
 
   describe "onKeyPressed" $

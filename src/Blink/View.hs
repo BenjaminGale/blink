@@ -921,7 +921,7 @@ consumeKey k = modify $ \ctx ->
   in ctx { ctxInput = input { inputKeyEvents = filter (\e -> key e /= k) (inputKeyEvents input) } }
 
 -- | Hides the given key\/modifier combinations from 'getInput' -- and so
--- from anything reading raw key events, e.g. 'Blink.View.Controls.Element.onKeyPressed'
+-- from anything reading raw key events, e.g. 'Blink.View.Controls.Control.onKeyPressed'
 -- -- for the duration of @action@, restoring the real input once it
 -- completes. Unlike 'consumeKey', this doesn't affect what anyone else
 -- sees: a control that itself observes some keys as reserved navigation

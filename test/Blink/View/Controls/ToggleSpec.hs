@@ -4,7 +4,7 @@ module Blink.View.Controls.ToggleSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.View.Controls.Element (Attribute)
+import Blink.View.Controls.Control (Attribute)
 import Blink.View.Controls.Toggle (ToggleConfig, isSelected, toggleButton, toggleChecked)
 import Blink.View.Controls.ToggleBehaviour (toggleBehaviourSpec)
 

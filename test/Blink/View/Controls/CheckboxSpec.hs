@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.View.Controls.Checkbox (checkbox)
-import Blink.View.Controls.Element (Attribute)
+import Blink.View.Controls.Control (Attribute)
 import Blink.View.Controls.Label (text)
 import Blink.View.Controls.Toggle (ToggleConfig, isSelected)
 import Blink.View.Controls.ToggleBehaviour (toggleBehaviourSpec)

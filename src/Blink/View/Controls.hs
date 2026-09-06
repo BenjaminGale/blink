@@ -1,8 +1,7 @@
 -- | The public forms of every ready-made widget. Each widget's own module
 -- ("Blink.View.Controls.Button", "Blink.View.Controls.Checkbox", ...) documents the
--- attribute functions used to configure it, and the module headers of
--- "Blink.View.Controls.Element" and "Blink.View.Controls.Control" describe how the
--- layers underneath fit together.
+-- attribute functions used to configure it, and "Blink.View.Controls.Control"'s
+-- own module header describes how it's built underneath.
 module Blink.View.Controls
   ( button
   , toggleButton

@@ -46,7 +46,6 @@ library
         Blink.View.Controls.Checkbox
         Blink.View.Controls.Control
         Blink.View.Controls.Divider
-        Blink.View.Controls.Element
         Blink.View.Controls.Label
         Blink.View.Controls.ProgressBar
         Blink.View.Controls.RadioButton

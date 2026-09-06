@@ -4,8 +4,7 @@ module Blink.View.Controls.SliderSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.View.Controls.Control (isFocusable, onFocusGained, onFocusLost)
-import Blink.View.Controls.Element (Attribute)
+import Blink.View.Controls.Control (Attribute, isFocusable, onFocusGained, onFocusLost)
 import Blink.View.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..), Key (..))

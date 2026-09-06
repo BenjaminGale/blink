@@ -142,7 +142,7 @@ onFiredCountChanged :: (Int -> [Out e msg]) -> Attribute (RepeatButtonConfig e m
 onFiredCountChanged f = Attribute (\rc -> rc { rbOnFiredCountChanged = f })
 
 -- | Fires once, the frame the press ends (release, or the pointer leaving
--- while held -- anything that drops 'Blink.View.Controls.Element.eiHeld').
+-- while held -- anything that drops 'Blink.View.Controls.Control.eiHeld').
 -- React by clearing whatever 'pressStartedAt' currently holds.
 onPressEnded :: [Out e msg] -> Attribute (RepeatButtonConfig e msg)
 onPressEnded hs = Attribute (\rc -> rc { rbOnPressEnded = hs })
