@@ -601,6 +601,28 @@ spec = describe "Blink.UI" $ do
         (remaining, _) <- runWith input (consumeKey KeyTab >> getInput)
         inputKeyEvents remaining `shouldBe` [returnEv]
 
+    describe "withoutKeyEvents" $ do
+      it "hides the given keys from the wrapped action" $ do
+        let tabEv    = KeyEvent KeyTab [] False
+            returnEv = KeyEvent KeyReturn [] False
+            input    = noInput { inputKeyEvents = [tabEv, returnEv] }
+        (seen, _) <- runWith input (withoutKeyEvents [(KeyTab, [])] getInput)
+        inputKeyEvents seen `shouldBe` [returnEv]
+
+      it "restores the hidden keys once the wrapped action completes" $ do
+        let tabEv    = KeyEvent KeyTab [] False
+            returnEv = KeyEvent KeyReturn [] False
+            input    = noInput { inputKeyEvents = [tabEv, returnEv] }
+        (_, ctx) <- runWith input (withoutKeyEvents [(KeyTab, [])] (pure ()))
+        inputKeyEvents (contextInput ctx) `shouldBe` [tabEv, returnEv]
+
+      it "keeps a key consumed inside the scope consumed after it exits" $ do
+        let tabEv    = KeyEvent KeyTab [] False
+            returnEv = KeyEvent KeyReturn [] False
+            input    = noInput { inputKeyEvents = [tabEv, returnEv] }
+        (_, ctx) <- runWith input (withoutKeyEvents [(KeyTab, [])] (consumeKey KeyReturn))
+        inputKeyEvents (contextInput ctx) `shouldBe` [tabEv]
+
     describe "tab stop" $ do
       it "returns Nothing when no tab stop has been registered" $ do
         (s, _) <- run0 getPreviousTabStop

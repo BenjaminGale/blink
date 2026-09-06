@@ -894,11 +894,13 @@ consumeKey k = modify $ \ctx ->
 -- real afterward still can.
 withoutKeyEvents :: [(Key, [Modifier])] -> UI e msg a -> UI e msg a
 withoutKeyEvents keys (UI f) = UI $ \ctx ->
-  let input    = ctxInput ctx
+  let input  = ctxInput ctx
+      hidden = filter (\e -> (key e, modifiers e) `elem` keys) (inputKeyEvents input)
       filtered = input { inputKeyEvents = filter (\e -> (key e, modifiers e) `notElem` keys) (inputKeyEvents input) }
   in do
     (a, ctx') <- f (ctx { ctxInput = filtered })
-    pure (a, ctx' { ctxInput = input })
+    let restoredInput = (ctxInput ctx') { inputKeyEvents = hidden ++ inputKeyEvents (ctxInput ctx') }
+    pure (a, ctx' { ctxInput = restoredInput })
 
 -- | The element that was the most recent tab stop before the current one,
 -- scoped to the currently ambient scope (root, or a composite's own while
