@@ -194,6 +194,44 @@ applyEdit inputFilterFn currentValue input sel@(Selection _ active)
           (T.take active currentValue <> typed <> T.drop active currentValue, active + T.length typed)
       | otherwise = (currentValue, active)
 
+-- | Resolves the frame's selection changes (mouse, then keyboard) and any
+-- resulting edit, firing 'onSubmit'\/'onInput' reactions and writing the
+-- new selection back via 'SetSelectionAt'. Returns the final selection for
+-- the caller to draw and auto-scroll against.
+resolveSelectionAndEdit
+  :: Ord e
+  => TextInputConfig e msg
+  -> e
+  -> Rectangle
+  -> Bool              -- ^ canEdit
+  -> SelectionGesture
+  -> Text              -- ^ current value
+  -> Text              -- ^ displayed value (post-'displayFilter')
+  -> Double            -- ^ current horizontal scroll offset
+  -> InputState
+  -> Selection         -- ^ selection at the start of the frame
+  -> UI e msg Selection
+resolveSelectionAndEdit cfg eid bounds canEdit gesture currentValue displayValue scrollX input selInit = do
+  selAfterMouse <-
+    if canEdit
+      then resolveMouseSelection eid bounds gesture displayValue scrollX selInit
+      else pure selInit
+
+  let selAfterKeys = resolveKeyboardSelection canEdit (inputKeyEvents input) (T.length currentValue) selAfterMouse
+
+      (selFinal, edited)
+        | canEdit   = applyEdit (ticInputFilter cfg) currentValue input selAfterKeys
+        | otherwise = (selAfterKeys, Nothing)
+
+      submitted = canEdit && any (\e -> key e == KeyReturn) (inputKeyEvents input)
+
+  when submitted $ runHandlers (ticOnSubmit cfg) ()
+  forM_ edited $ \t -> runHandlers (ticOnInput cfg) t
+
+  when canEdit $ emitUi (SetSelectionAt eid selFinal)
+
+  pure selFinal
+
 -- | The scroll offset needed to keep a cursor at @cursorAbs@ visible within
 -- a viewport of width @w@ currently scrolled to @scrollX@. Pixels in,
 -- pixels out -- @scrollFraction@\/@scrollPixels@ convert at the boundary
@@ -308,23 +346,8 @@ textInput eid attrs = Element
       let maxScrollPx = maxScrollPixels contentW w
           scrollX     = scrollPixels maxScrollPx frac
 
-      selAfterMouse <-
-        if canEdit
-          then resolveMouseSelection eid bounds (SelectionGesture wasCapturing justFocused) displayValue scrollX selInit
-          else pure selInit
-
-      let selAfterKeys = resolveKeyboardSelection canEdit (inputKeyEvents input) (T.length currentValue) selAfterMouse
-
-          (selFinal, edited)
-            | canEdit   = applyEdit (ticInputFilter cfg) currentValue input selAfterKeys
-            | otherwise = (selAfterKeys, Nothing)
-
-          submitted = canEdit && any (\e -> key e == KeyReturn) (inputKeyEvents input)
-
-      when submitted $ runHandlers (ticOnSubmit cfg) ()
-      forM_ edited $ \t -> runHandlers (ticOnInput cfg) t
-
-      when canEdit $ emitUi (SetSelectionAt eid selFinal)
+      selFinal <- resolveSelectionAndEdit cfg eid bounds canEdit
+        (SelectionGesture wasCapturing justFocused) currentValue displayValue scrollX input selInit
 
       -- Computed locally rather than re-read via 'getScrollState': scroll
       -- writes are deferred (applied between frames), so a same-frame
