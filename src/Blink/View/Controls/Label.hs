@@ -153,6 +153,6 @@ label eid attrs = Element
     cfg  = resolve defaultLabelConfig attrs
     ctrl = (lblControl cfg)
       { ccIsFocusable = False
-      , ccContent     = renderLabelledContent (lblLabelled cfg)
+      , ccContent     = const (renderLabelledContent (lblLabelled cfg))
       , ccElementId   = Just eid
       }

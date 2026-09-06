@@ -73,7 +73,7 @@ radioButton eid attrs = Element
       s <- currentStyle
       drawText (styleTextColour s) AlignCenter (radioGlyph selected)
     glyphContent = glyphCaptionContent glyphWidth glyphGap drawGlyph (bcLabelled btn)
-    ctrl = (bcControl btn) { ccContent = glyphContent }
+    ctrl = (bcControl btn) { ccContent = const glyphContent }
     cfg' = cfg
       { tgcNext   = const True
       , tgcButton = btn { bcControl = ctrl }

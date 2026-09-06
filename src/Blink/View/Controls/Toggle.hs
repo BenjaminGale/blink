@@ -167,7 +167,7 @@ toggleButton eid attrs = Element
   where
     cfg  = resolve defaultToggleButtonConfig attrs
     btn  = tgcButton cfg
-    ctrl = (bcControl btn) { ccContent = renderLabelledContent (bcLabelled btn) }
+    ctrl = (bcControl btn) { ccContent = const (renderLabelledContent (bcLabelled btn)) }
 
 -- | 'defaultToggleButtonConfig' styled via @styleKey@ and sized to fit its
 -- own content on both axes -- the shared default for a leaf toggle control

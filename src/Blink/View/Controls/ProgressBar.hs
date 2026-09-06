@@ -92,7 +92,7 @@ progressBar attrs = Element
     cfg  = resolve defaultProgressBarConfig attrs
     ctrl = (pbControl cfg)
       { ccIsFocusable  = False
-      , ccContent      = body
+      , ccContent      = const body
       }
     body = do
       s <- currentStyle

@@ -108,7 +108,7 @@ divider attrs = Element
     cfg  = resolve defaultDividerConfig attrs
     ctrl = (dcControl cfg)
       { ccIsFocusable  = False
-      , ccContent      = body
+      , ccContent      = const body
       }
     t = dcThickness cfg
     -- | 'thickness' on both axes: whichever one the default 'Layout'

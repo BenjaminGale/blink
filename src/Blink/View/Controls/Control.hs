@@ -424,7 +424,12 @@ data ControlConfig e msg = ControlConfig
     -- 'Blink.View.Controls.Toggle.toggleBase' setting a checked\/unchecked
     -- pseudo-state), unioned with the common\/focus states 'control'
     -- derives itself. Defaults to empty.
-  , ccContent         :: View e msg ()
+  , ccContent         :: ControlInteraction e msg -> View e msg ()
+    -- ^ Renders the control's content, given this same frame's own
+    -- 'ControlInteraction' -- already fully computed by the time this
+    -- runs, so content reads facts like 'ciFocused'\/'ciKeysPressed'\/
+    -- 'ciWasDragging' off it directly rather than re-deriving them via
+    -- 'isFocused'\/'getInput'\/'isDragging' itself.
   , ccFocusScope      :: TabPolicy
     -- ^ How Tab\/Shift-Tab traverse this control and its children. See
     -- 'focusScope'.
@@ -450,7 +455,7 @@ defaultControlConfig = ControlConfig
   , ccIsEnabled       = True
   , ccStyleKey        = Class ""
   , ccActiveStates    = Set.empty
-  , ccContent         = pure ()
+  , ccContent         = const (pure ())
   , ccFocusScope      = TabUnit
   }
 
@@ -474,6 +479,14 @@ data ControlInteraction e msg = ControlInteraction
   , ciFocusGained  :: Bool
   , ciFocusLost    :: Bool
   , ciKeysPressed  :: [KeyEvent]
+  , ciWasDragging  :: Bool
+    -- ^ Whether this control already held mouse capture as of the *start*
+    -- of this frame's processing, before anything this frame (including a
+    -- fresh capture acquired this same frame) could change it. Lets
+    -- content distinguish "continuing an existing drag" from "a fresh
+    -- grab just starting" -- a fact only available from before the frame
+    -- began, the same reason a plain live 'isDragging' read from inside
+    -- content can't recover it.
   , ciStyle        :: Style
   }
 
@@ -493,6 +506,7 @@ noInteraction s = ControlInteraction
   , ciFocusGained  = False
   , ciFocusLost    = False
   , ciKeysPressed  = []
+  , ciWasDragging  = False
   , ciStyle        = s
   }
 
@@ -704,7 +718,7 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       disabled    <- isDisabled
       let active = intrinsicStates disabled (noInteraction (styleBase styles)) `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
-      renderStyled m s (ccContent cc)
+      renderStyled m s (ccContent cc (noInteraction s))
       pure (noInteraction s)
 
     renderTracked eid = do
@@ -726,9 +740,10 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       when (ciMouseDown raw && ccIsFocusable cc) (emitUi (Focus currentScope eid))
       let active = intrinsicStates disabled raw `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
-      renderStyled m s (applyFocusScope eid (ccFocusScope cc) (ccContent cc))
+      let final = raw { ciStyle = s }
+      renderStyled m s (applyFocusScope eid (ccFocusScope cc) (ccContent cc final))
       when (ccIsFocusable cc && not disabled) (setPreviousTabStop eid)
-      pure raw { ciStyle = s }
+      pure final
 
     -- The raw hover\/mouse-button\/keyboard\/focus watching every
     -- identified control does, regardless of its focus-management or
@@ -738,7 +753,11 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
     -- itself depends on these flags), fires @cc@'s own handlers, and
     -- reports the full picture.
     watchInteraction eid disabled placeholderStyle = do
-      hit <- isRegionHit
+      -- Read before anything else this frame (in particular, before
+      -- 'watchHover' can freshly 'acquireCapture') so it reflects capture
+      -- as of the *start* of the frame -- see 'ciWasDragging'.
+      wasDragging <- isDragging eid
+      hit         <- isRegionHit
       let eligible = not disabled && hit
       hoverI <- watchHover eid eligible
       mouseI <- watchMouseButton eid (ccMouseActivation cc) eligible
@@ -755,6 +774,7 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
             , ciFocusGained  = fiFocusGained focusI
             , ciFocusLost    = fiFocusLost focusI
             , ciKeysPressed  = fiKeysPressed focusI
+            , ciWasDragging  = wasDragging
             }
       fireElementEvents cc interaction
       pure interaction
