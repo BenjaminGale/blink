@@ -84,9 +84,9 @@ thickness :: Double -> Attribute (DividerConfig e msg)
 thickness t = Attribute (\dc -> dc { dcThickness = t })
 
 -- | A plain visual separator (see the module header). Never focusable and
--- never claims focus on click, regardless of 'isFocusable'\/'style' --
+-- never claims focus on click, regardless of 'focusPolicy'\/'style' --
 -- fixed behaviour, not a default, the same way 'Blink.View.Controls.ProgressBar.progressBar'
--- fixes 'isFocusable' to 'False' itself. Draws nothing when the resolved
+-- fixes 'focusPolicy' to 'NotFocusable' itself. Draws nothing when the resolved
 -- style's border colour is 'Nothing', the same as a control with no
 -- border drawing no chrome border. Takes no id by default -- pass
 -- 'elementId' to give one instance a stable identity and react to its
@@ -107,7 +107,7 @@ divider attrs = Element
   where
     cfg  = resolve defaultDividerConfig attrs
     ctrl = (dcControl cfg)
-      { ccIsFocusable  = False
+      { ccFocusPolicy  = NotFocusable
       , ccContent      = const body
       }
     t = dcThickness cfg

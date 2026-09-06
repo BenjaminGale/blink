@@ -20,7 +20,7 @@ module Blink.View.Controls.ButtonBehaviour
 import Test.Hspec
 
 import Blink.View.Controls.Button (HasButtonConfig, onActivated)
-import Blink.View.Controls.Control (Attribute, HasControlConfig, isFocusable)
+import Blink.View.Controls.Control (Attribute, FocusPolicy (..), HasControlConfig, focusPolicy)
 import Blink.View.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.View.Controls.ElementBehaviour (tagged)
 import Blink.Geometry (Point, Rectangle)
@@ -83,7 +83,7 @@ buttonBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint rende
       resultMessages result `shouldNotContain` ["Clicked"]
 
     it "raises no Activated event from Enter while it doesn't hold focus" $ do
-      result <- runInteractions bounds ctx (render (isFocusable False : taggedActivated)) [] [PressKey KeyReturn []]
+      result <- runInteractions bounds ctx (render (focusPolicy NotFocusable : taggedActivated)) [] [PressKey KeyReturn []]
       resultMessages result `shouldBe` []
 
     it "raises no Activated event from Enter while disabled, even while already focused" $ do

@@ -26,7 +26,7 @@
 -- place, after every flag has been computed -- manages its own keyboard
 -- focus (claim on render while nothing else holds it, give up on Tab, hand
 -- focus to the previous tab stop on Shift-Tab, take focus itself on a
--- mouse-down when 'isFocusable'), and draws themed chrome (background,
+-- mouse-down when 'Focusable'), and draws themed chrome (background,
 -- border, padding, resolved from a 'Blink.View.Style.StyleKey' and its own
 -- hover\/press\/focus state) around whatever content its 'ControlConfig'
 -- carries. Per "a layer fires only what it originates", 'control' never
@@ -65,17 +65,16 @@ module Blink.View.Controls.Control
   , focusTargetOnClick
 
     -- ** Control attributes
-  , isFocusable
   , isEnabled
   , style
   , StyleKey (..)
 
     -- * Focus scope
-  , TabPolicy (..)
+  , FocusPolicy (..)
   , EntryPolicy (..)
   , ChildNavigation (..)
   , WrapPolicy (..)
-  , focusScope
+  , focusPolicy
 
     -- * Measurement
   , chromeInsets
@@ -322,32 +321,39 @@ fireElementEvents cc ci = do
 
 -- * Focus scope
 
--- | How Tab\/Shift-Tab traverse a control and its children. Attached via
--- the @ccFocusScope@ field of 'ControlConfig' (defaulting to 'TabUnit',
--- the degenerate case every control with no nested children already
--- behaves as).
-data TabPolicy
-  = TabFlatten
-    -- ^ No scope of its own. Tab passes straight through, unmodified, as
-    -- if this control didn't exist -- its children's own policies (if any)
-    -- join the surrounding order directly. For pure layout containers, not
-    -- controls in the focus-participating sense.
-  | TabUnit
-    -- ^ A live scope that consumes Tab\/Shift-Tab unconditionally at its
-    -- boundary -- always exits to the control's sibling, regardless of
-    -- which descendant (if any) is focused. Descendants never see Tab at
-    -- all; a descendant can still be focused directly by a click. The
-    -- default for every control, since a control with no nested children
-    -- has nothing for this to act on and simply behaves as it always has.
-  | TabScoped EntryPolicy ChildNavigation
-    -- ^ A live scope that hands Tab\/Shift-Tab (per the keys named in
-    -- 'ChildNavigation') to its children, per 'EntryPolicy' when the scope
-    -- gains focus from outside with nothing already focused inside.
+-- | Whether, and how, a control's own identity participates in keyboard
+-- focus. Attached via the @ccFocusPolicy@ field of 'ControlConfig'
+-- (defaulting to 'Focusable', matching every control's existing
+-- behavior). Unlike other 'ControlConfig' fields, a widget that needs a
+-- fixed value (e.g. 'Blink.View.Controls.Label.label' always being
+-- 'NotFocusable') sets it unconditionally after resolving attrs, the same
+-- way it already pins other fixed behavior -- there is no separate,
+-- narrower attribute for this; 'focusPolicy' is the only one, and any
+-- widget is free to override whatever a caller passed through it.
+data FocusPolicy
+  = NotFocusable
+    -- ^ This control's own id never becomes a focus target: no auto-claim
+    -- by rendering first, no Tab\/Shift-Tab landing on it, no click-to-
+    -- focus. For pure layout containers, and widgets like
+    -- 'Blink.View.Controls.Label.label' that are never themselves a stop.
+  | Focusable
+    -- ^ This control's own id is exactly one focus stop, entered and left
+    -- the way every focusable control already works: auto-claimed by
+    -- rendering first while nothing else holds focus, given up on Tab,
+    -- taken on click. The default.
+  | FocusScope EntryPolicy ChildNavigation
+    -- ^ Also exactly one focus stop from outside, but once entered, hands
+    -- Tab\/Shift-Tab (per the keys named in 'ChildNavigation') to this
+    -- control's own distinctly-identified children instead of giving up
+    -- immediately -- per 'EntryPolicy' when it gains focus from outside
+    -- with nothing already focused inside. The only case that needs a
+    -- real focus scope; 'NotFocusable'\/'Focusable' need no scope
+    -- machinery at all.
   deriving (Eq, Show)
 
--- | Which child a 'TabScoped' scope targets when it gains focus from
--- outside (a forward-Tab arriving at the boundary) with nothing already
--- focused inside.
+-- | Which child a 'FocusScope' targets when it gains focus from outside
+-- (a forward-Tab arriving at the boundary) with nothing already focused
+-- inside.
 data EntryPolicy
   = EnterRemembered
     -- ^ Targets whichever child was focused last time the scope was live
@@ -358,7 +364,7 @@ data EntryPolicy
     -- today.
   deriving (Eq, Show)
 
--- | How Tab moves among a 'TabScoped' scope's own children once it owns
+-- | How Tab moves among a 'FocusScope' scope's own children once it owns
 -- the key.
 data ChildNavigation = ChildNavigation
   { childForward  :: (Key, [Modifier])
@@ -379,26 +385,30 @@ data WrapPolicy
     -- exit already does.
   deriving (Eq, Show)
 
--- | Wraps a control's own content per its resolved 'TabPolicy'. Every
+-- | Wraps a control's own content per its resolved 'FocusPolicy'. Every
 -- control (leaf or composite) runs its content through this, uniformly --
--- 'TabPolicy' decides what, if anything, changes for whatever renders
+-- 'FocusPolicy' decides what, if anything, changes for whatever renders
 -- inside.
 --
--- 'TabUnit' is a no-op: no scope, @body@ unchanged. A control's own
--- content routinely reads its own focus\/key state directly (e.g.
--- 'Blink.View.Controls.TextInput.textInput' checking 'isFocused' on its
--- own id) -- wrapping that in a real focus scope keyed by the same id
--- would swap the ambient out from under those checks, breaking a plain
--- leaf that has no nested, separately-identified children for a scope to
--- ever have acted on in the first place. 'TabUnit' only has real work to
--- do once a composite actually renders such children (see 'TabScoped'),
--- which doesn't exist yet -- until then it's correctly indistinguishable
--- from not having this mechanism at all.
-applyFocusScope :: Ord e => e -> TabPolicy -> View e msg a -> View e msg a
-applyFocusScope _eid policy body = case policy of
-  TabUnit          -> body
-  TabFlatten       -> error "applyFocusScope: TabFlatten is not yet implemented"
-  TabScoped {}     -> error "applyFocusScope: TabScoped is not yet implemented"
+-- 'NotFocusable' and 'Focusable' need no scope machinery at all: neither
+-- changes whether this control's own id is a focus target for anything
+-- beyond the ordinary claim\/give-up logic 'control' already does outside
+-- this function (see @autoClaimsFocus@ and the click-to-focus\/Tab
+-- handling in 'control' itself), and neither has any nested,
+-- distinctly-identified children to act on. A real scope (established via
+-- 'withFocusScope') is only needed for 'FocusScope', since that's the one
+-- case where something inside -- a distinct child id -- needs Tab handed
+-- to it, or hidden from it, differently than this control's own id. Also
+-- why a real scope can't just be established unconditionally for every
+-- control: a control's own content routinely reads its own focus\/key
+-- state directly (e.g. 'Blink.View.Controls.TextInput.textInput' checking
+-- 'isFocused' on its own id), and wrapping that in a scope keyed by the
+-- same id would swap the ambient out from under those checks.
+applyFocusPolicy :: Ord e => e -> FocusPolicy -> View e msg a -> View e msg a
+applyFocusPolicy _eid policy body = case policy of
+  NotFocusable  -> body
+  Focusable     -> body
+  FocusScope {} -> error "applyFocusPolicy: FocusScope is not yet implemented"
 
 -- * Control
 
@@ -416,7 +426,6 @@ data ControlConfig e msg = ControlConfig
   , ccOnFocusGained   :: [EventHandler e msg]
   , ccOnFocusLost     :: [EventHandler e msg]
   , ccMouseActivation :: MouseActivation
-  , ccIsFocusable     :: Bool
   , ccIsEnabled       :: Bool
   , ccStyleKey        :: StyleKey e
   , ccActiveStates    :: Set VisualState
@@ -430,15 +439,15 @@ data ControlConfig e msg = ControlConfig
     -- runs, so content reads facts like 'ciFocused'\/'ciKeysPressed'\/
     -- 'ciWasDragging' off it directly rather than re-deriving them via
     -- 'isFocused'\/'getInput'\/'isDragging' itself.
-  , ccFocusScope      :: TabPolicy
-    -- ^ How Tab\/Shift-Tab traverse this control and its children. See
-    -- 'focusScope'.
+  , ccFocusPolicy     :: FocusPolicy
+    -- ^ Whether, and how, this control's own identity participates in
+    -- keyboard focus. See 'focusPolicy'.
   }
 
--- | No identity, every handler field empty, 'ClickActivated', focusable,
--- enabled, styled via an arbitrary placeholder key (always overridden --
--- every real caller of 'control' supplies its own via 'style'), no extra
--- active states, rendering nothing, and 'TabUnit'.
+-- | No identity, every handler field empty, 'ClickActivated', enabled,
+-- styled via an arbitrary placeholder key (always overridden -- every real
+-- caller of 'control' supplies its own via 'style'), no extra active
+-- states, rendering nothing, and 'Focusable'.
 defaultControlConfig :: ControlConfig e msg
 defaultControlConfig = ControlConfig
   { ccElementId       = Nothing
@@ -451,12 +460,11 @@ defaultControlConfig = ControlConfig
   , ccOnFocusGained   = []
   , ccOnFocusLost     = []
   , ccMouseActivation = ClickActivated
-  , ccIsFocusable     = True
   , ccIsEnabled       = True
   , ccStyleKey        = Class ""
   , ccActiveStates    = Set.empty
   , ccContent         = const (pure ())
-  , ccFocusScope      = TabUnit
+  , ccFocusPolicy     = Focusable
   }
 
 -- | What 'control' reports back: three steady interaction states
@@ -511,7 +519,7 @@ noInteraction s = ControlInteraction
   }
 
 -- | Implemented by any config type that nests a 'ControlConfig', letting a
--- control attribute (e.g. 'isFocusable', 'onClicked') be applied to it
+-- control attribute (e.g. 'focusPolicy', 'onClicked') be applied to it
 -- directly. Every instance but the base case delegates one hop into its
 -- own nested field.
 class HasControlConfig e msg cfg | cfg -> e msg where
@@ -519,12 +527,6 @@ class HasControlConfig e msg cfg | cfg -> e msg where
 
 instance HasControlConfig e msg (ControlConfig e msg) where
   overControl = id
-
--- | Whether this control participates in keyboard focus at all: Tab\/
--- Shift-Tab cycling onto it, and auto-claiming focus by rendering first
--- while nothing else holds it. 'False' excludes it from both.
-isFocusable :: HasControlConfig e msg cfg => Bool -> Attribute cfg
-isFocusable b = overControl (Attribute (\cc -> cc { ccIsFocusable = b }))
 
 -- | Whether the control responds to input at all. A disabled control still
 -- renders (in its disabled style) but ignores hover, clicks, key presses,
@@ -538,11 +540,16 @@ isEnabled b = overControl (Attribute (\cc -> cc { ccIsEnabled = b }))
 style :: HasControlConfig e msg cfg => StyleKey e -> Attribute cfg
 style k = overControl (Attribute (\cc -> cc { ccStyleKey = k }))
 
--- | How Tab\/Shift-Tab traverse this control and its children -- see
--- 'TabPolicy'. Defaults to 'TabUnit', under which a control with no nested
--- children behaves exactly as it always has.
-focusScope :: HasControlConfig e msg cfg => TabPolicy -> Attribute cfg
-focusScope p = overControl (Attribute (\cc -> cc { ccFocusScope = p }))
+-- | Whether, and how, this control's own identity participates in
+-- keyboard focus -- see 'FocusPolicy'. Defaults to 'Focusable', matching
+-- every control's existing behavior: Tab\/Shift-Tab cycling onto it, and
+-- auto-claiming focus by rendering first while nothing else holds it.
+-- There is no separate on\/off flag for this -- a widget that needs a
+-- fixed value (e.g. 'Blink.View.Controls.Label.label' always being
+-- 'NotFocusable') sets it unconditionally after resolving attrs, the same
+-- way it already pins other fixed behavior.
+focusPolicy :: HasControlConfig e msg cfg => FocusPolicy -> Attribute cfg
+focusPolicy p = overControl (Attribute (\cc -> cc { ccFocusPolicy = p }))
 
 -- | Which way, if any, focus just moved, for 'control's own immediate
 -- self-claim\/self-give-up notifications -- distinct from the deferred
@@ -651,11 +658,19 @@ measureChrome k child ctx = do
     otherAxis Horizontal = Vertical
     otherAxis Vertical   = Horizontal
 
+-- | Whether this control's own id is ever a focus target at all -- 'False'
+-- only for 'NotFocusable'; both 'Focusable' and 'FocusScope' present as
+-- exactly one stop from outside.
+isFocusable :: FocusPolicy -> Bool
+isFocusable NotFocusable  = False
+isFocusable Focusable     = True
+isFocusable FocusScope {} = True
+
 -- | Whether a control is eligible to claim focus purely by rendering first
 -- while nothing else holds it: opted into keyboard focus at all, via
--- @ccIsFocusable@.
+-- @ccFocusPolicy@.
 autoClaimsFocus :: ControlConfig e msg -> Bool
-autoClaimsFocus cc = ccIsFocusable cc
+autoClaimsFocus cc = isFocusable (ccFocusPolicy cc)
 
 -- | 'True' when this control should take focus with nothing having asked
 -- for it: opted into auto-claiming (per 'autoClaimsFocus'), nothing else is
@@ -697,9 +712,9 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
 --
 -- Per "a layer fires only what it originates", never dispatches a raw
 -- event itself: the self-focus-on-click effect it applies (when
--- @ccIsFocusable@) is a direct 'UiEffect', read off its own 'ciMouseDown'
--- -- so focus moves on press, before any drag or release decides whether
--- the press itself counts as a click.
+-- @ccFocusPolicy@ makes it a focus target) is a direct 'UiEffect', read
+-- off its own 'ciMouseDown' -- so focus moves on press, before any drag or
+-- release decides whether the press itself counts as a click.
 --
 -- Identified by @cc@'s own 'ccElementId' (see 'elementId'). With no id set,
 -- the control still renders, in its resting (undisabled, unfocused,
@@ -737,12 +752,12 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       (m, styles) <- getStyleSet styleKey
       hitBounds   <- marginInsetBounds m
       raw         <- withBounds hitBounds (watchInteraction eid disabled (styleBase styles))
-      when (ciMouseDown raw && ccIsFocusable cc) (emitUi (Focus currentScope eid))
+      when (ciMouseDown raw && isFocusable (ccFocusPolicy cc)) (emitUi (Focus currentScope eid))
       let active = intrinsicStates disabled raw `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
       let final = raw { ciStyle = s }
-      renderStyled m s (applyFocusScope eid (ccFocusScope cc) (ccContent cc final))
-      when (ccIsFocusable cc && not disabled) (setPreviousTabStop eid)
+      renderStyled m s (applyFocusPolicy eid (ccFocusPolicy cc) (ccContent cc final))
+      when (isFocusable (ccFocusPolicy cc) && not disabled) (setPreviousTabStop eid)
       pure final
 
     -- The raw hover\/mouse-button\/keyboard\/focus watching every

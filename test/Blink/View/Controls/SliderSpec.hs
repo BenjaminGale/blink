@@ -4,7 +4,7 @@ module Blink.View.Controls.SliderSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.View.Controls.Control (Attribute, isFocusable, onFocusGained, onFocusLost)
+import Blink.View.Controls.Control (Attribute, FocusPolicy (..), focusPolicy, onFocusGained, onFocusLost)
 import Blink.View.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..), Key (..))
@@ -175,7 +175,7 @@ spec = describe "Blink.View.Controls.Slider" $ do
       getDrawCommands ctx `shouldContain` [ringAt]
 
     it "draws no focus ring while not focused" $ do
-      ctx <- run [isFocusable False, value 0.5]
+      ctx <- run [focusPolicy NotFocusable, value 0.5]
       getDrawCommands ctx `shouldNotContain` [ringAt]
 
   describe "hover/drag thumb colour" $ do

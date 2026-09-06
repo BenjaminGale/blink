@@ -6,8 +6,8 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.View.Controls.Control
-  ( Attribute, ControlConfig (..), ControlInteraction (..)
-  , control, defaultControlConfig, elementId, focusTargetOnClick, isEnabled, isFocusable
+  ( Attribute, ControlConfig (..), ControlInteraction (..), FocusPolicy (..)
+  , control, defaultControlConfig, elementId, focusTargetOnClick, isEnabled, focusPolicy
   , onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, resolve
   )
@@ -94,7 +94,7 @@ renderRedirect :: TestElement -> [Attribute'] -> TestElement -> [Attribute'] -> 
 renderRedirect fromId attrsFrom toId attrsTo = do
   withBounds rectA $ do
     scope <- getCurrentScope
-    ci    <- control (resolve defaultControlConfig (elementId fromId : isFocusable False : attrsFrom))
+    ci    <- control (resolve defaultControlConfig (elementId fromId : focusPolicy NotFocusable : attrsFrom))
     focusTargetOnClick scope toId ci
   withBounds rectB (renderAt toId attrsTo)
 
@@ -176,13 +176,13 @@ spec = describe "Blink.View.Controls.Control.control" $ do
       -- as a click for the second. The mouse also crosses from A into B
       -- along the way, so both elements' hover edges fire too.
       let attrsA =
-            [ isFocusable False
+            [ focusPolicy NotFocusable
             , onMouseEntered (const [OutMsg ("A entered" :: String)])
             , onMouseExited  (const [OutMsg "A exited"])
             , onMouseDown    (const [OutMsg "A down"])
             ]
           attrsB =
-            [ isFocusable False
+            [ focusPolicy NotFocusable
             , onMouseEntered (const [OutMsg ("B entered" :: String)])
             , onMouseUp      (const [OutMsg "B up"])
             ]

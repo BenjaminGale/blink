@@ -9,7 +9,7 @@
 -- An attribute is @'Attribute' cfg@: a function @cfg -> cfg@, wrapped in a
 -- newtype so it can be given its own instances. This module only defines
 -- the mechanism itself; each config type's own module defines the actual
--- attribute functions (e.g. "Blink.View.Controls.Control"'s 'Blink.View.Controls.Control.isFocusable',
+-- attribute functions (e.g. "Blink.View.Controls.Control"'s 'Blink.View.Controls.Control.focusPolicy',
 -- "Blink.View.Layout.Box"'s 'Blink.View.Layout.Box.boxSpacing').
 module Blink.View.Attribute
   ( Attribute (..)

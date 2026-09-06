@@ -77,8 +77,8 @@ bandSpeed v = Attribute (\pc -> pc { pbBandSpeed = v })
 -- Takes no id by default -- pass 'Blink.View.Controls.Control.elementId' to
 -- give one instance a stable identity and react to its hover\/click\/focus
 -- events. Never a tab stop, though: fixed behaviour, not a default -- 'progressBar'
--- always overrides 'isFocusable' to 'False' itself, so it wins regardless
--- of what a caller passes. Has no content of its own to size to, so it
+-- always overrides 'focusPolicy' to 'NotFocusable' itself, so it wins
+-- regardless of what a caller passes. Has no content of its own to size to, so it
 -- defaults to filling the space it's given on both axes, same as every
 -- control did before controls reported their own 'Blink.View.Layout.Layout'.
 -- Override with 'Blink.View.Layout.Constraints.width'\/'Blink.View.Layout.Constraints.height'\/'Blink.View.Layout.Constraints.align'.
@@ -91,7 +91,7 @@ progressBar attrs = Element
   where
     cfg  = resolve defaultProgressBarConfig attrs
     ctrl = (pbControl cfg)
-      { ccIsFocusable  = False
+      { ccFocusPolicy  = NotFocusable
       , ccContent      = const body
       }
     body = do
