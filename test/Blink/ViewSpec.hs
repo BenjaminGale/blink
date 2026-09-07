@@ -11,7 +11,7 @@ import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.View.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.View.Style (Metrics (..), Style (..), StyleSet (..), StyleKey (..), VisualState (..), Theme (..))
 import Blink.View
-import Blink.View.Drawing (clipToCurrent, fillRect, strokeRect, drawText, withBackground, withBorder)
+import Blink.View.Drawing (withClip, fillRect, strokeRect, drawText, withBackground, withBorder)
 import Blink.View.Selection (selectionLow, selectionHigh, selectionHasExtent, cursor, collapseToLow, collapseToHigh, collapseToActive, extendActive)
 import Blink.Generators ()
 
@@ -94,7 +94,7 @@ advance input ctx = nextFrameContext testBounds input (contextTheme ctx) (contex
 
 spec :: Spec
 spec = describe "Blink.View" $ do
-  describe "clipToCurrent" $ do
+  describe "withClip" $ do
     -- In each test the region checked is testBounds (100×100), so the mouse
     -- is inside the element's own bounds; only the clip region should block
     -- the hit test.
@@ -102,19 +102,19 @@ spec = describe "Blink.View" $ do
       let clipRect = Rectangle 0 0 100 50
           mouseOutsideClip = noInput { inputMousePosition = Point 50 75 }
       (hit, _) <- runWith mouseOutsideClip
-        (withBounds clipRect $ clipToCurrent $ withBounds testBounds isRegionHit)
+        (withBounds clipRect $ withClip $ withBounds testBounds isRegionHit)
       hit `shouldBe` False
 
     it "isRegionHit is True when the mouse is inside both the bounds and the clip region" $ do
       let clipRect = Rectangle 0 0 100 50
           mouseInsideClip = noInput { inputMousePosition = Point 50 25 }
       (hit, _) <- runWith mouseInsideClip
-        (withBounds clipRect $ clipToCurrent $ withBounds testBounds isRegionHit)
+        (withBounds clipRect $ withClip $ withBounds testBounds isRegionHit)
       hit `shouldBe` True
 
     it "wraps draw commands in PushClip / PopClip" $ do
       let clipRect = Rectangle 0 0 100 50
-      (_, ctx) <- run0 (withBounds clipRect $ clipToCurrent $ fillRect (RGBA 1 0 0 1))
+      (_, ctx) <- run0 (withBounds clipRect $ withClip $ fillRect (RGBA 1 0 0 1))
       getDrawCommands ctx `shouldBe`
         [PushClip clipRect, FillRect clipRect (RGBA 1 0 0 1), PopClip]
 
@@ -124,8 +124,8 @@ spec = describe "Blink.View" $ do
           -- intersection is y 25–50; mouse at (50, 10) is inside outerClip but outside intersection
           mouseOutside = noInput { inputMousePosition = Point 50 10 }
       (hit, _) <- runWith mouseOutside
-        (withBounds outerClip $ clipToCurrent $
-         withBounds innerClip $ clipToCurrent $
+        (withBounds outerClip $ withClip $
+         withBounds innerClip $ withClip $
          withBounds testBounds isRegionHit)
       hit `shouldBe` False
 

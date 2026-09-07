@@ -104,11 +104,12 @@ requiresAnimation
 
 = Drawing
 
-'fillRect', 'strokeRect', and 'drawText' all operate on the /current bounds/
-returned by 'getBounds'. 'withBounds' temporarily replaces the current bounds
-for a sub-tree — used internally by the layout system. 'clipToCurrent' wraps a
-sub-tree in a clip region matching the current bounds; drawing outside the
-region is discarded.
+'Blink.View.Drawing.fillRect', 'Blink.View.Drawing.strokeRect', and
+'Blink.View.Drawing.drawText' all operate on the /current bounds/ returned
+by 'getBounds'. 'withBounds' temporarily replaces the current bounds for a
+sub-tree — used internally by the layout system.
+'Blink.View.Drawing.withClip' wraps a sub-tree in a clip region matching
+the current bounds; drawing outside the region is discarded.
 
 = Interaction
 
@@ -151,7 +152,7 @@ its own content via 'currentStyle'.
 
 = Text measurement
 
-'drawText' renders whatever text it is given without needing to know its
+'Blink.View.Drawing.drawText' renders whatever text it is given without needing to know its
 pixel size. Controls that must — placing a cursor, computing where a click
 landed, sizing a box to fit its label — go through the backend's
 'TextMeasurer' instead, via 'charOffset', 'charAtOffset', and 'measureText'.
@@ -182,9 +183,10 @@ miniButton eid label = do
 @
 
 'registerMouseOver' records the hit so a later frame can look back at it via
-'wasMouseOverLastFrame'; 'fillRect' and 'drawText' read the current bounds
-implicitly. See 'Blink.View.Controls.control' for the full version, which adds
-focus, tab navigation, and style-driven chrome on top of exactly this shape.
+'wasMouseOverLastFrame'; 'Blink.View.Drawing.fillRect' and
+'Blink.View.Drawing.drawText' read the current bounds implicitly. See
+'Blink.View.Controls.control' for the full version, which adds focus, tab
+navigation, and style-driven chrome on top of exactly this shape.
 -}
 module Blink.View
   ( -- * The View monad
@@ -217,8 +219,9 @@ module Blink.View
   , clampScrollPos
   , contextScrollState
     -- * Selection
-    -- | See also "Blink.View.Selection" for 'selectionLow', 'cursor', and the
-    -- rest of the pure helpers built on 'Selection'.
+    -- | See also "Blink.View.Selection" for
+    -- 'Blink.View.Selection.selectionLow', 'Blink.View.Selection.cursor',
+    -- and the rest of the pure helpers built on 'Selection'.
   , Selection (..)
   , getSelection
   , contextSelection
@@ -227,9 +230,11 @@ module Blink.View
   , getWindowSize
   , withBounds
     -- * Drawing
-    -- | Minimal primitives; see "Blink.View.Drawing" for 'fillRect',
-    -- 'strokeRect', 'drawText', 'clipToCurrent', 'withBackground', and
-    -- 'withBorder', built on top of these.
+    -- | Minimal primitives; see "Blink.View.Drawing" for
+    -- 'Blink.View.Drawing.fillRect', 'Blink.View.Drawing.strokeRect',
+    -- 'Blink.View.Drawing.drawText', 'Blink.View.Drawing.withClip',
+    -- 'Blink.View.Drawing.withBackground', and
+    -- 'Blink.View.Drawing.withBorder', built on top of these.
   , draw
   , getInteractionClip
   , withInteractionClip
@@ -462,8 +467,8 @@ data ViewContext e msg = ViewContext
   , ctxDisabled        :: Bool
   , ctxInteractionClip :: Maybe Rectangle
     -- ^ When set, 'isRegionHit' additionally requires the mouse to fall within
-    -- this rectangle. Set by 'clipToCurrent' and restored on exit, so it
-    -- tracks the innermost enclosing clip region.
+    -- this rectangle. Set by 'Blink.View.Drawing.withClip' and restored on
+    -- exit, so it tracks the innermost enclosing clip region.
   , ctxAnimation       :: AnimationState
     -- ^ Per-frame animation state: wall-clock delta and tick flag. Set by
     -- "Blink.App" at the start of each frame.
@@ -1231,18 +1236,19 @@ disableWhen False = id
 
 -- | Queues a 'DrawCommand' against the current frame's output, in submission
 -- order. Minimal drawing primitive -- see "Blink.View.Drawing" for the
--- higher-level operations ('fillRect', 'strokeRect', 'drawText',
--- 'clipToCurrent', etc.) built on top of it and 'getBounds'.
+-- higher-level operations ('Blink.View.Drawing.fillRect',
+-- 'Blink.View.Drawing.strokeRect', 'Blink.View.Drawing.drawText',
+-- 'Blink.View.Drawing.withClip', etc.) built on top of it and 'getBounds'.
 draw :: DrawCommand -> View e msg ()
 draw cmd = modifyOut $ \out -> out { outDrawCommands = cmd : outDrawCommands out }
 
--- | The active interaction clip region, if any -- see 'Blink.View.Drawing.clipToCurrent'.
+-- | The active interaction clip region, if any -- see 'Blink.View.Drawing.withClip'.
 getInteractionClip :: View e msg (Maybe Rectangle)
 getInteractionClip = gets ctxInteractionClip
 
 -- | Runs @action@ with the interaction clip region replaced, restoring the
 -- previous region once @action@ completes. Building block for
--- 'Blink.View.Drawing.clipToCurrent'.
+-- 'Blink.View.Drawing.withClip'.
 withInteractionClip :: Maybe Rectangle -> View e msg a -> View e msg a
 withInteractionClip = withField ctxInteractionClip (\v c -> c { ctxInteractionClip = v })
 
@@ -1333,9 +1339,10 @@ setFocusChange scopeId newFocus ctx = ctx { ctxFocus = updateScope (ctxFocus ctx
       }
 
 -- | 'True' when the mouse cursor is within the current bounds and within the
--- active interaction clip region (set by 'clipToCurrent'). This is the
--- lower-level, element-agnostic primitive; for a specific control's hit area
--- (bounds inset by its margin), see 'Blink.View.Controls.isMouseOver'.
+-- active interaction clip region (set by 'Blink.View.Drawing.withClip').
+-- This is the lower-level, element-agnostic primitive; for a specific
+-- control's hit area (bounds inset by its margin), see
+-- 'Blink.View.Controls.isMouseOver'.
 isRegionHit :: View e msg Bool
 isRegionHit = do
   r    <- getBounds

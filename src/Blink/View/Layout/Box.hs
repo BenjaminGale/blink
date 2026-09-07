@@ -25,7 +25,7 @@ import Blink.View.Layout.Constraints
   , canExpand, capLength, exactly, fill, layoutWithConstraints, minLength, naturalLength, resolveLength, shrink
   )
 import Blink.View (View, getBounds, withBounds)
-import Blink.View.Drawing (clipToCurrent)
+import Blink.View.Drawing (withClip)
 import Blink.View.Element (Element (..))
 
 -- | Every capability 'hBox'\/'vBox' resolve: the box's own size request,
@@ -359,7 +359,7 @@ runBox ax cfg = do
       contentBlock = alignRect (bxAlignment cfg) contentArea
                        (makeSlot ax 0 0 (foldl' (+) 0 slotSizes + totalSpacing) crossLen)
       slotOrigins  = scanl' (\o s -> o + s + bxSpacing cfg) (mainOrigin ax contentBlock) slotSizes
-  withBounds contentArea $ clipToCurrent $
+  withBounds contentArea $ withClip $
     forM_ (zip3 slotOrigins slotSizes kids) $ \(slotOrigin, slotSize, kid) -> do
       resolvedCross <- resolveLength (crossOrientation ax) (crossConstraint ax (elLayout kid))
                           (Bounded crossLen) (Bounded slotSize) (elMeasure kid)

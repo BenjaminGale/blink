@@ -1,11 +1,11 @@
 {- |
 Module: Blink.View.Selection
 
-Pure helpers built on top of "Blink.View"'s 'Blink.View.Selection' type:
-reading the low\/high bound of a range, collapsing it to a cursor, and
-moving its active end. None of these touch 'Blink.View.ViewContext' --
-read the current selection with 'Blink.View.getSelection' and pass the
-result through these.
+Pure helpers built on top of "Blink.View"'s 'Selection' type: reading the
+low\/high bound of a range, collapsing it to a cursor, and moving its
+active end. None of these touch 'Blink.View.ViewContext' -- read the
+current selection with 'Blink.View.getSelection' and pass the result
+through these.
 -}
 module Blink.View.Selection
   ( selectionLow

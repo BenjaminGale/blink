@@ -5,14 +5,14 @@ Drawing operations built on top of "Blink.View"'s minimal primitives
 ('Blink.View.draw', 'Blink.View.getBounds', 'Blink.View.getInteractionClip',
 'Blink.View.withInteractionClip'). Controls draw with 'fillRect',
 'strokeRect', and 'drawText' against the /current bounds/ (see
-'Blink.View.getBounds'); 'clipToCurrent' narrows both drawing and mouse
+'Blink.View.getBounds'); 'withClip' narrows both drawing and mouse
 hit-testing to a sub-tree's bounds.
 -}
 module Blink.View.Drawing
   ( fillRect
   , strokeRect
   , drawText
-  , clipToCurrent
+  , withClip
   , withBackground
   , withBorder
   ) where
@@ -44,8 +44,8 @@ drawText colour align text = drawAt (\r -> DrawText r text colour align)
 -- | Wraps a sub-tree in a clip region matching the current bounds. Draw
 -- commands produced by the sub-tree that fall outside the region are discarded,
 -- and mouse hit-testing is also restricted to the same region.
-clipToCurrent :: View e msg a -> View e msg a
-clipToCurrent action = do
+withClip :: View e msg a -> View e msg a
+withClip action = do
   r    <- getBounds
   clip <- getInteractionClip
   let newClip = maybe r (intersectRect r) clip

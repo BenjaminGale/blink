@@ -93,7 +93,7 @@ import Blink.Input (ButtonState (..), InputState (..), Key, KeyEvent (..), Modif
 import Blink.View.Layout.Constraints (MeasureCtx (..), shrink)
 import Blink.View.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), VisualState (..), resolveStyle)
 import Blink.View
-import Blink.View.Drawing (clipToCurrent, withBackground, withBorder)
+import Blink.View.Drawing (withClip, withBackground, withBorder)
 import Blink.View.Element (Element (..))
 
 -- * Raw events
@@ -749,7 +749,7 @@ renderStyled m s body = do
   let bg          = insetRect (metricsMargin m) r
       borderRect  = insetRect (borderContribution m s) bg
       contentRect = insetRect (metricsPadding m) borderRect
-      inner       = withBounds contentRect $ clipToCurrent (withMetrics m (withStyle s body))
+      inner       = withBounds contentRect $ withClip (withMetrics m (withStyle s body))
   withBounds bg $
     withBackground (styleBackground s) $
     case styleBorderColour s of
