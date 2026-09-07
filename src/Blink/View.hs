@@ -321,7 +321,7 @@ import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Blink.View.Rendering (DrawCommand, TextMeasurer (..), noOpTextMeasurer)
-import Blink.Focus
+import Blink.View.Focus
   ( FocusClaim (..), currentFocus, isGained, tryClaim
   , LostFocus (..), pendingLostFocus
   , FocusState (..), isNothingFocused, reaffirm

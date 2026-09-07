@@ -1,5 +1,5 @@
 {- |
-Module: Blink.Focus
+Module: Blink.View.Focus
 
 Pure keyboard-focus state: which element (if any) holds focus within a
 scope, how a claim ages across frames, and the bookkeeping a nested focus
@@ -13,7 +13,7 @@ etc.) built on top of what's defined here, the same relationship
 "Blink.Input" has with the mouse state 'Blink.View' threads through its own
 context.
 -}
-module Blink.Focus
+module Blink.View.Focus
   ( -- * Focus claims
     FocusClaim (..)
   , currentFocus

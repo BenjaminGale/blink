@@ -36,7 +36,6 @@ library
     exposed-modules:
         Blink
         Blink.App
-        Blink.Focus
         Blink.Geometry
         Blink.Input
         Blink.Update
@@ -44,6 +43,7 @@ library
         Blink.View.Attribute
         Blink.View.Controls
         Blink.View.Drawing
+        Blink.View.Focus
         Blink.View.Selection
         Blink.View.Controls.Button
         Blink.View.Controls.Checkbox
