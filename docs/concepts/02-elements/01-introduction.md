@@ -1,4 +1,4 @@
-# 1. `Element` and the attribute mechanism
+# The Element type and the attribute mechanism
 
 [`01-immediate-mode-api`](../01-immediate-mode-api/01-introduction.md)
 covered what `Blink.View` itself provides: a monad that draws directly
@@ -108,7 +108,7 @@ this; writing an ordinary widget generally doesn't, since
 answer unless your widget's natural size genuinely depends on its content
 (text, primarily).
 
-## Two kinds of "no space to give"
+## The `Available` type
 
 A container itself sizing to content (`fitContent` on the container, or
 one nested inside another content-sized container) has a second wrinkle:
@@ -165,9 +165,9 @@ somewhere inside its own. You don't need to know the mechanics of that
 nesting to use it; it's why `width (exactly 80)` reads identically
 whether you're sizing a button, a text input, or a whole box.
 
-## Where this leaves you
+## Summary
 
-`Element` and the attribute mechanism are the shared substrate — the next
+`Element` and the attribute mechanism are the shared substrate. The next
 two files are each a concrete application of it:
 [Composing containers](02-layout.md) covers how `hBox`/`vBox`/`borderLayout`
 use it to arrange multiple children, and

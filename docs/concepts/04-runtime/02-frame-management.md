@@ -1,4 +1,4 @@
-# 2. Frame management
+# Frame management
 
 [The frame loop](01-the-frame-loop.md) describes what happens inside a
 single call to `stepFrame` — the function a backend calls once per

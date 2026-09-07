@@ -1,4 +1,4 @@
-# 1. Why immediate mode
+# Why immediate mode
 
 Most GUI toolkits are **retained-mode**: you build a tree of widget objects
 once, hand it to the toolkit, and then *mutate* that tree as your
@@ -39,17 +39,15 @@ runs again with the new state and draws the new text directly.
 
 ## What this buys you
 
-* **No synchronization bugs.** A retained-mode tree can drift from your
-  state if you forget to call a setter somewhere. In Blink, the view is a
-  pure function of state — there's nothing to forget to update, because
-  nothing is retained to go stale.
-* **No diffing.** Unlike a virtual-DOM framework, Blink doesn't compare
-  frames to figure out what changed — it just draws the current one. This
-  is a big part of what keeps the model simple: there's no reconciliation
-  algorithm to reason about.
-* **Straightforward control flow.** An `if`/`case` in your view function
-  *is* your conditional rendering — no special "conditional component" API
-  needed.
+* **The view cannot drift from state.** It is a pure function of state,
+  recomputed every frame. There is no setter to forget to call, because
+  nothing is retained for the view and the state to fall out of sync on.
+* **Each frame draws directly from the current state.** Blink renders the
+  current frame instead of comparing it to the previous one, so there is
+  no reconciliation algorithm between state and screen.
+* **Conditional rendering is ordinary Haskell.** An `if`/`case` in the view
+  function is the conditional rendering; no separate "conditional
+  component" API is needed.
 
 ## What it costs
 
@@ -64,7 +62,7 @@ runs again with the new state and draws the new text directly.
   `Blink.View` provides for state that needs to persist — or at least be
   reported — across the boundary between one frame and the next.
 
-## Where this shows up in the API
+## Identifying controls and persisting state without a widget tree
 
 Because there's no persistent widget tree, there are no widget objects to
 hold a reference to. Instead:

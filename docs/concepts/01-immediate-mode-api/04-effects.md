@@ -1,10 +1,8 @@
-# 4. Effects
+# Effects
 
 Section 1 established that Blink's view is a pure function of state, with
-nothing retained to mutate. So how does clicking a button ever change
-anything?
-
-It doesn't — not directly. A control never mutates state itself. Instead,
+nothing retained to mutate. A control never mutates state directly.
+Instead,
 it queues a description of a change — an **effect** — for something else
 to apply once this frame's tree walk is finished. There are two flavours
 of this in `Blink.View`, aimed at two different owners:
@@ -86,7 +84,7 @@ immediately, and correctness doesn't depend on same-frame visibility here:
 nothing else in the tree is contending for a particular list's own scroll
 offset the way two sibling controls might contend for focus.
 
-## The one thing that doesn't queue
+## Exception: focus is applied immediately, not queued
 
 Not every piece of Blink's own state works this way. Focus is the
 exception — `setFocus`/`clearFocus` apply immediately, mid-frame, rather

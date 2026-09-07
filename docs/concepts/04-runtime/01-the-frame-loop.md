@@ -1,4 +1,4 @@
-# 1. The frame loop
+# The frame loop
 
 The previous areas covered what `Blink.View`, `Element`, layout, controls,
 and application-state updates each provide. This one zooms out to the

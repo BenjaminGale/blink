@@ -1,11 +1,11 @@
-# 5. Focus
+# Focus
 
 [Section 4](04-effects.md) covered Effects: describe a change now, let
 something else apply it later. Focus is the one piece of Blink's own
 state that breaks that rule — `setFocus`/`clearFocus` apply immediately,
 mid-frame, rather than queuing. This section is about why.
 
-## The problem: two controls, one frame, one race
+## A race between two controls in the same frame
 
 Say you have two buttons rendered one after another, and pressing Tab on
 the first should move focus to the second. Both controls run in the same
@@ -45,7 +45,7 @@ change takes effect:
 Tab silently does nothing. The keypress is consumed, `buttonA` genuinely
 gave up focus — just one frame later than `buttonB` needed to see it.
 
-## The fix: focus changes are immediate
+## Focus changes apply immediately
 
 `setFocus` and `clearFocus` mutate the ambient scope's focus state the
 moment they're called, not on a queue. Because the tree walk is sequential,

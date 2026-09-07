@@ -1,4 +1,4 @@
-# 3. Bounds
+# Bounds
 
 ## There is no layout tree — just a rectangle
 
@@ -63,20 +63,18 @@ replacement is scoped exactly to the sub-tree `withBounds` wraps:
 measurement: it wraps a sub-tree so that anything it draws outside the
 current bounds is discarded, rather than spilling over a sibling.
 
-## Bounds don't persist — unlike what's next
+## Bounds are recomputed every frame
 
-Unlike element identity's bookkeeping, or the effects and focus state
-covered next, bounds are not carried across frames at all: they're
-recomputed top-down, fresh, every single frame, from whatever the root
-bounds are this time. There's nothing to key by element identity here,
-because there's nothing to remember between frames in the first place.
+Bounds do not persist across frames. They are recalculated top-down from
+the root bounds on every frame, so there is no per-element bookkeeping to
+key by identity here, in contrast to focus and scroll state.
 
-`getBounds`/`withBounds`/`clipToCurrent` are the entire vocabulary at this
-level — there's no concept here of a child "requesting" a size, or of a
-parent negotiating space among several children at once. That gap is
-filled by `Element`, one layer up — see
-[`../02-elements/01-introduction.md`](../02-elements/01-introduction.md), once
-you've read the rest of this folder.
+`getBounds`, `withBounds`, and `clipToCurrent` cover measurement and
+clipping at this level. Requesting a preferred size for a child, or
+splitting space among several children, is handled by `Element`, one layer
+up — see
+[`../02-elements/01-introduction.md`](../02-elements/01-introduction.md),
+once the rest of this folder has been read.
 
 Next: [section 4](04-effects.md) covers the first kind of state that
 *does* persist — and how a view changes it without mutating anything

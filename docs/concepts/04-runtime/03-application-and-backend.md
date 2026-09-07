@@ -1,4 +1,4 @@
-# 3. `App` and the backend pipeline
+# App and the backend pipeline
 
 [The frame loop](01-the-frame-loop.md) covered what happens inside a
 single call to `stepFrame`. This section covers where that call comes

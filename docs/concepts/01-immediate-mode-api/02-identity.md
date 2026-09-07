@@ -1,4 +1,4 @@
-# 2. Element identity
+# Element identity
 
 A view is rebuilt from scratch every frame — there's no persistent
 `Button` object for Blink to recognize as "the same button" across frames.

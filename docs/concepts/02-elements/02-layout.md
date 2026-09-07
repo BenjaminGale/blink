@@ -1,4 +1,4 @@
-# 2. Composing containers
+# Composing containers
 
 `hBox`, `vBox`, and `borderLayout` are `Blink.View.Layout`'s concrete
 application of [`Element` and the attribute mechanism](01-introduction.md)

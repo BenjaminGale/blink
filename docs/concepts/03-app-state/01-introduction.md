@@ -1,4 +1,4 @@
-# 1. The `Update` monad
+# The Update monad
 
 [Effects](../01-immediate-mode-api/04-effects.md) established that
 `update` folds each queued message into your application state, once per
