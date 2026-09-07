@@ -4,7 +4,7 @@ module Blink.View.Controls.ProgressBarSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.View.Controls.Control (Attribute, elementId)
+import Blink.View.Controls.Control (Attribute, elementId, isEnabled)
 import Blink.View.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.View.Controls.ElementBehaviour (tagged)
 import Blink.View.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
@@ -139,3 +139,14 @@ spec = describe "Blink.View.Controls.ProgressBar" $ do
     it "does not request animation for a determinate bar" $ do
       ctx <- run [progress (Progress 0.5)]
       contextRequiresAnimation ctx `shouldBe` False
+
+    it "stops requesting animation once disabled" $ do
+      ctx <- snd <$> runView (runElement (progressBar [progress Indeterminate, isEnabled False])) elapsedCtx
+      contextRequiresAnimation ctx `shouldBe` False
+
+    it "holds the band still while disabled, even as the animation clock keeps advancing" $ do
+      let attrs         = [progress Indeterminate, isEnabled False]
+          laterElapsedCtx = nextFrameContext testBounds noInput testTheme (mkAnimationState 0 5 False) seedCtx
+      atOneSecond  <- snd <$> runView (runElement (progressBar attrs)) elapsedCtx
+      atFiveSeconds <- snd <$> runView (runElement (progressBar attrs)) laterElapsedCtx
+      getDrawCommands atFiveSeconds `shouldBe` getDrawCommands atOneSecond

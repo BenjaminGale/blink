@@ -624,6 +624,12 @@ data ControlInteraction e msg = ControlInteraction
     -- grab just starting" -- a fact only available from before the frame
     -- began, the same reason a plain live 'isDragging' read from inside
     -- content can't recover it.
+  , ciDisabled     :: Bool
+    -- ^ Whether this control is disabled, either directly
+    -- ('Blink.View.Controls.Control.isEnabled') or via an enclosing
+    -- 'Blink.View.disableWhen'. Content that only animates while live (e.g.
+    -- 'Blink.View.Controls.ProgressBar.progressBar's indeterminate band)
+    -- should check this rather than calling 'Blink.View.isDisabled' itself.
   , ciStyle        :: Style
   }
 
@@ -644,6 +650,7 @@ noInteraction s = ControlInteraction
   , ciFocusLost    = False
   , ciKeysPressed  = []
   , ciWasDragging  = False
+  , ciDisabled     = False
   , ciStyle        = s
   }
 
@@ -871,8 +878,9 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       disabled    <- isDisabled
       let active = intrinsicStates disabled (noInteraction (styleBase styles)) `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
-      renderStyled m s (ccContent cc (noInteraction s))
-      pure (noInteraction s)
+          interaction = (noInteraction s) { ciDisabled = disabled }
+      renderStyled m s (ccContent cc interaction)
+      pure interaction
 
     renderTracked eid = do
       disabled <- isDisabled
@@ -934,6 +942,7 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
             , ciFocusLost    = fiFocusLost focusI
             , ciKeysPressed  = fiKeysPressed focusI
             , ciWasDragging  = wasDragging
+            , ciDisabled     = disabled
             }
       fireElementEvents cc interaction
       pure interaction

@@ -265,8 +265,8 @@ rowAnimate s =
 rowProgress :: AppState -> Element ControlId Msg
 rowProgress s =
   if animating s
-    then progressBar (rowLayout ++ [progress Indeterminate])
-    else progressBar (rowLayout ++ [progress (Progress (fromIntegral (clickCount s) / 50))])
+    then progressBar (rowLayout ++ [progress Indeterminate, isEnabled (editingEnabled s)])
+    else progressBar (rowLayout ++ [progress (Progress (fromIntegral (clickCount s) / 50)), isEnabled (editingEnabled s)])
 
 rowSlider :: AppState -> Element ControlId Msg
 rowSlider s =

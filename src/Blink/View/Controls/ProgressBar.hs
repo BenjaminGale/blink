@@ -92,9 +92,9 @@ progressBar attrs = Element
     cfg  = resolve defaultProgressBarConfig attrs
     ctrl = (pbControl cfg)
       { ccFocusPolicy  = NotFocusable
-      , ccContent      = const body
+      , ccContent      = body
       }
-    body = do
+    body ci = do
       s <- currentStyle
       r <- getBounds
       case pbValue cfg of
@@ -103,8 +103,10 @@ progressBar attrs = Element
               fillRect' = r { rectWidth = rectWidth r * clamped }
           withBounds fillRect' $ fillRect (styleTextColour s)
         Indeterminate -> do
-          requiresAnimation
-          elapsed <- getAnimElapsed
+          -- Disabled: hold the band still rather than tracking the live
+          -- animation clock, which keeps advancing for as long as
+          -- anything else in the view still animates.
+          elapsed <- if ciDisabled ci then pure 0 else requiresAnimation >> getAnimElapsed
           let speed = pbBandSpeed cfg
               t     = realToFrac elapsed * speed
               phase = t - fromIntegral (floor t :: Int)
