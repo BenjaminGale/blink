@@ -417,10 +417,11 @@ data EntryPolicy
 -- same id would swap the ambient out from under those checks.
 --
 -- Both 'FocusScope' cases still need the caller ('control' itself) to
--- skip this control's own ordinary Tab\/Shift-Tab handling -- run
--- unconditionally, it would see focus-within as "I'm focused" and give up
--- the instant Tab is pressed, before any child ever gets a chance to
--- react.
+-- skip this control's own ordinary Tab\/Shift-Tab handling before @body@
+-- runs -- run unconditionally there, it would see focus-within as "I'm
+-- focused" and give up the instant Tab is pressed, before any child ever
+-- gets a chance to react. 'runFocusScope' runs it itself instead, once
+-- @body@ has already had its turn -- see there.
 applyFocusPolicy :: Ord e => e -> FocusPolicy -> View e msg a -> View e msg a
 applyFocusPolicy eid policy body = case policy of
   NotFocusable            -> body
@@ -430,8 +431,11 @@ applyFocusPolicy eid policy body = case policy of
     runFocusScope eid (Just (NavigationKeys [navForward nav] [navBackward nav], navEntry nav)) (navWrap nav) body
 
 -- | Runs @body@ (a 'FocusScope' control's content) inside its own focus
--- scope. @keys@, when given, replaces the ambient Tab\/Shift-Tab pair
--- children see with the 'Contained' scheme's own, and seeds the scope with
+-- scope, then this control's own reaction to whichever Tab\/Shift-Tab
+-- keys are ambient *outside* it -- captured before anything below can
+-- replace them, so it always means real Tab\/Shift-Tab regardless of
+-- @keys@. @keys@, when given, replaces the pair @body@'s own descendants
+-- see with the 'Contained' scheme's own, and seeds the scope with
 -- 'EnterRemembered' if that's what the entry policy calls for and the
 -- scope is being freshly claimed this frame (nothing already claimed
 -- inside) -- 'Nothing' ('Continue') leaves the ambient keys and entry
@@ -455,7 +459,7 @@ applyFocusPolicy eid policy body = case policy of
 -- whichever child rendered last (every focusable child claims it as it
 -- renders, unconditionally), so the *first* child to retreat would
 -- otherwise wrap around to the last one -- the behaviour 'WrapCycle'
--- wants, but not 'WrapStop'. Seeded after 'EnterRemembered' (below) has
+-- wants, but not 'WrapStop'. Seeded after 'EnterRemembered' (above) has
 -- already read this scope's own genuine history, so that still works. A
 -- child that does have a real predecessor this frame (it isn't the first
 -- to render) overwrites this placeholder with a real id before any
@@ -475,18 +479,28 @@ applyFocusPolicy eid policy body = case policy of
 -- built into every control simply refills it with whichever child renders
 -- first next time, the same mechanism that resolves 'EnterFirst'.
 --
--- A retreat that found the placeholder leaves its key un-consumed (see
--- 'advanceOrRetreat') rather than swallowing it, so once the scope closes
--- and the ambient\/current-scope are back to whatever encloses this
--- control, re-running 'advanceOrRetreat' here (advancing disabled, so this
--- can only retreat) lets this control hand off to *its own* previous tab
--- stop -- exactly as an ordinary focusable control would if it had
--- received the key directly. A no-op if something inside handled the key
--- itself (already consumed) or nothing was focused to begin with.
+-- Finally, this control runs its own ordinary 'advanceOrRetreat' against
+-- the ambient keys captured up front -- the *same* call for either
+-- 'ChildNavigation', letting each produce the right outcome on its own
+-- rather than branching on which one this is:
+--
+--   ['Contained']: descendants never see Tab\/Shift-Tab at all (@keys@
+--   replaced them), so this call always finds the key exactly as it
+--   arrived and reacts every time, regardless of which child (if any) is
+--   selected inside -- Tab\/Shift-Tab always leaves the scope, as a
+--   single ordinary stop.
+--
+--   ['Continue']: descendants see and react to real Tab\/Shift-Tab
+--   directly. An advancing descendant always consumes it immediately
+--   (whether or not it was the last one) -- the @wrap@\/@stillFocused@
+--   check above, not this call, is what notices the boundary was reached
+--   for that direction. A retreating descendant consumes it too, unless
+--   it hit the placeholder above -- so this call only ever finds a live
+--   retreat key at that same boundary, and is a no-op everywhere else.
 runFocusScope :: Ord e => e -> Maybe (NavigationKeys, EntryPolicy) -> WrapPolicy -> View e msg a -> View e msg a
-runFocusScope eid mKeysEntry wrap body =
+runFocusScope eid mKeysEntry wrap body = do
+  ambientKeys <- getNavigationKeys
   maybe id (withNavigationKeys . fst) mKeysEntry $ do
-    wasFocused <- isFocused eid
     (a, stillFocused) <- withFocusScope eid BlockFreshClaim $ do
       wasEmpty <- isNothingFocused <$> getFocus
       case mKeysEntry of
@@ -496,15 +510,18 @@ runFocusScope eid mKeysEntry wrap body =
           forM_ mPrev (requestFocus scopeId)
         _ -> pure ()
       when (wrap == WrapStop) (setPreviousTabStop eid)
-      a       <- body
+      a <- body
+      case mKeysEntry of
+        Just _ | wrap == WrapStop -> do
+          mPrev      <- getPreviousTabStop
+          stillHasIt <- maybe (pure False) isFocused mPrev
+          when (not stillHasIt) (forM_ mPrev setFocus)
+        _ -> pure ()
       focused <- not . isNothingFocused <$> getFocus
       pure (a, focused)
     when (wrap == WrapStop && not stillFocused) clearFocus
-    when (wrap == WrapStop) $ do
-      retreatKeys <- case mKeysEntry of
-        Just (keys, _) -> pure (navRetreat keys)
-        Nothing        -> navRetreat <$> getNavigationKeys
-      advanceOrRetreat wasFocused [] retreatKeys
+    wasFocused <- isFocused eid
+    advanceOrRetreat wasFocused (navAdvance ambientKeys) (navRetreat ambientKeys)
     pure a
 
 -- * Control

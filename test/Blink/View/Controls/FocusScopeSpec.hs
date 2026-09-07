@@ -6,7 +6,7 @@ import Test.Hspec
 
 import Blink.View.Controls.Control
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
-import Blink.Input (InputState (..))
+import Blink.Input (InputState (..), Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.View.Rendering (Colour (..), TextAlign (..))
 import Blink.View.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
@@ -96,6 +96,17 @@ renderAll policy = do
   composite policy [] []
   leaf After rectAfter []
 
+-- | A 'ContainedNavigation' scheme using Down\/Up as the forward\/backward
+-- keys (Tab stays owned by the composite as a whole), with the given
+-- wrap and entry policies.
+arrowNav :: WrapPolicy -> EntryPolicy -> ContainedNavigation
+arrowNav wrap entry = ContainedNavigation
+  { navForward  = (KeyDown, [])
+  , navBackward = (KeyUp, [])
+  , navWrap     = wrap
+  , navEntry    = entry
+  }
+
 -- | Whether @eid@ is the innermost currently-focused element, following
 -- the chain through any nested 'FocusScope's rather than only checking
 -- the outermost ambient claim.
@@ -105,7 +116,7 @@ focusedOn eid result = case contextFocusChain (resultContext result) of
   xs -> last xs == eid
 
 spec :: Spec
-spec = describe "Blink.View.Controls.Control.FocusScope" $
+spec = describe "Blink.View.Controls.Control.FocusScope" $ do
   describe "Continue" $ do
     let policy = FocusScope Continue
 
@@ -172,3 +183,65 @@ spec = describe "Blink.View.Controls.Control.FocusScope" $
       it "Child3 -> Child4" $ do
         result <- runInteractions testBounds seedCtx renderTwo [Wait 1, Tab, Wait 1, Tab, Wait 1] [Tab, Wait 1]
         focusedOn Child4 result `shouldBe` True
+
+  describe "Contained" $ do
+    describe "entering and leaving the group" $ do
+      let policy = FocusScope (Contained (arrowNav WrapCycle EnterFirst))
+
+      it "Tab from Before lands on Child1 (EnterFirst)" $ do
+        result <- runInteractions testBounds seedCtx (renderAll policy) [Wait 1] [Tab, Wait 1]
+        focusedOn Child1 result `shouldBe` True
+
+      it "Tab leaves the group for After, regardless of which child was selected" $ do
+        result <- runInteractions testBounds seedCtx (renderAll policy) [Wait 1, Tab, Wait 1, PressKey KeyDown [], Wait 1] [Tab, Wait 1]
+        focusedOn After result `shouldBe` True
+
+      it "Shift-Tab leaves the group for Before, regardless of which child was selected" $ do
+        result <- runInteractions testBounds seedCtx (renderAll policy) [Wait 1, Tab, Wait 1] [ShiftTab, Wait 1]
+        focusedOn Before result `shouldBe` True
+
+    describe "moving between children with the arrow keys" $ do
+      let policy = FocusScope (Contained (arrowNav WrapCycle EnterFirst))
+
+      it "Down moves Child1 -> Child2" $ do
+        result <- runInteractions testBounds seedCtx (renderAll policy) [Wait 1, Tab, Wait 1] [PressKey KeyDown [], Wait 1]
+        focusedOn Child2 result `shouldBe` True
+
+      it "Up moves Child2 -> Child1" $ do
+        result <- runInteractions testBounds seedCtx (renderAll policy) [Wait 1, Tab, Wait 1, PressKey KeyDown [], Wait 1] [PressKey KeyUp [], Wait 1]
+        focusedOn Child1 result `shouldBe` True
+
+    describe "WrapCycle" $ do
+      let policy = FocusScope (Contained (arrowNav WrapCycle EnterFirst))
+
+      it "Down from the last child wraps to the first" $ do
+        result <- runInteractions testBounds seedCtx (renderAll policy) [Wait 1, Tab, Wait 1, PressKey KeyDown [], Wait 1] [PressKey KeyDown [], Wait 1]
+        focusedOn Child1 result `shouldBe` True
+
+      it "Up from the first child wraps to the last" $ do
+        result <- runInteractions testBounds seedCtx (renderAll policy) [Wait 1, Tab, Wait 1] [PressKey KeyUp [], Wait 1]
+        focusedOn Child2 result `shouldBe` True
+
+    describe "WrapStop" $ do
+      let policy = FocusScope (Contained (arrowNav WrapStop EnterFirst))
+
+      it "Down from the last child stays put" $ do
+        result <- runInteractions testBounds seedCtx (renderAll policy) [Wait 1, Tab, Wait 1, PressKey KeyDown [], Wait 1] [PressKey KeyDown [], Wait 1]
+        focusedOn Child2 result `shouldBe` True
+
+      it "Up from the first child stays put" $ do
+        result <- runInteractions testBounds seedCtx (renderAll policy) [Wait 1, Tab, Wait 1] [PressKey KeyUp [], Wait 1]
+        focusedOn Child1 result `shouldBe` True
+
+      it "Tab still leaves the group even when stopped at the last child" $ do
+        result <- runInteractions testBounds seedCtx (renderAll policy) [Wait 1, Tab, Wait 1, PressKey KeyDown [], Wait 1] [Tab, Wait 1]
+        focusedOn After result `shouldBe` True
+
+    describe "EnterRemembered" $ do
+      let policy = FocusScope (Contained (arrowNav WrapCycle EnterRemembered))
+
+      it "re-entering the group after selecting Child2 lands back on Child2" $ do
+        result <- runInteractions testBounds seedCtx (renderAll policy)
+          [Wait 1, Tab, Wait 1, PressKey KeyDown [], Wait 1, Tab, Wait 1]
+          [ShiftTab, Wait 1, Wait 1]
+        focusedOn Child2 result `shouldBe` True
