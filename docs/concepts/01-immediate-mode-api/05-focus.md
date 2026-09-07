@@ -79,7 +79,7 @@ deciding "should I take the mouse?" needs to see what the *previous*
 sibling in this same frame just decided, or two overlapping elements could
 both believe they have it.
 
-## Why effects don't have this problem
+## Effects do not have this problem
 
 Contrast this with [Effects](04-effects.md): nothing else in the tree is
 racing to claim "the" scroll offset of a particular list — only that

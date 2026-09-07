@@ -1,4 +1,4 @@
-# Why immediate mode
+# Immediate mode
 
 Most GUI toolkits are **retained-mode**: you build a tree of widget objects
 once, hand it to the toolkit, and then *mutate* that tree as your
@@ -37,7 +37,7 @@ There's no `label.setText`, because there's no `label` object sitting
 around waiting to be told about a text change — next frame, the view just
 runs again with the new state and draws the new text directly.
 
-## What this buys you
+## Benefits
 
 * **The view cannot drift from state.** It is a pure function of state,
   recomputed every frame. There is no setter to forget to call, because
@@ -49,7 +49,7 @@ runs again with the new state and draws the new text directly.
   function is the conditional rendering; no separate "conditional
   component" API is needed.
 
-## What it costs
+## Costs
 
 * **The view runs every frame**, not just on change — some work your view
   does (a `map` over a list, building strings) happens repeatedly even when

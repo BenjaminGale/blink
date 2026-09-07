@@ -68,7 +68,7 @@ can't: `fitContent`, which means "exactly as much as this element's own
 content needs," and there's no way to know that without asking the
 element itself. That's what `elMeasure` is for.
 
-## Why measuring needs its own pass, with its own rules
+## The measurement pass
 
 A container with a `fitContent` child (or one that's itself sizing to
 content) has to call that child's `elMeasure` *before* it can decide how
