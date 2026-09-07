@@ -415,12 +415,97 @@ data EntryPolicy
 -- state directly (e.g. 'Blink.View.Controls.TextInput.textInput' checking
 -- 'isFocused' on its own id), and wrapping that in a scope keyed by the
 -- same id would swap the ambient out from under those checks.
+--
+-- Both 'FocusScope' cases still need the caller ('control' itself) to
+-- skip this control's own ordinary Tab\/Shift-Tab handling -- run
+-- unconditionally, it would see focus-within as "I'm focused" and give up
+-- the instant Tab is pressed, before any child ever gets a chance to
+-- react.
 applyFocusPolicy :: Ord e => e -> FocusPolicy -> View e msg a -> View e msg a
-applyFocusPolicy _eid policy body = case policy of
-  NotFocusable                -> body
-  Focusable                   -> body
-  FocusScope Continue         -> error "applyFocusPolicy: FocusScope Continue is not yet implemented"
-  FocusScope (Contained {})   -> error "applyFocusPolicy: FocusScope (Contained _) is not yet implemented"
+applyFocusPolicy eid policy body = case policy of
+  NotFocusable            -> body
+  Focusable               -> body
+  FocusScope Continue     -> runFocusScope eid Nothing WrapStop body
+  FocusScope (Contained nav) ->
+    runFocusScope eid (Just (NavigationKeys [navForward nav] [navBackward nav], navEntry nav)) (navWrap nav) body
+
+-- | Runs @body@ (a 'FocusScope' control's content) inside its own focus
+-- scope. @keys@, when given, replaces the ambient Tab\/Shift-Tab pair
+-- children see with the 'Contained' scheme's own, and seeds the scope with
+-- 'EnterRemembered' if that's what the entry policy calls for and the
+-- scope is being freshly claimed this frame (nothing already claimed
+-- inside) -- 'Nothing' ('Continue') leaves the ambient keys and entry
+-- behaviour alone, since children should behave exactly as if this
+-- control weren't there.
+--
+-- 'BlockFreshClaim': this scope's id is always the same id 'control'
+-- already claims (or doesn't) against the *enclosing* ambient via its own
+-- ordinary self-claim, before this function ever runs. 'AllowFreshClaim'
+-- would let the scope itself self-claim a second, uncontrolled time
+-- whenever nothing else is focused, bypassing that ordinary claim
+-- entirely.
+--
+-- 'WrapStop' also seeds the scope's own previous-tab-stop with this
+-- scope's own id, ahead of @body@ -- a value no descendant's id can ever
+-- equal, so 'advanceOrRetreat' reads it as "nothing to retreat to in
+-- here" (the same idiom 'Blink.View.withFocusScope' itself uses for its
+-- 'Blink.View.BlockFreshClaim' placeholder: when nothing else can honestly
+-- stand for "unset", a value nothing inside can ever be does instead).
+-- Without this, the scope's persisted previous-tab-stop is always
+-- whichever child rendered last (every focusable child claims it as it
+-- renders, unconditionally), so the *first* child to retreat would
+-- otherwise wrap around to the last one -- the behaviour 'WrapCycle'
+-- wants, but not 'WrapStop'. Seeded after 'EnterRemembered' (below) has
+-- already read this scope's own genuine history, so that still works. A
+-- child that does have a real predecessor this frame (it isn't the first
+-- to render) overwrites this placeholder with a real id before any
+-- retreat check can see it, so an ordinary internal move (e.g. second
+-- child back to first) is untouched.
+--
+-- TODO: revisit -- this placeholder is a workaround for there being no
+-- exported way to write a literal @Nothing@ into 'previousTabStop' (only
+-- 'setPreviousTabStop', which always writes @Just@); a cleaner primitive
+-- upstream could remove the need for it.
+--
+-- After @body@ runs, if nothing is claimed inside any more, @wrap@
+-- decides what happens: 'WrapStop' gives up this control's own claim too
+-- (letting the surrounding order pick up where it left off, the same way
+-- an ordinary control already does on Tab); 'WrapCycle' does nothing --
+-- the scope stays claimed but empty, so the ordinary auto-claim already
+-- built into every control simply refills it with whichever child renders
+-- first next time, the same mechanism that resolves 'EnterFirst'.
+--
+-- A retreat that found the placeholder leaves its key un-consumed (see
+-- 'advanceOrRetreat') rather than swallowing it, so once the scope closes
+-- and the ambient\/current-scope are back to whatever encloses this
+-- control, re-running 'advanceOrRetreat' here (advancing disabled, so this
+-- can only retreat) lets this control hand off to *its own* previous tab
+-- stop -- exactly as an ordinary focusable control would if it had
+-- received the key directly. A no-op if something inside handled the key
+-- itself (already consumed) or nothing was focused to begin with.
+runFocusScope :: Ord e => e -> Maybe (NavigationKeys, EntryPolicy) -> WrapPolicy -> View e msg a -> View e msg a
+runFocusScope eid mKeysEntry wrap body =
+  maybe id (withNavigationKeys . fst) mKeysEntry $ do
+    wasFocused <- isFocused eid
+    (a, stillFocused) <- withFocusScope eid BlockFreshClaim $ do
+      wasEmpty <- isNothingFocused <$> getFocus
+      case mKeysEntry of
+        Just (_, EnterRemembered) | wasEmpty -> do
+          scopeId <- getCurrentScope
+          mPrev   <- getPreviousTabStop
+          forM_ mPrev (requestFocus scopeId)
+        _ -> pure ()
+      when (wrap == WrapStop) (setPreviousTabStop eid)
+      a       <- body
+      focused <- not . isNothingFocused <$> getFocus
+      pure (a, focused)
+    when (wrap == WrapStop && not stillFocused) clearFocus
+    when (wrap == WrapStop) $ do
+      retreatKeys <- case mKeysEntry of
+        Just (keys, _) -> pure (navRetreat keys)
+        Nothing        -> navRetreat <$> getNavigationKeys
+      advanceOrRetreat wasFocused [] retreatKeys
+    pure a
 
 -- * Control
 
@@ -701,7 +786,14 @@ canAutoClaim eid cc = do
 -- consistently regardless of render order). Consumes whichever specific
 -- key matched, so nothing else reacts to the same press. Disabled controls
 -- never react.
-advanceOrRetreat :: Bool -> [(Key, [Modifier])] -> [(Key, [Modifier])] -> View e msg ()
+--
+-- A retreat whose 'previousTabStop' equals the current scope's own id
+-- (the placeholder 'runFocusScope' seeds for 'WrapStop' -- see there)
+-- means there's no real predecessor to hand off to in this scope; that
+-- case leaves the key un-consumed instead of swallowing it, so whatever
+-- encloses this scope gets a chance to react to it once this scope
+-- closes.
+advanceOrRetreat :: Eq e => Bool -> [(Key, [Modifier])] -> [(Key, [Modifier])] -> View e msg ()
 advanceOrRetreat wasFocused advanceKeys retreatKeys = do
   disabled <- isDisabled
   when (not disabled) $ do
@@ -711,9 +803,11 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
     let advanceHit = find (\e -> (key e, modifiers e) `elem` advanceKeys) evs
         retreatHit = find (\e -> (key e, modifiers e) `elem` retreatKeys) evs
     case (wasFocused, advanceHit, retreatHit) of
-      (True, Just e, _) -> clearFocus >> consumeKey (key e)
-      (True, _, Just e) -> forM_ prevCtrl (requestFocus scopeId) >> consumeKey (key e)
-      _                 -> pure ()
+      (True, Just e, _)
+        -> clearFocus >> consumeKey (key e)
+      (True, _, Just e)
+        | prevCtrl /= scopeId -> forM_ prevCtrl (requestFocus scopeId) >> consumeKey (key e)
+      _ -> pure ()
 
 -- | Watches this control's hover, mouse-button, keyboard, and focus
 -- activity for the current frame, manages its keyboard focus, reports the
@@ -758,7 +852,12 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       wasFocused   <- isFocused eid
       currentScope <- getCurrentScope
       applySelfFocus eid wasFocused
-      applyNavigationKeys wasFocused
+      -- A 'FocusScope' control owns no Tab\/Shift-Tab reaction of its own
+      -- here -- see 'runFocusScope'. Everything else reacts exactly as it
+      -- always has.
+      case ccFocusPolicy cc of
+        FocusScope {} -> pure ()
+        _             -> applyNavigationKeys wasFocused
       nowFocused <- isFocused eid
       fireFocusChangeDirect cc (focusTransition wasFocused nowFocused)
       (m, styles) <- getStyleSet styleKey

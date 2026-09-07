@@ -98,6 +98,7 @@ test-suite blink-tests
         Blink.View.Controls.DividerSpec
         Blink.View.Controls.ElementBehaviour
         Blink.View.Controls.FixedFocusBehaviour
+        Blink.View.Controls.FocusScopeSpec
         Blink.View.Controls.LabelSpec
         Blink.View.Controls.ProgressBarSpec
         Blink.View.Controls.RadioButtonSpec
