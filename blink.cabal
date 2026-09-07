@@ -59,6 +59,7 @@ library
         Blink.View.Controls.Slider
         Blink.View.Controls.TextInput
         Blink.View.Controls.Toggle
+        Blink.View.Controls.ToggleGroup
         Blink.View.Element
         Blink.View.Layout
         Blink.View.Layout.Border
@@ -112,6 +113,7 @@ test-suite blink-tests
         Blink.View.Controls.SliderSpec
         Blink.View.Controls.TextInputSpec
         Blink.View.Controls.ToggleBehaviour
+        Blink.View.Controls.ToggleGroupSpec
         Blink.View.Controls.ToggleSpec
         Blink.View.LayoutSpec
         Blink.View.Style.DefaultsSpec

@@ -13,6 +13,7 @@ import qualified Blink.View.Controls.RadioButtonSpec as RadioButton
 import qualified Blink.View.Controls.RepeatButtonSpec as RepeatButton
 import qualified Blink.View.Controls.SliderSpec as Slider
 import qualified Blink.View.Controls.TextInputSpec as TextInput
+import qualified Blink.View.Controls.ToggleGroupSpec as ToggleGroup
 import qualified Blink.View.Controls.ToggleSpec as Toggle
 import qualified Blink.GeometrySpec as Geometry
 import qualified Blink.InputSpec as Input
@@ -35,6 +36,7 @@ main = hspec $ do
   Label.spec
   Button.spec
   Toggle.spec
+  ToggleGroup.spec
   Checkbox.spec
   ProgressBar.spec
   RadioButton.spec

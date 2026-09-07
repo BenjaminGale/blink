@@ -13,6 +13,7 @@ module Blink.View.Controls
   , slider
   , divider
   , textInput
+  , toggleGroup
   ) where
 
 import Blink.View.Controls.Button (button)
@@ -25,3 +26,4 @@ import Blink.View.Controls.RepeatButton (repeatButton)
 import Blink.View.Controls.Slider (slider)
 import Blink.View.Controls.TextInput (textInput)
 import Blink.View.Controls.Toggle (toggleButton)
+import Blink.View.Controls.ToggleGroup (toggleGroup)

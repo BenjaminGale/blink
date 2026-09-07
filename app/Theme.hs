@@ -17,6 +17,7 @@ module Theme
 import qualified Data.Map.Strict as Map
 
 import Blink.Geometry
+import Blink.View.Controls.ToggleGroup (ToggleGroupPart)
 import Blink.View.Rendering
 import Blink.View.Style
 import Blink.View.Style.Defaults (defaultTheme)
@@ -28,7 +29,7 @@ data Page = ControlsPage | ContinuePage | ContainedPage
 data ControlId = Label
              | FieldLabel ControlId
              | StatusBar
-             | SidebarPageButton Page
+             | SidebarPageButton (ToggleGroupPart Page)
              | DarkModeCheckbox
              | EditingCheckbox
              | ClickButton

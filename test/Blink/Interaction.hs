@@ -52,7 +52,18 @@ data Interaction
   | Click
     -- ^ 'MouseDown' then 'MouseUp' at the current tracked position (2 frames).
   | ClickAt Point
-    -- ^ 'MouseDown' then 'MouseUp' at the given point (2 frames).
+    -- ^ 'MouseDown' then 'MouseUp' at the given point (2 frames). Note this
+    -- clicks "cold" -- with no frame establishing the point as already
+    -- hovered first. For a control nested inside another identified
+    -- control (see "Blink.View.Controls.Control"'s occlusion\/capture
+    -- model), that differs from real mouse input, which always arrives at
+    -- a point on some earlier frame before a button event can happen
+    -- there: occlusion is judged against the *previous* frame's hit-rect
+    -- registrations, so a cold click can resolve differently (capture
+    -- going to the wrong nested control) than the same click preceded by
+    -- real movement. Precede with an explicit 'MoveTo' at the same point
+    -- (as setup, so it doesn't pollute asserted messages) when that
+    -- distinction matters to the control under test.
   | DragTo Point
     -- ^ One frame: mouse at the given point, button forced down — continues
     -- a drag started by an earlier 'MouseDown'.

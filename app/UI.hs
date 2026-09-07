@@ -19,6 +19,8 @@ import Blink.View.Controls.Slider (onValueChanged)
 import qualified Blink.View.Controls.Slider as Slider (value)
 import Blink.View.Controls.TextInput (displayFilter, onInput, value)
 import Blink.View.Controls.Toggle (isSelected, onSelectedChanged)
+import Blink.View.Controls.ToggleGroup
+  (groupOrientation, itemSpacing, items, onSelectionChanged, selectedItem, toggleAttributes)
 import Blink.Geometry
 import Blink.Input
 import Blink.View.Layout
@@ -335,24 +337,28 @@ pages =
   , (ContainedPage, "Contained")
   ]
 
--- | One button per 'Page', disabled for whichever page is already showing
--- -- both a lightweight "you are here" indicator and (since a disabled
--- control ignores clicks) preventing a pointless re-select.
+-- | A toggle group of one item per 'Page' -- selecting a page is exactly
+-- the "only one selected at a time" invariant 'toggleGroup' already
+-- enforces, so there's no need for the old hand-rolled "disable whichever
+-- page is already showing" trick: clicking the already-selected page is
+-- simply a no-op (see 'Blink.View.Controls.ToggleGroup.allowDeselect'),
+-- and the selected item's own look already says "you are here".
 sidebar :: AppState -> DemoUI ()
 sidebar s =
   runElement $ vBox
-    [ width fill, height fill, spacing 4, margin 12
+    [ width fill, height fill, margin 12
     , children
-        ( caption "Pages" [width fill, height (exactly 20), align TopLeft]
-        : [ sidebarButton page label' | (page, label') <- pages ]
-        )
+        [ toggleGroup SidebarPageButton
+            [ width fill, height fill, groupOrientation Vertical, itemSpacing 4
+            , items (map fst pages)
+            , toggleAttributes (\page -> [text (pageLabel page), width fill, height (exactly 32)])
+            , selectedItem (Just (currentPage s))
+            , onSelectionChanged (maybe [] (\page -> [OutMsg (SetPage page)]))
+            ]
+        ]
     ]
   where
-    sidebarButton page label' =
-      button (SidebarPageButton page)
-        [ text label', onActivated (post (SetPage page)), isEnabled (currentPage s /= page)
-        , width fill, height (exactly 32)
-        ]
+    pageLabel page = maybe "" id (lookup page pages)
 
 pageContent :: AppState -> DemoUI ()
 pageContent s = case currentPage s of
