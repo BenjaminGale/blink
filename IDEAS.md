@@ -128,41 +128,7 @@ a bespoke text-only field per control.
 
 ## Styling
 
-### Control classes
-Every control should belong to a class for its kind (e.g. all buttons share
-the "Button" class), so the library can ship sensible default styling for
-each kind of control without a theme having to style every element
-individually. This is a prerequisite for style classes below — user-defined
-classes only make sense once controls already have a notion of "what kind of
-thing am I" to attach to.
-
-### Style classes
-Depends on: Control classes
-
-Beyond the built-in per-kind styling above, there's no way for a theme to
-apply a shared, user-defined style to a set of controls by class — reusing
-one look across several elements means repeating that style for each one
-individually. A style attribute, settable per control instance, would let a
-theme define a style once and apply it wherever it's needed, overriding the
-control's class-level default.
-
-This gives three levels a control's style can come from, in order of
-precedence: a style attribute set directly on that control instance, its
-control class's default, and — for elements that aren't controls and so have
-no class to fall back on — an explicit style keyed to that specific element.
-
-### Built-in default styles per control
-Depends on: Control classes
-
-Once every control has a class to hang a default style off, the library
-itself should ship a sensible default style for each one, so a theme that
-sets nothing still gets a coherent, usable look out of the box rather than
-unstyled controls. Today getting anything to look right requires a theme to
-style every control explicitly.
-
 ### Pseudo styles for control sub-structures
-Depends on: Control classes
-
 A control class styles a control as a whole, but composite controls are
 made of several visually distinct parts — a checkbox has a container, a box,
 and a label, each of which may need its own default look. This extends the
