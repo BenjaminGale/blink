@@ -219,9 +219,10 @@ module Blink.View
   , clampScrollPos
   , contextScrollState
     -- * Selection
-    -- | See also "Blink.View.Selection" for
-    -- 'Blink.View.Selection.selectionLow', 'Blink.View.Selection.cursor',
-    -- and the rest of the pure helpers built on 'Selection'.
+    -- | 'Selection' itself, and the pure helpers built on it
+    -- ('Blink.View.Selection.selectionLow', 'Blink.View.Selection.cursor',
+    -- etc.), live in "Blink.View.Selection"; re-exported here since a
+    -- 'Selection' is threaded through 'ViewContext'.
   , Selection (..)
   , getSelection
   , contextSelection
@@ -328,6 +329,7 @@ import Blink.View.Focus
   , FocusTracker (..), emptyFocusTracker, lookupScope, nextFocusTrackerFrame
   , FreshClaim (..), ScopeMode (..), scopeMode
   )
+import Blink.View.Selection (Selection (..))
 import Blink.Geometry (Point, Rectangle, Size, containsPoint)
 import Blink.Input
   ( Key (..), KeyEvent (..), Modifier (..), InputState (..)
@@ -366,15 +368,6 @@ mkAnimationState delta elapsed isTick = AnimationState
 -- | Per-instance scroll position in @[0, 1]@.
 newtype ScrollState = ScrollState { scrollPosition :: Double }
   deriving (Eq, Ord, Show)
-
--- | A contiguous selection or cursor within a linear sequence. The selected
--- range is @(min anchor active, max anchor active)@. When @anchor == active@
--- the selection is a cursor with no extent.
-data Selection = Selection
-  { selectionAnchor :: Int  -- ^ The fixed end.
-  , selectionActive :: Int  -- ^ The moving end (cursor position).
-  }
-  deriving (Eq, Show)
 
 -- | A cross-frame presentation effect: a scroll, selection, or explicit
 -- focus change that takes effect starting the next frame rather than

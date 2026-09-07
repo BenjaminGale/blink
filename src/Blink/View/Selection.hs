@@ -1,14 +1,19 @@
 {- |
 Module: Blink.View.Selection
 
-Pure helpers built on top of "Blink.View"'s 'Selection' type: reading the
-low\/high bound of a range, collapsing it to a cursor, and moving its
-active end. None of these touch 'Blink.View.ViewContext' -- read the
-current selection with 'Blink.View.getSelection' and pass the result
-through these.
+A contiguous selection or cursor within a linear sequence, plus pure
+helpers built on top of it: reading the low\/high bound of a range,
+collapsing it to a cursor, and moving its active end.
+
+No dependency on the 'Blink.View' monad -- 'Blink.View' holds a
+'Selection' in its context and exposes monadic accessors
+('Blink.View.getSelection', 'Blink.View.contextSelection') built on top of
+what's defined here, the same relationship "Blink.View.Focus" has with the
+focus state 'Blink.View' threads through its own context.
 -}
 module Blink.View.Selection
-  ( selectionLow
+  ( Selection (..)
+  , selectionLow
   , selectionHigh
   , selectionHasExtent
   , cursor
@@ -18,7 +23,14 @@ module Blink.View.Selection
   , extendActive
   ) where
 
-import Blink.View (Selection (..))
+-- | A contiguous selection or cursor within a linear sequence. The selected
+-- range is @(min anchor active, max anchor active)@. When @anchor == active@
+-- the selection is a cursor with no extent.
+data Selection = Selection
+  { selectionAnchor :: Int  -- ^ The fixed end.
+  , selectionActive :: Int  -- ^ The moving end (cursor position).
+  }
+  deriving (Eq, Show)
 
 -- | The lower bound of the selected range: @min selectionAnchor selectionActive@.
 selectionLow :: Selection -> Int
