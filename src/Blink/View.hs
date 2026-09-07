@@ -429,7 +429,6 @@ data Out e msg
   | OutUi (UiEffect e)
   deriving (Eq, Show)
 
--- | Which element (if any) a scope currently has focused, and whether that
 -- | Cross-frame presentation state. Persists unchanged across frames; never
 -- exposed to the application. Scroll position is tracked per element
 -- (@elmScrollStates@); selection is tracked for at most one element at a
