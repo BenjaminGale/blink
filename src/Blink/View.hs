@@ -214,6 +214,9 @@ module Blink.View
   , emit
   , emitUi
     -- * Scroll state
+    -- | 'ScrollState' and 'clampScrollPos' live in "Blink.View.Scroll";
+    -- re-exported here since a 'ScrollState' is threaded through
+    -- 'ViewContext'.
   , ScrollState
   , getScrollState
   , clampScrollPos
@@ -285,6 +288,9 @@ module Blink.View
   , contextFocus
   , contextFocusChain
   , contextPreviousTabStop
+    -- | 'NavigationKeys' and 'defaultNavigationKeys' live in
+    -- "Blink.View.Navigation"; re-exported here since a 'NavigationKeys'
+    -- is threaded through 'ViewContext'.
   , NavigationKeys (..)
   , defaultNavigationKeys
   , getNavigationKeys
@@ -307,6 +313,9 @@ module Blink.View
   , disableWhen
   , whenEnabled
     -- * Animation
+    -- | 'AnimationState' and 'mkAnimationState' live in
+    -- "Blink.View.Animation"; re-exported here since an 'AnimationState'
+    -- is threaded through 'ViewContext'.
   , AnimationState (animDelta, animElapsed, animIsTick)
   , mkAnimationState
   , requiresAnimation
@@ -330,6 +339,9 @@ import Blink.View.Focus
   , FreshClaim (..), ScopeMode (..), scopeMode
   )
 import Blink.View.Selection (Selection (..))
+import Blink.View.Animation (AnimationState (..), mkAnimationState)
+import Blink.View.Scroll (ScrollState (..), clampScrollPos)
+import Blink.View.Navigation (NavigationKeys (..), defaultNavigationKeys)
 import Blink.Geometry (Point, Rectangle, Size, containsPoint)
 import Blink.Input
   ( Key (..), KeyEvent (..), Modifier (..), InputState (..)
@@ -339,35 +351,6 @@ import Blink.Input
   , HitRect (..)
   )
 import Blink.View.Style (Style, StyleSet, Metrics, StyleKey (..), Theme (..), resolveStyle)
-
--- | Per-frame animation state threaded through the 'ViewContext'. Set by the
--- backend at the start of each frame; read by 'withAnimationFrame' and
--- 'getAnimDelta'.
-data AnimationState = AnimationState
-  { animDelta   :: Float
-    -- ^ Wall-clock seconds elapsed since the previous frame, clamped to
-    -- @[0, 0.1]@ seconds. Zero on the first frame.
-  , animElapsed :: Float
-    -- ^ Total wall-clock seconds elapsed since the application started,
-    -- accumulated from 'animDelta' each frame.
-  , animIsTick  :: Bool
-    -- ^ 'True' when this frame was triggered by the animation ticker rather
-    -- than a platform input event.
-  }
-
--- | Constructs an 'AnimationState', clamping the delta to @[0, 0.1]@ seconds
--- so the bound documented on 'animDelta' holds regardless of caller — the
--- constructor itself isn't exported, so this is the only way to build one.
-mkAnimationState :: Float -> Float -> Bool -> AnimationState
-mkAnimationState delta elapsed isTick = AnimationState
-  { animDelta   = max 0 (min 0.1 delta)
-  , animElapsed = elapsed
-  , animIsTick  = isTick
-  }
-
--- | Per-instance scroll position in @[0, 1]@.
-newtype ScrollState = ScrollState { scrollPosition :: Double }
-  deriving (Eq, Ord, Show)
 
 -- | A cross-frame presentation effect: a scroll, selection, or explicit
 -- focus change that takes effect starting the next frame rather than
@@ -682,10 +665,6 @@ writeSelection :: e -> Selection -> ViewContext e msg -> ViewContext e msg
 writeSelection eid sel ctx = ctx { ctxElements = (ctxElements ctx)
   { elmSelection = Just (eid, sel) } }
 
--- | Clamp a scroll position to @[0, 1]@.
-clampScrollPos :: Double -> Double
-clampScrollPos = max 0 . min 1
-
 -- | The current layout rectangle. Set by the layout system via 'withBounds'.
 getBounds :: View e msg Rectangle
 getBounds = gets ctxBounds
@@ -761,25 +740,6 @@ setPreviousTabStop eid = modifyFocusState $ \fs -> fs { previousTabStop = Just e
 -- it still targets the right scope when called from inside one.
 getCurrentScope :: View e msg (Maybe e)
 getCurrentScope = gets ctxCurrentScope
-
--- | The specific key\/modifier combinations that currently mean "give up
--- focus here and let the next render claim it" ('navAdvance') or "return to
--- whichever tab stop was previous" ('navRetreat'). Every
--- 'Blink.View.Controls.Control.control' consults this instead of a hardcoded Tab\/
--- Shift-Tab, so a container can redefine it for its own children by
--- opening a new ambient set around them with 'withNavigationKeys'.
-data NavigationKeys = NavigationKeys
-  { navAdvance :: [(Key, [Modifier])]
-  , navRetreat :: [(Key, [Modifier])]
-  } deriving (Eq, Show)
-
--- | Plain Tab\/Shift-Tab — what every control uses unless some enclosing
--- container has redefined it. The root ambient default.
-defaultNavigationKeys :: NavigationKeys
-defaultNavigationKeys = NavigationKeys
-  { navAdvance = [(KeyTab, [])]
-  , navRetreat = [(KeyTab, [Shift])]
-  }
 
 -- | The navigation keys currently ambient.
 getNavigationKeys :: View e msg NavigationKeys

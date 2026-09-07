@@ -40,10 +40,13 @@ library
         Blink.Input
         Blink.Update
         Blink.View
+        Blink.View.Animation
         Blink.View.Attribute
         Blink.View.Controls
         Blink.View.Drawing
         Blink.View.Focus
+        Blink.View.Navigation
+        Blink.View.Scroll
         Blink.View.Selection
         Blink.View.Controls.Button
         Blink.View.Controls.Checkbox
