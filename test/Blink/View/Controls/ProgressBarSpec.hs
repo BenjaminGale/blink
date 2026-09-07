@@ -144,9 +144,7 @@ spec = describe "Blink.View.Controls.ProgressBar" $ do
       ctx <- snd <$> runView (runElement (progressBar [progress Indeterminate, isEnabled False])) elapsedCtx
       contextRequiresAnimation ctx `shouldBe` False
 
-    it "holds the band still while disabled, even as the animation clock keeps advancing" $ do
-      let attrs         = [progress Indeterminate, isEnabled False]
-          laterElapsedCtx = nextFrameContext testBounds noInput testTheme (mkAnimationState 0 5 False) seedCtx
-      atOneSecond  <- snd <$> runView (runElement (progressBar attrs)) elapsedCtx
-      atFiveSeconds <- snd <$> runView (runElement (progressBar attrs)) laterElapsedCtx
-      getDrawCommands atFiveSeconds `shouldBe` getDrawCommands atOneSecond
+    it "still draws the band at the live clock's position while disabled, so re-enabling doesn't jump" $ do
+      enabledCtx  <- snd <$> runView (runElement (progressBar [progress Indeterminate])) elapsedCtx
+      disabledCtx <- snd <$> runView (runElement (progressBar [progress Indeterminate, isEnabled False])) elapsedCtx
+      getDrawCommands disabledCtx `shouldBe` getDrawCommands enabledCtx

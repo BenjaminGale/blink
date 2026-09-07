@@ -15,7 +15,7 @@ module Blink.View.Controls.ProgressBar
   , bandSpeed
   ) where
 
-import Control.Monad (void)
+import Control.Monad (void, when)
 
 import Blink.View.Controls.Control
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
@@ -103,10 +103,8 @@ progressBar attrs = Element
               fillRect' = r { rectWidth = rectWidth r * clamped }
           withBounds fillRect' $ fillRect (styleTextColour s)
         Indeterminate -> do
-          -- Disabled: hold the band still rather than tracking the live
-          -- animation clock, which keeps advancing for as long as
-          -- anything else in the view still animates.
-          elapsed <- if ciDisabled ci then pure 0 else requiresAnimation >> getAnimElapsed
+          when (not (ciDisabled ci)) requiresAnimation
+          elapsed <- getAnimElapsed
           let speed = pbBandSpeed cfg
               t     = realToFrac elapsed * speed
               phase = t - fromIntegral (floor t :: Int)
