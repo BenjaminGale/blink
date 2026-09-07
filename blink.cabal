@@ -36,6 +36,7 @@ library
     exposed-modules:
         Blink
         Blink.App
+        Blink.Focus
         Blink.Geometry
         Blink.Input
         Blink.Update
