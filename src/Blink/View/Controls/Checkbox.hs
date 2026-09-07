@@ -82,7 +82,7 @@ checkbox eid attrs = Element
         strokeRect (styleTextColour s) (uniformBorder 1)
         when selected $ drawText (styleTextColour s) AlignCenter checkTick
     glyphContent = glyphCaptionContent glyphWidth labelGap drawBox (bcLabelled btn)
-    ctrl = (bcControl btn) { ccContent = glyphContent }
+    ctrl = (bcControl btn) { ccContent = const glyphContent }
     cfg' = cfg
       { tgcNext   = not
       , tgcButton = btn { bcControl = ctrl }

@@ -128,8 +128,8 @@ target t = Attribute (\c -> c { lblTarget = Just t })
 -- | Displays text (see 'text'). Unlike every other control built on
 -- 'control', a label never takes keyboard focus itself, whether by Tab
 -- or by being clicked: this is fixed behaviour, not a default -- 'label'
--- always overrides 'isFocusable' to 'False' itself, so it wins regardless
--- of what a caller passes. The only way a click on a label affects focus
+-- always overrides 'focusPolicy' to 'NotFocusable' itself, so it wins
+-- regardless of what a caller passes. The only way a click on a label affects focus
 -- at all is 'target': unlike a control taking focus for itself, which
 -- happens on mouse-down, redirecting focus onto a /different/ element only
 -- takes effect once the click completes -- so dragging off the label
@@ -152,7 +152,7 @@ label eid attrs = Element
   where
     cfg  = resolve defaultLabelConfig attrs
     ctrl = (lblControl cfg)
-      { ccIsFocusable = False
-      , ccContent     = renderLabelledContent (lblLabelled cfg)
+      { ccFocusPolicy = NotFocusable
+      , ccContent     = const (renderLabelledContent (lblLabelled cfg))
       , ccElementId   = Just eid
       }

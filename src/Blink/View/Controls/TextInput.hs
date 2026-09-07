@@ -300,10 +300,9 @@ textInput eid attrs = Element
   { elLayout  = ticLayout cfg
   , elMeasure = measureChrome (ccStyleKey (ticControl cfg)) (lineHeightElement (ticValue cfg))
   , elRun     = do
-      wasFocused   <- isFocused eid
-      wasCapturing <- isDragging eid
+      wasFocused <- isFocused eid
       let ctrl = (ticControl cfg)
-            { ccContent   = body wasFocused wasCapturing
+            { ccContent   = body wasFocused
             , ccElementId = Just eid
             }
       void (control ctrl)
@@ -317,16 +316,17 @@ textInput eid attrs = Element
     -- zero height.
     lineHeightElement t = captionElement (if T.null t then " " else t)
 
-    body wasFocused wasCapturing = do
+    body wasFocused ci = do
       let currentValue = ticValue cfg
       s        <- currentStyle
-      hasFocus <- isFocused eid
+      let hasFocus = ciFocused ci
       disabled <- isDisabled
       bounds   <- getBounds
       input    <- getInput
       sel      <- getSelection eid
       frac     <- getScrollState eid
-      gained   <- hasGainedFocus eid
+      let gained      = ciFocusGained ci
+          wasCapturing = ciWasDragging ci
 
       let displayValue = ticDisplayFilter cfg currentValue
           w           = rectWidth bounds
@@ -335,7 +335,7 @@ textInput eid attrs = Element
           -- same-frame claim (auto-claim, or Tab landing here) or a 'Focus'
           -- effect applied between frames (a click on this control, or
           -- Shift-Tab) -- 'hasFocus'\/'wasFocused' alone catch the former;
-          -- 'hasGainedFocus' reports the latter on the frame it takes effect.
+          -- 'ciFocusGained' reports the latter on the frame it takes effect.
           justFocused = (hasFocus && not wasFocused) || gained
           canEdit     = hasFocus && not disabled
 

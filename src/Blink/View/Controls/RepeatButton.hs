@@ -186,7 +186,7 @@ repeatButton eid attrs = Element
     -- Always 'ActivateOnPress' -- fixed behaviour, not a default (same
     -- idiom as 'Blink.View.Controls.RadioButton.radioButton' forcing 'tgcNext').
     btn = (rbButton cfg) { bcActivation = ActivateOnPress }
-    ctrl = (bcControl btn) { ccContent = renderLabelledContent (bcLabelled btn) }
+    ctrl = (bcControl btn) { ccContent = const (renderLabelledContent (bcLabelled btn)) }
 
     run = do
       -- 'buttonBase' itself fires 'onActivated' once already, off

@@ -207,11 +207,11 @@ slider eid attrs = Element
       { ccContent   = body
       , ccElementId = Just eid
       }
-    body = do
+    body ci = do
       s         <- currentStyle
       bounds    <- getBounds
       disabled  <- isDisabled
-      focused   <- isFocused eid
+      let focused = ciFocused ci
       capturing <- isDragging eid
       -- One frame behind the real hit test (see 'wasMouseOverLastFrame'),
       -- since 'body' has no access to this frame's own hover reading --

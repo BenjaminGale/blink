@@ -248,6 +248,8 @@ module Blink.View
   , registerMouseOver
   , wasMouseOverLastFrame
   , isAnyMouseOver
+  , registerHitRect
+  , isOccludedFor
   , isButtonDown
   , isButtonReleased
   , isDragging
@@ -326,6 +328,7 @@ import Blink.Input
   , MouseCapture (..), ButtonState (..), captureOf
   , HoverState (..), wasHit, nextHoverState
   , Mouse (..), emptyMouse, advanceHover, advanceButton
+  , HitRect (..)
   )
 import Blink.View.Style (Style, StyleSet, Metrics, StyleKey (..), Theme (..), resolveStyle)
 
@@ -1105,6 +1108,48 @@ wasMouseOverLastFrame eid = gets $ \ctx ->
 isAnyMouseOver :: View e msg Bool
 isAnyMouseOver = gets (not . Map.null . mouseHoverNext . ctxMouse)
 
+-- | Records this frame's current bounds as the element's hit-tested rect,
+-- tagged with a registration index one past whatever's already been
+-- registered this frame -- so visiting order (a control before whatever it
+-- goes on to render) is recoverable later via 'isOccludedFor'. Call only
+-- after a geometric hit test such as 'isRegionHit' succeeds (and the
+-- element is otherwise eligible, e.g. not disabled) -- an element nowhere
+-- near the pointer never needs an entry, which keeps this map's size
+-- proportional to whatever's actually under the pointer, not the size of
+-- the whole view.
+registerHitRect :: Ord e => e -> View e msg ()
+registerHitRect eid = do
+  r <- getBounds
+  modifyMouse $ \m ->
+    let idx = Map.size (mouseHitRectsNext m)
+    in m { mouseHitRectsNext = Map.insert eid (HitRect r idx) (mouseHitRectsNext m) }
+
+-- | 'True' when, per last frame's 'registerHitRect' calls, some other
+-- element was hit at the current mouse position with a higher registration
+-- index than this one -- i.e. something nested inside this element, or
+-- drawn after it, sat on top of it there. An element not registered last
+-- frame (just appeared, or wasn't hit) is never considered occluded --
+-- occlusion is judged against last frame's picture, so a control that is
+-- itself brand new at this spot fails open for one frame, the same
+-- trade-off overlapping-widget resolution in other immediate-mode
+-- GUIs (Dear ImGui, egui) accepts.
+--
+-- Meant to gate a control's own 'acquireCapture' (see
+-- 'Blink.View.Controls.Control.watchHover'): a container backs off letting
+-- a nested child it rendered after it — and which is consequently ahead of
+-- it in next frame's registration order — win capture for a click that
+-- landed on the child, instead of the container claiming it purely because
+-- its own hit test ran first.
+isOccludedFor :: Ord e => e -> View e msg Bool
+isOccludedFor eid = do
+  p    <- getMousePos
+  prev <- gets (mouseHitRectsPrev . ctxMouse)
+  case Map.lookup eid prev of
+    Nothing               -> pure False
+    Just (HitRect _ myIdx) -> pure $ any (occludes myIdx p) (Map.toList (Map.delete eid prev))
+  where
+    occludes myIdx p (_, HitRect r idx) = idx > myIdx && containsPoint p r
+
 -- | The currently ambient scope's focused element, if any — root's, unless
 -- inside 'withFocusScope'.
 getFocus :: View e msg (Maybe e)
@@ -1291,15 +1336,28 @@ withFocusScope scopeId freshClaim (View f) = View $ \ctx ->
 
     -- The blocked scope's descendants run against a value nothing inside
     -- recognises as itself, so nothing reads as an invitation to
-    -- auto-claim. If nothing claims anyway, the real ambient is restored
-    -- untouched; if something claims explicitly despite the block, it's
-    -- folded back exactly as 'runClaimed' would.
+    -- auto-claim. If something claims explicitly despite the block, it's
+    -- folded back exactly as 'runClaimed' would. If nothing claims
+    -- anyway, the real ambient is restored untouched, and this scope's
+    -- own saved claim is reaffirmed (same as 'runClaimed' reaffirms a
+    -- live one) rather than left alone -- otherwise it would only ever
+    -- be protected from the next-frame expiry while actually live, and
+    -- expire the instant it's merely not the live target, even though
+    -- this scope is still being rendered every frame. Reaffirming here
+    -- means it only really expires once this scope stops being visited
+    -- at all (its composite removed from the tree).
     runBlocked ctx blockValue = do
-      let real = ftAmbient (ctxFocus ctx)
+      let real      = ftAmbient (ctxFocus ctx)
+          persisted = lookupScope scopeId (ctxFocus ctx)
       (a, ctx') <- runWithAmbient (real { focusClaim = maybe Unclaimed ClaimedThisFrame blockValue }) ctx
       let after = ftAmbient (ctxFocus ctx')
       if currentFocus (focusClaim after) == blockValue
-        then pure (a, ctx' { ctxFocus = (ctxFocus ctx') { ftAmbient = real } })
+        then pure (a, ctx'
+          { ctxFocus = (ctxFocus ctx')
+              { ftAmbient = real
+              , ftScopes  = Map.insert scopeId (persisted { focusClaim = reaffirm (focusClaim persisted) })
+                              (ftScopes (ctxFocus ctx'))
+              } })
         else pure (a, foldBackAsClaim real after ctx')
 
     -- Swaps the ambient 'FocusState' for @ambient@, and 'ctxCurrentScope'

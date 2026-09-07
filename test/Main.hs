@@ -6,6 +6,7 @@ import qualified Blink.View.Controls.ButtonSpec as Button
 import qualified Blink.View.Controls.CheckboxSpec as Checkbox
 import qualified Blink.View.Controls.ControlSpec as Control
 import qualified Blink.View.Controls.DividerSpec as Divider
+import qualified Blink.View.Controls.FocusScopeSpec as FocusScope
 import qualified Blink.View.Controls.LabelSpec as Label
 import qualified Blink.View.Controls.ProgressBarSpec as ProgressBar
 import qualified Blink.View.Controls.RadioButtonSpec as RadioButton
@@ -30,6 +31,7 @@ main = hspec $ do
   Layout.spec
   Input.spec
   Control.spec
+  FocusScope.spec
   Label.spec
   Button.spec
   Toggle.spec

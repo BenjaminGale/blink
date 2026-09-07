@@ -6,8 +6,8 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.View.Controls.Control
-  ( Attribute, ControlConfig (..), ControlInteraction (..)
-  , control, defaultControlConfig, elementId, focusTargetOnClick, isEnabled, isFocusable
+  ( Attribute, ControlConfig (..), FocusPolicy (..)
+  , control, defaultControlConfig, elementId, focusTargetOnClick, isEnabled, focusPolicy
   , onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, resolve
   )
@@ -94,7 +94,7 @@ renderRedirect :: TestElement -> [Attribute'] -> TestElement -> [Attribute'] -> 
 renderRedirect fromId attrsFrom toId attrsTo = do
   withBounds rectA $ do
     scope <- getCurrentScope
-    ci    <- control (resolve defaultControlConfig (elementId fromId : isFocusable False : attrsFrom))
+    ci    <- control (resolve defaultControlConfig (elementId fromId : focusPolicy NotFocusable : attrsFrom))
     focusTargetOnClick scope toId ci
   withBounds rectB (renderAt toId attrsTo)
 
@@ -137,6 +137,75 @@ spec = describe "Blink.View.Controls.Control.control" $ do
       result <- runInteractions testBounds pressedSeedCtx (renderControl []) [] [MouseDown (Point 50 50)]
       getDrawCommands (resultContext result) `shouldContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
 
+    describe "with a nested child control" $ do
+      let rectChild = Rectangle 20 20 40 40
+          containerWithChild =
+            () <$ control (resolve
+              (defaultControlConfig { ccContent = const (withBounds rectChild (renderAt ElemB [])) })
+              [elementId ElemA])
+
+      it "draws the child in its pressed style when the mouse is held down over it" $ do
+        result <- runInteractions testBounds pressedSeedCtx containerWithChild [MoveTo (Point 40 40)] [MouseDown (Point 40 40)]
+        getDrawCommands (resultContext result) `shouldContain` [FillRect (insetRect (uniform 10) rectChild) pressedColour]
+
+      it "does not draw the container in its pressed style when the mouse is held down over the child instead" $ do
+        result <- runInteractions testBounds pressedSeedCtx containerWithChild [MoveTo (Point 40 40)] [MouseDown (Point 40 40)]
+        getDrawCommands (resultContext result) `shouldNotContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
+
+      it "still draws the container in its pressed style when the mouse is held down over empty space inside it, away from the child" $ do
+        result <- runInteractions testBounds pressedSeedCtx containerWithChild [MoveTo (Point 70 70)] [MouseDown (Point 70 70)]
+        getDrawCommands (resultContext result) `shouldContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
+
+    describe "with a control nested two levels deep" $ do
+      -- rectMid's hit area (30,30)-(50,50) contains rectInner's hit area
+      -- (38,38)-(42,42), which contains the shared click point (40,40) --
+      -- so all three of outer/mid/inner are hit at once, only inner should
+      -- ever show pressed.
+      let rectMid   = Rectangle 20 20 40 40
+          rectInner = Rectangle 28 28 24 24
+          clickPoint = Point 40 40
+          nested =
+            () <$ control (resolve
+              (defaultControlConfig { ccContent = const (withBounds rectMid innerControl) })
+              [elementId ElemA])
+          innerControl =
+            () <$ control (resolve
+              (defaultControlConfig { ccContent = const (withBounds rectInner (renderAt ElemC [])) })
+              [elementId ElemB])
+
+      it "draws the innermost control in its pressed style" $ do
+        result <- runInteractions testBounds pressedSeedCtx nested [MoveTo clickPoint] [MouseDown clickPoint]
+        getDrawCommands (resultContext result) `shouldContain` [FillRect (insetRect (uniform 10) rectInner) pressedColour]
+
+      it "does not draw the middle control in its pressed style" $ do
+        result <- runInteractions testBounds pressedSeedCtx nested [MoveTo clickPoint] [MouseDown clickPoint]
+        getDrawCommands (resultContext result) `shouldNotContain` [FillRect (insetRect (uniform 10) rectMid) pressedColour]
+
+      it "does not draw the outermost control in its pressed style" $ do
+        result <- runInteractions testBounds pressedSeedCtx nested [MoveTo clickPoint] [MouseDown clickPoint]
+        getDrawCommands (resultContext result) `shouldNotContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
+
+    describe "with two overlapping sibling controls (not nested)" $ do
+      -- Distinct rects, but overlapping around the shared click point --
+      -- 'rectBack' is simply rendered first and 'rectFront' second, in the
+      -- same view, with no parent/child relationship, the same way a later,
+      -- visually-on-top sibling (e.g. a floating panel) would be in real
+      -- layout.
+      let rectBack   = Rectangle 0 0 80 80
+          rectFront  = Rectangle 20 20 80 80
+          clickPoint = Point 50 50 -- within both hit areas: (10,10)-(70,70) and (30,30)-(90,90)
+          overlapping = do
+            withBounds rectBack  (renderAt ElemA [])
+            withBounds rectFront (renderAt ElemB [])
+
+      it "draws the later (topmost) sibling in its pressed style" $ do
+        result <- runInteractions testBounds pressedSeedCtx overlapping [MoveTo clickPoint] [MouseDown clickPoint]
+        getDrawCommands (resultContext result) `shouldContain` [FillRect (insetRect (uniform 10) rectFront) pressedColour]
+
+      it "does not draw the earlier (bottommost) sibling in its pressed style" $ do
+        result <- runInteractions testBounds pressedSeedCtx overlapping [MoveTo clickPoint] [MouseDown clickPoint]
+        getDrawCommands (resultContext result) `shouldNotContain` [FillRect (insetRect (uniform 10) rectBack) pressedColour]
+
   describe "no id" $ do
     -- No 'elementId' at all, unlike 'renderAt'/'renderControl'.
     let renderNoId attrs = () <$ control (resolve defaultControlConfig attrs)
@@ -176,13 +245,13 @@ spec = describe "Blink.View.Controls.Control.control" $ do
       -- as a click for the second. The mouse also crosses from A into B
       -- along the way, so both elements' hover edges fire too.
       let attrsA =
-            [ isFocusable False
+            [ focusPolicy NotFocusable
             , onMouseEntered (const [OutMsg ("A entered" :: String)])
             , onMouseExited  (const [OutMsg "A exited"])
             , onMouseDown    (const [OutMsg "A down"])
             ]
           attrsB =
-            [ isFocusable False
+            [ focusPolicy NotFocusable
             , onMouseEntered (const [OutMsg ("B entered" :: String)])
             , onMouseUp      (const [OutMsg "B up"])
             ]

@@ -165,4 +165,4 @@ button eid attrs = Element
   }
   where
     cfg  = resolve defaultButtonConfig attrs
-    ctrl = (bcControl cfg) { ccContent = renderLabelledContent (bcLabelled cfg) }
+    ctrl = (bcControl cfg) { ccContent = const (renderLabelledContent (bcLabelled cfg)) }
