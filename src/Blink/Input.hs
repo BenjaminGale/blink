@@ -32,11 +32,13 @@ module Blink.Input
   , advanceHover
   , advanceButton
   , advanceMouse
+    -- * Hit-rect registry
+  , HitRect (..)
   ) where
 
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import Blink.Geometry (Point)
+import Blink.Geometry (Point, Rectangle)
 
 -- | The subset of keys that Blink's controls respond to. Text entry is
 -- handled via 'inputTypedText' in 'InputState'; 'Key' covers only
@@ -193,38 +195,61 @@ nextHoverState prev isOverNow = case (wasHit prev, isOverNow) of
   (True,  False) -> Exited
   (False, False) -> NotOver
 
+-- | One identified control's hit-tested bounds for a frame, together with a
+-- per-frame registration index -- see 'mouseHitRectsNext'.
+data HitRect = HitRect
+  { hitRectBounds :: Rectangle
+  , hitRectIndex  :: Int
+  } deriving (Eq, Show)
+
 -- | All mouse state for the current frame: the button/capture state, plus
--- each element's hover state. Hover is tracked as a read-only snapshot of
--- last frame's results ('mouseHoverPrev') and a map being built up as
--- elements are visited this frame ('mouseHoverNext') -- an element not
--- visited this frame simply has no entry in 'mouseHoverNext', so it starts
--- fresh (from 'NotOver') the next time it -- or a different element reusing
--- its id -- is visited, rather than resuming from a stale hover state.
+-- each element's hover state and hit-tested bounds. Both are tracked the
+-- same way: a read-only snapshot of last frame's results ('mouseHoverPrev'/
+-- 'mouseHitRectsPrev') and a map being built up as elements are visited this
+-- frame ('mouseHoverNext'/'mouseHitRectsNext') -- an element not visited
+-- this frame simply has no entry in either "next" map, so it starts fresh
+-- the next time it -- or a different element reusing its id -- is visited,
+-- rather than resuming from a stale state.
+--
+-- 'mouseHitRectsNext' only ever gains an entry for a control that was
+-- actually hit (and enabled) this frame -- see
+-- 'Blink.View.Controls.Control.watchInteraction' -- so its size tracks the
+-- depth of whatever's currently under the pointer, not the size of the
+-- whole view. The registration index records visiting order (root before
+-- the children it renders), so comparing indices lets a later query tell
+-- "was something nested inside me, or drawn after me, also hit here" --
+-- see 'Blink.View.isOccludedFor'.
 data Mouse e = Mouse
-  { mouseButton    :: ButtonState e
-  , mouseHoverPrev :: Map.Map e HoverState
-  , mouseHoverNext :: Map.Map e HoverState
+  { mouseButton        :: ButtonState e
+  , mouseHoverPrev     :: Map.Map e HoverState
+  , mouseHoverNext     :: Map.Map e HoverState
+  , mouseHitRectsPrev  :: Map.Map e HitRect
+  , mouseHitRectsNext  :: Map.Map e HitRect
   }
 
 -- | No button held, nothing hovered -- the starting state for a fresh
 -- context.
 emptyMouse :: Mouse e
 emptyMouse = Mouse
-  { mouseButton    = ButtonUp
-  , mouseHoverPrev = Map.empty
-  , mouseHoverNext = Map.empty
+  { mouseButton       = ButtonUp
+  , mouseHoverPrev    = Map.empty
+  , mouseHoverNext    = Map.empty
+  , mouseHitRectsPrev = Map.empty
+  , mouseHitRectsNext = Map.empty
   }
 
--- | Rolls 'mouseHoverNext' (this completed frame's results) into
--- 'mouseHoverPrev' for the next frame to read, starting a fresh empty
--- 'mouseHoverNext'. Leaves 'mouseButton' untouched -- used on its own when
--- re-rendering the current frame rather than advancing to a new one (see
--- 'Blink.View.rerenderContext'), where the button reading shouldn't be
--- re-derived a second time against itself.
+-- | Rolls 'mouseHoverNext'\/'mouseHitRectsNext' (this completed frame's
+-- results) into 'mouseHoverPrev'\/'mouseHitRectsPrev' for the next frame to
+-- read, starting fresh empty "next" maps. Leaves 'mouseButton' untouched --
+-- used on its own when re-rendering the current frame rather than advancing
+-- to a new one (see 'Blink.View.rerenderContext'), where the button reading
+-- shouldn't be re-derived a second time against itself.
 advanceHover :: Mouse e -> Mouse e
 advanceHover mouse = mouse
-  { mouseHoverPrev = mouseHoverNext mouse
-  , mouseHoverNext = Map.empty
+  { mouseHoverPrev    = mouseHoverNext mouse
+  , mouseHoverNext    = Map.empty
+  , mouseHitRectsPrev = mouseHitRectsNext mouse
+  , mouseHitRectsNext = Map.empty
   }
 
 -- | Advances 'mouseButton' via 'nextButtonState', given whether the button

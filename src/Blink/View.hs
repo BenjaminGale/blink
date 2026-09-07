@@ -248,6 +248,8 @@ module Blink.View
   , registerMouseOver
   , wasMouseOverLastFrame
   , isAnyMouseOver
+  , registerHitRect
+  , isOccludedFor
   , isButtonDown
   , isButtonReleased
   , isDragging
@@ -326,6 +328,7 @@ import Blink.Input
   , MouseCapture (..), ButtonState (..), captureOf
   , HoverState (..), wasHit, nextHoverState
   , Mouse (..), emptyMouse, advanceHover, advanceButton
+  , HitRect (..)
   )
 import Blink.View.Style (Style, StyleSet, Metrics, StyleKey (..), Theme (..), resolveStyle)
 
@@ -1104,6 +1107,48 @@ wasMouseOverLastFrame eid = gets $ \ctx ->
 -- here is exactly "some element was hit this frame".
 isAnyMouseOver :: View e msg Bool
 isAnyMouseOver = gets (not . Map.null . mouseHoverNext . ctxMouse)
+
+-- | Records this frame's current bounds as the element's hit-tested rect,
+-- tagged with a registration index one past whatever's already been
+-- registered this frame -- so visiting order (a control before whatever it
+-- goes on to render) is recoverable later via 'isOccludedFor'. Call only
+-- after a geometric hit test such as 'isRegionHit' succeeds (and the
+-- element is otherwise eligible, e.g. not disabled) -- an element nowhere
+-- near the pointer never needs an entry, which keeps this map's size
+-- proportional to whatever's actually under the pointer, not the size of
+-- the whole view.
+registerHitRect :: Ord e => e -> View e msg ()
+registerHitRect eid = do
+  r <- getBounds
+  modifyMouse $ \m ->
+    let idx = Map.size (mouseHitRectsNext m)
+    in m { mouseHitRectsNext = Map.insert eid (HitRect r idx) (mouseHitRectsNext m) }
+
+-- | 'True' when, per last frame's 'registerHitRect' calls, some other
+-- element was hit at the current mouse position with a higher registration
+-- index than this one -- i.e. something nested inside this element, or
+-- drawn after it, sat on top of it there. An element not registered last
+-- frame (just appeared, or wasn't hit) is never considered occluded --
+-- occlusion is judged against last frame's picture, so a control that is
+-- itself brand new at this spot fails open for one frame, the same
+-- trade-off overlapping-widget resolution in other immediate-mode
+-- GUIs (Dear ImGui, egui) accepts.
+--
+-- Meant to gate a control's own 'acquireCapture' (see
+-- 'Blink.View.Controls.Control.watchHover'): a container backs off letting
+-- a nested child it rendered after it — and which is consequently ahead of
+-- it in next frame's registration order — win capture for a click that
+-- landed on the child, instead of the container claiming it purely because
+-- its own hit test ran first.
+isOccludedFor :: Ord e => e -> View e msg Bool
+isOccludedFor eid = do
+  p    <- getMousePos
+  prev <- gets (mouseHitRectsPrev . ctxMouse)
+  case Map.lookup eid prev of
+    Nothing               -> pure False
+    Just (HitRect _ myIdx) -> pure $ any (occludes myIdx p) (Map.toList (Map.delete eid prev))
+  where
+    occludes myIdx p (_, HitRect r idx) = idx > myIdx && containsPoint p r
 
 -- | The currently ambient scope's focused element, if any — root's, unless
 -- inside 'withFocusScope'.

@@ -217,14 +217,18 @@ data HoverInteraction = HoverInteraction
   , hiMouseExited  :: Bool
   }
 
--- | Registers this frame's hover, claiming mouse-over and capture when the
--- control is eligible, and reports hovered plus the enter\/exit edges
--- against last frame's hover state.
-watchHover :: Ord e => e -> Bool -> View e msg HoverInteraction
-watchHover eid eligible = do
+-- | Registers this frame's hover, and claims capture unless the control is
+-- @occluded@ -- something else (per last frame's registered hit-rects) sat
+-- on top of it here, see 'isOccludedFor'. Reports hovered plus the
+-- enter\/exit edges against last frame's hover state; hover itself is
+-- unconditional on occlusion (any number of nested\/overlapping elements
+-- can be "hovered" at once, by design), only capture-claiming backs off.
+watchHover :: Ord e => e -> Bool -> Bool -> View e msg HoverInteraction
+watchHover eid eligible occluded = do
   when eligible $ do
     registerMouseOver eid
-    acquireCapture eid
+    registerHitRect eid
+    when (not occluded) (acquireCapture eid)
   wasOver <- wasMouseOverLastFrame eid
   pure HoverInteraction
     { hiHovered      = eligible
@@ -247,8 +251,17 @@ data MouseButtonInteraction = MouseButtonInteraction
 -- 'ClickActivated', a release only counts while still within bounds (the
 -- same release 'mbiMouseUp' reports); for 'CaptureActivated', a release
 -- while this control holds capture counts regardless of bounds.
-watchMouseButton :: Eq e => e -> MouseActivation -> Bool -> View e msg MouseButtonInteraction
-watchMouseButton eid activation eligible = do
+--
+-- @held@ additionally requires @not occluded@ -- not just deferring to
+-- 'isMouseFreeFor' -- because within the single frame capture is first
+-- claimed, an occluded ancestor's own check runs before the nested\/topmost
+-- element that will actually claim capture has had a chance to (an
+-- ancestor's own interaction is watched before it renders whatever content
+-- 'control' gives it, see 'control'), so capture would otherwise still
+-- read "free" for the ancestor on that frame even though it correctly
+-- declined to acquire it itself.
+watchMouseButton :: Eq e => e -> MouseActivation -> Bool -> Bool -> View e msg MouseButtonInteraction
+watchMouseButton eid activation eligible occluded = do
   mouse <- getMouse
   let capturedByMe  = captureOf (mouseButton mouse) == MouseCapturedBy eid
       releasedEvent = isButtonReleasedEvent (mouseButton mouse)
@@ -260,7 +273,7 @@ watchMouseButton eid activation eligible = do
 
   free <- isMouseFreeFor eid
   down <- isButtonDown
-  let held = eligible && free && down
+  let held = eligible && not occluded && free && down
 
   pure MouseButtonInteraction
     { mbiMouseDown = mouseDown
@@ -904,8 +917,9 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       wasDragging <- isDragging eid
       hit         <- isRegionHit
       let eligible = not disabled && hit
-      hoverI <- watchHover eid eligible
-      mouseI <- watchMouseButton eid (ccMouseActivation cc) eligible
+      occluded <- if eligible then isOccludedFor eid else pure False
+      hoverI <- watchHover eid eligible occluded
+      mouseI <- watchMouseButton eid (ccMouseActivation cc) eligible occluded
       focusI <- watchFocus eid disabled
       let interaction = (noInteraction placeholderStyle)
             { ciHovered      = hiHovered hoverI
