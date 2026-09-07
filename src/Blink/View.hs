@@ -1321,67 +1321,88 @@ withFocusScope scopeId freshClaim (View f) = View $ \ctx ->
   if ctxDisabled ctx
     then f ctx
     else case scopeMode scopeId freshClaim (contextFocus ctx) of
-      Claim         -> runClaimed ctx
-      Blocked blockValue -> runBlocked ctx blockValue
-  where
-    -- The claiming scope's descendants run against its own persisted
-    -- 'FocusState' (or a fresh one), and whatever they end up with is
-    -- folded back under this id, with the enclosing scope reaffirmed as
-    -- pointing here.
-    runClaimed ctx = do
-      let enclosing = ftAmbient (ctxFocus ctx)
-          child0    = lookupScope scopeId (ctxFocus ctx)
-      (a, ctx') <- runWithAmbient child0 ctx
-      pure (a, foldBackAsClaim enclosing (ftAmbient (ctxFocus ctx')) ctx')
+      Claim               -> runClaimed scopeId f ctx
+      Blocked blockValue  -> runBlocked scopeId f ctx blockValue
 
-    -- The blocked scope's descendants run against a value nothing inside
-    -- recognises as itself, so nothing reads as an invitation to
-    -- auto-claim. If something claims explicitly despite the block, it's
-    -- folded back exactly as 'runClaimed' would. If nothing claims
-    -- anyway, the real ambient is restored untouched, and this scope's
-    -- own saved claim is reaffirmed (same as 'runClaimed' reaffirms a
-    -- live one) rather than left alone -- otherwise it would only ever
-    -- be protected from the next-frame expiry while actually live, and
-    -- expire the instant it's merely not the live target, even though
-    -- this scope is still being rendered every frame. Reaffirming here
-    -- means it only really expires once this scope stops being visited
-    -- at all (its composite removed from the tree).
-    runBlocked ctx blockValue = do
-      let real      = ftAmbient (ctxFocus ctx)
-          persisted = lookupScope scopeId (ctxFocus ctx)
-      (a, ctx') <- runWithAmbient (real { focusClaim = maybe Unclaimed ClaimedThisFrame blockValue }) ctx
-      let after = ftAmbient (ctxFocus ctx')
-      if currentFocus (focusClaim after) == blockValue
-        then pure (a, ctx'
-          { ctxFocus = (ctxFocus ctx')
-              { ftAmbient = real
-              , ftScopes  = Map.insert scopeId (persisted { focusClaim = reaffirm (focusClaim persisted) })
-                              (ftScopes (ctxFocus ctx'))
-              } })
-        else pure (a, foldBackAsClaim real after ctx')
+-- | The claiming scope's descendants run against its own persisted
+-- 'FocusState' (or a fresh one), and whatever they end up with is folded
+-- back under this id, with the enclosing scope reaffirmed as pointing here.
+-- See 'withFocusScope'.
+runClaimed
+  :: Ord e
+  => e
+  -> (ViewContext e msg -> IO (a, ViewContext e msg))
+  -> ViewContext e msg
+  -> IO (a, ViewContext e msg)
+runClaimed scopeId f ctx = do
+  let enclosing = ftAmbient (ctxFocus ctx)
+      child0    = lookupScope scopeId (ctxFocus ctx)
+  (a, ctx') <- runWithAmbient scopeId f child0 ctx
+  pure (a, foldBackAsClaim scopeId enclosing (ftAmbient (ctxFocus ctx')) ctx')
 
-    -- Swaps the ambient 'FocusState' for @ambient@, and 'ctxCurrentScope'
-    -- to this scope's own id, while @f@ runs -- restoring the previous
-    -- scope id after, so nesting reports each level's own immediate scope,
-    -- not just the outermost one.
-    runWithAmbient ambient ctx = do
-      (a, ctx') <- f (ctx { ctxFocus = (ctxFocus ctx) { ftAmbient = ambient }, ctxCurrentScope = Just scopeId })
-      pure (a, ctx' { ctxCurrentScope = ctxCurrentScope ctx })
-
-    -- Records @after@ as this scope's own persisted state, and points
-    -- @base@ (the value to restore around this scope) at this scope's id —
-    -- the write-back shared by a claim and a blocked-but-claimed-anyway
-    -- resolution alike.
-    foldBackAsClaim base after ctx' = ctx'
+-- | The blocked scope's descendants run against a value nothing inside
+-- recognises as itself, so nothing reads as an invitation to auto-claim. If
+-- something claims explicitly despite the block, it's folded back exactly
+-- as 'runClaimed' would. If nothing claims anyway, the real ambient is
+-- restored untouched, and this scope's own saved claim is reaffirmed (same
+-- as 'runClaimed' reaffirms a live one) rather than left alone -- otherwise
+-- it would only ever be protected from the next-frame expiry while actually
+-- live, and expire the instant it's merely not the live target, even though
+-- this scope is still being rendered every frame. Reaffirming here means it
+-- only really expires once this scope stops being visited at all (its
+-- composite removed from the tree). See 'withFocusScope'.
+runBlocked
+  :: Ord e
+  => e
+  -> (ViewContext e msg -> IO (a, ViewContext e msg))
+  -> ViewContext e msg
+  -> Maybe e
+  -> IO (a, ViewContext e msg)
+runBlocked scopeId f ctx blockValue = do
+  let real      = ftAmbient (ctxFocus ctx)
+      persisted = lookupScope scopeId (ctxFocus ctx)
+  (a, ctx') <- runWithAmbient scopeId f (real { focusClaim = maybe Unclaimed ClaimedThisFrame blockValue }) ctx
+  let after = ftAmbient (ctxFocus ctx')
+  if currentFocus (focusClaim after) == blockValue
+    then pure (a, ctx'
       { ctxFocus = (ctxFocus ctx')
-          { ftAmbient = base { focusClaim = tryClaim scopeId (focusClaim base) }
-          , ftScopes  = Map.insert scopeId (after { focusClaim = reaffirm (focusClaim after) }) (ftScopes (ctxFocus ctx'))
-          } }
-    reaffirm Unclaimed             = Unclaimed
-    reaffirm (ClaimedLastFrame e)  = ClaimedThisFrame e
-    reaffirm (ClaimedThisFrame e)  = ClaimedThisFrame e
-    reaffirm (GainedLastFrame e)   = GainedLastFrame e
-    reaffirm (GainedThisFrame e)   = GainedThisFrame e
+          { ftAmbient = real
+          , ftScopes  = Map.insert scopeId (persisted { focusClaim = reaffirm (focusClaim persisted) })
+                          (ftScopes (ctxFocus ctx'))
+          } })
+    else pure (a, foldBackAsClaim scopeId real after ctx')
+
+-- | Swaps the ambient 'FocusState' for @ambient@, and 'ctxCurrentScope' to
+-- this scope's own id, while @f@ runs -- restoring the previous scope id
+-- after, so nesting reports each level's own immediate scope, not just the
+-- outermost one. See 'withFocusScope'.
+runWithAmbient
+  :: e
+  -> (ViewContext e msg -> IO (a, ViewContext e msg))
+  -> FocusState e
+  -> ViewContext e msg
+  -> IO (a, ViewContext e msg)
+runWithAmbient scopeId f ambient ctx = do
+  (a, ctx') <- f (ctx { ctxFocus = (ctxFocus ctx) { ftAmbient = ambient }, ctxCurrentScope = Just scopeId })
+  pure (a, ctx' { ctxCurrentScope = ctxCurrentScope ctx })
+
+-- | Records @after@ as this scope's own persisted state, and points @base@
+-- (the value to restore around this scope) at this scope's id -- the
+-- write-back shared by a claim and a blocked-but-claimed-anyway resolution
+-- alike. See 'withFocusScope'.
+foldBackAsClaim :: Ord e => e -> FocusState e -> FocusState e -> ViewContext e msg -> ViewContext e msg
+foldBackAsClaim scopeId base after ctx' = ctx'
+  { ctxFocus = (ctxFocus ctx')
+      { ftAmbient = base { focusClaim = tryClaim scopeId (focusClaim base) }
+      , ftScopes  = Map.insert scopeId (after { focusClaim = reaffirm (focusClaim after) }) (ftScopes (ctxFocus ctx'))
+      } }
+
+reaffirm :: FocusClaim e -> FocusClaim e
+reaffirm Unclaimed             = Unclaimed
+reaffirm (ClaimedLastFrame e)  = ClaimedThisFrame e
+reaffirm (ClaimedThisFrame e)  = ClaimedThisFrame e
+reaffirm (GainedLastFrame e)   = GainedLastFrame e
+reaffirm (GainedThisFrame e)   = GainedThisFrame e
 
 -- | Whether a fresh (unclaimed) ambient may be read as an invitation for a
 -- scope to auto-claim focus this frame — see 'withFocusScope'.
