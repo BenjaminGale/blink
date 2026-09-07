@@ -18,7 +18,7 @@ import Blink.View.Controls.RepeatButton
 import Blink.View.Controls.Slider (onValueChanged)
 import qualified Blink.View.Controls.Slider as Slider (value)
 import Blink.View.Controls.TextInput (displayFilter, onInput, value)
-import Blink.View.Controls.Toggle (isSelected, onSelectedChanged)
+import Blink.View.Controls.ToggleButton (isSelected, onSelectedChanged)
 import Blink.View.Controls.ToggleGroup
   (groupOrientation, itemSpacing, items, onSelectionChanged, selectedItem, toggleAttributes)
 import Blink.Geometry
@@ -231,21 +231,16 @@ radioOptions = ["Small", "Medium", "Large"]
 
 rowRadio :: AppState -> Element ControlId Msg
 rowRadio s =
-  hBox
+  radioButtonGroup RadioOption
     ( rowLayout ++
-      [ spacing 16
-      , children
-          [ radioOption i opt
-          | (i, opt) <- zip [0 ..] radioOptions
-          ]
+      [ itemSpacing 16
+      , items radioOptions
+      , toggleAttributes (\opt -> [text opt, width (exactly 100), height fill, align MiddleLeft])
+      , selectedItem (radioChoice s)
+      , onSelectionChanged (maybe [] (\opt -> [OutMsg (PickRadio opt)]))
+      , isEnabled (editingEnabled s)
       ]
     )
-  where
-    radioOption i opt =
-      radioButton (RadioCtl i)
-        [ text opt, isSelected (radioChoice s == Just opt), onSelectedChanged (\_ -> [OutMsg (PickRadio opt)])
-        , isEnabled (editingEnabled s), width (exactly 100), height fill, align MiddleLeft
-        ]
 
 rowTextInput :: AppState -> Element ControlId Msg
 rowTextInput s =
@@ -337,18 +332,18 @@ pages =
   , (ContainedPage, "Contained")
   ]
 
--- | A toggle group of one item per 'Page' -- selecting a page is exactly
--- the "only one selected at a time" invariant 'toggleGroup' already
--- enforces, so there's no need for the old hand-rolled "disable whichever
--- page is already showing" trick: clicking the already-selected page is
--- simply a no-op (see 'Blink.View.Controls.ToggleGroup.allowDeselect'),
+-- | A toggle button group of one item per 'Page' -- selecting a page is
+-- exactly the "only one selected at a time" invariant 'toggleButtonGroup'
+-- already enforces, so there's no need for the old hand-rolled "disable
+-- whichever page is already showing" trick: clicking the already-selected
+-- page is simply a no-op (see 'Blink.View.Controls.ToggleGroup.allowDeselect'),
 -- and the selected item's own look already says "you are here".
 sidebar :: AppState -> DemoUI ()
 sidebar s =
   runElement $ vBox
     [ width fill, height fill, margin 12
     , children
-        [ toggleGroup SidebarPageButton
+        [ toggleButtonGroup SidebarPageButton
             [ width fill, height fill, groupOrientation Vertical, itemSpacing 4
             , items (map fst pages)
             , toggleAttributes (\page -> [text (pageLabel page), width fill, height (exactly 32)])
@@ -430,7 +425,7 @@ containedMargin    = 6
 -- | A measurement-only element reporting a fixed natural size -- content
 -- is rendered separately (via @ccContent@), never through this; it exists
 -- purely for 'measureChrome' to inflate by the wrapping control's own
--- chrome, the same way e.g. 'Blink.View.Controls.Toggle.glyphCaptionElement'
+-- chrome, the same way e.g. 'Blink.View.Controls.ToggleButton.glyphCaptionElement'
 -- stands in for a checkbox's actual content when measuring 'toggleBase'.
 fixedSize :: Double -> Double -> Element e msg
 fixedSize w h = Element

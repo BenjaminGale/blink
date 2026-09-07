@@ -33,6 +33,7 @@ module Blink.View.Style.Defaults
   , sliderStyle
   , dividerStyle
   , labelStyle
+  , toggleGroupStyle
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -45,7 +46,8 @@ import Blink.View.Controls.ProgressBar (progressBarStyleKey)
 import Blink.View.Controls.RadioButton (radioButtonStyleKey)
 import Blink.View.Controls.Slider (sliderStyleKey)
 import Blink.View.Controls.TextInput (textInputStyleKey)
-import Blink.View.Controls.Toggle (toggleButtonStyleKey, toggleChecked)
+import Blink.View.Controls.ToggleButton (toggleButtonStyleKey, toggleChecked)
+import Blink.View.Controls.ToggleGroup (radioButtonGroupStyleKey, toggleButtonGroupStyleKey)
 import Blink.Geometry (uniform)
 import Blink.View.Rendering (Colour (..), TextAlign (..))
 import Blink.View.Style
@@ -93,9 +95,21 @@ dividerMetrics = Metrics
   , metricsBorderEdges = noBorder
   }
 
+-- | No margin\/padding\/border of its own -- a
+-- 'Blink.View.Controls.ToggleGroup.toggleButtonGroup'\/'Blink.View.Controls.ToggleGroup.radioButtonGroup'
+-- is just a plain wrapper around its items; any chrome belongs on the
+-- items themselves ('toggleButtonStyleKey'\/'radioButtonStyleKey'), not
+-- doubled up on their container.
+toggleGroupMetrics :: Metrics
+toggleGroupMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = uniform 0
+  , metricsBorderEdges = noBorder
+  }
+
 -- | A bordered-box control style: background/border step through
 -- hover/press/focus/disabled, with a bold accent fill both on press and
--- while selected (see 'Blink.View.Controls.Toggle.toggleChecked'). Used for
+-- while selected (see 'Blink.View.Controls.ToggleButton.toggleChecked'). Used for
 -- buttons, toggle buttons, and (left-aligned) text inputs.
 buttonStyle :: TextAlign -> Palette -> StyleSet
 buttonStyle align p = StyleSet
@@ -190,6 +204,23 @@ labelStyle p = StyleSet
   , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
   }
 
+-- | A plain, transparent, borderless style for a toggle group's own
+-- container -- paired with its own zero-margin\/padding\/border metrics
+-- alongside it below. Shared by
+-- 'Blink.View.Controls.ToggleGroup.toggleButtonGroup' and
+-- 'Blink.View.Controls.ToggleGroup.radioButtonGroup'; the items inside
+-- still resolve their own look from 'buttonStyle'\/'flatRowStyle'.
+toggleGroupStyle :: Palette -> StyleSet
+toggleGroupStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = transparent
+      , styleTextColour   = paletteTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleBorderColour = Nothing
+      }
+  , styleOverrides = Map.empty
+  }
+
 -- | A complete 'Theme' for every built-in control, built entirely from
 -- @p@ -- registers each control's default 'StyleKey' (see each control
 -- module's own @*StyleKey@, e.g. 'Blink.View.Controls.Button.buttonStyleKey')
@@ -208,6 +239,8 @@ defaultTheme p = Theme
       , (sliderStyleKey,       (progressBarMetrics, sliderStyle p))
       , (dividerStyleKey,      (dividerMetrics,     dividerStyle p))
       , (labelStyleKey,        (labelMetrics,       labelStyle p))
+      , (toggleButtonGroupStyleKey, (toggleGroupMetrics, toggleGroupStyle p))
+      , (radioButtonGroupStyleKey,  (toggleGroupMetrics, toggleGroupStyle p))
       ]
   , themeDefaultStyle = (controlMetrics, buttonStyle AlignCenter p)
   }

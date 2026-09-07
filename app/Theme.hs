@@ -16,6 +16,7 @@ module Theme
 
 import qualified Data.Map.Strict as Map
 
+import Data.Text (Text)
 import Blink.Geometry
 import Blink.View.Controls.ToggleGroup (ToggleGroupPart)
 import Blink.View.Rendering
@@ -36,7 +37,7 @@ data ControlId = Label
              | HoldButton
              | ResetButton
              | ToggleCtl
-             | RadioCtl Int
+             | RadioOption (ToggleGroupPart Text)
              | TextInputCtl
              | PasswordInputCtl
              | AnimateCheckbox

@@ -2,11 +2,11 @@
 -- | The shared "activating it changes its selected state and reports the
 -- new value" contract every toggle-style control must satisfy, on top of
 -- the activation contract every button-like control already satisfies (see
--- 'Blink.View.Controls.ButtonBehaviour.buttonBehaviourSpec'). 'Blink.View.Controls.Toggle.toggleButton',
+-- 'Blink.View.Controls.ButtonBehaviour.buttonBehaviourSpec'). 'Blink.View.Controls.ToggleButton.toggleButton',
 -- 'Blink.View.Controls.Checkbox.checkbox', and 'Blink.View.Controls.RadioButton.radioButton' all reuse
 -- this, each passing the function describing how activating it changes its
 -- own selected state (see 'toggleBehaviourSpec'). Unlike the layers below,
--- there's only ever one 'Blink.View.Controls.Toggle.ToggleConfig' type -- none of the three
+-- there's only ever one 'Blink.View.Controls.ToggleButton.ToggleConfig' type -- none of the three
 -- has its own -- so this isn't generic over a config type the way
 -- 'Blink.View.Controls.ButtonBehaviour.buttonBehaviourSpec' is.
 module Blink.View.Controls.ToggleBehaviour
@@ -17,7 +17,7 @@ import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
 import Blink.View.Controls.ButtonBehaviour (buttonBehaviourSpec, defaultButtonBehaviourConfig)
-import Blink.View.Controls.Toggle (ToggleConfig, isSelected, onSelectedChanged)
+import Blink.View.Controls.ToggleButton (ToggleConfig, isSelected, onSelectedChanged)
 import Blink.View.Controls.Control (Attribute)
 import Blink.View.Controls.ElementBehaviour (tagged)
 import Blink.Generators (genPointIn)
@@ -33,7 +33,7 @@ taggedToggle = onSelectedChanged (\b -> [OutMsg ("SelectedChanged:" ++ show b)])
 
 -- | 'True' when @msgs@ reports activating a control starting at @current@
 -- the way @next@ says it should: the changed-to value when that's actually
--- a change (see 'Blink.View.Controls.Toggle.toggleBase'), or no 'SelectedChanged' at all
+-- a change (see 'Blink.View.Controls.ToggleButton.toggleBase'), or no 'SelectedChanged' at all
 -- when it isn't. Other tagged messages (hover, click, focus, ...) may
 -- freely appear alongside either way.
 reportsSelectedChange :: (Bool -> Bool) -> Bool -> [String] -> Bool

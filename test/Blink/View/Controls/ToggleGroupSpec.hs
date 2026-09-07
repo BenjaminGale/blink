@@ -6,12 +6,12 @@ import qualified Data.Text as Text
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.View.Controls.Control (Attribute, control, defaultControlConfig, elementId, isEnabled, resolve)
+import Blink.View.Controls.Control (Attribute, StyleKey (..), control, defaultControlConfig, elementId, isEnabled, resolve)
 import Blink.View.Controls.ElementBehaviour (tagged)
 import Blink.View.Controls.Label (text)
 import Blink.View.Controls.ToggleGroup
   ( ToggleGroupConfig, ToggleGroupPart (..), allowDeselect, defaultToggleGroupConfig
-  , items, onSelectionChanged, selectedItem, tggSelected, toggleAttributes, toggleGroup
+  , items, onSelectionChanged, selectedItem, tggSelected, toggleAttributes, toggleButtonGroup
   )
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
@@ -78,7 +78,7 @@ inSlot Medium = Point 150 50
 inSlot Large  = Point 250 50
 
 render :: [Attribute'] -> View TestElement String ()
-render attrs = runElement $ toggleGroup tag
+render attrs = runElement $ toggleButtonGroup tag
   ( items sizes
   : toggleAttributes (\s -> [text (Text.pack (show s)), width (exactly 100), height fill])
   : attrs
@@ -112,7 +112,7 @@ spec :: Spec
 spec = describe "Blink.View.Controls.ToggleGroup" $ do
   describe "defaults" $
     it "starts with nothing selected" $
-      tggSelected (resolve defaultToggleGroupConfig []) `shouldBe` (Nothing :: Maybe Size)
+      tggSelected (resolve (defaultToggleGroupConfig (Class "test")) []) `shouldBe` (Nothing :: Maybe Size)
 
   -- Every click below is preceded by a 'MoveTo' at the same point, as
   -- setup (a real frame, discarded from 'resultMessages') rather than

@@ -191,7 +191,7 @@ runHandlers hs a = mapM_ dispatch (concatMap ($ a) hs)
     dispatch (OutMsg msg) = emit msg
     dispatch (OutUi eff)  = emitUi eff
 
--- | Builds a reaction (an 'EventHandler'\/'Blink.View.Controls.Toggle.onSelectedChanged'-shaped
+-- | Builds a reaction (an 'EventHandler'\/'Blink.View.Controls.ToggleButton.onSelectedChanged'-shaped
 -- function into @['Out' e msg]@) that emits @msg@, ignoring whatever data
 -- the triggering event carried.
 post :: msg -> a -> [Out e msg]
@@ -560,7 +560,7 @@ data ControlConfig e msg = ControlConfig
   , ccStyleKey        :: StyleKey e
   , ccActiveStates    :: Set VisualState
     -- ^ Extra 'VisualState's contributed by a wrapping layer (e.g.
-    -- 'Blink.View.Controls.Toggle.toggleBase' setting a checked\/unchecked
+    -- 'Blink.View.Controls.ToggleButton.toggleBase' setting a checked\/unchecked
     -- pseudo-state), unioned with the common\/focus states 'control'
     -- derives itself. Defaults to empty.
   , ccContent         :: ControlInteraction e msg -> View e msg ()

@@ -69,7 +69,7 @@ instead.
   * "Blink.View.Controls.Control" — The shared control primitive every
                        ready-made widget is built from: focus, chrome, and
                        events. Import alongside whichever of
-                       "Blink.View.Controls.Button", "Blink.View.Controls.Toggle",
+                       "Blink.View.Controls.Button", "Blink.View.Controls.ToggleButton",
                        "Blink.View.Controls.Checkbox",
                        "Blink.View.Controls.RadioButton",
                        "Blink.View.Controls.TextInput",

@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | A radio button: a glyph and a caption selected together as one control.
--- Built on 'toggleBase' -- see "Blink.View.Controls.Toggle" for how it and every
+-- Built on 'toggleBase' -- see "Blink.View.Controls.ToggleButton" for how it and every
 -- other toggle-like control fit together. A leaf: nothing derives from it,
 -- so it has no 'Blink.View.Controls.Control.ControlConfig'\/'Blink.View.Controls.Control.ControlInteraction'-style pair of its own
--- beyond 'ToggleConfig'\/'Blink.View.Controls.Toggle.ToggleInteraction', which already have every field
+-- beyond 'ToggleConfig'\/'Blink.View.Controls.ToggleButton.ToggleInteraction', which already have every field
 -- it needs.
 module Blink.View.Controls.RadioButton
   ( radioButton
@@ -16,7 +16,7 @@ import Data.Text (Text)
 import Blink.View.Controls.Button (ButtonConfig (..))
 import Blink.View.Controls.Control
 import Blink.View.Controls.Label (lcText)
-import Blink.View.Controls.Toggle
+import Blink.View.Controls.ToggleButton
   (ToggleConfig (..), defaultGlyphToggleConfig, glyphCaptionContent, glyphCaptionElement, toggleBase)
 import Blink.View.Rendering (TextAlign (..))
 import Blink.View.Style (Style (..))
@@ -48,15 +48,15 @@ radioButtonStyleKey :: StyleKey e
 radioButtonStyleKey = Class "radioButton"
 
 -- | A radio button: a glyph showing whether it's currently selected (see
--- 'Blink.View.Controls.Toggle.isSelected'), beside a caption set via
+-- 'Blink.View.Controls.ToggleButton.isSelected'), beside a caption set via
 -- 'Blink.View.Controls.Label.text', selected together as one control --
 -- clicking either the glyph or the caption activates it, the same as
--- 'Blink.View.Controls.Toggle.toggleButton'. Unlike a 'Blink.View.Controls.Toggle.toggleButton'
+-- 'Blink.View.Controls.ToggleButton.toggleButton'. Unlike a 'Blink.View.Controls.ToggleButton.toggleButton'
 -- or 'Blink.View.Controls.Checkbox.checkbox', activating it never deselects it
 -- -- only ever moves it from unselected to selected, since a radio button
 -- gives up selection by a sibling in its group being selected instead,
 -- never by being clicked again itself. See
--- 'Blink.View.Controls.Toggle.onSelectedChanged' for reacting to it. Defaults to
+-- 'Blink.View.Controls.ToggleButton.onSelectedChanged' for reacting to it. Defaults to
 -- sizing itself to its own glyph-plus-caption content on both axes, the
 -- same as 'Blink.View.Controls.Label.label'; override with
 -- 'Blink.View.Layout.Constraints.width'\/'Blink.View.Layout.Constraints.height'\/'Blink.View.Layout.Constraints.align'.

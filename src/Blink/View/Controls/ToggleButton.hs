@@ -12,17 +12,17 @@
 --
 -- @
 -- control --> buttonBase --> button                    (see "Blink.View.Controls.Button")
---                             --> toggleBase --> toggleButton
+--                             --> toggleBase --> toggleButton --> toggleButtonGroup (see "Blink.View.Controls.ToggleGroup")
 --                                             --> checkbox     (see "Blink.View.Controls.Checkbox")
---                                             --> radioButton  (see "Blink.View.Controls.RadioButton")
+--                                             --> radioButton  (see "Blink.View.Controls.RadioButton") --> radioButtonGroup
 -- @
-module Blink.View.Controls.Toggle
+module Blink.View.Controls.ToggleButton
   ( ToggleConfig (..)
   , ToggleInteraction (..)
   , defaultToggleButtonConfig
   , defaultGlyphToggleConfig
   , toggleButtonStyleKey
-  , toggleGroup
+  , toggleStyleGroup
   , toggleChecked
   , toggleUnchecked
   , toggleBase
@@ -92,8 +92,8 @@ toggleButtonStyleKey = Class "toggleButton"
 -- 'toggleUnchecked' -- see "Blink.View.Style"'s module header for why a
 -- control defines its own pseudo-states as opaque exported constants
 -- rather than letting callers build 'Custom' values themselves.
-toggleGroup :: Text
-toggleGroup = "Toggle"
+toggleStyleGroup :: Text
+toggleStyleGroup = "Toggle"
 
 -- | The pseudo-state 'toggleBase' puts in 'ccActiveStates' while the
 -- control is selected (see 'isSelected') -- a theme registers an
@@ -102,13 +102,13 @@ toggleGroup = "Toggle"
 -- it a distinct "selected" look, composed with whatever
 -- common\/focus state is also active.
 toggleChecked :: VisualState
-toggleChecked = Custom toggleGroup "Checked"
+toggleChecked = Custom toggleStyleGroup "Checked"
 
 -- | The pseudo-state 'toggleBase' puts in 'ccActiveStates' while the
 -- control is unselected. Themes typically register no override for this
 -- -- the plain base look already reads as "unchecked".
 toggleUnchecked :: VisualState
-toggleUnchecked = Custom toggleGroup "Unchecked"
+toggleUnchecked = Custom toggleStyleGroup "Unchecked"
 
 instance HasControlConfig e msg (ToggleConfig e msg) where
   overControl attr = Attribute (\tc -> tc { tgcButton = runAttribute (overControl attr) (tgcButton tc) })

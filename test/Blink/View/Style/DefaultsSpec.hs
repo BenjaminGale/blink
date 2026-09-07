@@ -12,7 +12,8 @@ import Blink.View.Controls.ProgressBar (progressBarStyleKey)
 import Blink.View.Controls.RadioButton (radioButtonStyleKey)
 import Blink.View.Controls.Slider (sliderStyleKey)
 import Blink.View.Controls.TextInput (textInputStyleKey)
-import Blink.View.Controls.Toggle (toggleButtonStyleKey, toggleChecked)
+import Blink.View.Controls.ToggleButton (toggleButtonStyleKey, toggleChecked)
+import Blink.View.Controls.ToggleGroup (radioButtonGroupStyleKey, toggleButtonGroupStyleKey)
 import Blink.View.Rendering (Colour (..))
 import Blink.View.Style
 import Blink.View.Style.Defaults (defaultTheme)
@@ -45,7 +46,10 @@ spec = describe "Blink.View.Style.Defaults" $ do
     it "registers every built-in control's default StyleKey" $ do
       Map.keys (themeElementStyles (defaultTheme testPalette :: Theme ()))
         `shouldMatchList`
-          [buttonStyleKey, toggleButtonStyleKey, checkboxStyleKey, radioButtonStyleKey, textInputStyleKey, progressBarStyleKey, sliderStyleKey, dividerStyleKey, labelStyleKey]
+          [ buttonStyleKey, toggleButtonStyleKey, checkboxStyleKey, radioButtonStyleKey, textInputStyleKey
+          , progressBarStyleKey, sliderStyleKey, dividerStyleKey, labelStyleKey
+          , toggleButtonGroupStyleKey, radioButtonGroupStyleKey
+          ]
 
     it "gives a button the surface colour at rest" $ do
       styleBackground (resolvedAt buttonStyleKey (Set.singleton CommonNormal)) `shouldBe` paletteSurface testPalette

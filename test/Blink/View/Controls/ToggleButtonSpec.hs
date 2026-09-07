@@ -1,11 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Blink.View.Controls.ToggleSpec (spec) where
+module Blink.View.Controls.ToggleButtonSpec (spec) where
 
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.View.Controls.Control (Attribute)
-import Blink.View.Controls.Toggle (ToggleConfig, isSelected, toggleButton, toggleChecked)
+import Blink.View.Controls.ToggleButton (ToggleConfig, isSelected, toggleButton, toggleChecked)
 import Blink.View.Controls.ToggleBehaviour (toggleBehaviourSpec)
 
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)
@@ -81,7 +81,7 @@ start :: [Attribute'] -> IO (ViewContext TestElement String)
 start attrs = snd <$> runView (fullSize attrs) seedCtx
 
 spec :: Spec
-spec = describe "Blink.View.Controls.Toggle" $ do
+spec = describe "Blink.View.Controls.ToggleButton" $ do
   describe "toggleButton" $ do
     toggleBehaviourSpec not testBounds seedCtx Ok (Point 5 5) hitRect (Point 200 200) fullSize
 

@@ -2,12 +2,12 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | A plain, momentary button: activated by a click or by pressing Enter
--- while focused. See "Blink.View.Controls.Toggle" for the sibling family of
+-- while focused. See "Blink.View.Controls.ToggleButton" for the sibling family of
 -- controls that track a selected\/unselected state instead.
 --
 -- @
 -- control --> buttonBase --> button
---                             --> toggleBase  (see "Blink.View.Controls.Toggle")
+--                             --> toggleBase  (see "Blink.View.Controls.ToggleButton")
 --                             --> repeatButton  (see "Blink.View.Controls.RepeatButton")
 -- @
 module Blink.View.Controls.Button
@@ -110,7 +110,7 @@ instance HasButtonConfig e msg (ButtonConfig e msg) where
   overButton = id
 
 -- | Reacts when the control is activated: a click, or pressing Enter while
--- it holds focus. The event 'button'\/'Blink.View.Controls.Toggle.toggleButton'\/'Blink.View.Controls.Checkbox.checkbox'\/
+-- it holds focus. The event 'button'\/'Blink.View.Controls.ToggleButton.toggleButton'\/'Blink.View.Controls.Checkbox.checkbox'\/
 -- 'Blink.View.Controls.RadioButton.radioButton' actually want callers to bind for "the control was
 -- activated" -- see 'onClicked' for the mouse-only, element-level event
 -- this is split from.
@@ -132,7 +132,7 @@ data ButtonInteraction e msg = ButtonInteraction
 -- | Runs @cfg@ as a 'control', and additionally fires every
 -- 'onActivated' handler in @cfg@ when activated: by a click, or by
 -- pressing Enter while it holds focus and isn't disabled. The shape every
--- button-like control ('button', 'Blink.View.Controls.Toggle.toggleButton', and
+-- button-like control ('button', 'Blink.View.Controls.ToggleButton.toggleButton', and
 -- 'Blink.View.Controls.Checkbox.checkbox'\/'Blink.View.Controls.RadioButton.radioButton') is
 -- built from. Always identified by @eid@, regardless of any 'elementId'
 -- a caller passes via @cfg@.

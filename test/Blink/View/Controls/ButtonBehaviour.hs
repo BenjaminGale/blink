@@ -5,7 +5,7 @@
 -- top of the raw-event\/focus\/hit-region contract every control already
 -- satisfies (see 'Blink.View.Controls.ControlBehaviour.controlBehaviourSpec').
 -- 'Blink.View.Controls.ButtonSpec' runs this against 'Blink.View.Controls.Button.button';
--- 'Blink.View.Controls.Toggle.toggleButton', 'Blink.View.Controls.Checkbox.checkbox',
+-- 'Blink.View.Controls.ToggleButton.toggleButton', 'Blink.View.Controls.Checkbox.checkbox',
 -- 'Blink.View.Controls.RadioButton.radioButton', and
 -- 'Blink.View.Controls.RepeatButton.repeatButton' reuse it too, on top of their
 -- own control-specific contract -- the last passing a 'ButtonBehaviourConfig'

@@ -7,7 +7,7 @@ import Test.Hspec
 import Blink.View.Controls.Checkbox (checkbox)
 import Blink.View.Controls.Control (Attribute)
 import Blink.View.Controls.Label (text)
-import Blink.View.Controls.Toggle (ToggleConfig, isSelected)
+import Blink.View.Controls.ToggleButton (ToggleConfig, isSelected)
 import Blink.View.Controls.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..))
