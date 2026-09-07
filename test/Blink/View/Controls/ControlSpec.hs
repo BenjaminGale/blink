@@ -156,6 +156,24 @@ spec = describe "Blink.View.Controls.Control.control" $ do
         result <- runInteractions testBounds pressedSeedCtx containerWithChild [MoveTo (Point 70 70)] [MouseDown (Point 70 70)]
         getDrawCommands (resultContext result) `shouldContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
 
+    describe "with isEnabled False on the container and a nested child control" $ do
+      let rectChild = Rectangle 20 20 40 40
+          childClickPoint = Point 40 40
+          containerDisabledWithChild attrsChild =
+            () <$ control (resolve
+              (defaultControlConfig { ccContent = const (withBounds rectChild (renderAt ElemB attrsChild)) })
+              [elementId ElemA, isEnabled False])
+
+      it "raises no click event from the child, even though only the container has isEnabled False" $ do
+        result <- runInteractions testBounds seedCtx
+          (containerDisabledWithChild [onClicked (const [OutMsg ("B clicked" :: String)])])
+          [MoveTo childClickPoint] [MouseDown childClickPoint, MouseUp childClickPoint]
+        resultMessages result `shouldBe` []
+
+      it "does not draw the child in its pressed style while the mouse is held over it" $ do
+        result <- runInteractions testBounds pressedSeedCtx (containerDisabledWithChild []) [MoveTo childClickPoint] [MouseDown childClickPoint]
+        getDrawCommands (resultContext result) `shouldNotContain` [FillRect (insetRect (uniform 10) rectChild) pressedColour]
+
     describe "with a control nested two levels deep" $ do
       -- rectMid's hit area (30,30)-(50,50) contains rectInner's hit area
       -- (38,38)-(42,42), which contains the shared click point (40,40) --
