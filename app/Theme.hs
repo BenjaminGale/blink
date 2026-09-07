@@ -9,6 +9,7 @@
 -- control class, so 'defaultTheme' can't register it itself).
 module Theme
   ( ControlId (..)
+  , Page (..)
   , lightTheme
   , darkTheme
   ) where
@@ -20,9 +21,14 @@ import Blink.View.Rendering
 import Blink.View.Style
 import Blink.View.Style.Defaults (defaultTheme)
 
+-- | Which of the demo's sidebar-selected pages is showing.
+data Page = ControlsPage | ContinuePage | ContainedPage
+  deriving (Eq, Ord, Show)
+
 data ControlId = Label
              | FieldLabel ControlId
              | StatusBar
+             | SidebarPageButton Page
              | DarkModeCheckbox
              | EditingCheckbox
              | ClickButton
@@ -34,6 +40,17 @@ data ControlId = Label
              | PasswordInputCtl
              | AnimateCheckbox
              | SliderCtl
+             | ContainedWrapRadio Int
+             | ContainedRememberCheckbox
+             | ContainedBefore
+             | ContainedGroup
+             | ContainedOption Int
+             | ContainedAfter
+             | ContinueBefore
+             | ContinueGroup
+             | ContinueSearchInput
+             | ContinueClearButton
+             | ContinueAfter
   deriving (Eq, Ord)
 
 -- | Colours sampled from a light-mode reference screenshot (an inspector
