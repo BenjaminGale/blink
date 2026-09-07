@@ -24,6 +24,7 @@ import Blink.Input
 import Blink.View.Layout
 import Blink.View.Rendering
 import Blink.View
+import Blink.View.Drawing (fillRect)
 import Blink.View.Element (Element (..), elementWithLayout, runElement)
 import Blink.Update
 import Theme (ControlId (..), Page (..), lightTheme, darkTheme)

@@ -43,6 +43,8 @@ library
         Blink.View
         Blink.View.Attribute
         Blink.View.Controls
+        Blink.View.Drawing
+        Blink.View.Selection
         Blink.View.Controls.Button
         Blink.View.Controls.Checkbox
         Blink.View.Controls.Control

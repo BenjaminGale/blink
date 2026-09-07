@@ -31,6 +31,7 @@ import Blink.View.Layout.Constraints (HasLayoutConfig (..), Layout (..), fill)
 import Blink.View.Rendering (Colour (..))
 import Blink.View.Style (Style (..))
 import Blink.View
+import Blink.View.Drawing (fillRect, strokeRect)
 import Blink.View.Element (Element (..), noIntrinsicSize)
 
 -- | The height of the thin filled bar drawn along the middle of the

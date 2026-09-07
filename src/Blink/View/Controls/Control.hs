@@ -93,6 +93,7 @@ import Blink.Input (ButtonState (..), InputState (..), Key, KeyEvent (..), Modif
 import Blink.View.Layout.Constraints (MeasureCtx (..), shrink)
 import Blink.View.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), VisualState (..), resolveStyle)
 import Blink.View
+import Blink.View.Drawing (clipToCurrent, withBackground, withBorder)
 import Blink.View.Element (Element (..))
 
 -- * Raw events

@@ -22,6 +22,7 @@ import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
 import Blink.View.Layout.Constraints (HasLayoutConfig (..), Layout (..), fill)
 import Blink.View.Style (Style (..))
 import Blink.View
+import Blink.View.Drawing (fillRect)
 import Blink.View.Element (Element (..), noIntrinsicSize)
 
 -- | The value passed to 'progressBar' via 'progress'.

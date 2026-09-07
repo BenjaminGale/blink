@@ -32,6 +32,8 @@ import Blink.View.Layout.Constraints (HasLayoutConfig (..), Layout (..), fill, f
 import Blink.View.Rendering (Colour (..), TextAlign (..))
 import Blink.View.Style (Style (..))
 import Blink.View
+import Blink.View.Drawing (fillRect, drawText)
+import Blink.View.Selection (selectionHasExtent, selectionLow, selectionHigh, cursor, extendActive)
 import Blink.View.Element (Element (..))
 
 -- | Every capability 'textInput' resolves: the wrapped 'ControlConfig',

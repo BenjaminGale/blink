@@ -38,7 +38,8 @@ import Blink.View.Controls.Control
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.View.Layout.Constraints (HasLayoutConfig (..), Layout (..), fill, fitContent)
 import Blink.View.Style (Style (..))
-import Blink.View (View, currentStyle, drawText, getCurrentScope, measureText)
+import Blink.View (View, currentStyle, getCurrentScope, measureText)
+import Blink.View.Drawing (drawText)
 import Blink.View.Element (Element (..))
 
 -- * Caption fragment

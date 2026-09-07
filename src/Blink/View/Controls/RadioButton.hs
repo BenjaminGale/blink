@@ -20,7 +20,8 @@ import Blink.View.Controls.Toggle
   (ToggleConfig (..), defaultGlyphToggleConfig, glyphCaptionContent, glyphCaptionElement, toggleBase)
 import Blink.View.Rendering (TextAlign (..))
 import Blink.View.Style (Style (..))
-import Blink.View (currentStyle, drawText)
+import Blink.View (currentStyle)
+import Blink.View.Drawing (drawText)
 import Blink.View.Element (Element (..))
 
 -- | The fixed width reserved for the glyph, on the left of the caption.

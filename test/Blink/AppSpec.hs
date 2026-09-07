@@ -14,6 +14,7 @@ import Blink.View.Layout.Constraints (Layout (..), fill)
 import Blink.View.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.View.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
 import Blink.View
+import Blink.View.Drawing (fillRect, drawText)
 import Blink.View.Element (Element, elementWithLayout)
 import Blink.Update (modify)
 

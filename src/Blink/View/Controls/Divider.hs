@@ -23,6 +23,7 @@ import Blink.Geometry (Alignment (TopLeft), Orientation (..), Size (..))
 import Blink.View.Layout.Constraints (HasLayoutConfig (..), Layout (..), fill, fitContent)
 import Blink.View.Style (Style (..))
 import Blink.View
+import Blink.View.Drawing (fillRect)
 import Blink.View.Element (Element (..))
 
 -- | Every capability 'divider' resolves: the wrapped 'ControlConfig', the

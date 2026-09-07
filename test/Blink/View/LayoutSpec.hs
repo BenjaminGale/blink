@@ -15,6 +15,7 @@ import Blink.View.Layout.Constraints (capLength, minLength)
 import Blink.View.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.View.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), noBorder)
 import Blink.View
+import Blink.View.Drawing (fillRect)
 import Blink.View.Element (elementWithLayout, runElement)
 
 -- Test infrastructure

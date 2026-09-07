@@ -11,6 +11,8 @@ import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.View.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.View.Style (Metrics (..), Style (..), StyleSet (..), StyleKey (..), VisualState (..), Theme (..))
 import Blink.View
+import Blink.View.Drawing (clipToCurrent, fillRect, strokeRect, drawText, withBackground, withBorder)
+import Blink.View.Selection (selectionLow, selectionHigh, selectionHasExtent, cursor, collapseToLow, collapseToHigh, collapseToActive, extendActive)
 import Blink.Generators ()
 
 data TwoElems = ElemA | ElemB deriving (Eq, Ord, Show)

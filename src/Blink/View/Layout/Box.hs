@@ -24,7 +24,8 @@ import Blink.View.Layout.Constraints
   ( Available (..), HasLayoutConfig (..), Layout (..), Length, MeasureCtx (..)
   , canExpand, capLength, exactly, fill, layoutWithConstraints, minLength, naturalLength, resolveLength, shrink
   )
-import Blink.View (View, clipToCurrent, getBounds, withBounds)
+import Blink.View (View, getBounds, withBounds)
+import Blink.View.Drawing (clipToCurrent)
 import Blink.View.Element (Element (..))
 
 -- | Every capability 'hBox'\/'vBox' resolve: the box's own size request,

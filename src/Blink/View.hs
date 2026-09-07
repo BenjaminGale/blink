@@ -217,28 +217,22 @@ module Blink.View
   , clampScrollPos
   , contextScrollState
     -- * Selection
+    -- | See also "Blink.View.Selection" for 'selectionLow', 'cursor', and the
+    -- rest of the pure helpers built on 'Selection'.
   , Selection (..)
   , getSelection
   , contextSelection
-  , selectionLow
-  , selectionHigh
-  , selectionHasExtent
-  , cursor
-  , collapseToLow
-  , collapseToHigh
-  , collapseToActive
-  , extendActive
     -- * Bounds
   , getBounds
   , getWindowSize
   , withBounds
     -- * Drawing
-  , fillRect
-  , strokeRect
-  , drawText
-  , clipToCurrent
-  , withBackground
-  , withBorder
+    -- | Minimal primitives; see "Blink.View.Drawing" for 'fillRect',
+    -- 'strokeRect', 'drawText', 'clipToCurrent', 'withBackground', and
+    -- 'withBorder', built on top of these.
+  , draw
+  , getInteractionClip
+  , withInteractionClip
     -- * Interaction
   , getInput
   , contextInput
@@ -321,7 +315,7 @@ import Data.List (foldl')
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Blink.View.Rendering (Colour (..), isVisible, TextAlign (..), DrawCommand (..), TextMeasurer (..), noOpTextMeasurer)
+import Blink.View.Rendering (DrawCommand, TextMeasurer (..), noOpTextMeasurer)
 import Blink.Focus
   ( FocusClaim (..), currentFocus, isGained, tryClaim
   , LostFocus (..), pendingLostFocus
@@ -329,7 +323,7 @@ import Blink.Focus
   , FocusTracker (..), emptyFocusTracker, lookupScope, nextFocusTrackerFrame
   , FreshClaim (..), ScopeMode (..), scopeMode
   )
-import Blink.Geometry (Point, Rectangle, Size, BorderEdges, containsPoint, intersectRect)
+import Blink.Geometry (Point, Rectangle, Size, containsPoint)
 import Blink.Input
   ( Key (..), KeyEvent (..), Modifier (..), InputState (..)
   , MouseCapture (..), ButtonState (..), captureOf
@@ -689,38 +683,6 @@ writeScrollState eid v ctx = ctx { ctxElements = (ctxElements ctx)
 writeSelection :: e -> Selection -> ViewContext e msg -> ViewContext e msg
 writeSelection eid sel ctx = ctx { ctxElements = (ctxElements ctx)
   { elmSelection = Just (eid, sel) } }
-
--- | The lower bound of the selected range: @min selectionAnchor selectionActive@.
-selectionLow :: Selection -> Int
-selectionLow s = min (selectionAnchor s) (selectionActive s)
-
--- | The upper bound of the selected range: @max selectionAnchor selectionActive@.
-selectionHigh :: Selection -> Int
-selectionHigh s = max (selectionAnchor s) (selectionActive s)
-
--- | 'True' when the selection has non-zero extent (anchor ≠ active).
-selectionHasExtent :: Selection -> Bool
-selectionHasExtent s = selectionAnchor s /= selectionActive s
-
--- | A cursor with no selection extent. Equivalent to @'Selection' n n@.
-cursor :: Int -> Selection
-cursor n = Selection n n
-
--- | Collapse the selection to a cursor at the lower bound.
-collapseToLow :: Selection -> Selection
-collapseToLow = cursor . selectionLow
-
--- | Collapse the selection to a cursor at the upper bound.
-collapseToHigh :: Selection -> Selection
-collapseToHigh = cursor . selectionHigh
-
--- | Collapse the selection to a cursor at the active (moving) end.
-collapseToActive :: Selection -> Selection
-collapseToActive = cursor . selectionActive
-
--- | Apply a function to the active end, keeping the anchor fixed.
-extendActive :: (Int -> Int) -> Selection -> Selection
-extendActive f s = s { selectionActive = f (selectionActive s) }
 
 -- | Clamp a scroll position to @[0, 1]@.
 clampScrollPos :: Double -> Double
@@ -1267,61 +1229,22 @@ disableWhen :: Bool -> View e msg a -> View e msg a
 disableWhen True  = withField ctxDisabled (\v c -> c { ctxDisabled = v }) True
 disableWhen False = id
 
+-- | Queues a 'DrawCommand' against the current frame's output, in submission
+-- order. Minimal drawing primitive -- see "Blink.View.Drawing" for the
+-- higher-level operations ('fillRect', 'strokeRect', 'drawText',
+-- 'clipToCurrent', etc.) built on top of it and 'getBounds'.
 draw :: DrawCommand -> View e msg ()
 draw cmd = modifyOut $ \out -> out { outDrawCommands = cmd : outDrawCommands out }
 
--- | Builds a 'DrawCommand' from the current bounds and queues it.
-drawAt :: (Rectangle -> DrawCommand) -> View e msg ()
-drawAt mkCmd = do
-  r <- getBounds
-  draw (mkCmd r)
+-- | The active interaction clip region, if any -- see 'Blink.View.Drawing.clipToCurrent'.
+getInteractionClip :: View e msg (Maybe Rectangle)
+getInteractionClip = gets ctxInteractionClip
 
--- | Fills the current bounds with a solid colour.
-fillRect :: Colour -> View e msg ()
-fillRect colour = drawAt (\r -> FillRect r colour)
-
--- | Strokes the border of the current bounds with the given colour and per-side widths.
-strokeRect :: Colour -> BorderEdges -> View e msg ()
-strokeRect colour edges = drawAt (\r -> StrokeBorder r colour edges)
-
--- | Renders text within the current bounds using the given colour and alignment.
-drawText :: Colour -> TextAlign -> Text -> View e msg ()
-drawText colour align text = drawAt (\r -> DrawText r text colour align)
-
--- | Wraps a sub-tree in a clip region matching the current bounds. Draw
--- commands produced by the sub-tree that fall outside the region are discarded,
--- and mouse hit-testing is also restricted to the same region.
-clipToCurrent :: View e msg a -> View e msg a
-clipToCurrent (View f) = View $ \ctx -> do
-  let r       = ctxBounds ctx
-      newClip = maybe r (intersectRect r) (ctxInteractionClip ctx)
-      ctx'    = ctx { ctxInteractionClip = Just newClip
-                    , ctxOutputs = (ctxOutputs ctx)
-                        { outDrawCommands = PushClip r : outDrawCommands (ctxOutputs ctx) } }
-  (a, ctx'') <- f ctx'
-  let ctx''' = ctx'' { ctxOutputs = (ctxOutputs ctx'')
-                         { outDrawCommands = PopClip : outDrawCommands (ctxOutputs ctx'') }
-                     , ctxInteractionClip = ctxInteractionClip ctx }
-  pure (a, ctx''')
-
--- | Fills the current bounds with @colour@ then runs @content@ on top.
--- Skips the fill when @colour@ is fully transparent.
-withBackground :: Colour -> View e msg a -> View e msg a
-withBackground colour content = do
-  when (isVisible colour) $ fillRect colour
-  content
-
--- | Runs @content@, then strokes a border around the current bounds on top.
--- Drawing the border after content ensures it is always visible over children.
--- Skips the stroke when @colour@ is fully transparent, mirroring
--- 'withBackground' — a caller that reserves border space in every state via
--- @styleBorderColour@ but only wants it to actually render in some of them
--- (e.g. a resting-state border that becomes visible on focus) relies on this.
-withBorder :: Colour -> BorderEdges -> View e msg a -> View e msg a
-withBorder colour edges content = do
-  result <- content
-  when (isVisible colour) $ strokeRect colour edges
-  pure result
+-- | Runs @action@ with the interaction clip region replaced, restoring the
+-- previous region once @action@ completes. Building block for
+-- 'Blink.View.Drawing.clipToCurrent'.
+withInteractionClip :: Maybe Rectangle -> View e msg a -> View e msg a
+withInteractionClip = withField ctxInteractionClip (\v c -> c { ctxInteractionClip = v })
 
 -- | Queues a message to be delivered to the application once the frame
 -- completes. Messages are delivered in emit order by 'getMessages'.
