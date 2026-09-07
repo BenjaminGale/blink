@@ -12,15 +12,14 @@ work building an actual screen.
 Once every child's `Length` is resolved to a concrete number (via
 `elMeasure` where needed, per
 [the elements concept](01-introduction.md)), `hBox`/`vBox`
-distribute space along the main axis with a small, fixed set of rules —
+distribute space along the main axis with a small, fixed set of rules:
 fixed-size children take exactly what they asked for, flexible children
 split whatever's left equally (capped by their own `atMost`/`between`
 ceiling if they have one), and the whole group is then positioned
 according to the box's `alignment` (where leftover whitespace goes, or
-which side clips on overflow). This is worth reading in
-`Blink.View.Layout.Box`'s own Haddocks rather than restating here — `hBox`'s
-module documentation walks through it with worked diagrams, now that you
-have the `elMeasure`/`Available` vocabulary those examples assume.
+which side clips on overflow). `Blink.View.Layout.Box`'s own Haddocks walk
+through this with worked diagrams, now that you have the
+`elMeasure`/`Available` vocabulary those examples assume.
 
 ## `borderLayout`: named regions instead of a single axis
 

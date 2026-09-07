@@ -2,7 +2,7 @@
 
 [The frame loop](01-the-frame-loop.md) covered what happens inside a
 single call to `stepFrame`. This section covers where that call comes
-from — how your view, theme, and
+from: how your view, theme, and
 [`update` function](../03-app-state/01-introduction.md) get bundled into
 something a real backend can drive.
 
@@ -52,17 +52,16 @@ turned into something a backend can drive by calling
 +------------------------------------------------+
 ```
 
-`BlinkHandle` is what threads the state between calls to `stepFrame` — the
+`BlinkHandle` threads the state between calls to `stepFrame`. The
 backend's own loop only ever passes the handle around; it never sees or
 stores `s` itself. Inside `stepFrame`, one call runs exactly the three
 frame-loop steps from [the frame loop](01-the-frame-loop.md), then folds
 every message the view emitted into the state with `update` before
 handing back a `FrameResult`.
 
-`configureContinuous` and `configureEventDriven` also decide *when*
-`stepFrame` runs relative to input, which changes what a single call
-actually does — see
-[frame management](02-frame-management.md) for that distinction.
+`configureContinuous` and `configureEventDriven` also decide when
+`stepFrame` runs relative to input, which changes what a single call does.
+See [frame management](02-frame-management.md) for that distinction.
 
 ## Writing a new backend
 

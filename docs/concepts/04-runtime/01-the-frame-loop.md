@@ -2,7 +2,7 @@
 
 The previous areas covered what `Blink.View`, `Element`, layout, controls,
 and application-state updates each provide. This one zooms out to the
-frame as a whole: Blink doesn't own the main loop — a backend (SDL2, in
+frame as a whole. Blink does not own the main loop; a backend (SDL2, in
 the included demo) calls into Blink once per frame. Each call does the
 same three things:
 
@@ -32,18 +32,17 @@ same three things:
    frame; `getMessages` pulls out what the view asked to happen, in the
    order it asked for it.
 
-The context produced by step 2 becomes next frame's starting point — that's
-the arrow feeding back into step 1. This is the *only* thing that persists
-between frames on Blink's side. Nothing else about "last frame" is
-remembered; if it isn't in that context, it doesn't exist to Blink.
+The context produced by step 2 becomes next frame's starting point: that's
+the arrow feeding back into step 1, and it is everything that persists
+between frames on Blink's side. The context is the complete record of
+"last frame" as far as Blink is concerned.
 
-## What's actually inside that context
+## Contents of the frame context
 
-The context (`ViewContext`) is not application data — it's the small set of
-bookkeeping covered by
+The context (`ViewContext`) holds the small set of bookkeeping covered by
 [`01-immediate-mode-api`](../01-immediate-mode-api/01-introduction.md)
-that has to survive between frames for the immediate-mode model to work
-at all:
+that has to survive between frames for the immediate-mode model to work.
+It does not hold application data:
 
 * Which element (if any) currently holds keyboard focus, per focus scope.
 * Scroll position and text selection, keyed by element ID.
@@ -51,11 +50,10 @@ at all:
   frame's controls can tell "was I hovered a moment ago?"
 * The animation clock.
 
-Your application's own state (`s` in `App e msg s`) is deliberately *not*
-part of this context — see
-[`03-app-state`](../03-app-state/01-introduction.md) for why that's a
-separate mechanism with a different owner.
+Your application's own state (`s` in `App e msg s`) lives in a separate
+mechanism with a different owner. See
+[`03-app-state`](../03-app-state/01-introduction.md) for why.
 
-Next: [section 2](02-frame-management.md) covers *when* a backend actually
-makes this call — the two ways `stepFrame` can be triggered, and why they
-change what a single call does.
+Next: [section 2](02-frame-management.md) covers when a backend makes this
+call: the two ways `stepFrame` can be triggered, and why they change what
+a single call does.

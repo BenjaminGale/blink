@@ -2,8 +2,8 @@
 
 [Effects](../01-immediate-mode-api/04-effects.md) established that
 `update` folds each queued message into your application state, once per
-message, in emission order. Your state `s` is just a plain Haskell type —
-usually a record — holding whatever your app needs to remember across
+message, in emission order. Your state `s` is just a plain Haskell type,
+usually a record, holding whatever your app needs to remember across
 frames:
 
 ```haskell
@@ -11,8 +11,8 @@ data AppState = AppState { counter :: Int, name :: Text }
 ```
 
 `Update s` is the monad that runs in: a small state-threading computation
-over `s`, with `get`/`put`/`gets`/`modify` — the same shape as any state
-monad you've used before. Messages describe what happened; `update` folds
+over `s`, using `get`/`put`/`gets`/`modify`, the same shape as any state
+monad. Messages describe what happened; `update` folds
 each one into the state:
 
 ```haskell
