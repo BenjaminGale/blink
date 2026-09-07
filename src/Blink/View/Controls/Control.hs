@@ -435,12 +435,19 @@ applyFocusPolicy eid policy body = case policy of
 -- keys are ambient *outside* it -- captured before anything below can
 -- replace them, so it always means real Tab\/Shift-Tab regardless of
 -- @keys@. @keys@, when given, replaces the pair @body@'s own descendants
--- see with the 'Contained' scheme's own, and seeds the scope with
--- 'EnterRemembered' if that's what the entry policy calls for and the
--- scope is being freshly claimed this frame (nothing already claimed
--- inside) -- 'Nothing' ('Continue') leaves the ambient keys and entry
--- behaviour alone, since children should behave exactly as if this
--- control weren't there.
+-- see with the 'Contained' scheme's own. 'Nothing' ('Continue') leaves
+-- the ambient keys alone, since children should behave exactly as if
+-- this control weren't there.
+--
+-- 'EnterRemembered' needs no code here at all: 'withFocusScope' already
+-- keeps this scope's own child claim alive for as long as this control
+-- keeps rendering, live or not (see its own docs) -- so whichever child
+-- was last selected is simply still there, the ordinary way, whenever
+-- this control is freshly Tab-ed back onto. 'EnterFirst' is the one that
+-- needs to actively do something: on the frame this control itself is
+-- freshly given outer focus, it discards whatever's remembered so the
+-- ordinary auto-claim mechanism picks whichever child is first eligible,
+-- fresh, exactly as if nothing had ever been selected before.
 --
 -- 'BlockFreshClaim': this scope's id is always the same id 'control'
 -- already claims (or doesn't) against the *enclosing* ambient via its own
@@ -459,12 +466,10 @@ applyFocusPolicy eid policy body = case policy of
 -- whichever child rendered last (every focusable child claims it as it
 -- renders, unconditionally), so the *first* child to retreat would
 -- otherwise wrap around to the last one -- the behaviour 'WrapCycle'
--- wants, but not 'WrapStop'. Seeded after 'EnterRemembered' (above) has
--- already read this scope's own genuine history, so that still works. A
--- child that does have a real predecessor this frame (it isn't the first
--- to render) overwrites this placeholder with a real id before any
--- retreat check can see it, so an ordinary internal move (e.g. second
--- child back to first) is untouched.
+-- wants, but not 'WrapStop'. A child that does have a real predecessor
+-- this frame (it isn't the first to render) overwrites this placeholder
+-- with a real id before any retreat check can see it, so an ordinary
+-- internal move (e.g. second child back to first) is untouched.
 --
 -- TODO: revisit -- this placeholder is a workaround for there being no
 -- exported way to write a literal @Nothing@ into 'previousTabStop' (only
@@ -500,14 +505,11 @@ applyFocusPolicy eid policy body = case policy of
 runFocusScope :: Ord e => e -> Maybe (NavigationKeys, EntryPolicy) -> WrapPolicy -> View e msg a -> View e msg a
 runFocusScope eid mKeysEntry wrap body = do
   ambientKeys <- getNavigationKeys
+  justEntered <- hasGainedFocus eid
   maybe id (withNavigationKeys . fst) mKeysEntry $ do
     (a, stillFocused) <- withFocusScope eid BlockFreshClaim $ do
-      wasEmpty <- isNothingFocused <$> getFocus
       case mKeysEntry of
-        Just (_, EnterRemembered) | wasEmpty -> do
-          scopeId <- getCurrentScope
-          mPrev   <- getPreviousTabStop
-          forM_ mPrev (requestFocus scopeId)
+        Just (_, EnterFirst) | justEntered -> clearFocus
         _ -> pure ()
       when (wrap == WrapStop) (setPreviousTabStop eid)
       a <- body

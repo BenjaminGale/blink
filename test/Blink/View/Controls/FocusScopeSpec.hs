@@ -96,6 +96,35 @@ renderAll policy = do
   composite policy [] []
   leaf After rectAfter []
 
+rectOption1, rectOption2, rectOption3, rectOption4 :: Rectangle
+rectOption1 = Rectangle 40  0 20 100
+rectOption2 = Rectangle 60  0 20 100
+rectOption3 = Rectangle 80  0 20 100
+rectOption4 = Rectangle 100 0 20 100
+
+-- | A 'FocusScope' composite with four children (reusing 'Child1'..'Child4').
+-- Unlike the two-child 'composite' above -- where "whichever child was
+-- selected" and "whichever child renders last" are always the same child
+-- by construction -- this has enough children to actually distinguish the
+-- two when testing 'EnterRemembered'.
+fourOptionsComposite :: FocusPolicy -> View TestElement String ()
+fourOptionsComposite policy = withBounds rectComposite (() <$ control cfg)
+  where
+    cfg = (resolve defaultControlConfig [elementId Composite, focusPolicy policy])
+      { ccContent = const $ do
+          leaf Child1 rectOption1 []
+          leaf Child2 rectOption2 []
+          leaf Child3 rectOption3 []
+          leaf Child4 rectOption4 []
+      }
+
+-- | 'Before', 'fourOptionsComposite', and 'After', in that order.
+renderFourOptions :: FocusPolicy -> View TestElement String ()
+renderFourOptions policy = do
+  leaf Before rectBefore []
+  fourOptionsComposite policy
+  leaf After rectAfter []
+
 -- | A 'ContainedNavigation' scheme using Down\/Up as the forward\/backward
 -- keys (Tab stays owned by the composite as a whole), with the given
 -- wrap and entry policies.
@@ -239,9 +268,30 @@ spec = describe "Blink.View.Controls.Control.FocusScope" $ do
 
     describe "EnterRemembered" $ do
       let policy = FocusScope (Contained (arrowNav WrapCycle EnterRemembered))
+          -- Before -> Child1 -> Child2 -> Child3, then leave to After.
+          -- Child3 is a middle child -- neither first nor last -- so
+          -- landing back on it can't be confused with either "always
+          -- resets to first" (EnterFirst) or "always ends up on
+          -- whichever child renders last" (the bug this is guarding
+          -- against: 'Child4' would render last in this fixture).
+          selectChild3 =
+            [ Wait 1, Tab, Wait 1
+            , PressKey KeyDown [], Wait 1
+            , PressKey KeyDown [], Wait 1
+            , Tab, Wait 1
+            ]
 
-      it "re-entering the group after selecting Child2 lands back on Child2" $ do
-        result <- runInteractions testBounds seedCtx (renderAll policy)
-          [Wait 1, Tab, Wait 1, PressKey KeyDown [], Wait 1, Tab, Wait 1]
-          [ShiftTab, Wait 1, Wait 1]
-        focusedOn Child2 result `shouldBe` True
+      it "remembers a middle selection, not whichever child renders last" $ do
+        result <- runInteractions testBounds seedCtx (renderFourOptions policy) selectChild3 [ShiftTab, Wait 1]
+        focusedOn Child3 result `shouldBe` True
+
+      it "keeps remembering across several frames away, same page" $ do
+        result <- runInteractions testBounds seedCtx (renderFourOptions policy)
+          (selectChild3 ++ [Wait 1, Wait 1, Wait 1, Wait 1, Wait 1])
+          [ShiftTab, Wait 1]
+        focusedOn Child3 result `shouldBe` True
+
+      it "EnterFirst, unlike EnterRemembered, always resets to the first child" $ do
+        let firstPolicy = FocusScope (Contained (arrowNav WrapCycle EnterFirst))
+        result <- runInteractions testBounds seedCtx (renderFourOptions firstPolicy) selectChild3 [ShiftTab, Wait 1]
+        focusedOn Child1 result `shouldBe` True
