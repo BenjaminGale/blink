@@ -203,12 +203,26 @@ postWith :: (a -> msg) -> a -> [Out e msg]
 postWith f a = [OutMsg (f a)]
 
 -- | 'True' when nothing else holds mouse capture, or this control itself
--- does (a drag in progress on this control doesn't count as contention).
--- Shared by 'control's own auto-claim logic.
+-- does (a drag in progress on this control doesn't count as contention), or
+-- the enclosing 'FocusScope' does. That last case matters for a click
+-- landing on a 'FocusScope' composite's own background (not any child):
+-- the composite itself acquires capture first (its content hasn't rendered,
+-- and so hasn't had a chance to claim the point out from under it, until
+-- afterwards -- see 'Blink.View.Mouse.isOccludedFor'), and that capture is
+-- held for the whole press. Without this, every child's own auto-claim
+-- would read as contested by its own composite for that entire press, so
+-- nothing could claim the scope's freshly-granted focus until release --
+-- and a 'Blink.View.Controls.Control.FocusPolicy.WrapStop' scope, seeing
+-- nothing claimed inside for a frame, would give up its own claim too (see
+-- 'runFocusScope'), letting the claim be stolen by whatever else in the
+-- surrounding order auto-claims next. Shared by 'control's own auto-claim
+-- logic.
 isMouseFreeFor :: Eq e => e -> View e msg Bool
 isMouseFreeFor eid = do
-  capturedByMe <- isDragging eid
-  (|| capturedByMe) <$> isMouseFree
+  capturedByMe    <- isDragging eid
+  scope           <- getCurrentScope
+  capturedByScope <- maybe (pure False) isDragging scope
+  (|| capturedByMe || capturedByScope) <$> isMouseFree
 
 -- | 'watchHover's own report: hovered, plus the enter\/exit edges against
 -- last frame's hover state.
@@ -861,7 +875,17 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
 -- event itself: the self-focus-on-click effect it applies (when
 -- @ccFocusPolicy@ makes it a focus target) is a direct 'UiEffect', read
 -- off its own 'ciMouseDown' -- so focus moves on press, before any drag or
--- release decides whether the press itself counts as a click.
+-- release decides whether the press itself counts as a click. Only fired
+-- while this control isn't already focused: it's a "give me focus" request
+-- for when something else (or nothing) currently holds it, not a periodic
+-- reaffirmation -- @applySelfFocus@ already reaffirms an existing claim
+-- every frame, immediately. Re-requesting it anyway on every click would
+-- queue a real 'Blink.View.Focus.requestFocus' \/ redirect even when
+-- nothing is actually moving, which a 'FocusScope' can't tell apart from a
+-- genuine arrival from outside (see 'Blink.View.Focus.hasGainedFocus' and
+-- the @justEntered@ check in @runFocusScope@) -- spuriously re-triggering
+-- 'EnterFirst' reset-to-first-child behaviour on every click anywhere in
+-- an already-focused scope, not just ones that actually enter it.
 --
 -- Identified by @cc@'s own 'ccElementId' (see 'elementId'). With no id set,
 -- the control still renders, in its resting (undisabled, unfocused,
@@ -905,7 +929,7 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       (m, styles) <- getStyleSet styleKey
       hitBounds   <- marginInsetBounds m
       raw         <- withBounds hitBounds (watchInteraction eid disabled (styleBase styles))
-      when (ciMouseDown raw && isFocusable (ccFocusPolicy cc)) (requestFocus currentScope eid)
+      when (ciMouseDown raw && isFocusable (ccFocusPolicy cc) && not nowFocused) (requestFocus currentScope eid)
       let active = intrinsicStates disabled raw `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
       let final = raw { ciStyle = s }

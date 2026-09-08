@@ -78,6 +78,18 @@ composite policy child1Attrs child2Attrs = withBounds rectComposite (() <$ contr
           leaf Child2 rectChild2 child2Attrs
       }
 
+-- | Like 'composite', but the children don't fully cover the composite's
+-- own bounds -- leaving a real "background" strip (here, 40-50 and 110-120)
+-- that hits the composite's own hit region without hitting either child.
+compositeWithGap :: FocusPolicy -> View TestElement String ()
+compositeWithGap policy = withBounds rectComposite (() <$ control cfg)
+  where
+    cfg = (resolve defaultControlConfig [elementId Composite, focusPolicy policy])
+      { ccContent = const $ do
+          leaf Child1 (Rectangle 50 0 30 100) []
+          leaf Child2 (Rectangle 80 0 30 100) []
+      }
+
 -- | A second 'FocusScope' composite at 'rectComposite2', containing
 -- 'Child3' then 'Child4'.
 composite2 :: FocusPolicy -> View TestElement String ()
@@ -200,6 +212,26 @@ spec = describe "Blink.View.Controls.Control.FocusScope" $ do
         result <- runInteractions testBounds seedCtx (renderAll policy) [ClickAt (Point 100 50), Wait 1] [Tab, Wait 1]
         focusedOn After result `shouldBe` True
 
+    describe "mousedown on the composite's own background (not any child)" $ do
+      -- 'Before' auto-claims root focus the instant nothing else has it --
+      -- standing in for e.g. a sidebar's own first control, which would
+      -- otherwise be free to steal focus back the moment the composite's
+      -- own claim is (even momentarily) given up.
+      let renderWithSidebar = do
+            leaf Before rectBefore []
+            compositeWithGap policy
+            leaf After rectAfter []
+          gapPoint = Point 45 50
+
+      it "Before auto-claims at start" $ do
+        result <- runInteractions testBounds seedCtx renderWithSidebar [] [Wait 1]
+        focusedOn Before result `shouldBe` True
+
+      it "press, hold across a frame, then release lands on Child1 -- not back on Before" $ do
+        result <- runInteractions testBounds seedCtx renderWithSidebar []
+          [MouseDown gapPoint, Wait 1, Wait 1, MouseUp gapPoint, Wait 1]
+        focusedOn Child1 result `shouldBe` True
+
     describe "two composites in sequence" $ do
       let renderTwo = do
             composite policy [] []
@@ -249,6 +281,18 @@ spec = describe "Blink.View.Controls.Control.FocusScope" $ do
 
       it "Up from the first child wraps to the last" $ do
         result <- runInteractions testBounds seedCtx (renderAll policy) [Wait 1, Tab, Wait 1] [PressKey KeyUp [], Wait 1]
+        focusedOn Child2 result `shouldBe` True
+
+    describe "mousedown on the group's own background while a child is already focused" $ do
+      let policy = FocusScope (Contained (arrowNav WrapCycle EnterFirst))
+          gapPoint = Point 45 50
+          -- Tab in (EnterFirst lands on Child1), then move to Child2, so a
+          -- later reset-to-first would be distinguishable from "stayed put".
+          selectChild2 = [Wait 1, Tab, Wait 1, PressKey KeyDown [], Wait 1]
+
+      it "doesn't reset the selection back to Child1 (EnterFirst re-firing on every click)" $ do
+        result <- runInteractions testBounds seedCtx (compositeWithGap policy) selectChild2
+          [MouseDown gapPoint, Wait 1, MouseUp gapPoint, Wait 1]
         focusedOn Child2 result `shouldBe` True
 
     describe "WrapStop" $ do
