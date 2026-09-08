@@ -2,36 +2,29 @@
 Module: Blink.View.Navigation
 
 Which key\/modifier combinations mean "advance" or "retreat" keyboard
-focus.
-
-No dependency on the 'Blink.View' monad -- 'Blink.View' holds a
-'NavigationKeys' ambiently in its context and exposes monadic accessors
-('Blink.View.getNavigationKeys', 'Blink.View.withNavigationKeys') built
-on top of what's defined here, the same relationship "Blink.View.Focus"
-has with the focus state 'Blink.View' threads through its own context.
+focus: the pure 'NavigationKeys' type and 'defaultNavigationKeys', plus the
+monadic accessors ('getNavigationKeys', 'withNavigationKeys') built on top
+of the ambient set threaded through 'Blink.View.Context.ViewContext'. See
+"Blink.View" for the module overview; import that instead of this module
+directly.
 -}
 module Blink.View.Navigation
   ( NavigationKeys (..)
   , defaultNavigationKeys
+  , getNavigationKeys
+  , withNavigationKeys
   ) where
 
-import Blink.Input (Key (..), Modifier (..))
+import Blink.View.Context
 
--- | The specific key\/modifier combinations that currently mean "give up
--- focus here and let the next render claim it" ('navAdvance') or "return to
--- whichever tab stop was previous" ('navRetreat'). Every
--- 'Blink.View.Controls.Control.control' consults this instead of a hardcoded Tab\/
--- Shift-Tab, so a container can redefine it for its own children by
--- opening a new ambient set around them with 'Blink.View.withNavigationKeys'.
-data NavigationKeys = NavigationKeys
-  { navAdvance :: [(Key, [Modifier])]
-  , navRetreat :: [(Key, [Modifier])]
-  } deriving (Eq, Show)
+-- | The navigation keys currently ambient.
+getNavigationKeys :: View e msg NavigationKeys
+getNavigationKeys = gets ctxNavigationKeys
 
--- | Plain Tab\/Shift-Tab — what every control uses unless some enclosing
--- container has redefined it. The root ambient default.
-defaultNavigationKeys :: NavigationKeys
-defaultNavigationKeys = NavigationKeys
-  { navAdvance = [(KeyTab, [])]
-  , navRetreat = [(KeyTab, [Shift])]
-  }
+-- | Replaces the ambient navigation keys for @action@, restoring the
+-- previous set once it completes — same save\/restore shape as
+-- 'Blink.View.Context.disableWhen', except it replaces rather than only
+-- escalating: a container fully redefines what its own children treat as
+-- navigation keys, it doesn't merely add to an outer scope's set.
+withNavigationKeys :: NavigationKeys -> View e msg a -> View e msg a
+withNavigationKeys = withField ctxNavigationKeys (\v c -> c { ctxNavigationKeys = v })

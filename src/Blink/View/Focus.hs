@@ -1,268 +1,308 @@
 {- |
 Module: Blink.View.Focus
 
-Pure keyboard-focus state: which element (if any) holds focus within a
-scope, how a claim ages across frames, and the bookkeeping a nested focus
-scope (a list, a tree — anything with sub-items) needs to persist its own
-focus independently of its enclosing scope.
-
-No dependency on the 'Blink.View' monad -- 'Blink.View' holds a
-'FocusTracker' in its context and exposes monadic accessors
-('Blink.View.getFocus', 'Blink.View.setFocus', 'Blink.View.withFocusScope',
-etc.) built on top of what's defined here, the same relationship
-"Blink.Input" has with the mouse state 'Blink.View' threads through its own
-context.
+Keyboard focus and nested focus scopes: single-hop focus queries
+('isFocused', 'hasGainedFocus', 'hasLostFocus'), the claim/clear API
+('setFocus', 'clearFocus', 'requestFocus', 'requestClearFocus'), and
+'withFocusScope', which lets a composite (a list, a tree — anything with
+sub-items) own its own nested 'FocusState'. See "Blink.View" for the module
+overview, including the focus/keyboard-navigation narrative; import that
+instead of this module directly.
 -}
 module Blink.View.Focus
-  ( -- * Focus claims
-    FocusClaim (..)
+  ( FocusState (previousTabStop)
+  , FocusClaim (..)
   , currentFocus
-  , isGained
-  , tryClaim
-  , tickFocusClaim
-    -- * Displaced focus
-  , LostFocus (..)
-  , pendingLostFocus
-  , tickLostFocus
-    -- * Per-scope state
-  , FocusState (..)
-  , emptyFocusState
   , isNothingFocused
-  , nextFocusFrame
-  , reaffirm
-    -- * Nested scopes
-  , FocusTracker (..)
-  , emptyFocusTracker
-  , lookupScope
-  , nextFocusTrackerFrame
+  , getFocus
+  , isFocused
+  , hasGainedFocus
+  , hasLostFocus
+  , setFocus
+  , setFocusWhen
+  , clearFocus
+  , disclaimFocus
+  , requestFocus
+  , requestClearFocus
   , FreshClaim (..)
-  , ScopeMode (..)
-  , scopeMode
+  , withFocusScope
+  , getPreviousTabStop
+  , setPreviousTabStop
+  , contextFocus
+  , contextFocusChain
+  , contextPreviousTabStop
   ) where
 
+import Control.Monad (join, when)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import Blink.View.Context
 
--- | Which element (if any) a scope currently has focused, and whether that
--- claim has been reaffirmed since it was set. A claim must be reaffirmed
--- every frame by whatever holds it actually rendering and re-claiming it
--- (see 'Blink.View.setFocus'); one frame of grace ('ClaimedLastFrame') is
--- given before an unreaffirmed claim is dropped, so a claim surviving
--- exactly one frame without a render in between (e.g. the frame a queued
--- 'Blink.View.Focus' effect is applied, before the new holder has rendered
--- even once) isn't mistaken for abandonment.
--- 'GainedThisFrame'\/'GainedLastFrame' are only ever entered by an explicit
--- 'Blink.View.Focus' effect (see 'Blink.View.setFocusChange'), never by
--- 'Blink.View.setFocus' reaffirming a claim -- that's what keeps a
--- self-claim from masquerading as a redirect.
-data FocusClaim e
-  = Unclaimed
-  | ClaimedLastFrame e
-    -- ^ Held as of the previous frame boundary but not yet reaffirmed this
-    -- pass; dropped to 'Unclaimed' if still unreaffirmed at the next boundary.
-  | ClaimedThisFrame e
-    -- ^ Reaffirmed during the current frame (or just granted).
-  | GainedLastFrame e
-    -- ^ Landed via a 'Blink.View.Focus' effect as of the previous frame
-    -- boundary; its final frame of visibility to 'Blink.View.hasGainedFocus',
-    -- then it fades to 'ClaimedThisFrame' -- an ordinary held claim from here
-    -- on.
-  | GainedThisFrame e
-    -- ^ Landed via a 'Blink.View.Focus' effect this frame boundary.
-  deriving (Eq, Show)
+-- | Modifies the currently ambient scope's own 'FocusState'.
+modifyFocusState :: (FocusState e -> FocusState e) -> View e msg ()
+modifyFocusState f = modify $ \ctx -> ctx { ctxFocus = (ctxFocus ctx) { ftAmbient = f (ftAmbient (ctxFocus ctx)) } }
 
--- | The element currently focused, regardless of reaffirmation status.
-currentFocus :: FocusClaim e -> Maybe e
-currentFocus Unclaimed             = Nothing
-currentFocus (ClaimedLastFrame e)  = Just e
-currentFocus (ClaimedThisFrame e)  = Just e
-currentFocus (GainedLastFrame e)   = Just e
-currentFocus (GainedThisFrame e)   = Just e
+-- | The currently ambient scope's focused element, if any — root's, unless
+-- inside 'withFocusScope'.
+getFocus :: View e msg (Maybe e)
+getFocus = gets contextFocus
 
--- | 'True' when this element is the target of a 'Blink.View.Focus' effect
--- that landed within the last two frames.
-isGained :: Eq e => e -> FocusClaim e -> Bool
-isGained eid (GainedLastFrame e) = e == eid
-isGained eid (GainedThisFrame e) = e == eid
-isGained _   _                   = False
+-- | The currently ambient scope's focused element, read directly from a
+-- 'ViewContext' outside the 'View' monad.
+contextFocus :: ViewContext e msg -> Maybe e
+contextFocus = currentFocus . focusClaim . ftAmbient . ctxFocus
 
--- | Claims focus for @eid@ (see 'Blink.View.setFocus'): succeeds when
--- nothing currently holds it, or @eid@ is reaffirming itself; refused,
--- unchanged, when a different element already holds it this frame -- so an
--- element calling 'Blink.View.setFocus' for itself can never steal focus out
--- from under whoever legitimately has it, regardless of render order.
--- Reaffirming a still-fresh 'Gained*' claim for the same element leaves it
--- exactly as it was, so a control reaffirming itself every frame doesn't cut
--- short its own 'Blink.View.hasGainedFocus' visibility window.
-tryClaim :: Eq e => e -> FocusClaim e -> FocusClaim e
-tryClaim eid claim
-  | isGained eid claim = claim
-  | otherwise = case currentFocus claim of
-      Nothing                     -> ClaimedThisFrame eid
-      Just holder | holder == eid -> ClaimedThisFrame eid
-                  | otherwise     -> claim
-
--- | Advances a 'FocusClaim' to the next frame: a reaffirmed claim gets one
--- frame of grace before it must be reaffirmed again; a claim already on
--- grace that wasn't reaffirmed again is dropped. A 'Gained*' claim ages down
--- the same way, but past 'GainedLastFrame' it settles into an ordinary
--- 'ClaimedThisFrame' rather than being dropped -- it's still held, just no
--- longer freshly granted.
-tickFocusClaim :: FocusClaim e -> FocusClaim e
-tickFocusClaim (GainedThisFrame e)  = GainedLastFrame e
-tickFocusClaim (GainedLastFrame e)  = ClaimedThisFrame e
-tickFocusClaim (ClaimedThisFrame e) = ClaimedLastFrame e
-tickFocusClaim (ClaimedLastFrame _) = Unclaimed
-tickFocusClaim Unclaimed            = Unclaimed
-
--- | Whether a scope has a displaced element pending observation, and for
--- how much longer. A redirect is visible for exactly one full frame
--- regardless of when during that frame it happened, so every element gets a
--- chance to see it however render order falls; the two "pending"
--- constructors carry the same @Maybe e@ but tell 'nextFocusFrame' whether
--- this is its first or last frame of visibility.
-data LostFocus e
-  = NothingLost
-  | LostLastFrame (Maybe e)
-    -- ^ Was pending as of the previous frame boundary; this is its final
-    -- frame of visibility, then it expires to 'NothingLost'.
-  | LostThisFrame (Maybe e)
-    -- ^ Just happened during the current frame.
-  deriving (Eq, Show)
-
--- | The element a scope's elements may still observe as displaced, if any.
--- See 'Blink.View.hasLostFocus'.
-pendingLostFocus :: LostFocus e -> Maybe (Maybe e)
-pendingLostFocus NothingLost       = Nothing
-pendingLostFocus (LostLastFrame f) = Just f
-pendingLostFocus (LostThisFrame f) = Just f
-
--- | Advances a @LostFocus@ to the next frame: a loss just noticed gets one
--- more frame of visibility before it expires.
-tickLostFocus :: LostFocus e -> LostFocus e
-tickLostFocus (LostThisFrame f) = LostLastFrame f
-tickLostFocus (LostLastFrame _) = NothingLost
-tickLostFocus NothingLost       = NothingLost
-
--- | Per-scope focus bookkeeping: which single child (if any) currently holds
--- focus within this scope, the last tab stop visited within it (for
--- Shift-Tab), and any pending focus-change notice. Root and every composite
--- (a list, a tree — anything with sub-items, see 'Blink.View.withFocusScope')
--- each own one of these; a composite's own is persisted in @ftScopes@
--- between frames, the same way scroll and selection state persist per
--- element.
-data FocusState e = FocusState
-  { focusClaim      :: FocusClaim e
-    -- ^ The element this scope currently has focused, if any, and its
-    -- reaffirmation status. See 'FocusClaim'.
-  , previousTabStop :: Maybe e
-    -- ^ The element visited just before the current one, scoped to this
-    -- level, for Shift-Tab.
-  , focusLost       :: LostFocus e
-    -- ^ The element this scope's most recent redirect displaced, if still
-    -- within its one-frame observation window. See @LostFocus@.
-  }
-
--- | The empty, never-focused 'FocusState' — root's initial value, and every
--- composite's the first time it renders.
-emptyFocusState :: FocusState e
-emptyFocusState = FocusState
-  { focusClaim      = Unclaimed
-  , previousTabStop = Nothing
-  , focusLost       = NothingLost
-  }
-
--- | 'True' when nothing is focused in the given scope. Pattern-matches
--- directly rather than requiring @Eq e@, so it's usable wherever a plain
--- 'Bool' guard is more convenient than matching by hand.
-isNothingFocused :: Maybe e -> Bool
-isNothingFocused Nothing  = True
-isNothingFocused (Just _) = False
-
--- | Advances a 'FocusState' to the next frame: ticks 'focusClaim' via
--- 'tickFocusClaim', so a claim not reaffirmed for a full frame expires to
--- 'Unclaimed'. Applied to the root scope and every entry in @ftScopes@ — a
--- scope that stops being reaffirmed (its composite removed from the tree, or
--- its specific focused child gone while the composite itself still renders)
--- expires independently, the same way root-level focus already did.
--- 'previousTabStop' is untouched here and simply persists, the same way
--- @elmScrollStates@ is never purged for elements that stop rendering.
+-- | The full root-to-leaf focus chain, read directly from a 'ViewContext'
+-- outside the 'View' monad by following each scope's own focused element into
+-- @ftScopes@ until it bottoms out. No production code needs this —
+-- every real check is the single-hop 'contextFocus'\/'isFocused' at
+-- whichever scope is ambient at the time — but it's useful for tests and
+-- debugging tools that want to see the whole nested claim at once.
 --
--- Also advances 'focusLost' independently of that, via 'tickLostFocus': a
--- loss just noticed stays visible for exactly one more frame so every
--- element gets a chance to observe it regardless of render order, then
--- expires the frame after.
-nextFocusFrame :: FocusState e -> FocusState e
-nextFocusFrame fs = fs
-  { focusClaim = tickFocusClaim (focusClaim fs)
-  , focusLost  = tickLostFocus (focusLost fs)
+-- Guards against revisiting an id already on the chain: a click can
+-- redirect focus onto any id (as 'Blink.View.Controls.Label.label' does with its
+-- own 'Blink.View.Controls.Label.target'), including an enclosing composite's
+-- own — a composite could use this so that clicking an item leaves the
+-- composite itself focused, not the item — which writes that id into its
+-- own scope entry in @ftScopes@. That's harmless for the single-hop checks
+-- every real caller uses, but would otherwise send this walk into an
+-- infinite loop.
+contextFocusChain :: Ord e => ViewContext e msg -> [e]
+contextFocusChain ctx = go Set.empty (contextFocus ctx)
+  where
+    go _    Nothing  = []
+    go seen (Just x)
+      | x `Set.member` seen = []
+      | otherwise            = x : go (Set.insert x seen) (currentFocus (focusClaim (lookupScope x (ctxFocus ctx))))
+
+-- | 'True' when the given element id is the currently ambient scope's
+-- focused element. For a leaf, this is exactly "am I focused"; for a
+-- composite checking its own id, single-hop equality already gives
+-- CSS's @:focus-within@ for free — 'withFocusScope' is what makes a
+-- composite's own id read as ambiently focused whenever a descendant is, by
+-- construction, so no chain-walk is needed here.
+isFocused :: Eq e => e -> View e msg Bool
+isFocused eid = (== Just eid) <$> getFocus
+
+-- | 'True' when the currently ambient scope's most recent redirect (a
+-- @Focus@ effect landing within the last two frames -- see 'FocusClaim')
+-- granted this element focus. Single-hop, exactly like 'isFocused'; never
+-- 'True' from 'setFocus' reaffirming a claim, only from an explicit @Focus@.
+hasGainedFocus :: Eq e => e -> View e msg Bool
+hasGainedFocus eid = gets (isGained eid . focusClaim . ftAmbient . ctxFocus)
+
+-- | 'True' when the currently ambient scope's most recent redirect (a
+-- @Focus@\/@ClearFocus@ effect, still within its one-frame observation
+-- window -- see 'LostFocus') displaced this element.
+hasLostFocus :: Eq e => e -> View e msg Bool
+hasLostFocus eid = gets ((== Just (Just eid)) . pendingLostFocus . focusLost . ftAmbient . ctxFocus)
+
+-- | Transfers keyboard focus to the given element, in the currently ambient
+-- scope. Takes effect immediately — like 'Blink.View.Mouse.registerMouseOver'
+-- and mouse capture, not like the deferred scroll\/selection writes —
+-- because a control's own focus decision (take it when nothing else has it,
+-- hand off on Tab) is only correct if the next sibling in the same tree walk
+-- can see it happened. Refused (see 'tryClaim') if a different element
+-- already holds it this frame, so it can never steal focus out from under
+-- whoever legitimately has it.
+setFocus :: Eq e => e -> View e msg ()
+setFocus eid = modifyFocusState $ \fs -> fs { focusClaim = tryClaim eid (focusClaim fs) }
+
+-- | Transfers keyboard focus to the given element when the condition is
+-- 'True'.
+setFocusWhen :: Eq e => Bool -> e -> View e msg ()
+setFocusWhen b eid = when b (setFocus eid)
+
+-- | Removes keyboard focus from the currently ambient scope. Immediate,
+-- like 'setFocus'.
+clearFocus :: View e msg ()
+clearFocus = modifyFocusState $ \fs -> fs { focusClaim = Unclaimed }
+
+-- | Rejects a @Focus@ grant that just landed on this element, restoring
+-- whoever held focus before it -- as if the grant had never been made.
+-- Call before anything else this frame reads focus state for the element.
+disclaimFocus :: View e msg ()
+disclaimFocus = modifyFocusState $ \fs -> fs
+  { focusClaim = maybe Unclaimed ClaimedThisFrame (join (pendingLostFocus (focusLost fs)))
+  , focusLost  = NothingLost
   }
 
--- | Renews a claim that's aged into its one-frame grace period back to
--- freshly reaffirmed, without touching a claim that's already fresh or
--- already gone. Used when folding a scope's result back into its persisted
--- state (see 'Blink.View.withFocusScope'): being written back here proves
--- the scope was actually visited this frame, so its claim shouldn't be
--- allowed to decay any further towards 'tickFocusClaim'\'s expiry -- only a
--- scope that genuinely stops being visited (its composite removed from the
--- tree) should expire.
-reaffirm :: FocusClaim e -> FocusClaim e
-reaffirm Unclaimed             = Unclaimed
-reaffirm (ClaimedLastFrame e)  = ClaimedThisFrame e
-reaffirm (ClaimedThisFrame e)  = ClaimedThisFrame e
-reaffirm (GainedLastFrame e)   = GainedLastFrame e
-reaffirm (GainedThisFrame e)   = GainedThisFrame e
+-- | Queues a @Focus@ effect: makes the given element focused within the
+-- given scope (@Nothing@ = root, @Just scopeId@ = a specific composite's
+-- scope — see 'withFocusScope'), taking effect at the next frame boundary.
+-- Unlike 'setFocus' (immediate, for a control's own auto-claim\/retain
+-- decision), this is for an explicit "make a different, specific element
+-- focused" change — a click redirecting focus to a different element, or
+-- Tab handing off to a specific known element — triggered from a place
+-- that only knows
+-- the winner, not who's currently focused: whoever is displaced is looked
+-- up when the effect is applied, not supplied here, and deferring lets
+-- every affected element observe the change consistently regardless of
+-- render order (see 'hasGainedFocus'\/'hasLostFocus').
+requestFocus :: Maybe e -> e -> View e msg ()
+requestFocus scopeId target = emitUi (Focus scopeId target)
 
--- | Per-frame keyboard-focus targeting state: which element has focus, and
--- which was the most recent tab stop. Reset and carried forward by
--- 'Blink.View.nextFrameContext'. Unlike mouse\/capture state, focus also
--- advances on a re-render of the same frame (see
--- 'Blink.View.rerenderContext'), since a scope that goes unclaimed on a
--- re-render should expire even though the button reading hasn't changed.
-data FocusTracker e = FocusTracker
-  { ftAmbient :: FocusState e
-    -- ^ The *currently ambient* scope's own focus state — root's, unless a
-    -- 'Blink.View.withFocusScope' call further up the stack has swapped it
-    -- for a composite's own.
-  , ftScopes  :: Map.Map e (FocusState e)
-    -- ^ Every composite's own persisted 'FocusState', flat, keyed directly
-    -- by scope id regardless of nesting depth — the same shape as
-    -- @elmScrollStates@. See 'Blink.View.withFocusScope'.
-  }
+-- | Queues a @ClearFocus@ effect: clears whoever is focused within the
+-- given scope, with nothing new claiming it, taking effect at the next
+-- frame boundary — the "clear" counterpart to 'requestFocus'.
+requestClearFocus :: Maybe e -> View e msg ()
+requestClearFocus scopeId = emitUi (ClearFocus scopeId)
 
--- | The empty 'FocusTracker' — nothing focused anywhere, no composite scopes
--- recorded yet.
-emptyFocusTracker :: FocusTracker e
-emptyFocusTracker = FocusTracker { ftAmbient = emptyFocusState, ftScopes = Map.empty }
+-- | Marks a sub-tree as belonging to a composite focus scope (a list, a
+-- tree — anything with sub-items), addressed by its own globally-unique id.
+-- Whether descendants get to see — and update — this scope's own persisted
+-- state depends on whether the scope is /currently/ the live focus target:
+--
+--   * It is (ambient's focused element is already this id), or nothing is
+--     focused anywhere so it's free to become the target on this pass:
+--     descendants run against this scope's own persisted 'FocusState' —
+--     looked up from @ftScopes@, defaulting to @emptyFocusState@ the
+--     first time — so they can auto-claim or resume exactly as if they were
+--     standalone. Whatever they end up with is folded back into
+--     @ftScopes@ under this id, and the enclosing scope's own
+--     focused element is (re)affirmed as pointing at this id — every frame
+--     it claims, even when nothing inside ends up focused, the same way a
+--     plain focused control reaffirms itself every frame it renders.
+--   * It isn't: descendants run against a /blocking/ ambient value instead —
+--     not this scope's own persisted state, and not necessarily the literal
+--     real ambient either (see @blockFreshClaim@ below) — so nothing reads
+--     as an invitation to auto-claim. If nothing inside claims explicitly
+--     despite that, the real ambient is restored unchanged and nothing is
+--     written back: this is what stops a stale remembered child from being
+--     handed a copy of old state, recognising itself in it, and
+--     reaffirming — which would silently steal focus back on a frame where
+--     this scope was never actually the target. If something inside /does/
+--     claim explicitly (an outright click, not an auto-claim) despite the
+--     block, that claim is honoured and folded back in as if this scope had
+--     been the live target all along.
+--
+-- 'BlockFreshClaim' overrides the "nothing is focused, free to claim" half
+-- of the first case for one frame, and changes what "blocking" value gets
+-- used in the second. It exists for a caller (see
+-- 'Blink.View.Controls.compositeControl') that gives the composite's own id an
+-- ordinary focus claim of its own, ahead of this call: if that claim was
+-- just given up via Tab this very frame, real ambient reads empty for an
+-- instant reason that has nothing to do with "nothing was ever focused" —
+-- feeding descendants that real, empty value would read as an invitation to
+-- auto-claim immediately, undoing the Tab press that was meant to move
+-- focus off the composite entirely. So in that one case, descendants are
+-- instead given this scope's own id as the blocking value (nothing they
+-- recognise as themselves), the same placeholder the old chain-based model
+-- used for exactly this. Standalone use (no such outer claim of its own)
+-- always passes 'AllowFreshClaim', so the blocking value is always the
+-- literal real ambient there.
+--
+-- Composes for arbitrary nesting: a composite inside another's
+-- 'withFocusScope' only ever swaps\/restores its own scope, and does the
+-- same lookup\/render\/write-back around its own children.
+--
+-- = Invariant: a disabled composite never holds focus
+--
+-- A disabled control must never appear to hold keyboard focus, even
+-- vacuously ("composite focused, no child chosen"). While disabled, this
+-- function runs @action@ against the ambient context completely unmodified:
+-- no substitution, no claim, no write-back — so it can neither claim focus
+-- for the composite nor leave a stale claim behind, regardless of what
+-- ambient says and regardless of whether the caller remembered to check
+-- 'isDisabled' itself. This is enforced here, once, rather than left as a
+-- convention every caller (present or future) has to uphold on its own —
+-- see the integration coverage in "Blink.View.ControlsSpec" for the regression
+-- this guards against.
+withFocusScope :: Ord e => e -> FreshClaim -> View e msg a -> View e msg a
+withFocusScope scopeId freshClaim (View f) = View $ \ctx ->
+  if ctxDisabled ctx
+    then f ctx
+    else case scopeMode scopeId freshClaim (contextFocus ctx) of
+      Claim               -> runClaimed scopeId f ctx
+      Blocked blockValue  -> runBlocked scopeId f ctx blockValue
 
--- | A composite scope's own persisted 'FocusState', or 'emptyFocusState' if
--- it hasn't rendered yet.
-lookupScope :: Ord e => e -> FocusTracker e -> FocusState e
-lookupScope scopeId ft = Map.findWithDefault emptyFocusState scopeId (ftScopes ft)
+-- | The claiming scope's descendants run against its own persisted
+-- 'FocusState' (or a fresh one), and whatever they end up with is folded
+-- back under this id, with the enclosing scope reaffirmed as pointing here.
+-- See 'withFocusScope'.
+runClaimed
+  :: Ord e
+  => e
+  -> (ViewContext e msg -> IO (a, ViewContext e msg))
+  -> ViewContext e msg
+  -> IO (a, ViewContext e msg)
+runClaimed scopeId f ctx = do
+  let enclosing = ftAmbient (ctxFocus ctx)
+      child0    = lookupScope scopeId (ctxFocus ctx)
+  (a, ctx') <- runWithAmbient scopeId f child0 ctx
+  pure (a, foldBackAsClaim scopeId enclosing (ftAmbient (ctxFocus ctx')) ctx')
 
--- | Advances a 'FocusTracker' to the next frame by applying 'nextFocusFrame'
--- to the ambient scope and every persisted composite scope.
-nextFocusTrackerFrame :: FocusTracker e -> FocusTracker e
-nextFocusTrackerFrame ft = ft
-  { ftAmbient = nextFocusFrame (ftAmbient ft)
-  , ftScopes  = Map.map nextFocusFrame (ftScopes ft)
-  }
+-- | The blocked scope's descendants run against a value nothing inside
+-- recognises as itself, so nothing reads as an invitation to auto-claim. If
+-- something claims explicitly despite the block, it's folded back exactly
+-- as 'runClaimed' would. If nothing claims anyway, the real ambient is
+-- restored untouched, and this scope's own saved claim is reaffirmed (same
+-- as 'runClaimed' reaffirms a live one) rather than left alone -- otherwise
+-- it would only ever be protected from the next-frame expiry while actually
+-- live, and expire the instant it's merely not the live target, even though
+-- this scope is still being rendered every frame. Reaffirming here means it
+-- only really expires once this scope stops being visited at all (its
+-- composite removed from the tree). See 'withFocusScope'.
+runBlocked
+  :: Ord e
+  => e
+  -> (ViewContext e msg -> IO (a, ViewContext e msg))
+  -> ViewContext e msg
+  -> Maybe e
+  -> IO (a, ViewContext e msg)
+runBlocked scopeId f ctx blockValue = do
+  let real      = ftAmbient (ctxFocus ctx)
+      persisted = lookupScope scopeId (ctxFocus ctx)
+  (a, ctx') <- runWithAmbient scopeId f (real { focusClaim = maybe Unclaimed ClaimedThisFrame blockValue }) ctx
+  let after = ftAmbient (ctxFocus ctx')
+  if currentFocus (focusClaim after) == blockValue
+    then pure (a, ctx'
+      { ctxFocus = (ctxFocus ctx')
+          { ftAmbient = real
+          , ftScopes  = Map.insert scopeId (persisted { focusClaim = reaffirm (focusClaim persisted) })
+                          (ftScopes (ctxFocus ctx'))
+          } })
+    else pure (a, foldBackAsClaim scopeId real after ctx')
 
--- | Whether a fresh (unclaimed) ambient may be read as an invitation for a
--- scope to auto-claim focus this frame — see 'Blink.View.withFocusScope'.
-data FreshClaim = AllowFreshClaim | BlockFreshClaim
-  deriving (Eq, Show)
+-- | Swaps the ambient 'FocusState' for @ambient@, and 'ctxCurrentScope' to
+-- this scope's own id, while @f@ runs -- restoring the previous scope id
+-- after, so nesting reports each level's own immediate scope, not just the
+-- outermost one. See 'withFocusScope'.
+runWithAmbient
+  :: e
+  -> (ViewContext e msg -> IO (a, ViewContext e msg))
+  -> FocusState e
+  -> ViewContext e msg
+  -> IO (a, ViewContext e msg)
+runWithAmbient scopeId f ambient ctx = do
+  (a, ctx') <- f (ctx { ctxFocus = (ctxFocus ctx) { ftAmbient = ambient }, ctxCurrentScope = Just scopeId })
+  pure (a, ctx' { ctxCurrentScope = ctxCurrentScope ctx })
 
--- | Which of the two policies documented on 'Blink.View.withFocusScope'
--- applies this frame: 'Claim' if the scope is (or is free to become) the
--- live focus target, 'Blocked' with the ambient value descendants should see
--- otherwise.
-data ScopeMode e = Claim | Blocked (Maybe e)
+-- | Records @after@ as this scope's own persisted state, and points @base@
+-- (the value to restore around this scope) at this scope's id -- the
+-- write-back shared by a claim and a blocked-but-claimed-anyway resolution
+-- alike. See 'withFocusScope'.
+foldBackAsClaim :: Ord e => e -> FocusState e -> FocusState e -> ViewContext e msg -> ViewContext e msg
+foldBackAsClaim scopeId base after ctx' = ctx'
+  { ctxFocus = (ctxFocus ctx')
+      { ftAmbient = base { focusClaim = tryClaim scopeId (focusClaim base) }
+      , ftScopes  = Map.insert scopeId (after { focusClaim = reaffirm (focusClaim after) }) (ftScopes (ctxFocus ctx'))
+      } }
 
--- | Resolves which 'ScopeMode' applies to a scope this frame, given its id,
--- its 'FreshClaim' policy, and the ambient scope's currently focused element.
-scopeMode :: Eq e => e -> FreshClaim -> Maybe e -> ScopeMode e
-scopeMode scopeId freshClaim currentAmbient = case currentAmbient of
-  Just cid | cid == scopeId          -> Claim
-  Nothing  | freshClaim == AllowFreshClaim -> Claim
-  Nothing                            -> Blocked (Just scopeId)
-  real                               -> Blocked real
+-- | The element that was the most recent tab stop before the current one,
+-- scoped to the currently ambient scope (root, or a composite's own while
+-- inside 'withFocusScope') — used by 'Blink.View.Controls.control' to implement
+-- Shift-Tab navigation.
+getPreviousTabStop :: View e msg (Maybe e)
+getPreviousTabStop = gets contextPreviousTabStop
+
+-- | The element that was the most recent tab stop before the current one,
+-- read directly from a 'ViewContext' outside the 'View' monad.
+contextPreviousTabStop :: ViewContext e msg -> Maybe e
+contextPreviousTabStop = previousTabStop . ftAmbient . ctxFocus
+
+-- | Records the current element as the previous tab stop, scoped to the
+-- currently ambient scope. Called automatically by 'Blink.View.Controls.control';
+-- call manually when building custom focusable controls.
+setPreviousTabStop :: e -> View e msg ()
+setPreviousTabStop eid = modifyFocusState $ \fs -> fs { previousTabStop = Just eid }

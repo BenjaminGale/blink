@@ -1,15 +1,13 @@
 {- |
 Module: Blink.View.Selection
 
-A contiguous selection or cursor within a linear sequence, plus pure
-helpers built on top of it: reading the low\/high bound of a range,
-collapsing it to a cursor, and moving its active end.
-
-No dependency on the 'Blink.View' monad -- 'Blink.View' holds a
-'Selection' in its context and exposes monadic accessors
-('Blink.View.getSelection', 'Blink.View.contextSelection') built on top of
-what's defined here, the same relationship "Blink.View.Focus" has with the
-focus state 'Blink.View' threads through its own context.
+A contiguous selection or cursor within a linear sequence: the pure
+'Selection' type and helpers built on top of it (reading the low\/high
+bound of a range, collapsing it to a cursor, moving its active end), plus
+the monadic accessors ('getSelection', 'requestSelectionAt') built on top
+of the 'Blink.View.Context.ViewContext' it's threaded through. See
+"Blink.View" for the module overview; import that instead of this module
+directly.
 -}
 module Blink.View.Selection
   ( Selection (..)
@@ -21,45 +19,26 @@ module Blink.View.Selection
   , collapseToHigh
   , collapseToActive
   , extendActive
+  , getSelection
+  , contextSelection
+  , requestSelectionAt
   ) where
 
--- | A contiguous selection or cursor within a linear sequence. The selected
--- range is @(min anchor active, max anchor active)@. When @anchor == active@
--- the selection is a cursor with no extent.
-data Selection = Selection
-  { selectionAnchor :: Int  -- ^ The fixed end.
-  , selectionActive :: Int  -- ^ The moving end (cursor position).
-  }
-  deriving (Eq, Show)
+import Blink.View.Context
 
--- | The lower bound of the selected range: @min selectionAnchor selectionActive@.
-selectionLow :: Selection -> Int
-selectionLow s = min (selectionAnchor s) (selectionActive s)
+-- | The given element's selection, or 'Nothing' if it isn't the element
+-- currently holding one.
+getSelection :: Eq e => e -> View e msg (Maybe Selection)
+getSelection eid = gets (contextSelection eid)
 
--- | The upper bound of the selected range: @max selectionAnchor selectionActive@.
-selectionHigh :: Selection -> Int
-selectionHigh s = max (selectionAnchor s) (selectionActive s)
+-- | The given element's selection, or 'Nothing' if it isn't the element
+-- currently holding one, read directly from a 'ViewContext' outside the 'View'
+-- monad.
+contextSelection :: Eq e => e -> ViewContext e msg -> Maybe Selection
+contextSelection eid ctx = case elmSelection (ctxElements ctx) of
+  SelectionAt owner sel | owner == eid -> Just sel
+  _                                    -> Nothing
 
--- | 'True' when the selection has non-zero extent (anchor ≠ active).
-selectionHasExtent :: Selection -> Bool
-selectionHasExtent s = selectionAnchor s /= selectionActive s
-
--- | A cursor with no selection extent. Equivalent to @'Selection' n n@.
-cursor :: Int -> Selection
-cursor n = Selection n n
-
--- | Collapse the selection to a cursor at the lower bound.
-collapseToLow :: Selection -> Selection
-collapseToLow = cursor . selectionLow
-
--- | Collapse the selection to a cursor at the upper bound.
-collapseToHigh :: Selection -> Selection
-collapseToHigh = cursor . selectionHigh
-
--- | Collapse the selection to a cursor at the active (moving) end.
-collapseToActive :: Selection -> Selection
-collapseToActive = cursor . selectionActive
-
--- | Apply a function to the active end, keeping the anchor fixed.
-extendActive :: (Int -> Int) -> Selection -> Selection
-extendActive f s = s { selectionActive = f (selectionActive s) }
+-- | Sets the given element's selection, from the next frame onward.
+requestSelectionAt :: e -> Selection -> View e msg ()
+requestSelectionAt eid sel = emitUi (SetSelectionAt eid sel)

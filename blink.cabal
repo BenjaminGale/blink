@@ -42,10 +42,12 @@ library
         Blink.View
         Blink.View.Animation
         Blink.View.Attribute
+        Blink.View.Context
         Blink.View.Controls
         Blink.View.Drawing
         Blink.View.Focus
         Blink.View.Hold
+        Blink.View.Mouse
         Blink.View.Navigation
         Blink.View.Scroll
         Blink.View.Selection

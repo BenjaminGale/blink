@@ -1,43 +1,56 @@
 {- |
 Module: Blink.View.Animation
 
-Per-frame animation state: the wall-clock delta and total elapsed time
-since the application started, and whether the current frame was
-triggered by the animation ticker rather than a platform input event.
-
-No dependency on the 'Blink.View' monad -- 'Blink.View' holds an
-'AnimationState' in its context and exposes monadic accessors
-('Blink.View.requiresAnimation', 'Blink.View.withAnimationFrame',
-'Blink.View.getAnimDelta', 'Blink.View.getAnimElapsed') built on top of
-what's defined here, the same relationship "Blink.View.Focus" has with the
-focus state 'Blink.View' threads through its own context.
+Per-frame animation state: the pure 'AnimationState' type and smart
+constructor 'mkAnimationState', plus the monadic accessors
+('requiresAnimation', 'withAnimationFrame', 'getAnimDelta',
+'getAnimElapsed') built on top of the wall-clock delta and elapsed time
+threaded through 'Blink.View.Context.ViewContext'. See "Blink.View" for the
+module overview, including the animation-loop narrative; import that
+instead of this module directly.
 -}
 module Blink.View.Animation
   ( AnimationState (animDelta, animElapsed, animIsTick)
   , mkAnimationState
+  , requiresAnimation
+  , withAnimationFrame
+  , getAnimDelta
+  , getAnimElapsed
+  , contextAnimation
   ) where
 
--- | Per-frame animation state threaded through 'Blink.View.ViewContext'.
--- Set by the backend at the start of each frame; read by
--- 'Blink.View.withAnimationFrame' and 'Blink.View.getAnimDelta'.
-data AnimationState = AnimationState
-  { animDelta   :: Float
-    -- ^ Wall-clock seconds elapsed since the previous frame, clamped to
-    -- @[0, 0.1]@ seconds. Zero on the first frame.
-  , animElapsed :: Float
-    -- ^ Total wall-clock seconds elapsed since the application started,
-    -- accumulated from 'animDelta' each frame.
-  , animIsTick  :: Bool
-    -- ^ 'True' when this frame was triggered by the animation ticker rather
-    -- than a platform input event.
-  }
+import Control.Monad (when)
+import Blink.View.Context
 
--- | Constructs an 'AnimationState', clamping the delta to @[0, 0.1]@ seconds
--- so the bound documented on 'animDelta' holds regardless of caller — the
--- constructor itself isn't exported, so this is the only way to build one.
-mkAnimationState :: Float -> Float -> Bool -> AnimationState
-mkAnimationState delta elapsed isTick = AnimationState
-  { animDelta   = max 0 (min 0.1 delta)
-  , animElapsed = elapsed
-  , animIsTick  = isTick
-  }
+-- | Signals that animation should continue running. Call unconditionally on
+-- every frame from any component that needs animation, including frames not
+-- triggered by the ticker, so "Blink.App"'s ticker does not go quiet while
+-- the component is visible.
+requiresAnimation :: View e msg ()
+requiresAnimation = modifyOut $ \out -> out { outRequiresAnimation = True }
+
+-- | Runs @action@ only on frames triggered by the animation ticker. On frames
+-- triggered by mouse movement, keyboard input, or other platform events, this
+-- is a no-op. Pair with 'requiresAnimation' so the ticker keeps firing.
+withAnimationFrame :: View e msg () -> View e msg ()
+withAnimationFrame action = do
+  isTick <- gets (animIsTick . ctxAnimation)
+  when isTick action
+
+-- | Wall-clock seconds elapsed since the previous frame, clamped to
+-- @[0, 0.1]@ seconds. Zero on the first frame. Use inside 'withAnimationFrame' to advance
+-- animation state by the correct amount regardless of ticker jitter.
+getAnimDelta :: View e msg Float
+getAnimDelta = gets (animDelta . ctxAnimation)
+
+-- | Total wall-clock seconds elapsed since the application started.
+-- Derived by accumulating 'animDelta' each frame; use this to compute
+-- animation phase without storing per-component state.
+getAnimElapsed :: View e msg Float
+getAnimElapsed = gets (animElapsed . ctxAnimation)
+
+-- | The frame's full 'AnimationState', read directly from a 'ViewContext'
+-- outside the 'View' monad — e.g. so a backend can carry it forward into the
+-- next 'nextFrameContext' call.
+contextAnimation :: ViewContext e msg -> AnimationState
+contextAnimation = ctxAnimation
