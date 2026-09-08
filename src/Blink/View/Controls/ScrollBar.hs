@@ -48,8 +48,7 @@ import Control.Monad (forM_, void, when)
 import Blink.View.Controls.Button (onActivated)
 import Blink.View.Controls.Control
 import Blink.View.Controls.Label (text)
-import Blink.View.Controls.RepeatButton
-  (firedCount, onFiredCountChanged, onPressEnded, onPressStarted, pressStartedAt, repeatButton)
+import Blink.View.Controls.RepeatButton (repeatButton)
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Point (..), Rectangle (..))
 import Blink.View.Layout.Box (children, hBox, vBox)
 import Blink.View.Layout.Constraints (HasLayoutConfig (..), Layout (..), exactly, fill, height, width)
@@ -321,15 +320,18 @@ scrollBar tag attrs = Element
 
     box = (if o == Horizontal then hBox else vBox) [children [decrementBtn, trackEl, incrementBtn]]
 
+    -- TODO(scrollbar phase): 'repeatButton' now owns its own repeat-press
+    -- state internally (see 'Blink.View.Controls.RepeatButton'), so
+    -- 'sbDecrementRepeat'\/'sbIncrementRepeat' and their attrs are dead --
+    -- clean those up along with the rest of the deferred scrollbar rework.
+    -- Also add an integration test that holds an arrow across multiple
+    -- animated frames and asserts the value keeps stepping -- today that's
+    -- only true by composition (each half is tested separately), never
+    -- asserted end-to-end for 'scrollBar' itself.
     decrementBtn = repeatButton (tag ScrollBarDecrement) $
       [ text (if o == Horizontal then "\9664" else "\9650") -- ◀ / ▲
       , style scrollBarButtonStyleKey
       , focusPolicy NotFocusable
-      , pressStartedAt (rsPressStartedAt (sbDecrementRepeat cfg))
-      , firedCount (rsFiredCount (sbDecrementRepeat cfg))
-      , onPressStarted (\t -> sbOnDecrementRepeatChanged cfg (RepeatState (Just t) 0))
-      , onFiredCountChanged (\n -> sbOnDecrementRepeatChanged cfg (RepeatState (rsPressStartedAt (sbDecrementRepeat cfg)) n))
-      , onPressEnded (sbOnDecrementRepeatChanged cfg initialRepeatState)
       , onActivated (const (stepValue cfg (negate (sbStep cfg))))
       ] ++ arrowLayoutAttrs o
 
@@ -337,11 +339,6 @@ scrollBar tag attrs = Element
       [ text (if o == Horizontal then "\9654" else "\9660") -- ▶ / ▼
       , style scrollBarButtonStyleKey
       , focusPolicy NotFocusable
-      , pressStartedAt (rsPressStartedAt (sbIncrementRepeat cfg))
-      , firedCount (rsFiredCount (sbIncrementRepeat cfg))
-      , onPressStarted (\t -> sbOnIncrementRepeatChanged cfg (RepeatState (Just t) 0))
-      , onFiredCountChanged (\n -> sbOnIncrementRepeatChanged cfg (RepeatState (rsPressStartedAt (sbIncrementRepeat cfg)) n))
-      , onPressEnded (sbOnIncrementRepeatChanged cfg initialRepeatState)
       , onActivated (const (stepValue cfg (sbStep cfg)))
       ] ++ arrowLayoutAttrs o
 

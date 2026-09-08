@@ -12,33 +12,28 @@
 -- control --> buttonBase --> repeatButton
 -- @
 --
--- 'repeatButton' keeps no timer of its own that survives between frames --
--- like 'Blink.View.Controls.Slider.slider' owning its value, the caller owns
--- two small numbers for the life of a press: the animation clock's
--- elapsed time when it began ('pressStartedAt'), and how many repeats have
--- fired so far ('firedCount'). Both are reported once each time they
--- change ('onPressStarted', 'onFiredCountChanged') and simply handed back
--- unchanged otherwise. From those two plus the animation clock's current
--- elapsed time, every frame recomputes /how many repeats are due by now/
--- from scratch -- a pure function of absolute elapsed time, never of how
--- many frames actually ran or how long any single frame took. That's
--- deliberate: a frame's own @dt@ is clamped (see 'Blink.View.AnimationState')
--- to keep other animations numerically stable, which would silently drop
--- repeats after a long hitch if the cadence were derived from it instead.
+-- The repeat cadence is control state, not application data -- 'repeatButton'
+-- reads and writes it itself via 'Blink.View.getHoldState'\/'Blink.View.HoldState',
+-- keyed by the element ID, the same way 'Blink.View.Controls.TextInput.textInput'
+-- owns its own scroll offset rather than asking the caller to thread it
+-- through. Every frame recomputes /how many repeats are due by now/ from
+-- scratch, from the stored press-anchor plus the animation clock's current
+-- elapsed time -- a pure function of absolute elapsed time
+-- ('Blink.View.repeatsDueBy'), never of how many frames actually ran or how
+-- long any single frame took. That's deliberate: a frame's own @dt@ is
+-- clamped (see 'Blink.View.AnimationState') to keep other animations
+-- numerically stable, which would silently drop repeats after a long hitch
+-- if the cadence were derived from it instead.
 module Blink.View.Controls.RepeatButton
   ( RepeatButtonConfig (..)
   , defaultRepeatButtonConfig
   , repeatButton
   , initialDelay
   , repeatInterval
-  , pressStartedAt
-  , firedCount
-  , onPressStarted
-  , onFiredCountChanged
-  , onPressEnded
   ) where
 
 import Control.Monad (replicateM_, void, when)
+import Data.Maybe (fromMaybe, isJust)
 
 import Blink.View.Controls.Button
   (ButtonActivation (..), ButtonConfig (..), ButtonInteraction (..), HasButtonConfig (..), buttonBase, defaultButtonConfig)
@@ -46,45 +41,27 @@ import Blink.View.Controls.Control
 import Blink.View.Controls.Label
   (HasLabelledConfig (..), captionElement, lcText, renderLabelledContent)
 import Blink.View.Layout.Constraints (HasLayoutConfig (..))
-import Blink.View hiding (repeatsDueBy) -- TODO(phase 2): use Blink.View's own instead of the local copy below.
+import Blink.View
 import Blink.View.Element (Element (..))
 
 -- | Every capability 'repeatButton' resolves: the wrapped 'ButtonConfig'
 -- (styling, caption, layout, and 'Blink.View.Controls.Button.onActivated'
--- reactions -- all reused unchanged), the repeat cadence, and the
--- two-number press handoff (see the module header).
+-- reactions -- all reused unchanged), and the repeat cadence.
 data RepeatButtonConfig e msg = RepeatButtonConfig
-  { rbButton             :: ButtonConfig e msg
-  , rbInitialDelay       :: Double
+  { rbButton       :: ButtonConfig e msg
+  , rbInitialDelay :: Double
     -- ^ Seconds held before the first repeat. Defaults to 0.4.
-  , rbInterval           :: Double
+  , rbInterval     :: Double
     -- ^ Seconds between repeats thereafter. Defaults to 0.08.
-  , rbPressStartedAt     :: Maybe Double
-    -- ^ The animation clock's elapsed time when the current press began, as
-    -- last reported via 'onPressStarted' -- 'Nothing' when not currently
-    -- pressed. Owned entirely by the caller; see 'pressStartedAt'.
-  , rbFiredCount         :: Int
-    -- ^ How many repeats have fired so far during the current press, as
-    -- last reported via 'onFiredCountChanged'. Owned entirely by the
-    -- caller; see 'firedCount'.
-  , rbOnPressStarted     :: Double -> [Out e msg]
-  , rbOnFiredCountChanged :: Int -> [Out e msg]
-  , rbOnPressEnded       :: [Out e msg]
   }
 
--- | 'defaultButtonConfig', a 0.4s initial delay, a 0.08s repeat interval,
--- no press anchored yet, a zero fired count, and no press\/repeat
--- reactions.
+-- | 'defaultButtonConfig', a 0.4s initial delay, and a 0.08s repeat
+-- interval.
 defaultRepeatButtonConfig :: RepeatButtonConfig e msg
 defaultRepeatButtonConfig = RepeatButtonConfig
-  { rbButton              = defaultButtonConfig
-  , rbInitialDelay        = 0.4
-  , rbInterval            = 0.08
-  , rbPressStartedAt      = Nothing
-  , rbFiredCount          = 0
-  , rbOnPressStarted      = const []
-  , rbOnFiredCountChanged = const []
-  , rbOnPressEnded        = []
+  { rbButton       = defaultButtonConfig
+  , rbInitialDelay = 0.4
+  , rbInterval     = 0.08
   }
 
 instance HasControlConfig e msg (RepeatButtonConfig e msg) where
@@ -109,51 +86,6 @@ initialDelay v = Attribute (\rc -> rc { rbInitialDelay = v })
 repeatInterval :: Double -> Attribute (RepeatButtonConfig e msg)
 repeatInterval v = Attribute (\rc -> rc { rbInterval = v })
 
--- | Hands the current press's anchor timestamp back to 'repeatButton',
--- exactly as last reported via 'onPressStarted' -- pass 'Nothing' (the
--- default) once 'onPressEnded' fires. Without this, held-duration always
--- reads as zero and the button never repeats past its first press. Reset
--- 'firedCount' to 0 in the same reaction that stores a fresh value here --
--- a new press starting its own count over from zero.
-pressStartedAt :: Maybe Double -> Attribute (RepeatButtonConfig e msg)
-pressStartedAt v = Attribute (\rc -> rc { rbPressStartedAt = v })
-
--- | Hands the repeat count back, exactly as last reported via
--- 'onFiredCountChanged' -- 0 (the default) at the start of a fresh press.
--- Without this, 'repeatButton' can't tell repeats it has already fired from
--- ones still due, and re-fires everything due every single frame.
-firedCount :: Int -> Attribute (RepeatButtonConfig e msg)
-firedCount v = Attribute (\rc -> rc { rbFiredCount = v })
-
--- | Fires once, the frame the button is pressed, carrying the animation
--- clock's elapsed time at that instant. Store it and feed it back via
--- 'pressStartedAt' next frame, resetting whatever 'firedCount' tracks to 0
--- alongside it.
-onPressStarted :: (Double -> [Out e msg]) -> Attribute (RepeatButtonConfig e msg)
-onPressStarted f = Attribute (\rc -> rc { rbOnPressStarted = f })
-
--- | Fires each frame one or more repeats do, carrying the new total fired
--- so far this press. Store it and feed it back via 'firedCount' next
--- frame.
-onFiredCountChanged :: (Int -> [Out e msg]) -> Attribute (RepeatButtonConfig e msg)
-onFiredCountChanged f = Attribute (\rc -> rc { rbOnFiredCountChanged = f })
-
--- | Fires once, the frame the press ends (release, or the pointer leaving
--- while held -- anything that drops 'Blink.View.Controls.Control.ciHeld').
--- React by clearing whatever 'pressStartedAt' currently holds.
-onPressEnded :: [Out e msg] -> Attribute (RepeatButtonConfig e msg)
-onPressEnded hs = Attribute (\rc -> rc { rbOnPressEnded = hs })
-
--- | How many repeats should have fired by the time @heldFor@ seconds have
--- elapsed since the press began: none before 'rbInitialDelay', then one at
--- that instant and one more every 'rbInterval' after. A pure function of
--- @heldFor@ alone -- see the module header for why 'repeatButton' diffs
--- this against 'rbFiredCount' rather than against last frame's @heldFor@.
-repeatsDueBy :: RepeatButtonConfig e msg -> Double -> Int
-repeatsDueBy cfg heldFor
-  | heldFor < rbInitialDelay cfg = 0
-  | otherwise = floor ((heldFor - rbInitialDelay cfg) / rbInterval cfg) + 1
-
 -- | A button that fires 'Blink.View.Controls.Button.onActivated' once
 -- immediately on press (not on release, unlike
 -- 'Blink.View.Controls.Button.button' -- holding is the whole point, so waiting
@@ -170,8 +102,8 @@ repeatsDueBy cfg heldFor
 -- to compute our own cadence from, only a stream of discrete key events at
 -- whatever rate the platform delivers them.
 --
--- The mouse-driven repeat cadence is computed fresh every frame from
--- 'pressStartedAt', 'firedCount', and the animation clock's current
+-- The mouse-driven repeat cadence is computed fresh every frame from the
+-- element's own 'Blink.View.HoldState' and the animation clock's current
 -- elapsed time -- see the module header for why, and
 -- 'Blink.View.requiresAnimation' for how it keeps getting frames to compute
 -- it in while the mouse itself sits still.
@@ -192,29 +124,22 @@ repeatButton eid attrs = Element
       -- 'buttonBase' itself fires 'onActivated' once already, off
       -- 'ActivateOnPress' (the press) or Enter-while-focused -- this only
       -- adds the repeats past that first activation.
-      r <- buttonBase eid btn { bcControl = ctrl }
+      r     <- buttonBase eid btn { bcControl = ctrl }
+      mHold <- getHoldState eid
       let ei = biControl r
-
-      when (ciMouseDown ei) $ do
-        now <- realToFrac <$> getAnimElapsed
-        runHandlers [rbOnPressStarted cfg] now
-
-      -- Kept alive by 'ciHeld' alone, not by whether the anchor has
-      -- arrived yet: the very frame a press starts, the caller hasn't had
-      -- a chance to feed 'pressStartedAt' back in, but the ticker still
-      -- needs to already be running so the *next* frame -- the first one
-      -- with an anchor to work from -- is a real animation tick rather
-      -- than an idle one.
-      when (ciHeld ei) requiresAnimation
-
-      case rbPressStartedAt cfg of
-        Just started | ciHeld ei -> do
+      if ciHeld ei
+        then do
+          -- Kept alive by 'ciHeld' alone, not by whether a stored anchor
+          -- exists yet: the very frame a press starts, there's nothing
+          -- stored to read back below, but the ticker still needs to
+          -- already be running so the *next* frame -- the first one with
+          -- an anchor to work from -- is a real animation tick rather than
+          -- an idle one.
+          requiresAnimation
           now <- realToFrac <$> getAnimElapsed
-          let heldFor = now - started
-              due     = repeatsDueBy cfg heldFor
-              toFire  = due - rbFiredCount cfg
-          when (toFire > 0) $ do
-            replicateM_ toFire (runHandlers (bcOnActivated btn) ())
-            runHandlers [rbOnFiredCountChanged cfg] due
-        Just _  -> runHandlers [const (rbOnPressEnded cfg)] ()
-        Nothing -> pure ()
+          let HoldState startedAt fired = fromMaybe (HoldState now 0) mHold
+              due    = repeatsDueBy (rbInitialDelay cfg) (rbInterval cfg) (now - startedAt)
+              toFire = due - fired
+          when (toFire > 0) $ replicateM_ toFire (runHandlers (bcOnActivated btn) ())
+          emitUi (SetHoldState eid (Just (HoldState startedAt due)))
+        else when (isJust mHold) $ emitUi (SetHoldState eid Nothing)

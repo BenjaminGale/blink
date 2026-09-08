@@ -8,10 +8,7 @@ import Blink.View.Controls.Control
   (Attribute, FocusPolicy (..), control, defaultControlConfig, elementId, focusPolicy, resolve)
 import Blink.View.Controls.ElementBehaviour (tagged)
 import Blink.View.Controls.ScrollBar
-  ( RepeatState (..), ScrollBarConfig, ScrollBarPart (..), decrementRepeatState, defaultScrollBarConfig
-  , incrementRepeatState, initialRepeatState, onDecrementRepeatStateChanged, onIncrementRepeatStateChanged
-  , onValueChanged, scrollBar, scrollBarOrientation, sbValue, step, value
-  )
+  (ScrollBarConfig, ScrollBarPart (..), defaultScrollBarConfig, onValueChanged, scrollBar, scrollBarOrientation, sbValue, step, value)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -156,25 +153,6 @@ spec = describe "Blink.View.Controls.ScrollBar" $ do
     it "does not fire again once already at the maximum" $ do
       result <- runInteractions barBounds seedCtx (render [value 1, onChanged])
                   [MoveTo incrementPoint] [MouseDown incrementPoint]
-      resultMessages result `shouldBe` []
-
-    it "reports a fresh repeat state when the decrement arrow is first pressed" $ do
-      let attrs = [ value 0.5
-                  , onDecrementRepeatStateChanged (\s -> [OutMsg ("Repeat:" ++ show (rsFiredCount s))])
-                  ]
-      result <- runInteractions barBounds seedCtx (render attrs) [MoveTo decrementPoint] [MouseDown decrementPoint]
-      resultMessages result `shouldBe` ["Repeat:0"]
-
-    it "reports a fresh repeat state when the increment arrow is first pressed" $ do
-      let attrs = [ value 0.5
-                  , onIncrementRepeatStateChanged (\s -> [OutMsg ("Repeat:" ++ show (rsFiredCount s))])
-                  ]
-      result <- runInteractions barBounds seedCtx (render attrs) [MoveTo incrementPoint] [MouseDown incrementPoint]
-      resultMessages result `shouldBe` ["Repeat:0"]
-
-    it "feeds a stored repeat state back in without error" $ do
-      let attrs = [value 0.5, decrementRepeatState (RepeatState (Just 0) 2), incrementRepeatState initialRepeatState]
-      result <- runInteractions barBounds seedCtx (render attrs) [] [Wait 1]
       resultMessages result `shouldBe` []
 
   describe "orientation" $

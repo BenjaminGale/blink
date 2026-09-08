@@ -13,8 +13,6 @@ import Blink.View.Controls.Control
 import Blink.View.Controls.Divider (orientation)
 import Blink.View.Controls.Label (LabelConfig, target, text)
 import Blink.View.Controls.ProgressBar (ProgressValue (..), progress)
-import Blink.View.Controls.RepeatButton
-  (firedCount, onFiredCountChanged, onPressEnded, onPressStarted, pressStartedAt)
 import Blink.View.Controls.ScrollBar
   ( RepeatState (..), decrementRepeatState, incrementRepeatState, initialRepeatState
   , onDecrementRepeatStateChanged, onIncrementRepeatStateChanged, scrollBar, scrollBarOrientation
@@ -32,7 +30,7 @@ import Blink.Geometry
 import Blink.Input
 import Blink.View.Layout
 import Blink.View.Rendering
-import Blink.View hiding (holdFiredCount, holdStartedAt) -- TODO(phase 2): AppState's own hold-repeat fields go away once RepeatButton owns this itself.
+import Blink.View
 import Blink.View.Drawing (drawText, fillRect, withClip)
 import Blink.View.Element (Element (..), elementWithLayout, noIntrinsicSize, runElement)
 import Blink.Update
@@ -52,8 +50,6 @@ data AppState = AppState
   , inputText      :: Text
   , passwordText   :: Text
   , animating      :: Bool
-  , holdPressedAt  :: Maybe Double
-  , holdFiredCount :: Int
   , sliderValue    :: Double
   , vScrollValue     :: Double
   , vScrollDecRepeat :: RepeatState
@@ -81,9 +77,6 @@ data Msg
   | SetInputText Text
   | SetPasswordText Text
   | SetAnimating Bool
-  | HoldPressStarted Double
-  | HoldFiredCountChanged Int
-  | HoldPressEnded
   | SetSlider Double
   | SetVScroll Double
   | SetVScrollDecRepeat RepeatState
@@ -110,8 +103,6 @@ demoApp = App
       , inputText      = ""
       , passwordText   = ""
       , animating      = False
-      , holdPressedAt  = Nothing
-      , holdFiredCount = 0
       , sliderValue    = 0.5
       , vScrollValue     = 0
       , vScrollDecRepeat = initialRepeatState
@@ -144,9 +135,6 @@ updateApp msg = case msg of
   SetInputText t       -> modify $ \s -> s { inputText = t }
   SetPasswordText t    -> modify $ \s -> s { passwordText = t }
   SetAnimating v       -> modify $ \s -> s { animating = v }
-  HoldPressStarted t      -> modify $ \s -> s { holdPressedAt = Just t, holdFiredCount = 0 }
-  HoldFiredCountChanged n -> modify $ \s -> s { holdFiredCount = n }
-  HoldPressEnded          -> modify $ \s -> s { holdPressedAt = Nothing, holdFiredCount = 0 }
   SetSlider v          -> modify $ \s -> s { sliderValue = v }
   SetVScroll v          -> modify $ \s -> s { vScrollValue = v }
   SetVScrollDecRepeat r -> modify $ \s -> s { vScrollDecRepeat = r }
@@ -230,11 +218,7 @@ rowButtons s =
       , children
           [ button ClickButton [text "Click me", onActivated (post AddClick), isEnabled (editingEnabled s), width (exactly 100), height fill]
           , repeatButton HoldButton
-              [ text "Hold me", onActivated (post AddClick), isEnabled (editingEnabled s), width (exactly 100), height fill
-              , pressStartedAt (holdPressedAt s), onPressStarted (postWith HoldPressStarted)
-              , firedCount (holdFiredCount s), onFiredCountChanged (postWith HoldFiredCountChanged)
-              , onPressEnded [OutMsg HoldPressEnded]
-              ]
+              [text "Hold me", onActivated (post AddClick), isEnabled (editingEnabled s), width (exactly 100), height fill]
           , button ResetButton [text "Reset", onActivated (post ResetClicks), isEnabled (editingEnabled s), width (exactly 100), height fill]
           , divider [orientation Vertical, height fill]
           , caption ("Clicks: " <> T.pack (show (clickCount s))) [width fill, height fill, align MiddleLeft]
