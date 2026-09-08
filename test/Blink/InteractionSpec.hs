@@ -111,8 +111,8 @@ spec = describe "Blink.Interaction" $ do
       resultMessages result `shouldBe` [()]
 
   describe "auto-settle" $ do
-    it "makes a deferred ScrollTo visible immediately in resultContext" $ do
-      result <- runInteractions testBounds seedAt0 (emitUi (ScrollTo () 0.5)) [] []
+    it "makes a deferred requestScrollTo visible immediately in resultContext" $ do
+      result <- runInteractions testBounds seedAt0 (requestScrollTo () 0.5) [] []
       contextScrollState () (resultContext result) `shouldBe` 0.5
 
   describe "chaining two runInteractions calls via resultContext" $ do
@@ -125,7 +125,7 @@ spec = describe "Blink.Interaction" $ do
     -- coming from wherever it already ended up, not where it actually
     -- started.
     it "still reports the same scroll position after being carried into a second call" $ do
-      seeded <- runInteractions testBounds seedAt0 (emitUi (ScrollTo () 0.5)) [] []
+      seeded <- runInteractions testBounds seedAt0 (requestScrollTo () 0.5) [] []
       result <- runInteractions testBounds (resultContext seeded) tick [] []
       contextScrollState () (resultContext result) `shouldBe` 0.5
 

@@ -205,13 +205,13 @@ spec = describe "Blink.View.Controls.TextInput" $ do
         other -> expectationFailure ("expected a single cursor selection, got: " <> show other)
 
   describe "arrow navigation" $ do
-    -- Renders the field alongside the seeding 'emitUi' so 'Field' reconfirms
+    -- Renders the field alongside the seeding 'requestSelectionAt' so 'Field' reconfirms
     -- its focus this frame -- unrendered, its focus would expire (see
     -- 'control'), and a freshly claimed focus selects the whole value.
     let seeded a v = do
           focused <- runInteractions testBounds seedCtx (fullSizeTextInput Field [value "hello"]) [] [ClickAt focusPt]
           settled <- runInteractions testBounds (resultContext focused)
-                       (fullSizeTextInput Field [value "hello"] >> emitUi (SetSelectionAt Field (Selection a v))) [] []
+                       (fullSizeTextInput Field [value "hello"] >> requestSelectionAt Field (Selection a v)) [] []
           pure (resultContext settled)
 
     it "moves the cursor left with Left" $ do
@@ -256,11 +256,11 @@ spec = describe "Blink.View.Controls.TextInput" $ do
 
   describe "selection editing" $ do
     -- See the "arrow navigation" 'seeded' above for why the field itself is
-    -- rendered alongside the seeding 'emitUi'.
+    -- rendered alongside the seeding 'requestSelectionAt'.
     let seeded a v attrs = do
           focused <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [ClickAt focusPt]
           settled <- runInteractions testBounds (resultContext focused)
-                       (fullSizeTextInput Field attrs >> emitUi (SetSelectionAt Field (Selection a v))) [] []
+                       (fullSizeTextInput Field attrs >> requestSelectionAt Field (Selection a v)) [] []
           pure (resultContext settled)
 
     it "deletes the selected range on backspace" $ do

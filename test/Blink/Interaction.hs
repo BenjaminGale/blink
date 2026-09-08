@@ -16,17 +16,17 @@
 -- module tries to fake: compose a second real control into the action under
 -- test instead, and reach that state with real 'Interaction's against it.
 -- Precise scroll\/selection seeding, which is impractical to reach via a
--- pixel-accurate drag, goes through the already-public 'emitUi' \/
--- 'UiEffect' API in a preliminary 'runInteractions' call instead, e.g.
+-- pixel-accurate drag, goes through 'requestScrollTo'\/'requestSelectionAt'
+-- in a preliminary 'runInteractions' call instead, e.g.
 --
 -- @
--- seeded <- runInteractions bounds (mkCtx noInput) (emitUi (ScrollTo TestControl 0.5)) [] []
+-- seeded <- runInteractions bounds (mkCtx noInput) (requestScrollTo TestControl 0.5) [] []
 -- result <- runInteractions bounds (resultContext seeded) (scrollBar ...) [] testInteractions
 -- @
 --
 -- (a call with both interaction lists empty still runs @action@ once, so the
--- 'emitUi' above actually queues its effect, which the trailing settle then
--- applies).
+-- 'requestScrollTo' above actually queues its effect, which the trailing
+-- settle then applies).
 module Blink.Interaction
   ( Interaction (..)
   , InteractionResult (..)
@@ -126,7 +126,7 @@ runInteractions bounds seed action setupIxns testIxns = do
     }
   where
     testFrames = if null testIxns then [Wait 1] else testIxns
-    settle ctx = applyUiEffects (getUiEffects ctx) ctx
+    settle = settleEffects
 
     step ctx frame = runView action (nextFrameContext bounds frame (contextTheme ctx) (contextAnimation ctx) ctx)
 

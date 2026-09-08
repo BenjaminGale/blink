@@ -3,11 +3,14 @@ module Blink.View.Controls.RepeatButtonSpec (spec) where
 
 import qualified Data.Map.Strict as Map
 import Test.Hspec
+import Test.Hspec.QuickCheck (prop)
+import Test.QuickCheck (forAll, choose)
+import Test.QuickCheck.Monadic (assert, monadicIO, run)
 
 import Blink.View.Controls.Button (onActivated)
 import Blink.View.Controls.ButtonBehaviour (ButtonBehaviourConfig (..), buttonBehaviourSpec, defaultButtonBehaviourConfig)
 import Blink.View.Controls.Control (Attribute, elementId)
-import Blink.View.Controls.RepeatButton (RepeatButtonConfig, repeatButton)
+import Blink.View.Controls.RepeatButton (RepeatButtonConfig, initialDelay, repeatButton, repeatInterval)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -81,24 +84,30 @@ taggedActivated = [onActivated (const [OutMsg "Activated"])]
 action :: View TestElement String ()
 action = renderWithId taggedActivated
 
--- | Drives 'action' through a fixed sequence of frames, each with its own
+-- | 'action', but with a custom initial delay and its repeat interval
+-- pushed far out of range -- for tests that only care about the first
+-- repeat, isolated from ever landing on a second one.
+actionWith :: Double -> View TestElement String ()
+actionWith delay = renderWithId (taggedActivated ++ [initialDelay delay, repeatInterval 1000000])
+
+-- | Drives @act@ through a fixed sequence of frames, each with its own
 -- explicit 'AnimationState' -- unlike 'runInteractions', which always
 -- carries the seed context's animation clock forward unchanged, this lets
 -- a test advance elapsed time across frames to exercise the repeat
 -- cadence. Accumulates every frame's messages, in order, same as
--- 'runInteractions'. Unlike before 'repeatButton' owned its own hold
--- state, no caller-side handoff needs stating between frames here -- it's
--- read back automatically via 'Blink.View.getHoldState'.
+-- 'runInteractions'. No caller-side handoff needs stating between frames
+-- here -- 'repeatButton' owns its own repeat-press state.
 runAnimatedFrames
-  :: ViewContext TestElement String
+  :: View TestElement String ()
+  -> ViewContext TestElement String
   -> [(Float, Float, InputState)]
   -> IO ([String], ViewContext TestElement String)
-runAnimatedFrames = go []
+runAnimatedFrames act = go []
   where
     go acc ctx [] = pure (acc, ctx)
     go acc ctx ((delta, elapsed, input) : rest) = do
       let ctx' = nextFrameContext testBounds input testTheme (mkAnimationState delta elapsed True) ctx
-      (_, ctxAfter) <- runView action ctx'
+      (_, ctxAfter) <- runView act ctx'
       go (acc ++ getMessages ctxAfter) ctxAfter rest
 
 mouseDownInside :: InputState
@@ -130,26 +139,12 @@ spec = describe "Blink.View.Controls.RepeatButton" $ do
       result <- runInteractions testBounds seedCtx (renderWithId taggedActivated) [] [MouseDown insidePoint, MouseUp insidePoint]
       length (filter (== "Activated") (resultMessages result)) `shouldBe` 1
 
-  describe "hold state ownership" $ do
-    it "anchors its own hold state on press, keyed by the animation clock's elapsed time" $ do
-      let elapsedCtx = nextFrameContext testBounds noInput testTheme (mkAnimationState 0 5 False) seedCtx
-      result <- runInteractions testBounds elapsedCtx (renderWithId taggedActivated) [] [MouseDown insidePoint]
-      contextHoldState Ok (resultContext result) `shouldBe` Just (HoldState 5 0)
-
-    it "clears its own hold state once the press releases" $ do
-      result <- runInteractions testBounds seedCtx (renderWithId taggedActivated) [MouseDown insidePoint] [MouseUp insidePoint]
-      contextHoldState Ok (resultContext result) `shouldBe` Nothing
-
-    it "records no hold state while nothing has ever been pressed" $ do
-      result <- runInteractions testBounds seedCtx (renderWithId taggedActivated) [] [Wait 1]
-      contextHoldState Ok (resultContext result) `shouldBe` Nothing
-
   describe "repeat cadence" $ do
     -- Anchored at elapsed 0 (the press frame), with the default 0.4s
     -- initial delay and 0.08s repeat interval -- see 'pressed'.
     it "does not repeat before the initial delay has elapsed" $ do
       ctx0 <- pressed
-      (msgs, _) <- runAnimatedFrames ctx0
+      (msgs, _) <- runAnimatedFrames action ctx0
         [ (0.1, 0.1, mouseDownInside)
         , (0.1, 0.2, mouseDownInside)
         , (0.1, 0.3, mouseDownInside)
@@ -158,17 +153,36 @@ spec = describe "Blink.View.Controls.RepeatButton" $ do
 
     it "fires its first repeat exactly at the initial delay" $ do
       ctx0 <- pressed
-      (msgs, _) <- runAnimatedFrames ctx0
+      (msgs, _) <- runAnimatedFrames action ctx0
         [ (0.3, 0.3, mouseDownInside)
         , (0.1, 0.4, mouseDownInside)
         ]
       msgs `shouldBe` ["Activated"]
 
+    prop "waits the normal delay before repeating, regardless of how long the app has already been running" $
+      forAll ((,) <$> choose (0, 10000 :: Double) <*> choose (0.1, 2 :: Double)) $ \(pressAt, delay) -> monadicIO $ do
+        -- A margin comfortably clear of both the exact boundary and of
+        -- 'Float' rounding at the scale 'pressAt' can reach.
+        let margin = delay * 0.25 :: Double
+            pressAt' = realToFrac pressAt
+            delay'   = realToFrac delay
+            margin'  = realToFrac margin
+        (tooSoon, justPast) <- run $ do
+          (_, ctx0) <- runView (actionWith delay)
+            (nextFrameContext testBounds mouseDownInside testTheme (mkAnimationState 0 pressAt' True) seedCtx)
+          (msgsBefore, ctx1) <- runAnimatedFrames (actionWith delay) ctx0
+            [(delay' - margin', pressAt' + delay' - margin', mouseDownInside)]
+          (msgsAt, _)        <- runAnimatedFrames (actionWith delay) ctx1
+            [(2 * margin', pressAt' + delay' + margin', mouseDownInside)]
+          pure (msgsBefore, msgsAt)
+        assert (tooSoon == [])
+        assert (justPast == ["Activated"])
+
     it "fires again every interval thereafter" $ do
       -- 0.49\/0.57, not the exactly-on-a-boundary 0.48\/0.56, for the same
       -- 'Float'-rounding reason as the catch-up test below.
       ctx0 <- pressed
-      (msgs, _) <- runAnimatedFrames ctx0
+      (msgs, _) <- runAnimatedFrames action ctx0
         [ (0.4, 0.4, mouseDownInside)   -- crosses the initial delay: 1st repeat
         , (0.09, 0.49, mouseDownInside) -- one interval later: 2nd repeat
         , (0.08, 0.57, mouseDownInside) -- 3rd repeat
@@ -183,7 +197,7 @@ spec = describe "Blink.View.Controls.RepeatButton" $ do
       -- mercy of 'Float' rounding landing a hair either side of a boundary
       -- -- real held-time from a wall clock is never exactly on one anyway.
       ctx0 <- pressed
-      (msgs, _) <- runAnimatedFrames ctx0
+      (msgs, _) <- runAnimatedFrames action ctx0
         [ (0.4, 0.4, mouseDownInside)   -- 1st repeat, at the delay
         , (0.25, 0.65, mouseDownInside) -- jumps past 3 more interval boundaries
         ]
@@ -191,22 +205,36 @@ spec = describe "Blink.View.Controls.RepeatButton" $ do
 
     it "stops repeating once the button is released" $ do
       ctx0 <- pressed
-      (msgs, _) <- runAnimatedFrames ctx0
+      (msgs, _) <- runAnimatedFrames action ctx0
         [ (0.4, 0.4, mouseDownInside)
         , (0.0, 0.4, noInput { inputMousePosition = insidePoint, inputLeftButtonDown = False })
         , (0.08, 0.48, noInput { inputMousePosition = insidePoint, inputLeftButtonDown = False })
         ]
       msgs `shouldBe` ["Activated"]
 
-    it "starts a fresh count from zero on a new press after releasing" $ do
+    it "fires no extra repeats on a fresh press immediately after releasing" $ do
       ctx0 <- pressed
-      (_, ctx1) <- runAnimatedFrames ctx0
+      (_, ctx1) <- runAnimatedFrames action ctx0
         [ (0.4, 0.4, mouseDownInside) -- 1st repeat, at the delay
         , (0.0, 0.4, noInput { inputMousePosition = insidePoint, inputLeftButtonDown = False })
         ]
-      (_, ctx2) <- runView action (nextFrameContext testBounds mouseDownInside testTheme (mkAnimationState 0 10 True) ctx1)
-      let settled = applyUiEffects (getUiEffects ctx2) ctx2
-      contextHoldState Ok settled `shouldBe` Just (HoldState 10 0)
+      -- If the old press's anchor and fired count had leaked through
+      -- instead of being cleared on release, this fresh press would already
+      -- read as ~10s held and fire a burst of repeats immediately.
+      (msgs, _) <- runAnimatedFrames action ctx1 [(0, 10, mouseDownInside)]
+      msgs `shouldBe` ["Activated"]
+
+    it "starts a fresh cadence on a new press after releasing" $ do
+      ctx0 <- pressed
+      (_, ctx1) <- runAnimatedFrames action ctx0
+        [ (0.4, 0.4, mouseDownInside) -- 1st repeat, at the delay
+        , (0.0, 0.4, noInput { inputMousePosition = insidePoint, inputLeftButtonDown = False })
+        ]
+      (_, ctx2) <- runAnimatedFrames action ctx1 [(0, 10, mouseDownInside)]
+      -- 10.45, not the exactly-on-a-boundary 10.4, for the same
+      -- 'Float'-rounding reason as the cadence tests above.
+      (msgs, _) <- runAnimatedFrames action ctx2 [(0.45, 10.45, mouseDownInside)]
+      msgs `shouldBe` ["Activated"]
 
   describe "animation ticker" $ do
     it "requires animation while held" $ do

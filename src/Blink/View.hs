@@ -63,7 +63,7 @@ for why). Scroll, hold, and selection have no such sibling-arbitration
 requirement, so they queue a 'UiEffect' with 'emitUi' instead of mutating
 immediately; a write made partway through a frame is not visible to a read
 later in that same frame. 'nextFrameContext' applies the queued effects via
-'applyUiEffects' when building the next frame's context, so the change
+@applyUiEffects@ when building the next frame's context, so the change
 takes effect starting then.
 
 = The render loop
@@ -207,12 +207,12 @@ module Blink.View
   , rerenderContext
   , getDrawCommands
   , getMessages
-  , getUiEffects
-  , applyUiEffects
+  , hasPendingUiEffects
+  , settleEffects
   , contextRequiresAnimation
     -- * Messages
   , Out (..)
-  , UiEffect (..)
+  , UiEffect
   , emit
   , emitUi
     -- * Scroll state
@@ -223,14 +223,11 @@ module Blink.View
   , getScrollState
   , clampScrollPos
   , contextScrollState
+  , requestScrollTo
+  , requestScrollBy
+  , postScrollBy
     -- * Repeat-press ("hold") state
-    -- | 'HoldState' and 'repeatsDueBy' live in "Blink.View.Hold";
-    -- re-exported here since a 'HoldState' is threaded through
-    -- 'ViewContext' the same way a 'ScrollState' is.
-  , HoldState (..)
-  , getHoldState
-  , repeatsDueBy
-  , contextHoldState
+  , resolveHoldRepeats
     -- * Selection
     -- | 'Selection' itself, and the pure helpers built on it
     -- ('Blink.View.Selection.selectionLow', 'Blink.View.Selection.cursor',
@@ -239,6 +236,7 @@ module Blink.View
   , Selection (..)
   , getSelection
   , contextSelection
+  , requestSelectionAt
     -- * Bounds
   , getBounds
   , getWindowSize
@@ -337,6 +335,7 @@ module Blink.View
 
 import Control.Monad (when, unless, join)
 import Data.List (foldl')
+import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -365,12 +364,12 @@ import Blink.View.Style (Style, StyleSet, Metrics, StyleKey (..), Theme (..), re
 
 -- | A cross-frame presentation effect: a scroll, selection, or explicit
 -- focus change that takes effect starting the next frame rather than
--- immediately. Queued with 'emitUi' and applied by 'applyUiEffects', which
+-- immediately. Queued with 'emitUi' and applied by @applyUiEffects@, which
 -- 'nextFrameContext' runs automatically between frames.
 --
 -- Focus claimed\/cleared by an element acting on *itself* (auto-claim,
 -- self-clear) is not represented here — see 'setFocus' for why that changes
--- immediately instead. 'Focus'\/'ClearFocus' are specifically for an
+-- immediately instead. @Focus@\/@ClearFocus@ are specifically for an
 -- explicit "make a different, named element focused (or clear whoever is)"
 -- change, triggered from a place that only knows the winner (or that
 -- there's no winner), not who's currently focused — 'Blink.View.Controls.Label.label'
@@ -379,26 +378,31 @@ import Blink.View.Style (Style, StyleSet, Metrics, StyleKey (..), Theme (..), re
 -- access, unlike the reaction that queued it), and deferring lets every
 -- affected element observe the change consistently regardless of render
 -- order — see 'FocusClaim' and @LostFocus@.
+--
+-- Constructors are private to this module. Produced by 'requestScrollTo',
+-- 'requestScrollBy', 'postScrollBy', 'requestSelectionAt', 'requestFocus',
+-- or 'requestClearFocus'.
 data UiEffect e
   = ScrollTo e Double
     -- ^ Sets the scroll position to an absolute value, clamped to @[0, 1]@
-    -- by 'applyUiEffects' when the effect is applied. Every caller
-    -- ('Blink.View.Controls.scrollBar', 'Blink.View.Controls.textInputControl')
-    -- already passes a value in the @[0, 1]@ convention documented on
-    -- 'ScrollState'; 'Blink.View.Controls.textInputControl' converts to and from
-    -- pixels locally since its selection\/cursor math is naturally
-    -- pixel-based.
+    -- when applied. Every caller ('Blink.View.Controls.ScrollBar.scrollBar',
+    -- 'Blink.View.Controls.TextInput.textInput') already passes a value in
+    -- the @[0, 1]@ convention documented on 'ScrollState';
+    -- 'Blink.View.Controls.TextInput.textInput' converts to and from pixels
+    -- locally since its selection\/cursor math is naturally pixel-based.
+    -- See 'requestScrollTo'.
   | ScrollBy e Double
     -- ^ Adjusts the scroll position by a delta, clamped to @[0, 1]@ — this
     -- constructor is only ever used in the normalised @[0, 1]@ convention.
-    -- Composes with other 'ScrollBy' effects queued in the same frame for
-    -- the same element rather than last-write-wins.
+    -- Composes with other @ScrollBy@ effects queued in the same frame for
+    -- the same element rather than last-write-wins. See 'requestScrollBy'\/
+    -- 'postScrollBy'.
   | SetSelectionAt e Selection
+    -- ^ See 'requestSelectionAt'.
   | SetHoldState e (Maybe HoldState)
     -- ^ Sets ('Just') or clears ('Nothing') an element's repeat-press
-    -- state -- see 'HoldState' and 'Blink.View.Controls.RepeatButton.repeatButton',
-    -- its only caller. Last-write-wins, applied by 'applyUiEffects' the
-    -- same way 'SetSelectionAt' is; unlike 'ScrollTo'\/'ScrollBy' there's no
+    -- state -- see 'HoldState' and 'resolveHoldRepeats', its only caller.
+    -- Last-write-wins; unlike @ScrollTo@\/@ScrollBy@ there's no
     -- absolute\/relative pair since a repeat-press has no meaningful
     -- "adjust by" -- a control either anchors a fresh press or clears one.
   | Focus (Maybe e) e
@@ -409,7 +413,7 @@ data UiEffect e
   | ClearFocus (Maybe e)
     -- ^ Clears whoever is focused within the given scope, with nothing new
     -- claiming it, applied atomically at the next frame boundary — the
-    -- "clear" counterpart to 'Focus'. See 'requestClearFocus'.
+    -- "clear" counterpart to @Focus@. See 'requestClearFocus'.
   deriving (Eq, Show)
 
 
@@ -561,7 +565,7 @@ emptyViewContext bounds input thm measurer = ViewContext
 
 -- | Advances the context to the next frame, given the backend-supplied
 -- inputs for the frame about to run: window bounds, raw input, active theme,
--- and animation state. First runs 'applyUiEffects' on the 'UiEffect's queued
+-- and animation state. First runs @applyUiEffects@ on the 'UiEffect's queued
 -- during the frame that just completed, so focus, scroll, and selection
 -- changes take effect starting this new frame. Then resets per-frame state
 -- (draw commands, hover element, queued messages, and the focus-visited
@@ -574,7 +578,7 @@ nextFrameContext :: Ord e => Rectangle -> InputState -> Theme e -> AnimationStat
 nextFrameContext bounds input thm anim ctx0 =
   fctx { ctxMouse = advanceButton wasDown isDown (ctxMouse fctx) }
   where
-    ctx     = applyUiEffects (getUiEffects ctx0) ctx0
+    ctx     = settleEffects ctx0
     fctx    = finishFrame bounds input thm anim ctx
     wasDown = inputLeftButtonDown (ctxInput ctx)
     isDown  = inputLeftButtonDown input
@@ -588,7 +592,7 @@ nextFrameContext bounds input thm anim ctx0 =
 rerenderContext :: Ord e => Rectangle -> InputState -> Theme e -> AnimationState -> ViewContext e msg -> ViewContext e msg
 rerenderContext bounds input thm anim ctx0 = finishFrame bounds input thm anim ctx
   where
-    ctx = applyUiEffects (getUiEffects ctx0) ctx0
+    ctx = settleEffects ctx0
 
 -- | Given a context that already has any queued 'UiEffect's applied,
 -- refreshes bounds\/theme\/animation, advances focus to the next frame,
@@ -658,15 +662,21 @@ contextScrollState :: Ord e => e -> ViewContext e msg -> Double
 contextScrollState eid ctx =
   scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
--- | The given element's repeat-press state (see 'HoldState'), or 'Nothing'
--- while it isn't currently being held\/repeating.
-getHoldState :: Ord e => e -> View e msg (Maybe HoldState)
-getHoldState eid = gets (contextHoldState eid)
+-- | Sets the given element's scroll position, clamped to @[0, 1]@, from the
+-- next frame onward.
+requestScrollTo :: e -> Double -> View e msg ()
+requestScrollTo eid v = emitUi (ScrollTo eid v)
 
--- | The given element's repeat-press state, read directly from a
--- 'ViewContext' outside the 'View' monad.
-contextHoldState :: Ord e => e -> ViewContext e msg -> Maybe HoldState
-contextHoldState eid ctx = Map.lookup eid (elmHoldStates (ctxElements ctx))
+-- | Adjusts the given element's scroll position by @dv@, clamped to
+-- @[0, 1]@, from the next frame onward. Multiple calls in the same frame
+-- for the same element accumulate.
+requestScrollBy :: e -> Double -> View e msg ()
+requestScrollBy eid dv = emitUi (ScrollBy eid dv)
+
+-- | 'requestScrollBy' as a handler reaction, ignoring the triggering
+-- event's own data.
+postScrollBy :: e -> Double -> a -> [Out e msg]
+postScrollBy eid dv = const [OutUi (ScrollBy eid dv)]
 
 -- | The given element's selection, or 'Nothing' if it isn't the element
 -- currently holding one.
@@ -681,17 +691,26 @@ contextSelection eid ctx = case elmSelection (ctxElements ctx) of
   Just (owner, sel) | owner == eid -> Just sel
   _                                -> Nothing
 
+-- | Sets the given element's selection, from the next frame onward.
+requestSelectionAt :: e -> Selection -> View e msg ()
+requestSelectionAt eid sel = emitUi (SetSelectionAt eid sel)
+
+-- Internal: the given element's repeat-press state, or 'Nothing' while it
+-- isn't currently being held\/repeating. Used only by 'resolveHoldRepeats'.
+contextHoldState :: Ord e => e -> ViewContext e msg -> Maybe HoldState
+contextHoldState eid ctx = Map.lookup eid (elmHoldStates (ctxElements ctx))
+
 -- Internal: writes a scroll position directly into the context, bypassing
 -- the deferred-effect queue. Clamps to @[0, 1]@ so this is the single point
 -- that enforces the 'ScrollState' invariant regardless of which 'UiEffect'
--- reaches it. Used only by 'applyUiEffects'.
+-- reaches it. Used only by @applyUiEffects@.
 writeScrollState :: Ord e => e -> Double -> ViewContext e msg -> ViewContext e msg
 writeScrollState eid v ctx = ctx { ctxElements = (ctxElements ctx)
   { elmScrollStates = Map.insert eid (ScrollState (clampScrollPos v)) (elmScrollStates (ctxElements ctx)) } }
 
 -- Internal: writes (or clears) an element's repeat-press state directly
 -- into the context, bypassing the deferred-effect queue. Used only by
--- 'applyUiEffects'.
+-- @applyUiEffects@.
 writeHoldState :: Ord e => e -> Maybe HoldState -> ViewContext e msg -> ViewContext e msg
 writeHoldState eid mhs ctx = ctx { ctxElements = (ctxElements ctx)
   { elmHoldStates = case mhs of
@@ -699,9 +718,28 @@ writeHoldState eid mhs ctx = ctx { ctxElements = (ctxElements ctx)
       Nothing -> Map.delete eid (elmHoldStates (ctxElements ctx))
   } }
 
+-- | Given whether an element is held, and its initial-delay\/interval
+-- cadence, returns how many repeats are due this frame. Requires animation
+-- while held.
+resolveHoldRepeats :: Ord e => e -> Bool -> Double -> Double -> View e msg Int
+resolveHoldRepeats eid held initialDelay interval
+  | not held = do
+      mHold <- gets (contextHoldState eid)
+      when (isJust mHold) $ emitUi (SetHoldState eid Nothing)
+      pure 0
+  | otherwise = do
+      requiresAnimation
+      now <- realToFrac <$> getAnimElapsed
+      mHold <- gets (contextHoldState eid)
+      let HoldState startedAt fired = fromMaybe (HoldState now 0) mHold
+          due    = repeatsDueBy initialDelay interval (now - startedAt)
+          toFire = max 0 (due - fired)
+      emitUi (SetHoldState eid (Just (HoldState startedAt due)))
+      pure toFire
+
 -- Internal: writes a selection directly into the context, bypassing the
 -- deferred-effect queue, replacing whichever element held the selection
--- before. Used only by 'applyUiEffects'.
+-- before. Used only by @applyUiEffects@.
 writeSelection :: e -> Selection -> ViewContext e msg -> ViewContext e msg
 writeSelection eid sel ctx = ctx { ctxElements = (ctxElements ctx)
   { elmSelection = Just (eid, sel) } }
@@ -989,14 +1027,14 @@ isFocused :: Eq e => e -> View e msg Bool
 isFocused eid = (== Just eid) <$> getFocus
 
 -- | 'True' when the currently ambient scope's most recent redirect (a
--- 'Focus' effect landing within the last two frames -- see 'FocusClaim')
+-- @Focus@ effect landing within the last two frames -- see 'FocusClaim')
 -- granted this element focus. Single-hop, exactly like 'isFocused'; never
--- 'True' from 'setFocus' reaffirming a claim, only from an explicit 'Focus'.
+-- 'True' from 'setFocus' reaffirming a claim, only from an explicit @Focus@.
 hasGainedFocus :: Eq e => e -> View e msg Bool
 hasGainedFocus eid = gets (isGained eid . focusClaim . ftAmbient . ctxFocus)
 
 -- | 'True' when the currently ambient scope's most recent redirect (a
--- 'Focus'\/'ClearFocus' effect, still within its one-frame observation
+-- @Focus@\/@ClearFocus@ effect, still within its one-frame observation
 -- window -- see @LostFocus@) displaced this element.
 hasLostFocus :: Eq e => e -> View e msg Bool
 hasLostFocus eid = gets ((== Just (Just eid)) . pendingLostFocus . focusLost . ftAmbient . ctxFocus)
@@ -1022,7 +1060,7 @@ setFocusWhen b eid = when b (setFocus eid)
 clearFocus :: View e msg ()
 clearFocus = modifyFocusState $ \fs -> fs { focusClaim = Unclaimed }
 
--- | Rejects a 'Focus' grant that just landed on this element, restoring
+-- | Rejects a @Focus@ grant that just landed on this element, restoring
 -- whoever held focus before it -- as if the grant had never been made.
 -- Call before anything else this frame reads focus state for the element.
 disclaimFocus :: View e msg ()
@@ -1031,7 +1069,7 @@ disclaimFocus = modifyFocusState $ \fs -> fs
   , focusLost  = NothingLost
   }
 
--- | Queues a 'Focus' effect: makes the given element focused within the
+-- | Queues a @Focus@ effect: makes the given element focused within the
 -- given scope (@Nothing@ = root, @Just scopeId@ = a specific composite's
 -- scope — see 'withFocusScope'), taking effect at the next frame boundary.
 -- Unlike 'setFocus' (immediate, for a control's own auto-claim\/retain
@@ -1046,7 +1084,7 @@ disclaimFocus = modifyFocusState $ \fs -> fs
 requestFocus :: Maybe e -> e -> View e msg ()
 requestFocus scopeId target = emitUi (Focus scopeId target)
 
--- | Queues a 'ClearFocus' effect: clears whoever is focused within the
+-- | Queues a @ClearFocus@ effect: clears whoever is focused within the
 -- given scope, with nothing new claiming it, taking effect at the next
 -- frame boundary — the "clear" counterpart to 'requestFocus'.
 requestClearFocus :: Maybe e -> View e msg ()
@@ -1252,7 +1290,7 @@ emit :: msg -> View e msg ()
 emit msg = modifyOut $ \out -> out { outEvents = OutMsg msg : outEvents out }
 
 -- | Queues a 'UiEffect' — a focus, scroll, or selection change — to be
--- applied by 'applyUiEffects' between this frame and the next. 'setFocus',
+-- applied by @applyUiEffects@ between this frame and the next. 'setFocus',
 -- 'clearFocus', and the scroll\/selection writes inside "Blink.View.Controls" are
 -- built on this; reach for it directly only when writing a custom control.
 emitUi :: UiEffect e -> View e msg ()
@@ -1269,10 +1307,8 @@ getDrawCommands = reverse . outDrawCommands . ctxOutputs
 getMessages :: ViewContext e msg -> [msg]
 getMessages ctx = [msg | OutMsg msg <- reverse (outEvents (ctxOutputs ctx))]
 
--- | Extracts the 'UiEffect's queued with 'emitUi' during the frame, in emit
--- order, interleaved order with messages discarded. Used by
--- 'nextFrameContext' to drive 'applyUiEffects'; not needed by ordinary
--- application or control code.
+-- Internal: the 'UiEffect's queued with 'emitUi' during the frame, in emit
+-- order, messages discarded.
 getUiEffects :: ViewContext e msg -> [UiEffect e]
 getUiEffects ctx = [eff | OutUi eff <- reverse (outEvents (ctxOutputs ctx))]
 
@@ -1283,26 +1319,7 @@ getUiEffects ctx = [eff | OutUi eff <- reverse (outEvents (ctxOutputs ctx))]
 contextRequiresAnimation :: ViewContext e msg -> Bool
 contextRequiresAnimation = outRequiresAnimation . ctxOutputs
 
--- | Applies the 'UiEffect's queued during a frame (via 'emitUi' or a
--- control's scroll\/selection writes) to the context handed to the next
--- frame. Run automatically by 'nextFrameContext' — no host or application
--- code needs to call this directly. Effects are folded in queue order:
--- 'ScrollTo' overwrites what came before for the same target, 'ScrollBy'
--- composes with a previous write to the same target, and 'SetSelectionAt'
--- overwrites whichever selection was there before, no matter which element
--- held it. Every scroll write passes through the same internal clamp, so the
--- result is always in @[0, 1]@ regardless of which constructor produced it:
---
--- @
--- applyUiEffects [ScrollBy eid 0.6, ScrollBy eid 0.6] ctx
---   -- scroll position 1.0 (0.6 + 0.6, clamped — not last-write-wins)
---
--- applyUiEffects [ScrollBy eid 0.6, ScrollTo eid 0.2] ctx
---   -- scroll position 0.2 (ScrollTo overwrites the pending ScrollBy)
---
--- applyUiEffects [ScrollTo eid 1.5] ctx
---   -- scroll position 1.0 (out-of-range input, clamped)
--- @
+-- Internal: applies queued 'UiEffect's to a context, folded in queue order.
 applyUiEffects :: Ord e => [UiEffect e] -> ViewContext e msg -> ViewContext e msg
 applyUiEffects effects ctx0 = foldl' step ctx0 effects
   where
@@ -1316,12 +1333,20 @@ applyUiEffects effects ctx0 = foldl' step ctx0 effects
     currentScroll eid ctx =
       scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
--- | Applies a 'Focus'\/'ClearFocus' effect to whichever scope it targets —
+-- | Applies whatever effects are pending on @ctx@.
+settleEffects :: Ord e => ViewContext e msg -> ViewContext e msg
+settleEffects ctx = applyUiEffects (getUiEffects ctx) ctx
+
+-- | 'True' when any effect is pending on @ctx@.
+hasPendingUiEffects :: ViewContext e msg -> Bool
+hasPendingUiEffects = not . null . getUiEffects
+
+-- | Applies a @Focus@\/@ClearFocus@ effect to whichever scope it targets —
 -- root's 'ftAmbient' (@Nothing@) or a specific composite's entry in
 -- @ftScopes@ (@Just scopeId@) — setting the new focus holder (if any, as a
 -- fresh 'GainedThisFrame' claim) and recording whoever it displaced (looking
 -- up the scope's previous holder to fill in 'focusLost') for one frame's
--- observation. Used only by 'applyUiEffects'.
+-- observation. Used only by @applyUiEffects@.
 setFocusChange :: Ord e => Maybe e -> Maybe e -> ViewContext e msg -> ViewContext e msg
 setFocusChange scopeId newFocus ctx = ctx { ctxFocus = updateScope (ctxFocus ctx) }
   where

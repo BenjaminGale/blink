@@ -5,10 +5,9 @@ Per-element repeat-press ("hold") state, plus the pure cadence logic built
 on top of it: how many repeats are due for a press of a given age.
 
 No dependency on the 'Blink.View' monad -- 'Blink.View' holds a
-'HoldState' per element in its context and exposes monadic accessors
-('Blink.View.getHoldState', 'Blink.View.contextHoldState') built on top of
-what's defined here, the same relationship "Blink.View.Scroll" has with
-the scroll state 'Blink.View' threads through its own context.
+'HoldState' per element in its context and builds 'Blink.View.resolveHoldRepeats'
+on top of what's defined here, the same relationship "Blink.View.Scroll"
+has with the scroll state 'Blink.View' threads through its own context.
 -}
 module Blink.View.Hold
   ( HoldState (..)

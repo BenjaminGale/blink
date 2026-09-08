@@ -133,7 +133,7 @@ uiStateApp = App
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
   , view    = \_ -> fullView $ do
       pos <- getScrollState ()
-      emitUi (ScrollTo () (pos + 1))
+      requestScrollTo () (pos + 1)
       emit (\_ -> round pos)
   , update  = modify
   }

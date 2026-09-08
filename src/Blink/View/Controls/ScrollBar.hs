@@ -4,8 +4,8 @@
 -- | A scrollbar: a composite of two repeating arrow buttons (built on
 -- 'Blink.View.Controls.RepeatButton.repeatButton') straddling a draggable
 -- track. Its position is control state, not application data -- 'scrollBar'
--- reads and writes it itself via 'Blink.View.getScrollState'\/'Blink.View.ScrollTo'\/
--- 'Blink.View.ScrollBy', keyed by its own element id, the same way
+-- reads and writes it itself via 'Blink.View.getScrollState'\/'Blink.View.requestScrollTo'\/
+-- 'Blink.View.requestScrollBy', keyed by its own element id, the same way
 -- 'Blink.View.Controls.TextInput.textInput' owns its own scroll offset
 -- rather than asking the caller to thread it through. Clicking or dragging
 -- the track jumps\/follows the pointer the same way
@@ -252,14 +252,14 @@ scrollBar tag attrs = Element
       [ text (if o == Horizontal then "\9664" else "\9650") -- ◀ / ▲
       , style scrollBarButtonStyleKey
       , focusPolicy NotFocusable
-      , onActivated (const [OutUi (ScrollBy scrollEid (negate (sbStep cfg)))])
+      , onActivated (postScrollBy scrollEid (negate (sbStep cfg)))
       ] ++ arrowLayoutAttrs o
 
     incrementBtn = repeatButton (tag ScrollBarIncrement) $
       [ text (if o == Horizontal then "\9654" else "\9660") -- ▶ / ▼
       , style scrollBarButtonStyleKey
       , focusPolicy NotFocusable
-      , onActivated (const [OutUi (ScrollBy scrollEid (sbStep cfg))])
+      , onActivated (postScrollBy scrollEid (sbStep cfg))
       ] ++ arrowLayoutAttrs o
 
     trackEl = Element
@@ -287,7 +287,7 @@ scrollBar tag attrs = Element
       let thumbLen = thumbLengthFor o bounds (sbVisibleFraction cfg)
       when (not disabled && capturing) $ do
         newValue <- fractionAt o bounds thumbLen <$> getMousePos
-        when (newValue /= value0) $ emitUi (ScrollTo scrollEid newValue)
+        when (newValue /= value0) $ requestScrollTo scrollEid newValue
       drawTrack o s bounds hovered capturing (sbVisibleFraction cfg) value0
 
     ctrl = (sbControl cfg)

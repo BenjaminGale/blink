@@ -13,6 +13,7 @@ import Blink.View.Style (Metrics (..), Style (..), StyleSet (..), StyleKey (..),
 import Blink.View
 import Blink.View.Drawing (withClip, fillRect, strokeRect, drawText, withBackground, withBorder)
 import Blink.View.Selection (selectionLow, selectionHigh, selectionHasExtent, cursor, collapseToLow, collapseToHigh, collapseToActive, extendActive)
+import qualified Blink.View.Hold as Hold
 import Blink.Generators ()
 
 data TwoElems = ElemA | ElemB deriving (Eq, Ord, Show)
@@ -236,26 +237,25 @@ spec = describe "Blink.View" $ do
       (s, _) <- run0 (getSelection ())
       s `shouldBe` Nothing
 
-    it "SetSelectionAt is queued rather than applied immediately" $ do
-      (s, ctx) <- run0 (emitUi (SetSelectionAt () (Selection 1 4)) >> getSelection ())
+    it "requestSelectionAt is deferred rather than applied immediately" $ do
+      (s, _) <- run0 (requestSelectionAt () (Selection 1 4) >> getSelection ())
       s `shouldBe` Nothing
-      getUiEffects ctx `shouldBe` [SetSelectionAt () (Selection 1 4)]
 
-    it "a queued SetSelectionAt is visible via getSelection once applied" $ do
-      (_, ctx) <- run0 (emitUi (SetSelectionAt () (Selection 1 4)))
-      (s, _) <- runView (getSelection ()) (applyUiEffects (getUiEffects ctx) ctx)
+    it "a requested selection is visible via getSelection once settled" $ do
+      (_, ctx) <- run0 (requestSelectionAt () (Selection 1 4))
+      (s, _) <- runView (getSelection ()) (settleEffects ctx)
       s `shouldBe` Just (Selection 1 4)
 
-    it "a later SetSelectionAt in the same frame overrides an earlier one" $ do
-      (_, ctx) <- run0 (emitUi (SetSelectionAt () (Selection 0 5)) >> emitUi (SetSelectionAt () (cursor 1)))
-      (s, _) <- runView (getSelection ()) (applyUiEffects (getUiEffects ctx) ctx)
+    it "a later requestSelectionAt in the same frame overrides an earlier one" $ do
+      (_, ctx) <- run0 (requestSelectionAt () (Selection 0 5) >> requestSelectionAt () (cursor 1))
+      (s, _) <- runView (getSelection ()) (settleEffects ctx)
       s `shouldBe` Just (cursor 1)
 
     it "a selection for a different element replaces the one held before" $ do
-      (_, ctx)   <- runTwoElem (emitUi (SetSelectionAt ElemA (Selection 0 5)))
-      let ctx' = applyUiEffects (getUiEffects ctx) ctx
-      (_, ctx'') <- runView (emitUi (SetSelectionAt ElemB (cursor 1))) ctx'
-      let settled = applyUiEffects (getUiEffects ctx'') ctx''
+      (_, ctx)   <- runTwoElem (requestSelectionAt ElemA (Selection 0 5))
+      let ctx' = settleEffects ctx
+      (_, ctx'') <- runView (requestSelectionAt ElemB (cursor 1)) ctx'
+      let settled = settleEffects ctx''
       contextSelection ElemA settled `shouldBe` Nothing
       contextSelection ElemB settled `shouldBe` Just (cursor 1)
 
@@ -264,29 +264,28 @@ spec = describe "Blink.View" $ do
       (v, _) <- run0 (getScrollState ())
       v `shouldBe` 0
 
-    it "ScrollTo is queued rather than applied immediately" $ do
-      (v, ctx) <- run0 (emitUi (ScrollTo () 0.5) >> getScrollState ())
+    it "requestScrollTo is deferred rather than applied immediately" $ do
+      (v, _) <- run0 (requestScrollTo () 0.5 >> getScrollState ())
       v `shouldBe` 0
-      getUiEffects ctx `shouldBe` [ScrollTo () 0.5]
 
-    it "a queued ScrollTo is visible via getScrollState once applied" $ do
-      (_, ctx) <- run0 (emitUi (ScrollTo () 0.5))
-      (v, _) <- runView (getScrollState ()) (applyUiEffects (getUiEffects ctx) ctx)
+    it "a requested scroll position is visible via getScrollState once settled" $ do
+      (_, ctx) <- run0 (requestScrollTo () 0.5)
+      (v, _) <- runView (getScrollState ()) (settleEffects ctx)
       v `shouldBe` 0.5
 
-    it "ScrollBy composes with the current position, clamped to [0, 1]" $ do
-      (_, ctx) <- run0 (emitUi (ScrollTo () 0.5) >> emitUi (ScrollBy () 0.7))
-      (v, _) <- runView (getScrollState ()) (applyUiEffects (getUiEffects ctx) ctx)
+    it "requestScrollBy composes with the current position, clamped to [0, 1]" $ do
+      (_, ctx) <- run0 (requestScrollTo () 0.5 >> requestScrollBy () 0.7)
+      (v, _) <- runView (getScrollState ()) (settleEffects ctx)
       v `shouldBe` 1.0
 
-    it "ScrollTo clamps an out-of-range value to [0, 1]" $ do
-      (_, ctx) <- run0 (emitUi (ScrollTo () 1.5))
-      (v, _) <- runView (getScrollState ()) (applyUiEffects (getUiEffects ctx) ctx)
+    it "requestScrollTo clamps an out-of-range value to [0, 1]" $ do
+      (_, ctx) <- run0 (requestScrollTo () 1.5)
+      (v, _) <- runView (getScrollState ()) (settleEffects ctx)
       v `shouldBe` 1.0
 
     it "keeps scroll positions separate per element" $ do
-      (_, ctx) <- runTwoElem (emitUi (ScrollTo ElemA 0.3) >> emitUi (ScrollTo ElemB 0.7))
-      (v, _) <- runView (getScrollState ElemA) (applyUiEffects (getUiEffects ctx) ctx)
+      (_, ctx) <- runTwoElem (requestScrollTo ElemA 0.3 >> requestScrollTo ElemB 0.7)
+      (v, _) <- runView (getScrollState ElemA) (settleEffects ctx)
       v `shouldBe` 0.3
 
   describe "clampScrollPos" $ do
@@ -301,46 +300,44 @@ spec = describe "Blink.View" $ do
     it "preserves 1" $
       clampScrollPos 1 `shouldBe` 1
 
-  describe "hold state" $ do
-    it "returns Nothing when no state has been recorded" $ do
-      (v, _) <- run0 (getHoldState ())
-      v `shouldBe` Nothing
+  describe "resolveHoldRepeats" $ do
+    it "returns 0 while not held" $ do
+      (n, _) <- run0 (resolveHoldRepeats () False 0.4 0.08)
+      n `shouldBe` 0
 
-    it "SetHoldState is queued rather than applied immediately" $ do
-      (v, ctx) <- run0 (emitUi (SetHoldState () (Just (HoldState 0 1))) >> getHoldState ())
-      v `shouldBe` Nothing
-      getUiEffects ctx `shouldBe` [SetHoldState () (Just (HoldState 0 1))]
+    it "returns 0 for a press that has not yet reached the initial delay" $ do
+      (n, _) <- run0 (resolveHoldRepeats () True 0.4 0.08)
+      n `shouldBe` 0
 
-    it "a queued SetHoldState is visible via getHoldState once applied" $ do
-      (_, ctx) <- run0 (emitUi (SetHoldState () (Just (HoldState 0 1))))
-      (v, _) <- runView (getHoldState ()) (applyUiEffects (getUiEffects ctx) ctx)
-      v `shouldBe` Just (HoldState 0 1)
+    it "fires once a held press crosses the initial delay" $ do
+      ctx0 <- freshCtx
+      (_, ctx1) <- runView (resolveHoldRepeats () True 0.4 0.08) ctx0
+      let ctx2 = nextFrameContext testBounds noInput emptyTheme (mkAnimationState 0.4 0.4 True) ctx1
+      (n, _) <- runView (resolveHoldRepeats () True 0.4 0.08) ctx2
+      n `shouldBe` 1
 
-    it "SetHoldState Nothing clears a previously recorded state" $ do
-      (_, ctx) <- run0 (emitUi (SetHoldState () (Just (HoldState 0 1))) >> emitUi (SetHoldState () Nothing))
-      (v, _) <- runView (getHoldState ()) (applyUiEffects (getUiEffects ctx) ctx)
-      v `shouldBe` Nothing
-
-    it "keeps hold state separate per element" $ do
-      (_, ctx) <- runTwoElem (emitUi (SetHoldState ElemA (Just (HoldState 0 1))) >> emitUi (SetHoldState ElemB (Just (HoldState 0 2))))
-      (vA, ctx') <- runView (getHoldState ElemA) (applyUiEffects (getUiEffects ctx) ctx)
-      (vB, _)    <- runView (getHoldState ElemB) ctx'
-      vA `shouldBe` Just (HoldState 0 1)
-      vB `shouldBe` Just (HoldState 0 2)
+    it "keeps separate elements' cadences independent" $ do
+      ctx0 <- snd <$> runTwoElem (pure ())
+      (_, ctx1) <- runView (resolveHoldRepeats ElemA True 0.4 0.08) ctx0
+      let ctx2 = nextFrameContext testBounds noInput twoElemTheme (mkAnimationState 0.4 0.4 True) ctx1
+      (nA, ctx3) <- runView (resolveHoldRepeats ElemA True 0.4 0.08) ctx2
+      (nB, _)    <- runView (resolveHoldRepeats ElemB True 0.4 0.08) ctx3
+      nA `shouldBe` 1
+      nB `shouldBe` 0
 
   describe "repeatsDueBy" $ do
     it "fires no repeats before the initial delay" $
-      repeatsDueBy 0.4 0.08 0.3 `shouldBe` 0
+      Hold.repeatsDueBy 0.4 0.08 0.3 `shouldBe` 0
 
     it "fires the first repeat exactly at the initial delay" $
-      repeatsDueBy 0.4 0.08 0.4 `shouldBe` 1
+      Hold.repeatsDueBy 0.4 0.08 0.4 `shouldBe` 1
 
     it "fires again every interval thereafter" $ do
-      repeatsDueBy 0.4 0.08 0.49 `shouldBe` 2
-      repeatsDueBy 0.4 0.08 0.57 `shouldBe` 3
+      Hold.repeatsDueBy 0.4 0.08 0.49 `shouldBe` 2
+      Hold.repeatsDueBy 0.4 0.08 0.57 `shouldBe` 3
 
     it "catches up on multiple interval crossings spanned by one long duration" $
-      repeatsDueBy 0.4 0.08 0.65 `shouldBe` 4
+      Hold.repeatsDueBy 0.4 0.08 0.65 `shouldBe` 4
 
   describe "nextFrameContext capture" $ do
     it "carries existing capture forward on continued ButtonDown frames" $ do
@@ -504,10 +501,11 @@ spec = describe "Blink.View" $ do
       (f, _) <- runView getFocus ctx3
       f `shouldBe` Nothing
 
-  describe "focus change (Focus / ClearFocus)" $ do
+  describe "focus change (requestFocus / requestClearFocus)" $ do
     it "a focus request sets the new focus and reports it to the winner and the loser" $ do
-      (_, ctx0) <- runTwoElem (setFocus ElemA)
-      let ctx1 = applyUiEffects [Focus Nothing ElemB] ctx0
+      (_, ctx0') <- runTwoElem (setFocus ElemA)
+      (_, ctx0) <- runView (requestFocus Nothing ElemB) ctx0'
+      let ctx1 = settleEffects ctx0
       (newFocus, _)      <- runView getFocus ctx1
       (winnerGained, _)  <- runView (hasGainedFocus ElemB) ctx1
       (loserLost, _)     <- runView (hasLostFocus ElemA) ctx1
@@ -520,8 +518,9 @@ spec = describe "Blink.View" $ do
       winnerLost   `shouldBe` False
 
     it "a clear removes focus and reports it to the loser, with no winner" $ do
-      (_, ctx0) <- runTwoElem (setFocus ElemA)
-      let ctx1 = applyUiEffects [ClearFocus Nothing] ctx0
+      (_, ctx0') <- runTwoElem (setFocus ElemA)
+      (_, ctx0) <- runView (requestClearFocus Nothing) ctx0'
+      let ctx1 = settleEffects ctx0
       (newFocus, _)  <- runView getFocus ctx1
       (loserLost, _) <- runView (hasLostFocus ElemA) ctx1
       (anyGained, _) <- runView (or <$> traverse hasGainedFocus [ElemA, ElemB]) ctx1
@@ -530,17 +529,23 @@ spec = describe "Blink.View" $ do
       anyGained `shouldBe` False
 
     it "a focus request with nothing previously focused reports no loser" $ do
-      ctx0 <- snd <$> runTwoElem (pure ())
-      let ctx1 = applyUiEffects [Focus Nothing ElemB] ctx0
+      ctx0' <- snd <$> runTwoElem (pure ())
+      (_, ctx0) <- runView (requestFocus Nothing ElemB) ctx0'
+      let ctx1 = settleEffects ctx0
       (winnerGained, _) <- runView (hasGainedFocus ElemB) ctx1
       (anyLost, _)      <- runView (or <$> traverse hasLostFocus [ElemA, ElemB]) ctx1
       winnerGained `shouldBe` True
       anyLost      `shouldBe` False
 
     it "the recorded change stays visible for exactly one more frame, then is cleared" $ do
-      (_, ctx0) <- runTwoElem (setFocus ElemA)
-      let ctx1 = applyUiEffects [Focus Nothing ElemB] ctx0
-          ctx2 = advance noInput ctx1
+      (_, ctx0') <- runTwoElem (setFocus ElemA)
+      (_, ctx0) <- runView (requestFocus Nothing ElemB) ctx0'
+      -- 'ctx2' settles the same queued request fresh from 'ctx0' rather
+      -- than chaining off 'ctx1' -- 'settleEffects' doesn't clear the
+      -- queue it just applied, so advancing 'ctx1' instead would reapply
+      -- the same request a second time.
+      let ctx1 = settleEffects ctx0
+          ctx2 = advance noInput ctx0
           ctx3 = advance noInput ctx2
       (gainedAtApply, _)    <- runView (hasGainedFocus ElemB) ctx1
       (lostAtApply, _)      <- runView (hasLostFocus ElemA) ctx1
@@ -556,8 +561,9 @@ spec = describe "Blink.View" $ do
       lostFrameAfter   `shouldBe` False
 
     it "a scoped focus request updates only that scope's FocusState, not root's" $ do
-      let ctx0 = emptyViewContext testBounds noInput scopeTheme noOpTextMeasurer :: ViewContext ScopeElems ()
-          ctx1 = applyUiEffects [Focus (Just Group) ItemB] ctx0
+      let ctx0' = emptyViewContext testBounds noInput scopeTheme noOpTextMeasurer :: ViewContext ScopeElems ()
+      (_, ctx0) <- runView (requestFocus (Just Group) ItemB) ctx0'
+      let ctx1 = settleEffects ctx0
       (insideGained, _) <- runView (withFocusScope Group AllowFreshClaim (hasGainedFocus ItemB)) ctx1
       (rootGained, _)   <- runView (hasGainedFocus ItemB) ctx1
       insideGained `shouldBe` True

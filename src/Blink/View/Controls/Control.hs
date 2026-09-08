@@ -704,7 +704,7 @@ focusTransition was now
 -- detection watching raw focus transitions uses -- for a control's
 -- self-claim (auto-claiming focus by rendering first) or immediate
 -- self-give-up (Tab), neither of which goes through the
--- 'Focus'\/'ClearFocus' 'UiEffect' that deferred detection watches for.
+-- @Focus@\/@ClearFocus@ 'UiEffect' that deferred detection watches for.
 fireFocusChangeDirect :: ControlConfig e msg -> FocusTransition -> View e msg ()
 fireFocusChangeDirect cc t = case t of
   GainedFocus    -> runHandlers (ccOnFocusGained cc) ()
@@ -904,7 +904,7 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       (m, styles) <- getStyleSet styleKey
       hitBounds   <- marginInsetBounds m
       raw         <- withBounds hitBounds (watchInteraction eid disabled (styleBase styles))
-      when (ciMouseDown raw && isFocusable (ccFocusPolicy cc)) (emitUi (Focus currentScope eid))
+      when (ciMouseDown raw && isFocusable (ccFocusPolicy cc)) (requestFocus currentScope eid)
       let active = intrinsicStates disabled raw `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
       let final = raw { ciStyle = s }
@@ -968,4 +968,4 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
 -- itself when clicked -- e.g. 'Blink.View.Controls.Label.label' redirecting
 -- onto its 'Blink.View.Controls.Label.target'.
 focusTargetOnClick :: Maybe e -> e -> ControlInteraction e msg -> View e msg ()
-focusTargetOnClick scope target ci = when (ciClicked ci) (emitUi (Focus scope target))
+focusTargetOnClick scope target ci = when (ciClicked ci) (requestFocus scope target)

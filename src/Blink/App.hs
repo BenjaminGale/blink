@@ -114,7 +114,7 @@ import Blink.View
   , AnimationState (animElapsed)
   , mkAnimationState
   , emptyViewContext, nextFrameContext, rerenderContext
-  , runView, getDrawCommands, getMessages, getUiEffects
+  , runView, getDrawCommands, getMessages, hasPendingUiEffects
   , contextAnimation, contextRequiresAnimation
   )
 import Blink.View.Element (Element, runElement)
@@ -261,7 +261,7 @@ doStepEventDriven :: Ord e => App e msg s -> AppRefs e msg s -> IO () -> FrameIn
 doStepEventDriven app refs notify input = do
   (firstPassCtx, state') <- runFrame app refs input
   renderedCtx <-
-    if null (getMessages firstPassCtx) && null (getUiEffects firstPassCtx)
+    if null (getMessages firstPassCtx) && not (hasPendingUiEffects firstPassCtx)
       -- Nothing was queued, so nothing about the app or view state changed —
       -- a second pass would run the same view against the same state and
       -- input and produce byte-identical output. Reuse the first pass's

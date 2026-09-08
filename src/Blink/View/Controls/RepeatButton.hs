@@ -11,19 +11,6 @@
 -- @
 -- control --> buttonBase --> repeatButton
 -- @
---
--- The repeat cadence is control state, not application data -- 'repeatButton'
--- reads and writes it itself via 'Blink.View.getHoldState'\/'Blink.View.HoldState',
--- keyed by the element ID, the same way 'Blink.View.Controls.TextInput.textInput'
--- owns its own scroll offset rather than asking the caller to thread it
--- through. Every frame recomputes /how many repeats are due by now/ from
--- scratch, from the stored press-anchor plus the animation clock's current
--- elapsed time -- a pure function of absolute elapsed time
--- ('Blink.View.repeatsDueBy'), never of how many frames actually ran or how
--- long any single frame took. That's deliberate: a frame's own @dt@ is
--- clamped (see 'Blink.View.AnimationState') to keep other animations
--- numerically stable, which would silently drop repeats after a long hitch
--- if the cadence were derived from it instead.
 module Blink.View.Controls.RepeatButton
   ( RepeatButtonConfig (..)
   , defaultRepeatButtonConfig
@@ -33,7 +20,6 @@ module Blink.View.Controls.RepeatButton
   ) where
 
 import Control.Monad (replicateM_, void, when)
-import Data.Maybe (fromMaybe, isJust)
 
 import Blink.View.Controls.Button
   (ButtonActivation (..), ButtonConfig (..), ButtonInteraction (..), HasButtonConfig (..), buttonBase, defaultButtonConfig)
@@ -101,12 +87,6 @@ repeatInterval v = Attribute (\rc -> rc { rbInterval = v })
 -- unlike the mouse, there's no continuous "is this key still down" state
 -- to compute our own cadence from, only a stream of discrete key events at
 -- whatever rate the platform delivers them.
---
--- The mouse-driven repeat cadence is computed fresh every frame from the
--- element's own 'Blink.View.HoldState' and the animation clock's current
--- elapsed time -- see the module header for why, and
--- 'Blink.View.requiresAnimation' for how it keeps getting frames to compute
--- it in while the mouse itself sits still.
 repeatButton :: Ord e => e -> [Attribute (RepeatButtonConfig e msg)] -> Element e msg
 repeatButton eid attrs = Element
   { elLayout  = bcLayout btn
@@ -124,22 +104,6 @@ repeatButton eid attrs = Element
       -- 'buttonBase' itself fires 'onActivated' once already, off
       -- 'ActivateOnPress' (the press) or Enter-while-focused -- this only
       -- adds the repeats past that first activation.
-      r     <- buttonBase eid btn { bcControl = ctrl }
-      mHold <- getHoldState eid
-      let ei = biControl r
-      if ciHeld ei
-        then do
-          -- Kept alive by 'ciHeld' alone, not by whether a stored anchor
-          -- exists yet: the very frame a press starts, there's nothing
-          -- stored to read back below, but the ticker still needs to
-          -- already be running so the *next* frame -- the first one with
-          -- an anchor to work from -- is a real animation tick rather than
-          -- an idle one.
-          requiresAnimation
-          now <- realToFrac <$> getAnimElapsed
-          let HoldState startedAt fired = fromMaybe (HoldState now 0) mHold
-              due    = repeatsDueBy (rbInitialDelay cfg) (rbInterval cfg) (now - startedAt)
-              toFire = due - fired
-          when (toFire > 0) $ replicateM_ toFire (runHandlers (bcOnActivated btn) ())
-          emitUi (SetHoldState eid (Just (HoldState startedAt due)))
-        else when (isJust mHold) $ emitUi (SetHoldState eid Nothing)
+      r <- buttonBase eid btn { bcControl = ctrl }
+      toFire <- resolveHoldRepeats eid (ciHeld (biControl r)) (rbInitialDelay cfg) (rbInterval cfg)
+      when (toFire > 0) $ replicateM_ toFire (runHandlers (bcOnActivated btn) ())

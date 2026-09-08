@@ -81,12 +81,11 @@ type Attribute' = Attribute (ScrollBarConfig TestElement String)
 render :: [Attribute'] -> View TestElement String ()
 render attrs = runElement (scrollBar tag attrs)
 
--- | Seeds the scrollbar's position directly via the 'ScrollTo' effect
--- 'Blink.View.getScrollState' consumers read back, the same way
--- 'Blink.Interaction's own module header documents for scroll\/selection
+-- | Seeds the scrollbar's position directly via 'requestScrollTo', the same
+-- way 'Blink.Interaction's own module header documents for scroll\/selection
 -- state that's impractical to reach via a pixel-accurate drag.
 seededAt :: Double -> IO (ViewContext TestElement String)
-seededAt v = resultContext <$> runInteractions barBounds seedCtx (emitUi (ScrollTo scrollEid v)) [] []
+seededAt v = resultContext <$> runInteractions barBounds seedCtx (requestScrollTo scrollEid v) [] []
 
 -- | Scene bounds wide enough for 'Before' (0-40) followed by the bar
 -- (40-56), for the Tab tests below.
@@ -179,7 +178,7 @@ spec = describe "Blink.View.Controls.ScrollBar" $ do
       -- Crosses the 0.4s initial delay plus two 0.08s intervals: the press
       -- itself plus 3 repeats, 4 decrements of 0.05 each in total.
       (_, ctxHeld) <- runView (render []) (nextFrameContext barBounds downInput testTheme (mkAnimationState 0.6 0.6 True) ctxPressed)
-      let settled = applyUiEffects (getUiEffects ctxHeld) ctxHeld
+      let settled = settleEffects ctxHeld
       contextScrollState scrollEid settled `shouldSatisfy` (\v -> abs (v - (0.9 - 4 * 0.05)) < 1e-9)
 
   describe "orientation" $

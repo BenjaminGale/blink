@@ -195,7 +195,7 @@ applyEdit inputFilterFn currentValue input sel@(Selection _ active)
 
 -- | Resolves the frame's selection changes (mouse, then keyboard) and any
 -- resulting edit, firing 'onSubmit'\/'onInput' reactions and writing the
--- new selection back via 'SetSelectionAt'. Returns the final selection for
+-- new selection back via 'requestSelectionAt'. Returns the final selection for
 -- the caller to draw and auto-scroll against.
 resolveSelectionAndEdit
   :: Ord e
@@ -227,14 +227,14 @@ resolveSelectionAndEdit cfg eid bounds canEdit gesture currentValue displayValue
   when submitted $ runHandlers (ticOnSubmit cfg) ()
   forM_ edited $ \t -> runHandlers (ticOnInput cfg) t
 
-  when canEdit $ emitUi (SetSelectionAt eid selFinal)
+  when canEdit $ requestSelectionAt eid selFinal
 
   pure selFinal
 
 -- | The scroll offset needed to keep a cursor at @cursorAbs@ visible within
 -- a viewport of width @w@ currently scrolled to @scrollX@. Pixels in,
 -- pixels out -- @scrollFraction@\/@scrollPixels@ convert at the boundary
--- with 'getScrollState'\/'ScrollTo' so the stored value stays in the same
+-- with 'getScrollState'\/'requestScrollTo' so the stored value stays in the same
 -- @[0, 1]@ convention every other scroll-state consumer uses.
 resolveScroll :: Double -> Double -> Double -> Double
 resolveScroll w scrollX cursorAbs
@@ -334,7 +334,7 @@ textInput eid attrs = Element
           w           = rectWidth bounds
           selInit     = fromMaybe (cursor (T.length currentValue)) sel
           -- True on the one frame focus arrives, whether as an immediate
-          -- same-frame claim (auto-claim, or Tab landing here) or a 'Focus'
+          -- same-frame claim (auto-claim, or Tab landing here) or a @Focus@
           -- effect applied between frames (a click on this control, or
           -- Shift-Tab) -- 'hasFocus'\/'wasFocused' alone catch the former;
           -- 'ciFocusGained' reports the latter on the frame it takes effect.
@@ -357,7 +357,7 @@ textInput eid attrs = Element
           then do
             curX <- charOffset displayValue (selectionActive selFinal)
             let newScrollX = resolveScroll w scrollX (realToFrac curX)
-            when (newScrollX /= scrollX) $ emitUi (ScrollTo eid (scrollFraction maxScrollPx newScrollX))
+            when (newScrollX /= scrollX) $ requestScrollTo eid (scrollFraction maxScrollPx newScrollX)
             pure newScrollX
           else pure scrollX
 
