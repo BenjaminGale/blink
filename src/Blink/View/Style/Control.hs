@@ -107,9 +107,11 @@ buttonStyle align p = StyleSet
   }
 
 -- | A flat, mostly-invisible row style: no background or border
--- normally, just a hover tint, a focus ring, and an accent tint while
--- selected, so it reads as a plain row rather than a button. Used for
--- checkboxes and radio buttons.
+-- normally, just a hover tint and a focus ring, so it reads as a plain
+-- row rather than a button. Used for checkboxes and radio buttons.
+-- No 'toggleChecked' override -- the glyph itself (checkmark or filled
+-- dot) already shows selected state, and overriding it here would mask
+-- the hover/press tint above whenever a row is selected.
 flatRowStyle :: Palette -> StyleSet
 flatRowStyle p = StyleSet
   { styleBase = Style
@@ -123,7 +125,6 @@ flatRowStyle p = StyleSet
       , (CommonPressed,   \s -> s { styleBackground = paletteSurfaceHover p })
       , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
       , (FocusFocused,    \s -> s { styleBorderColour = Just (paletteFocusRing p) })
-      , (toggleChecked,   \s -> s { styleBackground = paletteAccent p })
       ]
   }
 

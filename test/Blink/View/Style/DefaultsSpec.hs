@@ -89,14 +89,12 @@ spec = describe "Blink.View.Style.Defaults" $ do
         it ("gives " <> show key <> " a distinct look while focused") $ do
           resolvedAt key (Set.singleton FocusFocused) `shouldNotBe` resolvedAt key Set.empty
 
-    -- Every control below puts 'toggleChecked' into its active states while
-    -- selected (see each control's own use of
-    -- 'Blink.View.Controls.ToggleButton.toggleChecked'). Missing an entry
-    -- here means a checked/selected instance looks identical to an
-    -- unchecked one.
+    -- 'toggleButtonStyleKey' is the only one of these with no glyph of its
+    -- own to show checked/unchecked, so it's the only one whose 'StyleSet'
+    -- needs a 'toggleChecked' entry -- a checkbox/radio button shows it via
+    -- their own glyph instead (see 'Blink.View.Style.Control.flatRowStyle').
     describe "toggle pseudo-state coverage" $ do
-      let toggleableStyleKeys = [toggleButtonStyleKey, checkboxStyleKey, radioButtonStyleKey]
-      forM_ toggleableStyleKeys $ \key ->
-        it ("gives " <> show key <> " a distinct look while checked") $ do
-          resolvedAt key (Set.fromList [CommonNormal, toggleChecked])
-            `shouldNotBe` resolvedAt key (Set.singleton CommonNormal)
+      let key = toggleButtonStyleKey :: StyleKey ()
+      it ("gives " <> show key <> " a distinct look while checked") $ do
+        resolvedAt key (Set.fromList [CommonNormal, toggleChecked])
+          `shouldNotBe` resolvedAt key (Set.singleton CommonNormal)

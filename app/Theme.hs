@@ -60,13 +60,16 @@ data ControlId = Label
   deriving (Eq, Ord)
 
 -- | Colours sampled from a light-mode reference screenshot (an inspector
--- panel).
+-- panel). 'paletteSurfaceHover' is pulled darker than the sampled value,
+-- which was only 2 units from the page background (#E5E5EA) -- too close
+-- to read as a hover cue on a checkbox or radio button, which shows that
+-- colour directly rather than as a shift from an opaque resting fill.
 lightPalette :: Palette
 lightPalette = Palette
   { paletteAccent          = RGBA 0.290 0.553 0.941 1  -- #4A8DF0
   , paletteFocusRing       = RGBA 0.290 0.553 0.941 1  -- #4A8DF0
   , paletteSurface         = RGBA 0.949 0.949 0.957 1  -- #F2F2F4
-  , paletteSurfaceHover    = RGBA 0.906 0.906 0.918 1  -- #E7E7EA
+  , paletteSurfaceHover    = RGBA 0.847 0.847 0.867 1  -- #D8D8DD
   , paletteSurfaceDisabled = RGBA 0.969 0.969 0.973 1  -- #F7F7F8
   , paletteTextPrimary     = RGBA 0.231 0.231 0.251 1  -- #3B3B40
   , paletteTextMuted       = RGBA 0.663 0.667 0.682 1  -- #A9AAAE
