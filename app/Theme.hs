@@ -18,13 +18,14 @@ import qualified Data.Map.Strict as Map
 
 import Data.Text (Text)
 import Blink.Geometry
+import Blink.View.Controls.ScrollBar (ScrollBarPart)
 import Blink.View.Controls.ToggleGroup (ToggleGroupPart)
 import Blink.View.Rendering
 import Blink.View.Style
 import Blink.View.Style.Defaults (defaultTheme)
 
 -- | Which of the demo's sidebar-selected pages is showing.
-data Page = ControlsPage | ContinuePage | ContainedPage
+data Page = ControlsPage | ScrollBarsPage | ContinuePage | ContainedPage
   deriving (Eq, Ord, Show)
 
 data ControlId = Label
@@ -42,6 +43,8 @@ data ControlId = Label
              | PasswordInputCtl
              | AnimateCheckbox
              | SliderCtl
+             | VScrollCtl ScrollBarPart
+             | HScrollCtl ScrollBarPart
              | ContainedWrapRadio Int
              | ContainedRememberCheckbox
              | ContainedBefore

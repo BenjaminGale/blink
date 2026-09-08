@@ -44,6 +44,7 @@ import Blink.View.Controls.Divider (dividerStyleKey)
 import Blink.View.Controls.Label (labelStyleKey)
 import Blink.View.Controls.ProgressBar (progressBarStyleKey)
 import Blink.View.Controls.RadioButton (radioButtonStyleKey)
+import Blink.View.Controls.ScrollBar (scrollBarButtonStyleKey, scrollBarStyleKey, scrollBarTrackStyleKey)
 import Blink.View.Controls.Slider (sliderStyleKey)
 import Blink.View.Controls.TextInput (textInputStyleKey)
 import Blink.View.Controls.ToggleButton (toggleButtonStyleKey, toggleChecked)
@@ -241,6 +242,9 @@ defaultTheme p = Theme
       , (labelStyleKey,        (labelMetrics,       labelStyle p))
       , (toggleButtonGroupStyleKey, (toggleGroupMetrics, toggleGroupStyle p))
       , (radioButtonGroupStyleKey,  (toggleGroupMetrics, toggleGroupStyle p))
+      , (scrollBarStyleKey,         (toggleGroupMetrics, toggleGroupStyle p))
+      , (scrollBarButtonStyleKey,   (controlMetrics,     buttonStyle AlignCenter p))
+      , (scrollBarTrackStyleKey,    (progressBarMetrics, sliderStyle p))
       ]
   , themeDefaultStyle = (controlMetrics, buttonStyle AlignCenter p)
   }

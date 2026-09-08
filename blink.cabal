@@ -56,6 +56,7 @@ library
         Blink.View.Controls.ProgressBar
         Blink.View.Controls.RadioButton
         Blink.View.Controls.RepeatButton
+        Blink.View.Controls.ScrollBar
         Blink.View.Controls.Slider
         Blink.View.Controls.TextInput
         Blink.View.Controls.ToggleButton
@@ -110,6 +111,7 @@ test-suite blink-tests
         Blink.View.Controls.ProgressBarSpec
         Blink.View.Controls.RadioButtonSpec
         Blink.View.Controls.RepeatButtonSpec
+        Blink.View.Controls.ScrollBarSpec
         Blink.View.Controls.SliderSpec
         Blink.View.Controls.TextInputSpec
         Blink.View.Controls.ToggleBehaviour

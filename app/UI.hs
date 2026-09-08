@@ -15,8 +15,15 @@ import Blink.View.Controls.Label (LabelConfig, target, text)
 import Blink.View.Controls.ProgressBar (ProgressValue (..), progress)
 import Blink.View.Controls.RepeatButton
   (firedCount, onFiredCountChanged, onPressEnded, onPressStarted, pressStartedAt)
+import Blink.View.Controls.ScrollBar
+  ( RepeatState (..), decrementRepeatState, incrementRepeatState, initialRepeatState
+  , onDecrementRepeatStateChanged, onIncrementRepeatStateChanged, scrollBar, scrollBarOrientation
+  , scrollBarTrackStyleKey, visibleFraction
+  )
+import qualified Blink.View.Controls.ScrollBar as ScrollBar (onValueChanged, value)
 import Blink.View.Controls.Slider (onValueChanged)
 import qualified Blink.View.Controls.Slider as Slider (value)
+import Blink.View.Style (Style (..))
 import Blink.View.Controls.TextInput (displayFilter, onInput, value)
 import Blink.View.Controls.ToggleButton (isSelected, onSelectedChanged)
 import Blink.View.Controls.ToggleGroup
@@ -26,11 +33,11 @@ import Blink.Input
 import Blink.View.Layout
 import Blink.View.Rendering
 import Blink.View
-import Blink.View.Drawing (fillRect)
-import Blink.View.Element (Element (..), elementWithLayout, runElement)
+import Blink.View.Drawing (drawText, fillRect, withClip)
+import Blink.View.Element (Element (..), elementWithLayout, noIntrinsicSize, runElement)
 import Blink.Update
 import Theme (ControlId (..), Page (..), lightTheme, darkTheme)
-import Control.Monad (void, when)
+import Control.Monad (forM_, void, when)
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -48,6 +55,12 @@ data AppState = AppState
   , holdPressedAt  :: Maybe Double
   , holdFiredCount :: Int
   , sliderValue    :: Double
+  , vScrollValue     :: Double
+  , vScrollDecRepeat :: RepeatState
+  , vScrollIncRepeat :: RepeatState
+  , hScrollValue     :: Double
+  , hScrollDecRepeat :: RepeatState
+  , hScrollIncRepeat :: RepeatState
   , isHovering     :: Bool
   , lastInput      :: Text
   , lastInputCount :: Int
@@ -72,6 +85,12 @@ data Msg
   | HoldFiredCountChanged Int
   | HoldPressEnded
   | SetSlider Double
+  | SetVScroll Double
+  | SetVScrollDecRepeat RepeatState
+  | SetVScrollIncRepeat RepeatState
+  | SetHScroll Double
+  | SetHScrollDecRepeat RepeatState
+  | SetHScrollIncRepeat RepeatState
   | FrameObserved Bool Text  -- ^ mouse-is-hovering, this frame's raw key/typed-text label
   | SetPage Page
   | ContainedActivated Text
@@ -94,6 +113,12 @@ demoApp = App
       , holdPressedAt  = Nothing
       , holdFiredCount = 0
       , sliderValue    = 0.5
+      , vScrollValue     = 0
+      , vScrollDecRepeat = initialRepeatState
+      , vScrollIncRepeat = initialRepeatState
+      , hScrollValue     = 0
+      , hScrollDecRepeat = initialRepeatState
+      , hScrollIncRepeat = initialRepeatState
       , isHovering     = False
       , lastInput      = ""
       , lastInputCount = 0
@@ -123,6 +148,12 @@ updateApp msg = case msg of
   HoldFiredCountChanged n -> modify $ \s -> s { holdFiredCount = n }
   HoldPressEnded          -> modify $ \s -> s { holdPressedAt = Nothing, holdFiredCount = 0 }
   SetSlider v          -> modify $ \s -> s { sliderValue = v }
+  SetVScroll v          -> modify $ \s -> s { vScrollValue = v }
+  SetVScrollDecRepeat r -> modify $ \s -> s { vScrollDecRepeat = r }
+  SetVScrollIncRepeat r -> modify $ \s -> s { vScrollIncRepeat = r }
+  SetHScroll v          -> modify $ \s -> s { hScrollValue = v }
+  SetHScrollDecRepeat r -> modify $ \s -> s { hScrollDecRepeat = r }
+  SetHScrollIncRepeat r -> modify $ \s -> s { hScrollIncRepeat = r }
   FrameObserved hov keyLabel -> modify $ \s -> s
     { isHovering     = hov
     , lastInput      = if T.null keyLabel then lastInput s else keyLabel
@@ -278,6 +309,132 @@ rowSlider s =
         ]
     )
 
+-- Scroll bars page
+--
+-- A pair of 'scrollBar's wrapped around 'scrollContent', wired up the same
+-- way a real scrolling viewport would be: each bar owns the caller-owned
+-- value 'Blink.View.Controls.Slider.slider' also uses, plus a
+-- 'RepeatState' handoff per arrow button (see
+-- 'Blink.View.Controls.RepeatButton.repeatButton's own module header for
+-- why that handoff exists at all).
+
+scrollGridCols, scrollGridRows :: Int
+scrollGridCols = 20
+scrollGridRows = 30
+
+scrollCellW, scrollCellH :: Double
+scrollCellW = 80
+scrollCellH = 24
+
+scrollContentW, scrollContentH :: Double
+scrollContentW = fromIntegral scrollGridCols * scrollCellW
+scrollContentH = fromIntegral scrollGridRows * scrollCellH
+
+-- | Roughly how much of 'scrollContentW'\/'scrollContentH' the viewport
+-- below actually shows. Only cosmetic -- it just sizes each scrollbar's own
+-- thumb -- since the scrolling itself is computed from the viewport's real
+-- bounds every frame, in 'scrollContent'.
+hScrollVisibleFraction, vScrollVisibleFraction :: Double
+hScrollVisibleFraction = 0.4
+vScrollVisibleFraction = 0.28
+
+-- | The grid a pair of scroll bars in 'scrollViewport' control: draws every
+-- \"R{row}C{col}\" cell that overlaps the viewport, offset by @hFrac@\/@vFrac@
+-- (0 pins the grid to its top-left corner, 1 to its bottom-right) -- exists
+-- purely to give the scroll bars something visibly worth scrolling. Styled
+-- and bordered the same as a 'scrollBar's own track, via
+-- 'scrollBarTrackStyleKey', so it reads as part of the same widget rather
+-- than an unrelated panel behind it.
+scrollContent :: Double -> Double -> Element ControlId Msg
+scrollContent hFrac vFrac = Element
+  { elLayout  = Layout fill fill TopLeft
+  , elMeasure = measureChrome scrollBarTrackStyleKey (Element (Layout fill fill TopLeft) noIntrinsicSize (pure ()))
+  , elRun     = void (control cfg)
+  }
+  where
+    cfg = defaultControlConfig
+      { ccStyleKey    = scrollBarTrackStyleKey
+      , ccFocusPolicy = NotFocusable
+      , ccContent     = const gridBody
+      }
+    gridBody = do
+      s      <- currentStyle
+      bounds <- getBounds
+      let offsetX = hFrac * max 0 (scrollContentW - rectWidth bounds)
+          offsetY = vFrac * max 0 (scrollContentH - rectHeight bounds)
+      withClip $ forM_ [0 .. scrollGridRows - 1] $ \row ->
+        forM_ [0 .. scrollGridCols - 1] $ \col -> do
+          let cellRect = Rectangle
+                { rectX      = rectX bounds + fromIntegral col * scrollCellW - offsetX
+                , rectY      = rectY bounds + fromIntegral row * scrollCellH - offsetY
+                , rectWidth  = scrollCellW
+                , rectHeight = scrollCellH
+                }
+              visible = intersectRect cellRect bounds
+          when (rectWidth visible > 0 && rectHeight visible > 0) $
+            withBounds cellRect $ drawText (styleTextColour s) AlignCenter (cellLabel row col)
+    cellLabel row col = "R" <> T.pack (show row) <> "C" <> T.pack (show col)
+
+scrollViewportHeight, scrollBarBreadth :: Double
+scrollViewportHeight = 200
+scrollBarBreadth     = 16
+
+-- | The grid from 'scrollContent', a vertical 'scrollBar' down its right
+-- edge and a horizontal one along its bottom -- the L-shaped arrangement
+-- any real scrolling viewport uses, with a plain spacer filling the corner
+-- between the two bars.
+scrollViewport :: AppState -> Element ControlId Msg
+scrollViewport s =
+  vBox
+    [ width fill, height (exactly (scrollViewportHeight + scrollBarBreadth))
+    , children
+        [ hBox
+            [ width fill, height (exactly scrollViewportHeight)
+            , children
+                [ scrollContent (hScrollValue s) (vScrollValue s)
+                , scrollBar VScrollCtl
+                    [ scrollBarOrientation Vertical, height fill
+                    , ScrollBar.value (vScrollValue s), visibleFraction vScrollVisibleFraction
+                    , ScrollBar.onValueChanged (postWith SetVScroll)
+                    , decrementRepeatState (vScrollDecRepeat s), onDecrementRepeatStateChanged (postWith SetVScrollDecRepeat)
+                    , incrementRepeatState (vScrollIncRepeat s), onIncrementRepeatStateChanged (postWith SetVScrollIncRepeat)
+                    , isEnabled (editingEnabled s)
+                    ]
+                ]
+            ]
+        , hBox
+            [ width fill, height (exactly scrollBarBreadth)
+            , children
+                [ scrollBar HScrollCtl
+                    [ scrollBarOrientation Horizontal, width fill
+                    , ScrollBar.value (hScrollValue s), visibleFraction hScrollVisibleFraction
+                    , ScrollBar.onValueChanged (postWith SetHScroll)
+                    , decrementRepeatState (hScrollDecRepeat s), onDecrementRepeatStateChanged (postWith SetHScrollDecRepeat)
+                    , incrementRepeatState (hScrollIncRepeat s), onIncrementRepeatStateChanged (postWith SetHScrollIncRepeat)
+                    , isEnabled (editingEnabled s)
+                    ]
+                , elementWithLayout (Layout (exactly scrollBarBreadth) (exactly scrollBarBreadth) TopLeft) (pure ())
+                ]
+            ]
+        ]
+    ]
+
+scrollBarsPage :: AppState -> DemoUI ()
+scrollBarsPage s =
+  runElement $ vBox
+    [ spacing 12, margin 12
+    , children
+        [ caption "Scroll bars" [width fill, height (exactly 24), align TopLeft]
+        , caption description [width fill, height (exactly 40), align TopLeft]
+        , scrollViewport s
+        ]
+    ]
+  where
+    description =
+      "A composite of two repeating arrow buttons and a draggable track, \
+      \never itself a Tab stop (nor are its buttons) -- drag a bar, click \
+      \its track, or hold an arrow to page through the grid below."
+
 -- Footer
 
 footer :: AppState -> DemoUI ()
@@ -327,9 +484,10 @@ sidebarWidth = 170
 
 pages :: [(Page, Text)]
 pages =
-  [ (ControlsPage,  "Controls")
-  , (ContinuePage,  "Continue")
-  , (ContainedPage, "Contained")
+  [ (ControlsPage,    "Controls")
+  , (ScrollBarsPage,  "Scroll bars")
+  , (ContinuePage,    "Continue")
+  , (ContainedPage,   "Contained")
   ]
 
 -- | A toggle button group of one item per 'Page' -- selecting a page is
@@ -357,9 +515,10 @@ sidebar s =
 
 pageContent :: AppState -> DemoUI ()
 pageContent s = case currentPage s of
-  ControlsPage  -> mainList s
-  ContinuePage  -> continuePage s
-  ContainedPage -> containedPage s
+  ControlsPage   -> mainList s
+  ScrollBarsPage -> scrollBarsPage s
+  ContinuePage   -> continuePage s
+  ContainedPage  -> containedPage s
 
 -- | 'continueGroup's own natural height (its own margin plus one row of
 -- content, at 'rowHeight') -- same reasoning as 'containedGroupHeight'.
