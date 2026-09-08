@@ -3,11 +3,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | A scrollbar: a composite of two repeating arrow buttons (built on
 -- 'Blink.View.Controls.RepeatButton.repeatButton') straddling a draggable
--- track, all three driving a single external value the same way
--- 'Blink.View.Controls.Slider.slider' owns its own -- clicking or dragging
--- the track jumps\/follows the pointer the same way a slider's thumb does,
--- and holding either arrow steps the value by 'step', repeating for as long
--- as it's held.
+-- track. Its position is control state, not application data -- 'scrollBar'
+-- reads and writes it itself via 'Blink.View.getScrollState'\/'Blink.View.ScrollTo'\/
+-- 'Blink.View.ScrollBy', keyed by its own element id, the same way
+-- 'Blink.View.Controls.TextInput.textInput' owns its own scroll offset
+-- rather than asking the caller to thread it through. Clicking or dragging
+-- the track jumps\/follows the pointer the same way
+-- 'Blink.View.Controls.Slider.slider''s thumb does; holding either arrow
+-- steps it by 'step', repeating for as long as it's held.
+--
+-- A caller that needs to know the current position too -- to offset the
+-- content being scrolled, say -- reads it the same way, via
+-- 'Blink.View.getScrollState' passed the identical element id
+-- (@tag 'ScrollBarRoot'@); no attribute\/reaction pair is needed to expose
+-- it, the same way none is needed to read a text input's own scroll
+-- offset from outside it.
 --
 -- Like 'Blink.View.Controls.ToggleGroup.toggleGroup', the composite's own
 -- id is never a keyboard focus target -- 'Blink.View.Controls.Control.NotFocusable'
@@ -25,22 +35,14 @@
 module Blink.View.Controls.ScrollBar
   ( ScrollBarConfig (..)
   , ScrollBarPart (..)
-  , RepeatState (..)
   , defaultScrollBarConfig
-  , initialRepeatState
   , scrollBarStyleKey
   , scrollBarButtonStyleKey
   , scrollBarTrackStyleKey
   , scrollBar
   , scrollBarOrientation
-  , value
   , visibleFraction
   , step
-  , onValueChanged
-  , decrementRepeatState
-  , incrementRepeatState
-  , onDecrementRepeatStateChanged
-  , onIncrementRepeatStateChanged
   ) where
 
 import Control.Monad (forM_, void, when)
@@ -72,7 +74,9 @@ minThumbLength :: Double
 minThumbLength = 20
 
 -- | Identifies one part of a 'scrollBar' for the purpose of minting element
--- ids -- the draggable track, and the two arrow buttons.
+-- ids -- the draggable track, the two arrow buttons, and the composite's
+-- own root, which doubles as the 'Blink.View.ScrollState' key its position
+-- is stored under (see the module header).
 data ScrollBarPart
   = ScrollBarTrack
   | ScrollBarDecrement
@@ -80,40 +84,15 @@ data ScrollBarPart
   | ScrollBarRoot
   deriving (Eq, Ord, Show)
 
--- | The caller-owned handoff behind one arrow button's repeat cadence --
--- exactly the two numbers 'Blink.View.Controls.RepeatButton.repeatButton'
--- itself needs (see its module header), bundled into one value since
--- 'scrollBar' has two such buttons to track at once. Fed back in via
--- 'decrementRepeatState'\/'incrementRepeatState', reported via
--- 'onDecrementRepeatStateChanged'\/'onIncrementRepeatStateChanged'.
-data RepeatState = RepeatState
-  { rsPressStartedAt :: Maybe Double
-  , rsFiredCount     :: Int
-  } deriving (Eq, Show)
-
--- | No press in progress, fired count zero -- the state to feed back once
--- 'onDecrementRepeatStateChanged'\/'onIncrementRepeatStateChanged' reports a
--- press ending.
-initialRepeatState :: RepeatState
-initialRepeatState = RepeatState Nothing 0
-
 -- | Every capability 'scrollBar' resolves: the wrapped 'ControlConfig', its
--- own size request, which axis it runs along, its current value and the
--- proportion of the track its thumb covers, the step each arrow moves it
--- by, its 'onValueChanged' reactions, and the repeat-cadence handoff for
--- each arrow button (see 'RepeatState').
+-- own size request, which axis it runs along, the proportion of the track
+-- its thumb covers, and the step each arrow moves the position by.
 data ScrollBarConfig e msg = ScrollBarConfig
-  { sbControl                  :: ControlConfig e msg
-  , sbLayout                   :: Layout
-  , sbOrientation               :: Orientation
-  , sbValue                     :: Double
-  , sbVisibleFraction           :: Double
-  , sbStep                      :: Double
-  , sbOnValueChanged            :: [Double -> [Out e msg]]
-  , sbDecrementRepeat           :: RepeatState
-  , sbIncrementRepeat           :: RepeatState
-  , sbOnDecrementRepeatChanged  :: RepeatState -> [Out e msg]
-  , sbOnIncrementRepeatChanged  :: RepeatState -> [Out e msg]
+  { sbControl         :: ControlConfig e msg
+  , sbLayout          :: Layout
+  , sbOrientation     :: Orientation
+  , sbVisibleFraction :: Double
+  , sbStep            :: Double
   }
 
 -- | The default 'Layout' for a scrollbar running along @o@: fills the space
@@ -124,21 +103,14 @@ layoutFor Horizontal = Layout fill (exactly scrollBarThickness) TopLeft
 layoutFor Vertical   = Layout (exactly scrollBarThickness) fill TopLeft
 
 -- | 'defaultControlConfig' (styled via 'scrollBarStyleKey'), 'Vertical', a
--- value of 0, a visible fraction of 0.2, a step of 0.05, no
--- 'onValueChanged' reactions, and no repeat in progress on either arrow.
+-- visible fraction of 0.2, and a step of 0.05.
 defaultScrollBarConfig :: ScrollBarConfig e msg
 defaultScrollBarConfig = ScrollBarConfig
-  { sbControl                  = defaultControlConfig { ccStyleKey = scrollBarStyleKey }
-  , sbLayout                   = layoutFor Vertical
-  , sbOrientation               = Vertical
-  , sbValue                     = 0
-  , sbVisibleFraction           = 0.2
-  , sbStep                      = 0.05
-  , sbOnValueChanged            = []
-  , sbDecrementRepeat           = initialRepeatState
-  , sbIncrementRepeat           = initialRepeatState
-  , sbOnDecrementRepeatChanged  = const []
-  , sbOnIncrementRepeatChanged  = const []
+  { sbControl         = defaultControlConfig { ccStyleKey = scrollBarStyleKey }
+  , sbLayout          = layoutFor Vertical
+  , sbOrientation     = Vertical
+  , sbVisibleFraction = 0.2
+  , sbStep            = 0.05
   }
 
 instance HasControlConfig e msg (ScrollBarConfig e msg) where
@@ -162,12 +134,6 @@ scrollBarTrackStyleKey  = Class "scrollBarTrack"
 scrollBarOrientation :: Orientation -> Attribute (ScrollBarConfig e msg)
 scrollBarOrientation o = Attribute (\sc -> sc { sbOrientation = o, sbLayout = layoutFor o })
 
--- | The current scroll position, as a fraction of the track the thumb's
--- leading edge can travel across -- @0@ pins it to the start, @1@ to the
--- end. Clamped to @[0, 1]@. Defaults to 0.
-value :: Double -> Attribute (ScrollBarConfig e msg)
-value v = Attribute (\sc -> sc { sbValue = v })
-
 -- | How much of the scrollable content is visible at once, as a fraction of
 -- the whole -- sets the thumb's length as that fraction of the track,
 -- clamped to never draw shorter than the minimum grabbable length. Defaults
@@ -175,40 +141,11 @@ value v = Attribute (\sc -> sc { sbValue = v })
 visibleFraction :: Double -> Attribute (ScrollBarConfig e msg)
 visibleFraction v = Attribute (\sc -> sc { sbVisibleFraction = v })
 
--- | How much each arrow button moves the value by, once per activation
+-- | How much each arrow button moves the position by, once per activation
 -- (including each repeat while held -- see 'Blink.View.Controls.RepeatButton.repeatButton').
 -- Defaults to 0.05.
 step :: Double -> Attribute (ScrollBarConfig e msg)
 step s = Attribute (\sc -> sc { sbStep = s })
-
--- | Reacts with the new value whenever dragging or clicking the track, or
--- an arrow button, would change it. It's up to the reaction to actually
--- store the new value and pass it back in via 'value' next frame.
-onValueChanged :: (Double -> [Out e msg]) -> Attribute (ScrollBarConfig e msg)
-onValueChanged f = Attribute (\sc -> sc { sbOnValueChanged = sbOnValueChanged sc ++ [f] })
-
--- | Hands the decrement arrow's current repeat state back to 'scrollBar',
--- exactly as last reported via 'onDecrementRepeatStateChanged'. Without
--- this, holding the arrow down never repeats past its first activation --
--- see 'Blink.View.Controls.RepeatButton.pressStartedAt'. Defaults to
--- 'initialRepeatState'.
-decrementRepeatState :: RepeatState -> Attribute (ScrollBarConfig e msg)
-decrementRepeatState s = Attribute (\sc -> sc { sbDecrementRepeat = s })
-
--- | The increment arrow's equivalent of 'decrementRepeatState'.
-incrementRepeatState :: RepeatState -> Attribute (ScrollBarConfig e msg)
-incrementRepeatState s = Attribute (\sc -> sc { sbIncrementRepeat = s })
-
--- | Reacts whenever the decrement arrow's own repeat state changes -- a
--- fresh press, a new repeat firing, or the press ending (reported as
--- 'initialRepeatState'). Store it and feed it back via
--- 'decrementRepeatState' next frame.
-onDecrementRepeatStateChanged :: (RepeatState -> [Out e msg]) -> Attribute (ScrollBarConfig e msg)
-onDecrementRepeatStateChanged f = Attribute (\sc -> sc { sbOnDecrementRepeatChanged = f })
-
--- | The increment arrow's equivalent of 'onDecrementRepeatStateChanged'.
-onIncrementRepeatStateChanged :: (RepeatState -> [Out e msg]) -> Attribute (ScrollBarConfig e msg)
-onIncrementRepeatStateChanged f = Attribute (\sc -> sc { sbOnIncrementRepeatChanged = f })
 
 -- | Clamps a value to @[0, 1]@.
 clamp01 :: Double -> Double
@@ -283,15 +220,6 @@ drawTrack o s bounds hovered dragging frac v = do
     origin   = axisOrigin o bounds + clamp01 v * travel
     thumb    = mainRect o bounds origin thumbLen
 
--- | The new value an arrow's activation moves @cfg@'s current value to by
--- @delta@ (negative for the decrement arrow), reported via
--- 'onValueChanged' only when it actually changes.
-stepValue :: ScrollBarConfig e msg -> Double -> [Out e msg]
-stepValue cfg delta =
-  let v0 = clamp01 (sbValue cfg)
-      v1 = clamp01 (v0 + delta)
-  in if v1 /= v0 then concatMap ($ v1) (sbOnValueChanged cfg) else []
-
 -- | Each arrow button's fixed size along the main axis, filling the cross
 -- axis -- the same shape regardless of which arrow it is.
 arrowLayoutAttrs :: HasLayoutConfig cfg => Orientation -> [Attribute cfg]
@@ -301,13 +229,12 @@ arrowLayoutAttrs Vertical   = [width fill, height (exactly scrollBarThickness)]
 -- | A scrollbar (see the module header). Clicking or dragging the track
 -- moves the thumb to (and keeps it centred under) the pointer, the same way
 -- 'Blink.View.Controls.Slider.slider' does; holding either arrow steps the
--- value by 'step', repeating for as long as it's held. Its value is control
--- state owned by the caller, not this control -- see 'onValueChanged' for
--- reacting to a change, and 'decrementRepeatState'\/'incrementRepeatState'
--- for the arrows' own repeat-cadence handoff.
+-- position by 'step', repeating for as long as it's held.
 --
 -- @tag@ mints each part's element id from a 'ScrollBarPart' -- the caller
--- never writes a per-part id by hand.
+-- never writes a per-part id by hand. @tag 'ScrollBarRoot'@ doubles as the
+-- 'Blink.View.ScrollState' key -- see the module header for reading it
+-- from elsewhere.
 scrollBar :: Ord e => (ScrollBarPart -> e) -> [Attribute (ScrollBarConfig e msg)] -> Element e msg
 scrollBar tag attrs = Element
   { elLayout  = sbLayout cfg
@@ -315,31 +242,24 @@ scrollBar tag attrs = Element
   , elRun     = void (control ctrl)
   }
   where
-    cfg = resolve defaultScrollBarConfig attrs
-    o   = sbOrientation cfg
+    cfg       = resolve defaultScrollBarConfig attrs
+    o         = sbOrientation cfg
+    scrollEid = tag ScrollBarRoot
 
     box = (if o == Horizontal then hBox else vBox) [children [decrementBtn, trackEl, incrementBtn]]
 
-    -- TODO(scrollbar phase): 'repeatButton' now owns its own repeat-press
-    -- state internally (see 'Blink.View.Controls.RepeatButton'), so
-    -- 'sbDecrementRepeat'\/'sbIncrementRepeat' and their attrs are dead --
-    -- clean those up along with the rest of the deferred scrollbar rework.
-    -- Also add an integration test that holds an arrow across multiple
-    -- animated frames and asserts the value keeps stepping -- today that's
-    -- only true by composition (each half is tested separately), never
-    -- asserted end-to-end for 'scrollBar' itself.
     decrementBtn = repeatButton (tag ScrollBarDecrement) $
       [ text (if o == Horizontal then "\9664" else "\9650") -- ◀ / ▲
       , style scrollBarButtonStyleKey
       , focusPolicy NotFocusable
-      , onActivated (const (stepValue cfg (negate (sbStep cfg))))
+      , onActivated (const [OutUi (ScrollBy scrollEid (negate (sbStep cfg)))])
       ] ++ arrowLayoutAttrs o
 
     incrementBtn = repeatButton (tag ScrollBarIncrement) $
       [ text (if o == Horizontal then "\9654" else "\9660") -- ▶ / ▼
       , style scrollBarButtonStyleKey
       , focusPolicy NotFocusable
-      , onActivated (const (stepValue cfg (sbStep cfg)))
+      , onActivated (const [OutUi (ScrollBy scrollEid (sbStep cfg))])
       ] ++ arrowLayoutAttrs o
 
     trackEl = Element
@@ -363,18 +283,15 @@ scrollBar tag attrs = Element
       let trackId = tag ScrollBarTrack
       capturing <- isDragging trackId
       hovered   <- wasMouseOverLastFrame trackId
-      let value0   = clamp01 (sbValue cfg)
-          thumbLen = thumbLengthFor o bounds (sbVisibleFraction cfg)
-      fromMouse <-
-        if not disabled && capturing
-          then Just . fractionAt o bounds thumbLen <$> getMousePos
-          else pure Nothing
-      forM_ fromMouse $ \newValue ->
-        when (newValue /= value0) $ runHandlers (sbOnValueChanged cfg) newValue
+      value0    <- getScrollState scrollEid
+      let thumbLen = thumbLengthFor o bounds (sbVisibleFraction cfg)
+      when (not disabled && capturing) $ do
+        newValue <- fractionAt o bounds thumbLen <$> getMousePos
+        when (newValue /= value0) $ emitUi (ScrollTo scrollEid newValue)
       drawTrack o s bounds hovered capturing (sbVisibleFraction cfg) value0
 
     ctrl = (sbControl cfg)
-      { ccElementId   = Just (tag ScrollBarRoot)
+      { ccElementId   = Just scrollEid
       , ccFocusPolicy = NotFocusable
       , ccContent     = const (runElement box)
       }

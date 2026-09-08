@@ -13,12 +13,7 @@ import Blink.View.Controls.Control
 import Blink.View.Controls.Divider (orientation)
 import Blink.View.Controls.Label (LabelConfig, target, text)
 import Blink.View.Controls.ProgressBar (ProgressValue (..), progress)
-import Blink.View.Controls.ScrollBar
-  ( RepeatState (..), decrementRepeatState, incrementRepeatState, initialRepeatState
-  , onDecrementRepeatStateChanged, onIncrementRepeatStateChanged, scrollBar, scrollBarOrientation
-  , scrollBarTrackStyleKey, visibleFraction
-  )
-import qualified Blink.View.Controls.ScrollBar as ScrollBar (onValueChanged, value)
+import Blink.View.Controls.ScrollBar (ScrollBarPart (..), scrollBar, scrollBarOrientation, scrollBarTrackStyleKey, visibleFraction)
 import Blink.View.Controls.Slider (onValueChanged)
 import qualified Blink.View.Controls.Slider as Slider (value)
 import Blink.View.Style (Style (..))
@@ -51,12 +46,6 @@ data AppState = AppState
   , passwordText   :: Text
   , animating      :: Bool
   , sliderValue    :: Double
-  , vScrollValue     :: Double
-  , vScrollDecRepeat :: RepeatState
-  , vScrollIncRepeat :: RepeatState
-  , hScrollValue     :: Double
-  , hScrollDecRepeat :: RepeatState
-  , hScrollIncRepeat :: RepeatState
   , isHovering     :: Bool
   , lastInput      :: Text
   , lastInputCount :: Int
@@ -78,12 +67,6 @@ data Msg
   | SetPasswordText Text
   | SetAnimating Bool
   | SetSlider Double
-  | SetVScroll Double
-  | SetVScrollDecRepeat RepeatState
-  | SetVScrollIncRepeat RepeatState
-  | SetHScroll Double
-  | SetHScrollDecRepeat RepeatState
-  | SetHScrollIncRepeat RepeatState
   | FrameObserved Bool Text  -- ^ mouse-is-hovering, this frame's raw key/typed-text label
   | SetPage Page
   | ContainedActivated Text
@@ -104,12 +87,6 @@ demoApp = App
       , passwordText   = ""
       , animating      = False
       , sliderValue    = 0.5
-      , vScrollValue     = 0
-      , vScrollDecRepeat = initialRepeatState
-      , vScrollIncRepeat = initialRepeatState
-      , hScrollValue     = 0
-      , hScrollDecRepeat = initialRepeatState
-      , hScrollIncRepeat = initialRepeatState
       , isHovering     = False
       , lastInput      = ""
       , lastInputCount = 0
@@ -136,12 +113,6 @@ updateApp msg = case msg of
   SetPasswordText t    -> modify $ \s -> s { passwordText = t }
   SetAnimating v       -> modify $ \s -> s { animating = v }
   SetSlider v          -> modify $ \s -> s { sliderValue = v }
-  SetVScroll v          -> modify $ \s -> s { vScrollValue = v }
-  SetVScrollDecRepeat r -> modify $ \s -> s { vScrollDecRepeat = r }
-  SetVScrollIncRepeat r -> modify $ \s -> s { vScrollIncRepeat = r }
-  SetHScroll v          -> modify $ \s -> s { hScrollValue = v }
-  SetHScrollDecRepeat r -> modify $ \s -> s { hScrollDecRepeat = r }
-  SetHScrollIncRepeat r -> modify $ \s -> s { hScrollIncRepeat = r }
   FrameObserved hov keyLabel -> modify $ \s -> s
     { isHovering     = hov
     , lastInput      = if T.null keyLabel then lastInput s else keyLabel
@@ -294,13 +265,6 @@ rowSlider s =
     )
 
 -- Scroll bars page
---
--- A pair of 'scrollBar's wrapped around 'scrollContent', wired up the same
--- way a real scrolling viewport would be: each bar owns the caller-owned
--- value 'Blink.View.Controls.Slider.slider' also uses, plus a
--- 'RepeatState' handoff per arrow button (see
--- 'Blink.View.Controls.RepeatButton.repeatButton's own module header for
--- why that handoff exists at all).
 
 scrollGridCols, scrollGridRows :: Int
 scrollGridCols = 20
@@ -323,14 +287,16 @@ hScrollVisibleFraction = 0.4
 vScrollVisibleFraction = 0.28
 
 -- | The grid a pair of scroll bars in 'scrollViewport' control: draws every
--- \"R{row}C{col}\" cell that overlaps the viewport, offset by @hFrac@\/@vFrac@
--- (0 pins the grid to its top-left corner, 1 to its bottom-right) -- exists
--- purely to give the scroll bars something visibly worth scrolling. Styled
--- and bordered the same as a 'scrollBar's own track, via
--- 'scrollBarTrackStyleKey', so it reads as part of the same widget rather
--- than an unrelated panel behind it.
-scrollContent :: Double -> Double -> Element ControlId Msg
-scrollContent hFrac vFrac = Element
+-- \"R{row}C{col}\" cell that overlaps the viewport, offset by the current
+-- horizontal\/vertical scroll position -- read directly via
+-- 'getScrollState', the same 'VScrollCtl'\/'HScrollCtl' element ids the
+-- scroll bars below read\/write their own position under, rather than
+-- threaded through as a parameter. Exists purely to give the scroll bars
+-- something visibly worth scrolling. Styled and bordered the same as a
+-- 'scrollBar's own track, via 'scrollBarTrackStyleKey', so it reads as part
+-- of the same widget rather than an unrelated panel behind it.
+scrollContent :: Element ControlId Msg
+scrollContent = Element
   { elLayout  = Layout fill fill TopLeft
   , elMeasure = measureChrome scrollBarTrackStyleKey (Element (Layout fill fill TopLeft) noIntrinsicSize (pure ()))
   , elRun     = void (control cfg)
@@ -344,6 +310,8 @@ scrollContent hFrac vFrac = Element
     gridBody = do
       s      <- currentStyle
       bounds <- getBounds
+      hFrac  <- getScrollState (HScrollCtl ScrollBarRoot)
+      vFrac  <- getScrollState (VScrollCtl ScrollBarRoot)
       let offsetX = hFrac * max 0 (scrollContentW - rectWidth bounds)
           offsetY = vFrac * max 0 (scrollContentH - rectHeight bounds)
       withClip $ forM_ [0 .. scrollGridRows - 1] $ \row ->
@@ -375,13 +343,10 @@ scrollViewport s =
         [ hBox
             [ width fill, height (exactly scrollViewportHeight)
             , children
-                [ scrollContent (hScrollValue s) (vScrollValue s)
+                [ scrollContent
                 , scrollBar VScrollCtl
                     [ scrollBarOrientation Vertical, height fill
-                    , ScrollBar.value (vScrollValue s), visibleFraction vScrollVisibleFraction
-                    , ScrollBar.onValueChanged (postWith SetVScroll)
-                    , decrementRepeatState (vScrollDecRepeat s), onDecrementRepeatStateChanged (postWith SetVScrollDecRepeat)
-                    , incrementRepeatState (vScrollIncRepeat s), onIncrementRepeatStateChanged (postWith SetVScrollIncRepeat)
+                    , visibleFraction vScrollVisibleFraction
                     , isEnabled (editingEnabled s)
                     ]
                 ]
@@ -391,10 +356,7 @@ scrollViewport s =
             , children
                 [ scrollBar HScrollCtl
                     [ scrollBarOrientation Horizontal, width fill
-                    , ScrollBar.value (hScrollValue s), visibleFraction hScrollVisibleFraction
-                    , ScrollBar.onValueChanged (postWith SetHScroll)
-                    , decrementRepeatState (hScrollDecRepeat s), onDecrementRepeatStateChanged (postWith SetHScrollDecRepeat)
-                    , incrementRepeatState (hScrollIncRepeat s), onIncrementRepeatStateChanged (postWith SetHScrollIncRepeat)
+                    , visibleFraction hScrollVisibleFraction
                     , isEnabled (editingEnabled s)
                     ]
                 , elementWithLayout (Layout (exactly scrollBarBreadth) (exactly scrollBarBreadth) TopLeft) (pure ())
