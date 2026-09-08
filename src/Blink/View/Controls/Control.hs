@@ -224,6 +224,7 @@ data HoverInteraction = HoverInteraction
 -- enter\/exit edges against last frame's hover state; hover itself is
 -- unconditional on occlusion (any number of nested\/overlapping elements
 -- can be "hovered" at once, by design), only capture-claiming backs off.
+-- @eligible@ is expected to already fold in 'isMouseFreeFor'.
 watchHover :: Ord e => e -> Bool -> Bool -> View e msg HoverInteraction
 watchHover eid eligible occluded = do
   when eligible $ do
@@ -927,7 +928,8 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       hit         <- isRegionHit
       let eligible = not disabled && hit
       occluded <- if eligible then isOccludedFor eid else pure False
-      hoverI <- watchHover eid eligible occluded
+      free     <- isMouseFreeFor eid
+      hoverI <- watchHover eid (eligible && free) occluded
       mouseI <- watchMouseButton eid (ccMouseActivation cc) eligible occluded
       focusI <- watchFocus eid disabled
       let interaction = (noInteraction placeholderStyle)

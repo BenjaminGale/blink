@@ -253,15 +253,14 @@ spec = describe "Blink.View.Controls.Control.control" $ do
       result <- runInteractions testBounds seedCtx (both attrsA attrsB) [] []
       resultMessages result `shouldBe` ["A gained"]
 
-  describe "cross-element interaction" $
+  describe "cross-element interaction" $ do
     it "reports MouseDown for the element the press started on, and MouseUp for whichever element the release happens over" $ do
       -- Mouse goes down over ElemA, is dragged (still held) onto ElemB, and
       -- released there. ElemA should only ever see MouseDown (it's not hit
       -- by the time the button comes up); ElemB should only ever see
       -- MouseUp (it wasn't hit when the button went down) -- confirming a
       -- drag begun on one element and released over another doesn't count
-      -- as a click for the second. The mouse also crosses from A into B
-      -- along the way, so both elements' hover edges fire too.
+      -- as a click for the second.
       let attrsA =
             [ focusPolicy NotFocusable
             , onMouseEntered (const [OutMsg ("A entered" :: String)])
@@ -275,7 +274,21 @@ spec = describe "Blink.View.Controls.Control.control" $ do
             ]
       result <- runInteractions testBounds seedCtx (both attrsA attrsB) []
         [MouseDown onA, DragTo onB, MouseUp onB]
-      resultMessages result `shouldBe` ["A entered", "A down", "A exited", "B entered", "B up"]
+      resultMessages result `shouldBe` ["A entered", "A down", "A exited", "B up"]
+
+  describe "capture suppresses hover elsewhere" $ do
+    let attrsB = [focusPolicy NotFocusable, onMouseEntered (const [OutMsg ("B entered" :: String)])]
+
+    it "does not fire a sibling's mouse-entered event while another element holds capture" $ do
+      result <- runInteractions testBounds seedCtx (both [] attrsB) []
+        [MouseDown onA, DragTo onB, MouseUp onB]
+      resultMessages result `shouldBe` []
+
+    it "fires the sibling's mouse-entered event normally once capture is released" $ do
+      result <- runInteractions testBounds seedCtx (both [] attrsB)
+        [MouseDown onA, DragTo onB, MouseUp onB, Wait 1, MoveTo (Point 200 200)]
+        [MoveTo onB]
+      resultMessages result `shouldBe` ["B entered"]
 
   describe "click-to-focus" $ do
     let attrsA = [onFocusLost   (const [OutMsg ("A lost"   :: String)])]
