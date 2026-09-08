@@ -106,7 +106,8 @@ import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
 
 import Blink.Geometry (Point (..), Rectangle, Size (..), rectFromSize)
-import Blink.Input (KeyEvent, InputState (..))
+import Blink.Input (KeyEvent, InputState (..), advanceButton)
+import Blink.View.Context (ctxMouse)
 import Blink.View.Rendering (DrawCommand, TextMeasurer (..))
 import Blink.View.Style (Theme)
 import Blink.View
@@ -259,27 +260,62 @@ doStepContinuous app refs input = do
 
 doStepEventDriven :: Ord e => App e msg s -> AppRefs e msg s -> IO () -> FrameInput -> IO (FrameResult s)
 doStepEventDriven app refs notify input = do
-  (firstPassCtx, state') <- runFrame app refs input
-  renderedCtx <-
+  (firstPassCtx, state1) <- runFrame app refs input
+  (renderedCtx, state2) <-
     if null (getMessages firstPassCtx) && not (hasPendingUiEffects firstPassCtx)
       -- Nothing was queued, so nothing about the app or view state changed —
       -- a second pass would run the same view against the same state and
       -- input and produce byte-identical output. Reuse the first pass's
       -- context and draws instead of paying for a pointless re-render.
-      then pure firstPassCtx
+      then pure (firstPassCtx, state1)
       else do
-        let winRect    = rectFromSize (windowSize input)
-            inputState = toInputState input
-            freshCtx   = rerenderContext winRect (clearKeyEvents inputState)
-                           (theme app state') (contextAnimation firstPassCtx) firstPassCtx
-        snd <$> runView (runElement (view app state')) freshCtx
+        let winRect     = rectFromSize (windowSize input)
+            inputState  = toInputState input
+            rerendered  = rerenderContext winRect (clearKeyEvents inputState)
+                            (theme app state1) (contextAnimation firstPassCtx) firstPassCtx
+            freshCtx    = suppressFreshButtonEdge inputState rerendered
+        (_, ctx2) <- runView (runElement (view app state1)) freshCtx
+        -- A deferred effect settling on this second pass (e.g. a focus
+        -- change taking effect) can itself emit messages that never appear
+        -- anywhere else -- fold them into state too rather than silently
+        -- dropping them. A third pass to re-render against the result is
+        -- deliberately not done: re-running an already-settled deferred
+        -- focus change through another 'rerenderContext' re-emits the same
+        -- gained/lost messages again (verified against a real click-to-focus
+        -- case), so looping here would re-deliver duplicates every further
+        -- pass instead of converging. The accepted trade-off is that this
+        -- one frame's draws (rendered against 'state1') can lag one frame
+        -- behind whatever folding these messages changes in state -- the
+        -- same one-frame staleness continuous mode already has, just
+        -- reached from the second pass instead of the first.
+        let state2 = foldl' (\s msg -> runUpdate (update app msg) s) state1 (getMessages ctx2)
+        pure (ctx2, state2)
   writeIORef (refsCtx refs) renderedCtx
+  writeIORef (refsState refs) state2
   wasActive <- readIORef (refsAnimActive refs)
   let nowActive = contextRequiresAnimation renderedCtx
   writeIORef (refsAnimActive refs) nowActive
   when (not wasActive && nowActive) $
     forkAnimationTicker (refsAnimActive refs) notify
-  pure $ toResult input (getDrawCommands renderedCtx) state'
+  pure $ toResult input (getDrawCommands renderedCtx) state2
+
+-- | Collapses a fresh button edge ('Blink.Input.ButtonDown', 'Blink.Input.ButtonReleased')
+-- into its continuing counterpart ('Blink.Input.ButtonHeld', 'Blink.Input.ButtonUp') as
+-- read against @input@, leaving whatever capture is currently assigned
+-- unchanged. 'doStepEventDriven' uses this for its second, re-render pass:
+-- the first pass already reacted to this input's fresh press/release once
+-- (e.g. a click toggled a control); re-running the same view against the
+-- literal same input a second time would see the identical fresh edge
+-- again and react to it a second time -- e.g. a checkbox re-reads its own
+-- (now-updated) selected state and toggles back. Collapsing the edge here
+-- leaves level state (is the button currently down, is something still
+-- captured) untouched, so drag/hover rendering is unaffected -- only the
+-- "this is a fresh press/release" fact is suppressed for this rerender.
+suppressFreshButtonEdge :: InputState -> ViewContext e msg -> ViewContext e msg
+suppressFreshButtonEdge input ctx =
+  ctx { ctxMouse = advanceButton isDown isDown (ctxMouse ctx) }
+  where
+    isDown = inputLeftButtonDown input
 
 toResult :: FrameInput -> [DrawCommand] -> s -> FrameResult s
 toResult input draws state

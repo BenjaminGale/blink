@@ -328,10 +328,13 @@ spec = do
         result <- stepFrame handle normalInput
         isContinue result `shouldBe` True
 
+      -- counterApp emits on every render regardless of input. Event-driven
+      -- mode renders twice whenever a message is pending, so this counts
+      -- twice per input event.
       it "dispatched modifiers are applied to produce the frame state" $ do
         handle <- configureEventDriven counterApp (pure ()) nullMeasurer
         result <- stepFrame handle normalInput
-        resultState result `shouldBe` 1
+        resultState result `shouldBe` 2
 
       it "returns Quit when quitRequested is True" $ do
         handle <- configureEventDriven counterApp (pure ()) nullMeasurer
@@ -410,4 +413,12 @@ spec = do
         handle <- configureEventDriven focusApp (pure ()) nullMeasurer
         _      <- stepFrame handle normalInput -- FocusA auto-claims
         result <- stepFrame handle tabInput
+        resultState result `shouldBe` ["A gained", "A lost", "B gained"]
+
+      -- Clicking B queues its focus change as a UiEffect that settles
+      -- during the second render pass within this same stepFrame call.
+      it "clicking to focus a real control still reaches update when it settles on the second pass" $ do
+        handle <- configureEventDriven focusApp (pure ()) nullMeasurer
+        _      <- stepFrame handle normalInput -- FocusA auto-claims
+        result <- stepFrame handle (pointerAt (Point 75 50) True)
         resultState result `shouldBe` ["A gained", "A lost", "B gained"]
