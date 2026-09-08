@@ -46,7 +46,7 @@ import Blink.View.Controls.Control
 import Blink.View.Controls.Label
   (HasLabelledConfig (..), captionElement, lcText, renderLabelledContent)
 import Blink.View.Layout.Constraints (HasLayoutConfig (..))
-import Blink.View
+import Blink.View hiding (repeatsDueBy) -- TODO(phase 2): use Blink.View's own instead of the local copy below.
 import Blink.View.Element (Element (..))
 
 -- | Every capability 'repeatButton' resolves: the wrapped 'ButtonConfig'

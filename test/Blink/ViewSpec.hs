@@ -301,6 +301,47 @@ spec = describe "Blink.View" $ do
     it "preserves 1" $
       clampScrollPos 1 `shouldBe` 1
 
+  describe "hold state" $ do
+    it "returns Nothing when no state has been recorded" $ do
+      (v, _) <- run0 (getHoldState ())
+      v `shouldBe` Nothing
+
+    it "SetHoldState is queued rather than applied immediately" $ do
+      (v, ctx) <- run0 (emitUi (SetHoldState () (Just (HoldState 0 1))) >> getHoldState ())
+      v `shouldBe` Nothing
+      getUiEffects ctx `shouldBe` [SetHoldState () (Just (HoldState 0 1))]
+
+    it "a queued SetHoldState is visible via getHoldState once applied" $ do
+      (_, ctx) <- run0 (emitUi (SetHoldState () (Just (HoldState 0 1))))
+      (v, _) <- runView (getHoldState ()) (applyUiEffects (getUiEffects ctx) ctx)
+      v `shouldBe` Just (HoldState 0 1)
+
+    it "SetHoldState Nothing clears a previously recorded state" $ do
+      (_, ctx) <- run0 (emitUi (SetHoldState () (Just (HoldState 0 1))) >> emitUi (SetHoldState () Nothing))
+      (v, _) <- runView (getHoldState ()) (applyUiEffects (getUiEffects ctx) ctx)
+      v `shouldBe` Nothing
+
+    it "keeps hold state separate per element" $ do
+      (_, ctx) <- runTwoElem (emitUi (SetHoldState ElemA (Just (HoldState 0 1))) >> emitUi (SetHoldState ElemB (Just (HoldState 0 2))))
+      (vA, ctx') <- runView (getHoldState ElemA) (applyUiEffects (getUiEffects ctx) ctx)
+      (vB, _)    <- runView (getHoldState ElemB) ctx'
+      vA `shouldBe` Just (HoldState 0 1)
+      vB `shouldBe` Just (HoldState 0 2)
+
+  describe "repeatsDueBy" $ do
+    it "fires no repeats before the initial delay" $
+      repeatsDueBy 0.4 0.08 0.3 `shouldBe` 0
+
+    it "fires the first repeat exactly at the initial delay" $
+      repeatsDueBy 0.4 0.08 0.4 `shouldBe` 1
+
+    it "fires again every interval thereafter" $ do
+      repeatsDueBy 0.4 0.08 0.49 `shouldBe` 2
+      repeatsDueBy 0.4 0.08 0.57 `shouldBe` 3
+
+    it "catches up on multiple interval crossings spanned by one long duration" $
+      repeatsDueBy 0.4 0.08 0.65 `shouldBe` 4
+
   describe "nextFrameContext capture" $ do
     it "carries existing capture forward on continued ButtonDown frames" $ do
       (_, ctx1) <- runWith mouseOnCenterDown (acquireCapture ())

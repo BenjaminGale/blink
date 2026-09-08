@@ -40,24 +40,26 @@ by queuing a @msg@ value with 'emit' rather than mutating anything. The host
 reads the queued messages back with 'getMessages' once the frame completes
 and folds them into its own state via "Blink.Update".
 
-= Focus, scroll, and selection
+= Focus, scroll, hold, and selection
 
 Some controls carry presentation state that is no business of the
-application — which element holds keyboard focus, a scrollbar's position, a
-text input's cursor. This state is baked directly into the 'ViewContext':
-focus lives in the interaction state, and scroll positions
-(@elmScrollStates@, a @Map e 'ScrollState'@) live in the element state, keyed
-by element ID, populating lazily on first write and persisting across
-frames. Selection (@elmSelection@) holds just one 'Selection' at a time,
-tagged with the element it belongs to, since only the focused control ever
-has one; writing a new element's selection replaces whichever one was there
-before. The application never sees any of this traffic.
+application — which element holds keyboard focus, a scrollbar's position,
+whether a repeat button is still being held down, a text input's cursor.
+This state is baked directly into the 'ViewContext': focus lives in the
+interaction state, and scroll positions (@elmScrollStates@, a @Map e
+'ScrollState'@) and repeat-press state (@elmHoldStates@, a @Map e
+'HoldState'@) live in the element state, both keyed by element ID,
+populating lazily on first write and persisting across frames. Selection
+(@elmSelection@) holds just one 'Selection' at a time, tagged with the
+element it belongs to, since only the focused control ever has one; writing
+a new element's selection replaces whichever one was there before. The
+application never sees any of this traffic.
 
 Focus ('setFocus', 'clearFocus') changes immediately, exactly like
 'registerMouseOver' and mouse capture, because sibling arbitration within a
 single tree walk depends on it (see the
 <https://github.com/BenjaminGale/blink/blob/main/docs/concepts/01-immediate-mode-api/05-focus.md concepts guide's section on focus>
-for why). Scroll and selection have no such sibling-arbitration
+for why). Scroll, hold, and selection have no such sibling-arbitration
 requirement, so they queue a 'UiEffect' with 'emitUi' instead of mutating
 immediately; a write made partway through a frame is not visible to a read
 later in that same frame. 'nextFrameContext' applies the queued effects via
@@ -221,6 +223,14 @@ module Blink.View
   , getScrollState
   , clampScrollPos
   , contextScrollState
+    -- * Repeat-press ("hold") state
+    -- | 'HoldState' and 'repeatsDueBy' live in "Blink.View.Hold";
+    -- re-exported here since a 'HoldState' is threaded through
+    -- 'ViewContext' the same way a 'ScrollState' is.
+  , HoldState (..)
+  , getHoldState
+  , repeatsDueBy
+  , contextHoldState
     -- * Selection
     -- | 'Selection' itself, and the pure helpers built on it
     -- ('Blink.View.Selection.selectionLow', 'Blink.View.Selection.cursor',
@@ -341,6 +351,7 @@ import Blink.View.Focus
 import Blink.View.Selection (Selection (..))
 import Blink.View.Animation (AnimationState (..), mkAnimationState)
 import Blink.View.Scroll (ScrollState (..), clampScrollPos)
+import Blink.View.Hold (HoldState (..), repeatsDueBy)
 import Blink.View.Navigation (NavigationKeys (..), defaultNavigationKeys)
 import Blink.Geometry (Point, Rectangle, Size, containsPoint)
 import Blink.Input
@@ -383,6 +394,13 @@ data UiEffect e
     -- Composes with other 'ScrollBy' effects queued in the same frame for
     -- the same element rather than last-write-wins.
   | SetSelectionAt e Selection
+  | SetHoldState e (Maybe HoldState)
+    -- ^ Sets ('Just') or clears ('Nothing') an element's repeat-press
+    -- state -- see 'HoldState' and 'Blink.View.Controls.RepeatButton.repeatButton',
+    -- its only caller. Last-write-wins, applied by 'applyUiEffects' the
+    -- same way 'SetSelectionAt' is; unlike 'ScrollTo'\/'ScrollBy' there's no
+    -- absolute\/relative pair since a repeat-press has no meaningful
+    -- "adjust by" -- a control either anchors a fresh press or clears one.
   | Focus (Maybe e) e
     -- ^ Makes the given element focused within the given scope (@Nothing@ =
     -- root, @Just scopeId@ = the composite scope with that id — see
@@ -406,10 +424,12 @@ data Out e msg
 
 -- | Cross-frame presentation state. Persists unchanged across frames; never
 -- exposed to the application. Scroll position is tracked per element
--- (@elmScrollStates@); selection is tracked for at most one element at a
+-- (@elmScrollStates@), as is repeat-press ("hold") state
+-- (@elmHoldStates@); selection is tracked for at most one element at a
 -- time (@elmSelection@), tagged with which element it belongs to.
 data ElementState e = ElementState
   { elmScrollStates   :: Map.Map e ScrollState
+  , elmHoldStates     :: Map.Map e HoldState
   , elmSelection      :: Maybe (e, Selection)
   }
 
@@ -531,6 +551,7 @@ emptyViewContext bounds input thm measurer = ViewContext
   , ctxMouse           = advanceButton False (inputLeftButtonDown input) emptyMouse
   , ctxElements        = ElementState
       { elmScrollStates  = Map.empty
+      , elmHoldStates    = Map.empty
       , elmSelection     = Nothing
       }
   , ctxOutputs         = emptyFrameOutputs
@@ -637,6 +658,16 @@ contextScrollState :: Ord e => e -> ViewContext e msg -> Double
 contextScrollState eid ctx =
   scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
+-- | The given element's repeat-press state (see 'HoldState'), or 'Nothing'
+-- while it isn't currently being held\/repeating.
+getHoldState :: Ord e => e -> View e msg (Maybe HoldState)
+getHoldState eid = gets (contextHoldState eid)
+
+-- | The given element's repeat-press state, read directly from a
+-- 'ViewContext' outside the 'View' monad.
+contextHoldState :: Ord e => e -> ViewContext e msg -> Maybe HoldState
+contextHoldState eid ctx = Map.lookup eid (elmHoldStates (ctxElements ctx))
+
 -- | The given element's selection, or 'Nothing' if it isn't the element
 -- currently holding one.
 getSelection :: Eq e => e -> View e msg (Maybe Selection)
@@ -657,6 +688,16 @@ contextSelection eid ctx = case elmSelection (ctxElements ctx) of
 writeScrollState :: Ord e => e -> Double -> ViewContext e msg -> ViewContext e msg
 writeScrollState eid v ctx = ctx { ctxElements = (ctxElements ctx)
   { elmScrollStates = Map.insert eid (ScrollState (clampScrollPos v)) (elmScrollStates (ctxElements ctx)) } }
+
+-- Internal: writes (or clears) an element's repeat-press state directly
+-- into the context, bypassing the deferred-effect queue. Used only by
+-- 'applyUiEffects'.
+writeHoldState :: Ord e => e -> Maybe HoldState -> ViewContext e msg -> ViewContext e msg
+writeHoldState eid mhs ctx = ctx { ctxElements = (ctxElements ctx)
+  { elmHoldStates = case mhs of
+      Just hs -> Map.insert eid hs (elmHoldStates (ctxElements ctx))
+      Nothing -> Map.delete eid (elmHoldStates (ctxElements ctx))
+  } }
 
 -- Internal: writes a selection directly into the context, bypassing the
 -- deferred-effect queue, replacing whichever element held the selection
@@ -1268,6 +1309,7 @@ applyUiEffects effects ctx0 = foldl' step ctx0 effects
     step ctx (ScrollTo eid v)        = writeScrollState eid v ctx
     step ctx (ScrollBy eid dv)       = writeScrollState eid (currentScroll eid ctx + dv) ctx
     step ctx (SetSelectionAt eid sel) = writeSelection eid sel ctx
+    step ctx (SetHoldState eid mhs)  = writeHoldState eid mhs ctx
     step ctx (Focus sid target)     = setFocusChange sid (Just target) ctx
     step ctx (ClearFocus sid)       = setFocusChange sid Nothing ctx
 

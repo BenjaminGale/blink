@@ -45,6 +45,7 @@ library
         Blink.View.Controls
         Blink.View.Drawing
         Blink.View.Focus
+        Blink.View.Hold
         Blink.View.Navigation
         Blink.View.Scroll
         Blink.View.Selection

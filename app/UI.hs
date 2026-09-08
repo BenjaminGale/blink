@@ -32,7 +32,7 @@ import Blink.Geometry
 import Blink.Input
 import Blink.View.Layout
 import Blink.View.Rendering
-import Blink.View
+import Blink.View hiding (holdFiredCount, holdStartedAt) -- TODO(phase 2): AppState's own hold-repeat fields go away once RepeatButton owns this itself.
 import Blink.View.Drawing (drawText, fillRect, withClip)
 import Blink.View.Element (Element (..), elementWithLayout, noIntrinsicSize, runElement)
 import Blink.Update
