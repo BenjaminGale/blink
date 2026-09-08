@@ -5,7 +5,7 @@ A ready-made 'Theme' for every built-in control, so an app gets a
 coherent, usable look out of the box just by supplying a 'Palette' --
 see 'defaultTheme'.
 
-Each control shape below is also exported on its own
+Each control shape is also exported on its own
 ('buttonStyle', 'flatRowStyle', 'progressBarStyle', 'sliderStyle', 'labelStyle'), so an
 app that wants the built-in look for every control /except/ one state on
 one control doesn't have to rebuild a whole 'StyleSet' by hand -- take the
@@ -24,6 +24,17 @@ myButtonStyle = (buttonStyle AlignCenter myPalette)
 Register it under whichever 'StyleKey' the control resolves to (e.g.
 'Blink.View.Controls.Button.buttonStyleKey', or a different 'Class'\/'ElementId'
 passed via 'Blink.View.Controls.Control.style') in 'themeElementStyles'.
+
+= Module layout
+
+Each built-in control's own registration in 'defaultTheme' lives in its
+own @Blink.View.Style.\<Control\>@ module (e.g. "Blink.View.Style.Checkbox"),
+which is also where a control's own shape lives if it has one (e.g.
+"Blink.View.Style.ProgressBar"). A shape shared by more than one control
+lives in "Blink.View.Style.Control" instead, since no single control's
+module could own it. This module only assembles those pieces into one
+'Theme' -- see any of the modules above for the actual colours and
+metrics.
 -}
 module Blink.View.Style.Defaults
   ( defaultTheme
@@ -38,213 +49,44 @@ module Blink.View.Style.Defaults
 
 import qualified Data.Map.Strict as Map
 
-import Blink.View.Controls.Button (buttonStyleKey)
-import Blink.View.Controls.Checkbox (checkboxStyleKey)
-import Blink.View.Controls.Divider (dividerStyleKey)
-import Blink.View.Controls.Label (labelStyleKey)
-import Blink.View.Controls.ProgressBar (progressBarStyleKey)
-import Blink.View.Controls.RadioButton (radioButtonStyleKey)
-import Blink.View.Controls.ScrollBar (scrollBarButtonStyleKey, scrollBarStyleKey, scrollBarTrackStyleKey)
-import Blink.View.Controls.Slider (sliderStyleKey)
-import Blink.View.Controls.TextInput (textInputStyleKey)
-import Blink.View.Controls.ToggleButton (toggleButtonStyleKey, toggleChecked)
-import Blink.View.Controls.ToggleGroup (radioButtonGroupStyleKey, toggleButtonGroupStyleKey)
-import Blink.Geometry (uniform)
-import Blink.View.Rendering (Colour (..), TextAlign (..))
+import Blink.View.Rendering (TextAlign (..))
 import Blink.View.Style
+import Blink.View.Style.Control (buttonStyle, controlMetrics, flatRowStyle, sliderStyle, toggleGroupStyle)
+import Blink.View.Style.Divider (dividerStyle)
+import Blink.View.Style.Label (labelStyle)
+import Blink.View.Style.ProgressBar (progressBarStyle)
 
--- | Fully transparent -- used, like 'app/Theme.hs's @invisibleBorder@,
--- as a border colour that's really invisible rather than as 'Nothing':
--- a control whose border becomes visible on another state (e.g.
--- 'FocusFocused') must keep a @Just@ border at rest too, or gaining a
--- real border colour would also change its measured size.
-transparent :: Colour
-transparent = RGBA 0 0 0 0
-
-controlMetrics :: Metrics
-controlMetrics = Metrics
-  { metricsMargin      = uniform 3
-  , metricsPadding     = uniform 6
-  , metricsBorderEdges = uniformBorder 1
-  }
-
-flatRowMetrics :: Metrics
-flatRowMetrics = Metrics
-  { metricsMargin      = uniform 2
-  , metricsPadding     = uniform 4
-  , metricsBorderEdges = uniformBorder 1
-  }
-
-labelMetrics :: Metrics
-labelMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 6
-  , metricsBorderEdges = noBorder
-  }
-
-progressBarMetrics :: Metrics
-progressBarMetrics = Metrics
-  { metricsMargin      = uniform 3
-  , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
-  }
-
-dividerMetrics :: Metrics
-dividerMetrics = Metrics
-  { metricsMargin      = uniform 4
-  , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
-  }
-
--- | No margin\/padding\/border of its own -- a
--- 'Blink.View.Controls.ToggleGroup.toggleButtonGroup'\/'Blink.View.Controls.ToggleGroup.radioButtonGroup'
--- is just a plain wrapper around its items; any chrome belongs on the
--- items themselves ('toggleButtonStyleKey'\/'radioButtonStyleKey'), not
--- doubled up on their container.
-toggleGroupMetrics :: Metrics
-toggleGroupMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
-  }
-
--- | A bordered-box control style: background/border step through
--- hover/press/focus/disabled, with a bold accent fill both on press and
--- while selected (see 'Blink.View.Controls.ToggleButton.toggleChecked'). Used for
--- buttons, toggle buttons, and (left-aligned) text inputs.
-buttonStyle :: TextAlign -> Palette -> StyleSet
-buttonStyle align p = StyleSet
-  { styleBase = Style
-      { styleBackground   = paletteSurface p
-      , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = align
-      , styleBorderColour = Just (paletteBorder p)
-      }
-  , styleOverrides = Map.fromList
-      [ (CommonMouseOver, \s -> s { styleBackground = paletteSurfaceHover p, styleBorderColour = Just (paletteBorderHover p) })
-      , (CommonPressed,   \s -> s { styleBackground = paletteAccent p, styleTextColour = paletteTextOnAccent p, styleBorderColour = Just (paletteAccent p) })
-      , (CommonDisabled,  \s -> s { styleBackground = paletteSurfaceDisabled p, styleTextColour = paletteTextMuted p, styleBorderColour = Just (paletteBorder p) })
-      , (FocusFocused,    \s -> s { styleBorderColour = Just (paletteFocusRing p) })
-      , (toggleChecked,   \s -> s { styleBackground = paletteAccent p, styleTextColour = paletteTextOnAccent p, styleBorderColour = Just (paletteAccent p) })
-      ]
-  }
-
--- | A flat, mostly-invisible row style: no background or border
--- normally, just a hover tint, a focus ring, and an accent tint while
--- selected, so it reads as a plain row rather than a button. Used for
--- checkboxes and radio buttons.
-flatRowStyle :: Palette -> StyleSet
-flatRowStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground   = transparent
-      , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleBorderColour = Just transparent
-      }
-  , styleOverrides = Map.fromList
-      [ (CommonMouseOver, \s -> s { styleBackground = paletteSurfaceHover p })
-      , (CommonPressed,   \s -> s { styleBackground = paletteSurfaceHover p })
-      , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
-      , (FocusFocused,    \s -> s { styleBorderColour = Just (paletteFocusRing p) })
-      , (toggleChecked,   \s -> s { styleBackground = paletteAccent p })
-      ]
-  }
-
--- | A progress bar's track/fill style: 'paletteSurface' for the track
--- (background), 'paletteAccent' for the fill (drawn via
--- 'styleTextColour'), no border.
-progressBarStyle :: Palette -> StyleSet
-progressBarStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground   = paletteSurface p
-      , styleTextColour   = paletteAccent p
-      , styleTextAlign    = AlignLeft
-      , styleBorderColour = Nothing
-      }
-  , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
-  }
-
--- | A slider's groove\/fill\/thumb style: transparent background,
--- 'paletteBorder' for the groove (drawn via 'styleBorderColour'),
--- 'paletteAccent' for the filled track and thumb (drawn via
--- 'styleTextColour').
-sliderStyle :: Palette -> StyleSet
-sliderStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground   = transparent
-      , styleTextColour   = paletteAccent p
-      , styleTextAlign    = AlignLeft
-      , styleBorderColour = Just (paletteBorder p)
-      }
-  , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
-  }
-
--- | A divider's line style: transparent background, 'paletteBorder' for
--- the line itself (drawn via 'styleBorderColour', same as
--- 'Blink.View.Controls.Slider.Slider's groove).
-dividerStyle :: Palette -> StyleSet
-dividerStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground   = transparent
-      , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleBorderColour = Just (paletteBorder p)
-      }
-  , styleOverrides = Map.empty
-  }
-
--- | A plain, transparent label style with no border.
-labelStyle :: Palette -> StyleSet
-labelStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground   = transparent
-      , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleBorderColour = Nothing
-      }
-  , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
-  }
-
--- | A plain, transparent, borderless style for a toggle group's own
--- container -- paired with its own zero-margin\/padding\/border metrics
--- alongside it below. Shared by
--- 'Blink.View.Controls.ToggleGroup.toggleButtonGroup' and
--- 'Blink.View.Controls.ToggleGroup.radioButtonGroup'; the items inside
--- still resolve their own look from 'buttonStyle'\/'flatRowStyle'.
-toggleGroupStyle :: Palette -> StyleSet
-toggleGroupStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground   = transparent
-      , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleBorderColour = Nothing
-      }
-  , styleOverrides = Map.empty
-  }
+import qualified Blink.View.Style.Button as Button
+import qualified Blink.View.Style.Checkbox as Checkbox
+import qualified Blink.View.Style.Divider as Divider
+import qualified Blink.View.Style.Label as Label
+import qualified Blink.View.Style.ProgressBar as ProgressBar
+import qualified Blink.View.Style.RadioButton as RadioButton
+import qualified Blink.View.Style.ScrollBar as ScrollBar
+import qualified Blink.View.Style.Slider as Slider
+import qualified Blink.View.Style.TextInput as TextInput
+import qualified Blink.View.Style.ToggleButton as ToggleButton
+import qualified Blink.View.Style.ToggleGroup as ToggleGroup
 
 -- | A complete 'Theme' for every built-in control, built entirely from
--- @p@ -- registers each control's default 'StyleKey' (see each control
--- module's own @*StyleKey@, e.g. 'Blink.View.Controls.Button.buttonStyleKey')
--- with its shape above. Works for any element type @e@ since every entry
--- is 'Class'-keyed, never 'ElementId'-keyed. 'themeDefaultStyle' falls
--- back to the boxed-control look.
+-- @p@. Works for any element type @e@ since every entry is 'Class'-keyed,
+-- never 'ElementId'-keyed. 'themeDefaultStyle' falls back to the
+-- boxed-control look. See /Module layout/ above for where each entry
+-- actually comes from.
 defaultTheme :: Ord e => Palette -> Theme e
 defaultTheme p = Theme
-  { themeElementStyles = Map.fromList
-      [ (buttonStyleKey,       (controlMetrics,     buttonStyle AlignCenter p))
-      , (toggleButtonStyleKey, (controlMetrics,     buttonStyle AlignCenter p))
-      , (checkboxStyleKey,     (flatRowMetrics,     flatRowStyle p))
-      , (radioButtonStyleKey,  (flatRowMetrics,     flatRowStyle p))
-      , (textInputStyleKey,    (controlMetrics,     buttonStyle AlignLeft p))
-      , (progressBarStyleKey,  (progressBarMetrics, progressBarStyle p))
-      , (sliderStyleKey,       (progressBarMetrics, sliderStyle p))
-      , (dividerStyleKey,      (dividerMetrics,     dividerStyle p))
-      , (labelStyleKey,        (labelMetrics,       labelStyle p))
-      , (toggleButtonGroupStyleKey, (toggleGroupMetrics, toggleGroupStyle p))
-      , (radioButtonGroupStyleKey,  (toggleGroupMetrics, toggleGroupStyle p))
-      , (scrollBarStyleKey,         (toggleGroupMetrics, toggleGroupStyle p))
-      , (scrollBarButtonStyleKey,   (controlMetrics,     buttonStyle AlignCenter p))
-      , (scrollBarTrackStyleKey,    (progressBarMetrics, sliderStyle p))
-      ]
+  { themeElementStyles = Map.fromList (concat
+      [ Button.defaultStyleEntries p
+      , ToggleButton.defaultStyleEntries p
+      , Checkbox.defaultStyleEntries p
+      , RadioButton.defaultStyleEntries p
+      , TextInput.defaultStyleEntries p
+      , ProgressBar.defaultStyleEntries p
+      , Slider.defaultStyleEntries p
+      , Divider.defaultStyleEntries p
+      , Label.defaultStyleEntries p
+      , ToggleGroup.defaultStyleEntries p
+      , ScrollBar.defaultStyleEntries p
+      ])
   , themeDefaultStyle = (controlMetrics, buttonStyle AlignCenter p)
   }

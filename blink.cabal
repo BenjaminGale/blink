@@ -69,7 +69,19 @@ library
         Blink.View.Layout.Constraints
         Blink.View.Rendering
         Blink.View.Style
+        Blink.View.Style.Button
+        Blink.View.Style.Checkbox
+        Blink.View.Style.Control
         Blink.View.Style.Defaults
+        Blink.View.Style.Divider
+        Blink.View.Style.Label
+        Blink.View.Style.ProgressBar
+        Blink.View.Style.RadioButton
+        Blink.View.Style.ScrollBar
+        Blink.View.Style.Slider
+        Blink.View.Style.TextInput
+        Blink.View.Style.ToggleButton
+        Blink.View.Style.ToggleGroup
     hs-source-dirs: src
 
 executable demo

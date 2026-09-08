@@ -23,6 +23,7 @@ import Blink.View.Controls.ToggleGroup (ToggleGroupPart)
 import Blink.View.Rendering
 import Blink.View.Style
 import Blink.View.Style.Defaults (defaultTheme)
+import Blink.View.Style.Divider (dividerStyle)
 
 -- | Which of the demo's sidebar-selected pages is showing.
 data Page = ControlsPage | ScrollBarsPage | ContinuePage | ContainedPage
@@ -99,20 +100,12 @@ statusBarMetrics = Metrics
 
 -- | Inserts the status bar's look -- an 'ElementId'-keyed entry, not a
 -- built-in control class, so 'Blink.View.Style.Defaults.defaultTheme' doesn't
--- (and can't) register it itself.
+-- (and can't) register it itself. Reuses 'dividerStyle' for the look (a
+-- plain line in 'paletteBorder' is exactly what a status bar's own top
+-- rule wants), with its own 'Metrics' for the top-only border edge.
 withStatusBar :: Palette -> Theme ControlId -> Theme ControlId
 withStatusBar p thm = thm
-  { themeElementStyles = Map.insert (ElementId StatusBar) (statusBarMetrics, style) (themeElementStyles thm) }
-  where
-    style = StyleSet
-      { styleBase = Style
-          { styleBackground   = RGBA 0 0 0 0
-          , styleTextColour   = paletteTextPrimary p
-          , styleTextAlign    = AlignLeft
-          , styleBorderColour = Just (paletteBorder p)
-          }
-      , styleOverrides = Map.empty
-      }
+  { themeElementStyles = Map.insert (ElementId StatusBar) (statusBarMetrics, dividerStyle p) (themeElementStyles thm) }
 
 lightTheme :: Theme ControlId
 lightTheme = withStatusBar lightPalette (defaultTheme lightPalette)

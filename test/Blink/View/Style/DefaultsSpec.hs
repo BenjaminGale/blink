@@ -1,5 +1,6 @@
 module Blink.View.Style.DefaultsSpec (spec) where
 
+import Control.Monad (forM_)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Test.Hspec
@@ -73,3 +74,29 @@ spec = describe "Blink.View.Style.Defaults" $ do
 
     it "mutes a disabled label's text" $ do
       styleTextColour (resolvedAt labelStyleKey (Set.singleton CommonDisabled)) `shouldBe` paletteTextMuted testPalette
+
+    -- Every control below is focusable under its own default 'FocusPolicy'
+    -- (see each control module's own 'Blink.View.Controls.Control.focusPolicy'
+    -- for the ones deliberately excluded, e.g. a scrollbar's own buttons and
+    -- track, which are 'Blink.View.Controls.Control.NotFocusable'). Missing an
+    -- entry here means a focused instance draws no focus ring at all.
+    describe "focus ring coverage" $ do
+      let focusableStyleKeys =
+            [ buttonStyleKey, toggleButtonStyleKey, checkboxStyleKey, radioButtonStyleKey
+            , textInputStyleKey, sliderStyleKey
+            ]
+      forM_ focusableStyleKeys $ \key ->
+        it ("gives " <> show key <> " a distinct look while focused") $ do
+          resolvedAt key (Set.singleton FocusFocused) `shouldNotBe` resolvedAt key Set.empty
+
+    -- Every control below puts 'toggleChecked' into its active states while
+    -- selected (see each control's own use of
+    -- 'Blink.View.Controls.ToggleButton.toggleChecked'). Missing an entry
+    -- here means a checked/selected instance looks identical to an
+    -- unchecked one.
+    describe "toggle pseudo-state coverage" $ do
+      let toggleableStyleKeys = [toggleButtonStyleKey, checkboxStyleKey, radioButtonStyleKey]
+      forM_ toggleableStyleKeys $ \key ->
+        it ("gives " <> show key <> " a distinct look while checked") $ do
+          resolvedAt key (Set.fromList [CommonNormal, toggleChecked])
+            `shouldNotBe` resolvedAt key (Set.singleton CommonNormal)
