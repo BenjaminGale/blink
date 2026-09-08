@@ -36,20 +36,41 @@ toolbarView s = hBox
   ]
 ```
 
-## Rendering from a `Maybe` — `maybe`/`mapMaybe`
+## Rendering from a `Maybe` — `catMaybes`/`mapMaybe`
 
-The same idea extended to data that's already optional:
+The same idea extended to data that's already optional. When you've
+already assembled a list of `Maybe Element`s — some rows always present,
+some conditional — `catMaybes` drops the `Nothing`s:
 
 ```haskell
 sidebarView :: AppState -> Element ScreenId Msg
 sidebarView s = vBox
   [ spacing 4
-  , children $ mapMaybe id
+  , children $ catMaybes
       [ Just (label TitleLabel [text "Details"])
       , detailRow <$> selectedItem s
       ]
   ]
 ```
+
+When instead you're starting from a plain list and the per-item mapping
+can itself opt an item out, `mapMaybe` does the map and the filter in one
+pass:
+
+```haskell
+-- items :: [Item], only some of which have a detail row to show
+detailRows :: [Item] -> [Element ScreenId Msg]
+detailRows items = mapMaybe detailRowIfVisible items
+
+detailRowIfVisible :: Item -> Maybe (Element ScreenId Msg)
+detailRowIfVisible item
+  | itemHidden item = Nothing
+  | otherwise        = Just (detailRow item)
+```
+
+The distinguishing question: do you have a `[a]` and a function
+`a -> Maybe b` (`mapMaybe`), or do you already have a `[Maybe a]`
+(`catMaybes`)?
 
 ## When the slot must stay occupied — `emptyElement`
 
@@ -77,8 +98,8 @@ bannerView s = vBox
 
 ## Summary
 
-Reach for plain Haskell first — `if`, list comprehension guards, `maybe`/
-`mapMaybe` — since `Element` and `children` are ordinary values, not a
+Reach for plain Haskell first — `if`, list comprehension guards,
+`catMaybes`/`mapMaybe` — since `Element` and `children` are ordinary values, not a
 bespoke DSL. `emptyElement` is the one addition worth knowing about, for
 the specific case where a branch has nothing to draw but still needs to
 produce a same-shaped `Element` rather than being left out of a list.
