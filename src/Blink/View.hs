@@ -50,10 +50,10 @@ interaction state, and scroll positions (@elmScrollStates@, a @Map e
 'ScrollState'@) and repeat-press state (@elmHoldStates@, a @Map e
 'HoldState'@) live in the element state, both keyed by element ID,
 populating lazily on first write and persisting across frames. Selection
-(@elmSelection@) holds just one 'Selection' at a time, tagged with the
-element it belongs to, since only the focused control ever has one; writing
-a new element's selection replaces whichever one was there before. The
-application never sees any of this traffic.
+(@elmSelection@, a @SelectionSlot@) holds just one 'Selection' at a time,
+tagged with the element it belongs to, since only the focused control ever
+has one; writing a new element's selection replaces whichever one was there
+before. The application never sees any of this traffic.
 
 Focus ('setFocus', 'clearFocus') changes immediately, exactly like
 'registerMouseOver' and mouse capture, because sibling arbitration within a
@@ -429,13 +429,19 @@ data Out e msg
 -- | Cross-frame presentation state. Persists unchanged across frames; never
 -- exposed to the application. Scroll position is tracked per element
 -- (@elmScrollStates@), as is repeat-press ("hold") state
--- (@elmHoldStates@); selection is tracked for at most one element at a
--- time (@elmSelection@), tagged with which element it belongs to.
+-- (@elmHoldStates@); selection is exclusive across elements, tracked as a
+-- single 'SelectionSlot' (@elmSelection@) rather than a map.
 data ElementState e = ElementState
   { elmScrollStates   :: Map.Map e ScrollState
   , elmHoldStates     :: Map.Map e HoldState
-  , elmSelection      :: Maybe (e, Selection)
+  , elmSelection      :: SelectionSlot e
   }
+
+-- | At most one element holds a selection at a time; setting it on one
+-- element clears any other. 'NoSelection' when none does.
+data SelectionSlot e
+  = NoSelection
+  | SelectionAt e Selection
 
 -- | Outputs accumulated during a single frame: draw commands, the queued
 -- 'Out' events (messages and 'UiEffect's, in emit order), and the animation
@@ -556,7 +562,7 @@ emptyViewContext bounds input thm measurer = ViewContext
   , ctxElements        = ElementState
       { elmScrollStates  = Map.empty
       , elmHoldStates    = Map.empty
-      , elmSelection     = Nothing
+      , elmSelection     = NoSelection
       }
   , ctxOutputs         = emptyFrameOutputs
   , ctxStyle           = resolveStyle (snd (themeDefaultStyle thm)) Set.empty
@@ -688,8 +694,8 @@ getSelection eid = gets (contextSelection eid)
 -- monad.
 contextSelection :: Eq e => e -> ViewContext e msg -> Maybe Selection
 contextSelection eid ctx = case elmSelection (ctxElements ctx) of
-  Just (owner, sel) | owner == eid -> Just sel
-  _                                -> Nothing
+  SelectionAt owner sel | owner == eid -> Just sel
+  _                                    -> Nothing
 
 -- | Sets the given element's selection, from the next frame onward.
 requestSelectionAt :: e -> Selection -> View e msg ()
@@ -742,7 +748,7 @@ resolveHoldRepeats eid held initialDelay interval
 -- before. Used only by @applyUiEffects@.
 writeSelection :: e -> Selection -> ViewContext e msg -> ViewContext e msg
 writeSelection eid sel ctx = ctx { ctxElements = (ctxElements ctx)
-  { elmSelection = Just (eid, sel) } }
+  { elmSelection = SelectionAt eid sel } }
 
 -- | The current layout rectangle. Set by the layout system via 'withBounds'.
 getBounds :: View e msg Rectangle
