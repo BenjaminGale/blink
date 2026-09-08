@@ -45,13 +45,14 @@ module Blink.View.Style.Defaults
   , dividerStyle
   , labelStyle
   , toggleGroupStyle
+  , containerStyle
   ) where
 
 import qualified Data.Map.Strict as Map
 
 import Blink.View.Rendering (TextAlign (..))
 import Blink.View.Style
-import Blink.View.Style.Control (buttonStyle, controlMetrics, flatRowStyle, sliderStyle, toggleGroupStyle)
+import Blink.View.Style.Control (buttonStyle, containerStyle, controlMetrics, flatRowStyle, sliderStyle, toggleGroupStyle)
 import Blink.View.Style.Divider (dividerStyle)
 import Blink.View.Style.Label (labelStyle)
 import Blink.View.Style.ProgressBar (progressBarStyle)

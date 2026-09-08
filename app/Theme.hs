@@ -10,6 +10,7 @@
 module Theme
   ( ControlId (..)
   , Page (..)
+  , containerStyleKey
   , lightTheme
   , darkTheme
   ) where
@@ -22,8 +23,9 @@ import Blink.View.Controls.ScrollBar (ScrollBarPart)
 import Blink.View.Controls.ToggleGroup (ToggleGroupPart)
 import Blink.View.Rendering
 import Blink.View.Style
-import Blink.View.Style.Defaults (defaultTheme)
+import Blink.View.Style.Defaults (containerStyle, defaultTheme)
 import Blink.View.Style.Divider (dividerStyle)
+import Blink.View.Style.Control (controlMetrics)
 
 -- | Which of the demo's sidebar-selected pages is showing.
 data Page = ControlsPage | ScrollBarsPage | ContinuePage | ContainedPage
@@ -110,8 +112,21 @@ withStatusBar :: Palette -> Theme ControlId -> Theme ControlId
 withStatusBar p thm = thm
   { themeElementStyles = Map.insert (ElementId StatusBar) (statusBarMetrics, dividerStyle p) (themeElementStyles thm) }
 
+-- | The 'StyleKey' 'Continue'\/'Contained' resolve their own outer
+-- container's chrome from (see 'UI.continueGroup'\/'UI.containedGroup')
+-- -- a 'Class', not an 'ElementId', since both share this one look.
+containerStyleKey :: StyleKey ControlId
+containerStyleKey = Class "container"
+
+-- | Inserts the 'FocusScope' container look -- 'containerStyle' paired
+-- with 'controlMetrics' (same border width 'buttonStyle' uses, so
+-- 'FocusFocused' has somewhere to draw its ring), under 'containerStyleKey'.
+withContainer :: Palette -> Theme ControlId -> Theme ControlId
+withContainer p thm = thm
+  { themeElementStyles = Map.insert containerStyleKey (controlMetrics, containerStyle p) (themeElementStyles thm) }
+
 lightTheme :: Theme ControlId
-lightTheme = withStatusBar lightPalette (defaultTheme lightPalette)
+lightTheme = withContainer lightPalette (withStatusBar lightPalette (defaultTheme lightPalette))
 
 darkTheme :: Theme ControlId
-darkTheme = withStatusBar darkPalette (defaultTheme darkPalette)
+darkTheme = withContainer darkPalette (withStatusBar darkPalette (defaultTheme darkPalette))

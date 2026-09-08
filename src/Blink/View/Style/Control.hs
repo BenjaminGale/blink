@@ -7,6 +7,11 @@ track look ('sliderStyle') shared by a slider and a scrollbar's own
 track, and the plain wrapper look ('toggleGroupStyle') shared by a toggle
 group, a radio group, and a scrollbar's own container -- plus the
 'Metrics' each pairs with in 'Blink.View.Style.Defaults.defaultTheme'.
+Also 'containerStyle', not registered by 'Blink.View.Style.Defaults.defaultTheme'
+itself (no built-in control needs it) but exported the same way
+'buttonStyle' is, for an app to register against its own
+'Blink.View.Controls.Control.FocusScope' composites -- see
+"Theme"'s @withStatusBar@-style registration in the sample app.
 
 A shape used by exactly one control lives in that control's own
 @Blink.View.Style.\<Control\>@ module instead (e.g.
@@ -26,6 +31,7 @@ module Blink.View.Style.Control
   , flatRowStyle
   , sliderStyle
   , toggleGroupStyle
+  , containerStyle
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -152,7 +158,11 @@ sliderStyle p = StyleSet
 -- paired with 'toggleGroupMetrics' alongside it above. Shared by
 -- 'Blink.View.Controls.ToggleGroup.toggleButtonGroup', 'Blink.View.Controls.ToggleGroup.radioButtonGroup',
 -- and a scrollbar's own outer container; the items inside still resolve
--- their own look from 'buttonStyle'\/'flatRowStyle'.
+-- their own look from 'buttonStyle'\/'flatRowStyle'. No 'FocusFocused'
+-- override either -- unlike 'containerStyle' below, none of these three
+-- containers ever holds keyboard focus itself (each is
+-- 'Blink.View.Controls.Control.NotFocusable', fixed), so a ring here
+-- would never actually draw.
 toggleGroupStyle :: Palette -> StyleSet
 toggleGroupStyle p = StyleSet
   { styleBase = Style
@@ -162,4 +172,29 @@ toggleGroupStyle p = StyleSet
       , styleBorderColour = Nothing
       }
   , styleOverrides = Map.empty
+  }
+
+-- | 'buttonStyle's boxed look with its background held fixed -- hover only
+-- steps the border colour, never 'styleBackground', the way a container
+-- that merely holds focusable children, rather than being one itself,
+-- should read (no fill tint, no press fill). Keeps 'CommonDisabled' and
+-- 'FocusFocused' too -- the latter is a state such a container does
+-- reach: a 'Blink.View.Controls.Control.FocusScope' composite (unlike
+-- 'toggleGroupStyle's wrappers above) reads as focused whenever any child
+-- inside it does, so its own border still needs to answer that. Paired
+-- with 'controlMetrics' (real border width, so both overrides have
+-- something to draw into) rather than 'toggleGroupMetrics'.
+containerStyle :: Palette -> StyleSet
+containerStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = paletteSurface p
+      , styleTextColour   = paletteTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleBorderColour = Just (paletteBorder p)
+      }
+  , styleOverrides = Map.fromList
+      [ (CommonMouseOver, \s -> s { styleBorderColour = Just (paletteBorderHover p) })
+      , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
+      , (FocusFocused,    \s -> s { styleBorderColour = Just (paletteFocusRing p) })
+      ]
   }

@@ -8,7 +8,7 @@ import Blink.View.Controls.Button (onActivated)
 import Blink.View.Controls.Control
   (ChildNavigation (..), ContainedNavigation (..), ControlConfig (..), EntryPolicy (..), FocusPolicy (..)
   , WrapPolicy (..), control, defaultControlConfig, elementId, focusPolicy, isEnabled, measureChrome, post
-  , postWith, resolve
+  , postWith, resolve, style
   )
 import Blink.View.Controls.Divider (orientation)
 import Blink.View.Controls.Label (LabelConfig, target, text)
@@ -29,7 +29,7 @@ import Blink.View
 import Blink.View.Drawing (drawText, fillRect, withClip)
 import Blink.View.Element (Element (..), elementWithLayout, noIntrinsicSize, runElement)
 import Blink.Update
-import Theme (ControlId (..), Page (..), lightTheme, darkTheme)
+import Theme (ControlId (..), Page (..), containerStyleKey, lightTheme, darkTheme)
 import Control.Monad (forM_, void, when)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -507,6 +507,7 @@ continueGroup s = Element
     cfg = (resolve defaultControlConfig
             [ elementId ContinueGroup
             , focusPolicy (FocusScope Continue)
+            , style containerStyleKey
             ])
             { ccContent = const (runElement innerBox) }
     innerBox = hBox
@@ -628,6 +629,7 @@ containedGroup s = Element
     cfg = (resolve defaultControlConfig
             [ elementId ContainedGroup
             , focusPolicy (FocusScope (Contained nav))
+            , style containerStyleKey
             ])
             { ccContent = const (runElement optionsBox) }
     optionsBox = vBox [spacing containedSpacing, margin containedMargin, children optionElements]
