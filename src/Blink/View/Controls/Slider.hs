@@ -19,6 +19,7 @@ module Blink.View.Controls.Slider
   , value
   , step
   , onValueChanged
+  , thumbColourFor
   ) where
 
 import Control.Monad (forM_, void, when)

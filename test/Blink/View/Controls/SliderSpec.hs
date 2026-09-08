@@ -9,7 +9,7 @@ import Blink.View.Controls.ControlBehaviour (controlBehaviourSpec, defaultContro
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..), Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.View.Controls.Slider (SliderConfig, onValueChanged, slider, step, value)
+import Blink.View.Controls.Slider (SliderConfig, onValueChanged, slider, step, thumbColourFor, value)
 import Blink.View.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.View.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.View
@@ -24,13 +24,6 @@ testBounds = Rectangle 0 0 100 100
 -- darken it) produce a colour distinguishable from 'testColour' itself.
 testColour :: Colour
 testColour = RGBA 0.4 0.4 0.4 1
-
--- | Scales @c@'s RGB by @factor@, replicating (not importing)
--- 'Blink.View.Controls.Slider.slider's own hover\/drag thumb-shading formula,
--- so the expected colour is computed the same way the control computes it
--- rather than as a separately-transcribed literal.
-scaleColour :: Double -> Colour -> Colour
-scaleColour factor (RGBA r g b a) = RGBA (r * factor) (g * factor) (b * factor) a
 
 testStyle :: Style
 testStyle = Style
@@ -187,13 +180,13 @@ spec = describe "Blink.View.Controls.Slider" $ do
     it "darkens only the thumb, not the filled track, on hover" $ do
       result <- runInteractions testBounds seedCtx (runElement (slider Handle [value 0.5])) [MoveTo midPoint] []
       let draws = resultDraws result
-      draws `shouldContain` [thumbColouredAt (scaleColour 0.85 testColour) 43]
+      draws `shouldContain` [thumbColouredAt (thumbColourFor False True testColour) 43]
       draws `shouldContain` [filledAt 29]
 
     it "darkens the thumb further while dragging than while merely hovering" $ do
       result <- runInteractions testBounds seedCtx (runElement (slider Handle [value 0])) [] [MouseDown midPoint]
       let draws = resultDraws result
-      draws `shouldContain` [thumbColouredAt (scaleColour 0.7 testColour) 21]
+      draws `shouldContain` [thumbColouredAt (thumbColourFor True True testColour) 21]
       draws `shouldContain` [filledAt 0]
 
   describe "dragging" $ do

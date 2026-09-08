@@ -15,7 +15,12 @@ import Blink.View.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.View.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
 import Blink.View
 import Blink.View.Drawing (fillRect, drawText)
-import Blink.View.Element (Element, elementWithLayout)
+import Blink.View.Element (Element, elLayout, elementWithLayout)
+import Blink.View.Controls.Checkbox (checkbox)
+import Blink.View.Controls.Control (control, defaultControlConfig, elementId, onFocusGained, onFocusLost, resolve)
+import Blink.View.Controls.ToggleButton (isSelected, onSelectedChanged)
+import qualified Blink.View.Controls.Slider as Slider
+import qualified Blink.View.Controls.TextInput as TextInput
 import Blink.Update (modify)
 
 -- | Every test app below fills the whole test bounds; only the body of the
@@ -181,6 +186,82 @@ captureApp = App
 mouseInput :: Bool -> FrameInput
 mouseInput down = normalInput { mouseButtonDown = down }
 
+-- | Wires a real 'checkbox' (not a toy view built from 'drawText'/'emit')
+-- into an 'App', so clicking it is driven through 'Blink.App''s actual
+-- frame orchestration -- real message-fold via 'update' and, in
+-- event-driven mode, the real second render pass -- rather than only
+-- through "Blink.Interaction"'s own simplified stepping loop, which every
+-- other control test in this suite uses and which doesn't run either of
+-- those. Every other app above exists to isolate one piece of that
+-- orchestration; this one instead checks that a real control participates
+-- in it correctly end to end.
+checkboxApp :: App () (Bool -> Bool) Bool
+checkboxApp = App
+  { startUp = pure False
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \checked ->
+      (checkbox () [isSelected checked, onSelectedChanged (\b -> [OutMsg (const b)])])
+        { elLayout = Layout fill fill TopLeft }
+  , update  = modify
+  }
+
+-- | Same rationale as 'checkboxApp', for a drag-driven continuous control
+-- rather than a discrete toggle.
+sliderApp :: App () (Double -> Double) Double
+sliderApp = App
+  { startUp = pure 0
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \v ->
+      (Slider.slider () [Slider.value v, Slider.onValueChanged (\v' -> [OutMsg (const v')])])
+        { elLayout = Layout fill fill TopLeft }
+  , update  = modify
+  }
+
+-- | Same rationale as 'checkboxApp', for a control driven by a stream of
+-- typed-text frames rather than a single click.
+textInputApp :: App () (Text -> Text) Text
+textInputApp = App
+  { startUp = pure ""
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \t ->
+      (TextInput.textInput () [TextInput.value t, TextInput.onInput (\t' -> [OutMsg (const t')])])
+        { elLayout = Layout fill fill TopLeft }
+  , update  = modify
+  }
+
+pointerAt :: Point -> Bool -> FrameInput
+pointerAt p down = normalInput { mousePosition = p, mouseButtonDown = down }
+
+typedInput :: Text -> FrameInput
+typedInput t = normalInput { typedText = [t] }
+
+tabInput :: FrameInput
+tabInput = normalInput { keyEvents = [KeyEvent KeyTab [] False] }
+
+data FocusElem = FocusA | FocusB deriving (Eq, Ord, Show)
+
+-- | Same rationale as 'checkboxApp', for the third interaction shape none
+-- of the above cover: a focus change, which (unlike a click or typed
+-- character) is deferred by 'Blink.View' to the frame after the input that
+-- triggered it, and delivers different messages to two different
+-- elements ("A lost" / "B gained") from the same 'update' fold.
+focusApp :: App FocusElem String [String]
+focusApp = App
+  { startUp = pure []
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \_ -> fullView $ do
+      withBounds (Rectangle 0 0 50 100) $ void $ control $ resolve defaultControlConfig
+        [ elementId FocusA
+        , onFocusGained (const [OutMsg "A gained"])
+        , onFocusLost   (const [OutMsg "A lost"])
+        ]
+      withBounds (Rectangle 50 0 50 100) $ void $ control $ resolve defaultControlConfig
+        [ elementId FocusB
+        , onFocusGained (const [OutMsg "B gained"])
+        ]
+  , update  = \m -> modify (++ [m])
+  }
+
 -- A measurer that counts how many times a text size was requested, so a
 -- test can observe how many times a frame's view actually ran.
 countingMeasurer :: IORef Int -> TextMeasurer
@@ -305,3 +386,28 @@ spec = do
         handle <- configureEventDriven (viewCountApp True) (pure ()) (countingMeasurer ref)
         _      <- stepFrame handle normalInput
         readIORef ref `shouldReturn` 2
+
+    describe "a real control driven through the actual frame loop" $ do
+      it "clicking a real checkbox toggles the app's state and is reflected in that same click's draw commands" $ do
+        handle <- configureEventDriven checkboxApp (pure ()) nullMeasurer
+        _      <- stepFrame handle (pointerAt (Point 50 50) True)
+        result <- stepFrame handle (pointerAt (Point 50 50) False)
+        resultState result `shouldBe` True
+        drawnTexts result `shouldContain` ["\10003"]
+
+      it "dragging a real slider updates the app's state through the real update fold" $ do
+        handle <- configureEventDriven sliderApp (pure ()) nullMeasurer
+        result <- stepFrame handle (pointerAt (Point 50 50) True)
+        resultState result `shouldBe` 0.5
+
+      it "typing into a real text field updates the app's state through the real update fold" $ do
+        handle <- configureEventDriven textInputApp (pure ()) nullMeasurer
+        _      <- stepFrame handle normalInput -- claims focus, selects the (empty) value
+        result <- stepFrame handle (typedInput "hi")
+        resultState result `shouldBe` "hi"
+
+      it "tabbing focus between two real controls updates the app's state through the real update fold" $ do
+        handle <- configureEventDriven focusApp (pure ()) nullMeasurer
+        _      <- stepFrame handle normalInput -- FocusA auto-claims
+        result <- stepFrame handle tabInput
+        resultState result `shouldBe` ["A gained", "A lost", "B gained"]
