@@ -19,6 +19,12 @@ Description — what it is, why it'd help, or what it'd take.
 
 ## Controls
 
+## Text Input
+Add a placeholderText attribute which is displayed (grayed out) when the control
+has no input.
+
+Support delete key
+
 ### Icon element
 An `icon` control, built the same way `label` is, that draws a single glyph
 from an icon font (e.g. Material Symbols) instead of body text — a `name`
@@ -155,23 +161,64 @@ should be constrained to non-negative values when they're constructed.
 
 ## Architecture
 
-### Split `Blink.View` into topic modules
-`Blink.View` bundles several disjoint concerns that only live together because
-they all need `ViewContext`'s internals — the monad itself, mouse/button
-accessors, focus/scope handling, scroll/selection, drawing primitives,
-animation, text measurement. The size of the file is a symptom of that, not
-just a big-file smell.
+### Three-tier test architecture: Infrastructure / Frame rendering / App
+The test suite has two implicit tiers today with no explicit boundary
+between them: pure-function tests (geometry, input state machines, layout
+math) sit alongside `View`-level behaviour tests. Both are driven through
+`Blink.Interaction`, which advances one `nextFrameContext` per simulated
+frame. That matches continuous mode's loop; it has no equivalent of
+event-driven mode's second render pass at all.
 
-The idea: an internal `Blink.View.Context` (or similar) holding `View`/
-`ViewContext`/the raw `gets`/`modify`, with topic modules (`Blink.View.Mouse`,
-`Blink.View.Focus`, `Blink.View.Scroll`, `Blink.View.Drawing`, `Blink.View.Animation`,
-...) importing it for context access, and `Blink.View` itself becoming a thin
-re-exporting shell — the same shape the top-level `Blink` module guide
-already has.
+```
+Layer 1 — Infrastructure (pure data types and functions, no View/ViewContext)
+├─ Geometry: rects, insets, alignment, containment, intersection
+├─ Input state machines: button down/held/released/up; hover entered/over/exited
+├─ Update monad: modify/put/gets sequencing
+├─ Layout constraint math: preferredSize for Exactly/Fill/AtLeast/AtMost/Between
+├─ Selection helpers: low/high/collapse/extend/cursor
+├─ Scroll position clamping
+└─ Hold/repeat cadence arithmetic (repeatsDueBy)
 
-Treat as its own dedicated, mostly-mechanical pass (bounded but real risk —
-re-checking import cycles across the split) rather than interleaving with
-feature work.
+Layer 2 — Frame rendering (single View, one simulated frame at a time,
+                            via Blink.Interaction; matches continuous mode)
+├─ Per-element raw event contract: hover, press/click, keyboard, focus claim/lost
+├─ Per-family shared contracts: button activation, toggle activation, fixed-focus
+├─ Individual control behavior: rendering, styling, value semantics
+├─ Multi-control scenarios within one View, still one frame at a time:
+│   FocusScope Continue/Contained navigation, click-to-focus,
+│   cross-element capture/hover suppression, tab order
+├─ View monad primitives: bounds, clip, drawing, disabled state,
+│   animation state, mouse-over memory
+├─ Box/border layout distribution (hBox/vBox/borderLayout)
+└─ Theme/style resolution
+
+Layer 3 — App (the real Blink.App orchestration loop, both modes) — DOESN'T EXIST YET
+├─ A control's reaction reaches app state via the real update fold,
+│   in both continuous and event-driven mode
+├─ A deferred effect settling on event-driven's second pass still
+│   reaches state, exactly once (not lost, not duplicated)
+├─ A fresh click/press isn't reprocessed by the second pass
+├─ Draws match each mode's own contract: continuous may be one frame
+│   stale (by design); event-driven never is
+├─ Animation-ticker start/stop decision fires correctly off real
+│   per-frame state (not the ticker thread itself)
+└─ Multi-control/composite scenarios agree between the two modes on
+    messages/state, diverging only where draw-timing is documented to
+```
+
+Layer 3 can't be reached by Layer 2's harness by construction, since
+`Blink.Interaction` never runs event-driven's second render pass.
+`Blink.App`'s own second pass already had exactly the kind of bug this
+tier exists to catch (silently dropping, then separately duplicating,
+messages) — no amount of Layer 2 testing could have caught it, at any
+scenario complexity.
+
+Needs a harness (alongside `Blink.Interaction`) that wraps a `View` action
+in a minimal message-accumulating `App` and drives it through both
+`configureContinuous` and `configureEventDriven`, asserting messages/state
+agree between the two. Draws aren't expected to match exactly: continuous
+mode is one frame stale by design, so a draws comparison needs to account
+for that offset rather than requiring byte-identical output.
 
 ### `scrollIntoView`
 No such function currently exists. The idea is a helper that, given a
