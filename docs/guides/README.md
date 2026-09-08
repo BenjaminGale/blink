@@ -9,6 +9,9 @@ first.
 - [Composing a layout](composing-a-layout.md) — building a screen out of
   nested `hBox`/`vBox`/`borderLayout` containers, sizing children, and
   converting between `Element` and a bare `View` action.
+- [Conditional rendering](conditional-rendering.md) — branching, optionally
+  including a child, and rendering from a `Maybe`, using ordinary Haskell
+  control flow plus `emptyElement`.
 - [Building a custom control](building-a-custom-control.md) — hand-writing
   a widget from `Blink.View` primitives when a ready-made one doesn't fit.
 - [Writing a backend](writing-a-backend.md) — what a backend must provide

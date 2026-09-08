@@ -7,12 +7,13 @@ module Blink.View.Element
   , runElement
   , noIntrinsicSize
   , spacer
+  , emptyElement
   , elementWithLayout
   ) where
 
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Rectangle (..), Size (..))
 import Blink.View.Layout.Constraints
-  (Available (..), Layout (..), MeasureCtx (..), fill, layoutWithConstraints, resolveLength)
+  (Available (..), Layout (..), MeasureCtx (..), exactly, fill, layoutWithConstraints, resolveLength)
 import Blink.View (View, getBounds)
 
 -- | The layout-facing pairing of a component's size request, its measure,
@@ -66,6 +67,15 @@ noIntrinsicSize ctx = pure $ case measureAxis ctx of
 -- | An element that draws nothing and takes whatever share it is given.
 spacer :: Element e msg
 spacer = Element (Layout fill fill TopLeft) noIntrinsicSize (pure ())
+
+-- | An element that draws nothing and takes no space: @0x0@ on both axes,
+-- unlike 'spacer', which fills whatever it's given. For the branch of a
+-- conditional that has no content this frame but still needs to produce
+-- an 'Element' — e.g. a container's 'Blink.View.Layout.Box.children' list
+-- built with a plain @if@/@else@ rather than a list comprehension that can
+-- just omit the entry.
+emptyElement :: Element e msg
+emptyElement = Element (Layout (exactly 0) (exactly 0) TopLeft) noIntrinsicSize (pure ())
 
 -- | Pairs a plain 'View' action with an explicit size request, for use as a
 -- container child before it reports its own 'Layout' (see "Blink.View.Controls").
