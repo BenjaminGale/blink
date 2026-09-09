@@ -86,6 +86,7 @@ library
         Blink.Controls.TextInput.Style
         Blink.Controls.ToggleButton.Style
         Blink.Controls.ToggleGroup.Style
+        Blink.Controls.Tree.Style
     hs-source-dirs: src
 
 executable demo

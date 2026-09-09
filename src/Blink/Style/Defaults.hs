@@ -69,6 +69,7 @@ import qualified Blink.Controls.Slider.Style as Slider
 import qualified Blink.Controls.TextInput.Style as TextInput
 import qualified Blink.Controls.ToggleButton.Style as ToggleButton
 import qualified Blink.Controls.ToggleGroup.Style as ToggleGroup
+import qualified Blink.Controls.Tree.Style as Tree
 
 -- | A complete 'Theme' for every built-in control, built entirely from
 -- @p@. Works for any element type @e@ since every entry is 'Class'-keyed,
@@ -90,6 +91,7 @@ defaultTheme p = Theme
       , ToggleGroup.defaultStyleEntries p
       , ScrollBar.defaultStyleEntries p
       , List.defaultStyleEntries p
+      , Tree.defaultStyleEntries p
       ])
   , themeDefaultStyle = (controlMetrics, buttonStyle AlignCenter p)
   }

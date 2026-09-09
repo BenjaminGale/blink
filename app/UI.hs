@@ -9,11 +9,12 @@ import Blink.Controls.Control
   , postWith, resolve, style
   )
 import Blink.Controls.Label (LabelConfig)
-import Blink.Controls.List (ItemState, MultiSelection (..), SingleSelection (..), multiSelection, selectFirst, selectedItems)
+import Blink.Controls.List (ItemState, MultiSelection (..), SingleSelection (..), multiSelection, selectFirst, selectedItems, singleSelection)
 import qualified Blink.Controls.List as List (isItem, isSelected, onSelectionChanged)
 import Blink.Controls.ProgressBar (ProgressValue (..))
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)
 import qualified Blink.Controls.Slider as Slider (value)
+import Blink.Controls.Tree (TreeItemState (..), flattenVisible)
 import Blink.Style (Style (..))
 import Blink.Geometry
 import Blink.Input
@@ -25,8 +26,12 @@ import Blink.Element (Attribute, Element (..), elementWithLayout, noIntrinsicSiz
 import Blink.Update
 import Theme (ControlId (..), Page (..), containerStyleKey, lightTheme, darkTheme)
 import Control.Monad (forM_, void, when)
+import Data.Maybe (listToMaybe)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Tree (Forest, Tree (..))
 
 -- Application state
 
@@ -52,6 +57,8 @@ data AppState = AppState
   , fruitLastActivated :: Text
   , groceryList        :: MultiSelection Text
   , longListSelection  :: SingleSelection Int
+  , fileTreeExpanded   :: Set Text
+  , fileTreeSelection  :: SingleSelection Text
   }
 
 data Msg
@@ -76,6 +83,8 @@ data Msg
   | FruitActivated Text
   | GroceryListChanged (MultiSelection Text)
   | LongListChanged (SingleSelection Int)
+  | FileTreeExpansionChanged (Set Text)
+  | FileTreeSelectionChanged (SingleSelection Text)
 
 demoApp :: App ControlId Msg AppState
 demoApp = App
@@ -101,6 +110,8 @@ demoApp = App
       , fruitLastActivated = ""
       , groceryList        = multiSelection groceries
       , longListSelection  = selectFirst longListItems
+      , fileTreeExpanded   = defaultFileTreeExpanded
+      , fileTreeSelection  = selectFirst (visibleFileTreeItems defaultFileTreeExpanded)
       }
   , theme   = \s -> if darkMode s then darkTheme else lightTheme
   , view    = demoView
@@ -136,6 +147,16 @@ updateApp msg = case msg of
   FruitActivated t        -> modify $ \s -> s { fruitLastActivated = t }
   GroceryListChanged v    -> modify $ \s -> s { groceryList = v }
   LongListChanged v       -> modify $ \s -> s { longListSelection = v }
+  -- Collapsing a node can take its selected descendant out of view, so
+  -- the selection is rebuilt against the newly-visible items rather
+  -- than just carried over -- 'FileTreeSelectionChanged' never needs
+  -- this, since it only ever reports a model 'Blink.Controls.Tree.tree'
+  -- itself derived from the current visible items already.
+  FileTreeExpansionChanged e -> modify $ \s -> s
+    { fileTreeExpanded  = e
+    , fileTreeSelection = singleSelection (visibleFileTreeItems e) (listToMaybe (selectedItems (fileTreeSelection s)))
+    }
+  FileTreeSelectionChanged v -> modify $ \s -> s { fileTreeSelection = v }
 
 type DemoUI = View ControlId Msg
 
@@ -445,6 +466,7 @@ pages =
   , (ContinuePage,    "Continue")
   , (ContainedPage,   "Contained")
   , (ListPage,        "List")
+  , (TreePage,        "Tree")
   ]
 
 -- | A toggle button group of one item per 'Page' -- selecting a page is
@@ -477,6 +499,7 @@ pageContent s = case currentPage s of
   ContinuePage   -> continuePage s
   ContainedPage  -> containedPage s
   ListPage       -> listPage s
+  TreePage       -> treePage s
 
 -- | 'continueGroup's own natural height (its own margin plus one row of
 -- content, at 'rowHeight') -- same reasoning as 'containedGroupHeight'.
@@ -789,6 +812,65 @@ listPage s =
       \only the selection model passed via `selection` differs. The third \
       \is bounded shorter than its content, so it scrolls -- drag its bar, \
       \or arrow the cursor past either edge to see it auto-scroll into view."
+
+-- | A small, fixed directory shape -- just enough nesting (three levels)
+-- to show indentation and a collapsed grandchild at once.
+fileForest :: Forest Text
+fileForest =
+  [ Node "src"
+      [ Node "Controls"
+          [ Node "List.hs" []
+          , Node "Tree.hs" []
+          , Node "Button.hs" []
+          ]
+      , Node "Blink.hs" []
+      ]
+  , Node "test"
+      [ Node "Main.hs" [] ]
+  , Node "README.md" []
+  ]
+
+-- | "src" expanded, everything else collapsed -- shows one level of
+-- nesting plus a collapsed sibling ("test") on load.
+defaultFileTreeExpanded :: Set Text
+defaultFileTreeExpanded = Set.singleton "src"
+
+-- | The plain, flattened item list 'fileTreeSelection' is built over,
+-- given which nodes are expanded -- see 'FileTreeExpansionChanged'.
+visibleFileTreeItems :: Set Text -> [Text]
+visibleFileTreeItems e = map fst (flattenVisible fileForest e)
+
+fileTreeElem :: AppState -> Element ControlId Msg
+fileTreeElem s =
+  tree FileTree
+    [ forest fileForest
+    , expanded (fileTreeExpanded s)
+    , selection (fileTreeSelection s)
+    , renderNode (listCaption . List.isItem . tisState)
+    , List.onSelectionChanged (postWith FileTreeSelectionChanged)
+    , onExpansionChanged (postWith FileTreeExpansionChanged)
+    , width fill, height (exactly 200)
+    ]
+
+treePage :: AppState -> DemoUI ()
+treePage s =
+  runElement $ vBox
+    [ spacing 12, margin 12
+    , children
+        [ caption "Tree" [width fill, height (exactly 24), align TopLeft]
+        , caption description [width fill, height (exactly 40), align TopLeft]
+        , fileTreeElem s
+        , caption detailText [width fill, align TopLeft]
+        ]
+    ]
+  where
+    description =
+      "Click a chevron to expand/collapse, or Tab to the tree and use \
+      \Up/Down. Built entirely on `list` -- 'src' starts expanded, \
+      \'test' collapsed."
+    detailText = case selectedItems (fileTreeSelection s) of
+      [x] -> "Selected: " <> x
+      _   -> "Selected: none"
 
 -- Top-level view
 

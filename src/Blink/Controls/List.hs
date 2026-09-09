@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | A list control generic over its /selection model/: a single 'list'
@@ -83,8 +84,10 @@ module Blink.Controls.List
   , ListConfig (..)
   , defaultListConfig
   , ListInteraction (..)
+  , HasListConfig (..)
   , listBase
   , list
+  , rowsSpacer
   , selection
   , renderItem
   , rowHeight
@@ -453,6 +456,18 @@ instance HasControlConfig e msg (ListConfig sel e msg a) where
 instance HasLayoutConfig (ListConfig sel e msg a) where
   overLayout attr = Attribute (\c -> c { lcLayout = runAttribute attr (lcLayout c) })
 
+-- | Every control built on an embedded 'ListConfig' -- 'list' itself, and
+-- the table\/tree\/tree-table wrappers built on 'listBase' -- implements
+-- this so 'selection'\/'renderItem'\/'rowHeight'\/'onSelectionChanged'\/
+-- 'onItemActivated' work on their own attribute lists directly, the same
+-- way 'Blink.Controls.Button.HasButtonConfig' lets
+-- 'Blink.Controls.Button.onActivated' work on any button-shaped control.
+class HasListConfig sel e msg a cfg | cfg -> sel e msg a where
+  overList :: Attribute (ListConfig sel e msg a) -> Attribute cfg
+
+instance HasListConfig sel e msg a (ListConfig sel e msg a) where
+  overList = id
+
 -- | The row height 'list' uses when the caller sets no 'rowHeight' of its
 -- own -- tall enough for a single line of body text plus
 -- 'Blink.Controls.Style.flatRowMetrics' chrome at a typical UI font size,
@@ -478,26 +493,26 @@ defaultListConfig = ListConfig
 
 -- | The whole model -- items and selection together. The only way to set
 -- either; @sel@ is inferred from this argument.
-selection :: sel a -> Attribute (ListConfig sel e msg a)
-selection s = Attribute (\c -> c { lcSelection = s })
+selection :: HasListConfig sel e msg a cfg => sel a -> Attribute cfg
+selection s = overList (Attribute (\c -> c { lcSelection = s }))
 
 -- | How a row draws its item; receives the row's selected\/cursor flags
 -- for styling.
-renderItem :: (ItemState a -> Element e msg) -> Attribute (ListConfig sel e msg a)
-renderItem f = Attribute (\c -> c { lcRenderItem = f })
+renderItem :: HasListConfig sel e msg a cfg => (ItemState a -> Element e msg) -> Attribute cfg
+renderItem f = overList (Attribute (\c -> c { lcRenderItem = f }))
 
 -- | The height every row is drawn at, overriding whatever height
 -- 'renderItem'\/'s own element requests. Defaults to 32px.
-rowHeight :: Double -> Attribute (ListConfig sel e msg a)
-rowHeight h = Attribute (\c -> c { lcRowHeight = h })
+rowHeight :: HasListConfig sel e msg a cfg => Double -> Attribute cfg
+rowHeight h = overList (Attribute (\c -> c { lcRowHeight = h }))
 
 -- | Reacts whenever a user-driven change actually moves the model to a
 -- new value, with the complete new model. Without it the list still
 -- reflects keyboard\/click interaction locally within the frame (see
 -- 'list'), but the app never learns of it, so next frame's 'selection'
 -- puts it right back -- the list is then read-only in practice.
-onSelectionChanged :: (sel a -> [Out e msg]) -> Attribute (ListConfig sel e msg a)
-onSelectionChanged h = Attribute (\c -> c { lcOnSelectionChanged = lcOnSelectionChanged c ++ [h] })
+onSelectionChanged :: HasListConfig sel e msg a cfg => (sel a -> [Out e msg]) -> Attribute cfg
+onSelectionChanged h = overList (Attribute (\c -> c { lcOnSelectionChanged = lcOnSelectionChanged c ++ [h] }))
 
 -- | Reacts when the user acts on a specific item: a click on its row, or
 -- Enter\/Space with the cursor on it. Fires whether or not that action
@@ -505,8 +520,8 @@ onSelectionChanged h = Attribute (\c -> c { lcOnSelectionChanged = lcOnSelection
 -- fires this) -- "the user chose this, act on it", distinct from
 -- 'onSelectionChanged' keeping selection state in sync. Arrowing never
 -- fires this.
-onItemActivated :: (a -> [Out e msg]) -> Attribute (ListConfig sel e msg a)
-onItemActivated h = Attribute (\c -> c { lcOnItemActivated = lcOnItemActivated c ++ [h] })
+onItemActivated :: HasListConfig sel e msg a cfg => (a -> [Out e msg]) -> Attribute cfg
+onItemActivated h = overList (Attribute (\c -> c { lcOnItemActivated = lcOnItemActivated c ++ [h] }))
 
 -- | What 'listBase' reports back: the underlying 'control' call's own
 -- 'ControlInteraction' (so a control built on top of 'listBase' -- e.g. a

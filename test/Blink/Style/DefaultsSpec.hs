@@ -17,6 +17,7 @@ import Blink.Controls.Slider (sliderStyleKey)
 import Blink.Controls.TextInput (textInputStyleKey)
 import Blink.Controls.ToggleButton (toggleButtonStyleKey, toggleChecked)
 import Blink.Controls.ToggleGroup (radioButtonGroupStyleKey, toggleButtonGroupStyleKey)
+import Blink.Controls.Tree.Style (treeChevronStyleKey)
 import Blink.Rendering (Colour (..))
 import Blink.Style
 import Blink.Style.Defaults (defaultTheme)
@@ -54,6 +55,7 @@ spec = describe "Blink.Style.Defaults" $ do
           , toggleButtonGroupStyleKey, radioButtonGroupStyleKey
           , scrollBarStyleKey, scrollBarButtonStyleKey, scrollBarTrackStyleKey
           , listStyleKey, listItemStyleKey
+          , treeChevronStyleKey
           ]
 
     it "gives a button the surface colour at rest" $ do
