@@ -14,7 +14,7 @@ import qualified Blink.Controls.List as List (isItem, onSelectionChanged)
 import Blink.Controls.ProgressBar (ProgressValue (..))
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)
 import qualified Blink.Controls.Slider as Slider (value)
-import Blink.Controls.Table (ColumnConfig (..))
+import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..))
 import Blink.Controls.Tree (TreeItemState (..), flattenVisible)
 import Blink.Style (Style (..))
 import Blink.Geometry
@@ -886,12 +886,12 @@ groceryTableColumns :: [ColumnConfig ControlId Msg Text]
 groceryTableColumns =
   [ ColumnConfig
       { colHeader = listCaption "Item"
-      , colWidth  = fill
+      , colWidth  = ColumnFill
       , colCell   = listCaption . List.isItem
       }
   , ColumnConfig
       { colHeader = listCaption "Qty"
-      , colWidth  = exactly 60
+      , colWidth  = ColumnFixed 60
       , colCell   = \st -> listCaption (maybe "" (T.pack . show) (lookup (List.isItem st) groceryTableItems))
       }
   ]

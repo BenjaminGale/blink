@@ -197,8 +197,8 @@ monad, the render loop, and the state types 'ViewContext' embeds — focus,
 scroll, selection, hold, animation, navigation) and the feature modules
 built on it: "Blink.View.Mouse" (position, buttons, capture, hover,
 occlusion), "Blink.View.Focus" (focus queries, claim\/clear, nested
-scopes), "Blink.View.Scroll", "Blink.View.Selection", "Blink.View.Hold",
-"Blink.View.Animation", and "Blink.View.Navigation" (each pairing its pure
+scopes), "Blink.View.Scroll", "Blink.View.Extent", "Blink.View.Selection",
+"Blink.View.Hold", "Blink.View.Animation", and "Blink.View.Navigation" (each pairing its pure
 type with the monadic accessors built on top of it). Import this module
 rather than any of those directly.
 -}
@@ -221,6 +221,7 @@ module Blink.View
   , getMessages
   , hasPendingUiEffects
   , settleEffects
+  , settleAndClearEffects
   , contextRequiresAnimation
     -- * Messages
   , Out (..)
@@ -238,6 +239,14 @@ module Blink.View
   , requestScrollTo
   , requestScrollBy
   , postScrollBy
+    -- * Extent state
+    -- | 'ExtentState' lives in "Blink.View.Extent"; re-exported here
+    -- since it's threaded through 'ViewContext' the same way
+    -- 'ScrollState' is.
+  , ExtentState
+  , getExtentState
+  , contextExtentState
+  , requestExtentBy
     -- * Repeat-press ("hold") state
   , resolveHoldRepeats
     -- * Selection
@@ -351,6 +360,7 @@ import Blink.View.Context
 import Blink.View.Mouse
 import Blink.View.Focus
 import Blink.View.Scroll
+import Blink.View.Extent
 import Blink.View.Selection
 import Blink.View.Hold
 import Blink.View.Animation

@@ -116,23 +116,19 @@ spec = describe "Blink.Interaction" $ do
       contextScrollState () (resultContext result) `shouldBe` 0.5
 
   describe "chaining two runInteractions calls via resultContext" $ do
-    -- 'resultContext' settles (applies) its queued effects but doesn't
-    -- clear them, so a second 'runInteractions' call seeded from it
-    -- re-applies the same effect again via its own opening frame. Harmless
-    -- for an idempotent effect like ScrollTo (re-setting the same absolute
-    -- position changes nothing) -- but a focus change's "from" is
-    -- recomputed fresh at apply time, so a second application reports it
-    -- coming from wherever it already ended up, not where it actually
-    -- started.
+    -- 'resultContext' settles (applies) its queued effects and clears them
+    -- from the output queue (see 'settleAndClearEffects'), so a second
+    -- 'runInteractions' call seeded from it starts with nothing left to
+    -- re-apply.
     it "still reports the same scroll position after being carried into a second call" $ do
       seeded <- runInteractions testBounds seedAt0 (requestScrollTo () 0.5) [] []
       result <- runInteractions testBounds (resultContext seeded) tick [] []
       contextScrollState () (resultContext result) `shouldBe` 0.5
 
-    it "reports no loser when carried into a second call, even though it really came from a focused element" $ do
+    it "still reports the real loser when carried into a second call" $ do
       seeded  <- runInteractions testBounds seedAt0 (setFocus () >> requestClearFocus Nothing) [] []
       chained <- runInteractions testBounds (resultContext seeded) probeFocusChange [] []
-      resultMessages chained `shouldBe` [(False, False)]
+      resultMessages chained `shouldBe` [(False, True)]
 
     it "reports the real origin when the change is primed and observed within one continuous call instead" $ do
       result <- runInteractions testBounds seedAt0

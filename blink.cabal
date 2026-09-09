@@ -49,6 +49,7 @@ library
         Blink.View.Mouse
         Blink.View.Navigation
         Blink.View.Scroll
+        Blink.View.Extent
         Blink.View.Selection
         Blink.Controls.Button
         Blink.Controls.Checkbox

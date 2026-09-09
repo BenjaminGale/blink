@@ -71,8 +71,8 @@ items = [1, 2, 3]
 
 testColumns :: [ColumnConfig TestElem String Int]
 testColumns =
-  [ ColumnConfig { colHeader = marker "H-Name", colWidth = exactly 40, colCell = cellMarker "Name" }
-  , ColumnConfig { colHeader = marker "H-Age",  colWidth = exactly 60, colCell = cellMarker "Age" }
+  [ ColumnConfig { colHeader = marker "H-Name", colWidth = ColumnFixed 40, colCell = cellMarker "Name" }
+  , ColumnConfig { colHeader = marker "H-Age",  colWidth = ColumnFixed 60, colCell = cellMarker "Age" }
   ]
 
 renderTable :: [Attribute (TableConfig SingleSelection TestElem String Int)] -> View TestElem String ()
@@ -85,8 +85,8 @@ renderTable attrs = runElement $ table Part
 
 silentColumns :: [ColumnConfig TestElem String Int]
 silentColumns =
-  [ ColumnConfig { colHeader = emptyElement, colWidth = exactly 40, colCell = const emptyElement }
-  , ColumnConfig { colHeader = emptyElement, colWidth = exactly 60, colCell = const emptyElement }
+  [ ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 40, colCell = const emptyElement }
+  , ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 60, colCell = const emptyElement }
   ]
 
 -- | Like 'renderTable', but with silent cells\/header -- for tests that
@@ -110,7 +110,7 @@ widgetSpec = describe "table" $
       [Wait 1]
     resultMessages result `shouldBe`
       [ "H-Name@0.0,0.0+40.0"
-      , "H-Age@41.0,0.0+60.0" -- +1 for the divider between header cells
+      , "H-Age@45.0,0.0+60.0" -- +5 for the resize handle between header cells
       , "Name1@0.0,20.0+40.0"
       , "Age1@40.0,20.0+60.0"
       , "Name2@0.0,40.0+40.0"
@@ -133,7 +133,7 @@ scrollingSpec = describe "table header" $ do
     let headerMsgs = filter (\m -> take 2 m == "H-") (resultMessages result)
     -- Always at y 0, full column widths -- the header sits in its own
     -- fixed slot above the (here, scrolling) rows, not inside them.
-    headerMsgs `shouldBe` ["H-Name@0.0,0.0+40.0", "H-Age@41.0,0.0+60.0"]
+    headerMsgs `shouldBe` ["H-Name@0.0,0.0+40.0", "H-Age@45.0,0.0+60.0"]
 
   it "is not itself a selectable row -- clicking it fires nothing" $ do
     result <- runInteractions shortBounds seedCtx
@@ -145,7 +145,38 @@ scrollingSpec = describe "table header" $ do
       [ClickAt (at 10 10)]
     resultMessages result `shouldBe` []
 
+resizingSpec :: Spec
+resizingSpec = describe "table column resizing" $
+  it "dragging the handle between two columns resizes them and leaves other columns' widths unchanged" $ do
+    -- The handle between "Name" (0-40) and "Age" (40-100) spans x 40-45,
+    -- centred at 42.5. Dragging its centre 10px right should grow "Name"
+    -- by 10 and shrink "Age" by 10, leaving their combined 100px (and
+    -- every row's) unchanged.
+    let handleCentre = at 42.5 10
+
+    dragged <- runInteractions testBounds seedCtx
+      (renderSilentTable [selection (unselected items)])
+      [MoveTo handleCentre]
+      [MouseDown handleCentre, DragTo (at 52.5 10)]
+
+    result <- runInteractions testBounds (resultContext dragged)
+      (renderTable [selection (unselected items)])
+      []
+      [Wait 1]
+
+    resultMessages result `shouldBe`
+      [ "H-Name@0.0,0.0+50.0"
+      , "H-Age@55.0,0.0+50.0"
+      , "Name1@0.0,20.0+50.0"
+      , "Age1@50.0,20.0+50.0"
+      , "Name2@0.0,40.0+50.0"
+      , "Age2@50.0,40.0+50.0"
+      , "Name3@0.0,60.0+50.0"
+      , "Age3@50.0,60.0+50.0"
+      ]
+
 spec :: Spec
 spec = describe "Blink.Controls.Table" $ do
   widgetSpec
   scrollingSpec
+  resizingSpec

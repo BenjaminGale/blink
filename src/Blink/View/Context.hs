@@ -2,13 +2,13 @@
 Module: Blink.View.Context
 
 Internal. The 'View' monad, the 'ViewContext' record, the render loop built
-on it, and the state types threaded through it (focus, scroll, selection,
-hold, animation, navigation) — kept here, rather than in modules of their
-own, because 'ViewContext' embeds them directly and needs their
+on it, and the state types threaded through it (focus, scroll, extent,
+selection, hold, animation, navigation) — kept here, rather than in modules
+of their own, because 'ViewContext' embeds them directly and needs their
 definitions regardless of whether anything else does.
 
 Feature modules ("Blink.View.Mouse", "Blink.View.Focus",
-"Blink.View.Scroll", "Blink.View.Selection", "Blink.View.Hold",
+"Blink.View.Scroll", "Blink.View.Extent", "Blink.View.Selection", "Blink.View.Hold",
 "Blink.View.Animation", "Blink.View.Navigation") import this module for
 context access and build their own topic's public API on top — pure
 helpers and monadic accessors alike. "Blink.View" re-exports the combined
@@ -33,6 +33,7 @@ module Blink.View.Context
   , getMessages
   , hasPendingUiEffects
   , settleEffects
+  , settleAndClearEffects
   , contextRequiresAnimation
     -- * Messages
   , Out (..)
@@ -94,6 +95,8 @@ module Blink.View.Context
     -- * Scroll (pure)
   , ScrollState (..)
   , clampScrollPos
+    -- * Extent (pure)
+  , ExtentState (..)
     -- * Selection (pure)
   , Selection (..)
   , selectionLow
@@ -368,6 +371,14 @@ newtype ScrollState = ScrollState { scrollPosition :: Double }
 clampScrollPos :: Double -> Double
 clampScrollPos = max 0 . min 1
 
+-- | An accumulated offset for one element, in whatever unit the caller
+-- gives it (e.g. pixels) -- unlike 'ScrollState', never clamped to
+-- @[0, 1]@; a caller wanting bounds of its own (e.g. a minimum column
+-- width) applies them itself when reading it back. Defaults to @0@ for
+-- an element nothing has adjusted yet.
+newtype ExtentState = ExtentState { extentValue :: Double }
+  deriving (Eq, Ord, Show)
+
 --------------------------------------------------------------------------------
 -- Selection (pure)
 --------------------------------------------------------------------------------
@@ -522,7 +533,7 @@ defaultNavigationKeys = NavigationKeys
 -- "Blink.View.Focus" constructs @Focus@\/@ClearFocus@) but not re-exported
 -- from "Blink.View": produced only via 'Blink.View.Scroll.requestScrollTo',
 -- 'Blink.View.Scroll.requestScrollBy', 'Blink.View.Scroll.postScrollBy',
--- 'Blink.View.Selection.requestSelectionAt',
+-- 'Blink.View.Extent.requestExtentBy', 'Blink.View.Selection.requestSelectionAt',
 -- @Blink.View.Focus.requestFocus@, or @Blink.View.Focus.requestClearFocus@.
 data UiEffect e
   = ScrollTo e Double
@@ -539,6 +550,11 @@ data UiEffect e
     -- Composes with other @ScrollBy@ effects queued in the same frame for
     -- the same element rather than last-write-wins. See
     -- 'Blink.View.Scroll.requestScrollBy'\/'Blink.View.Scroll.postScrollBy'.
+  | AdjustExtent e Double
+    -- ^ Adjusts an element's 'ExtentState' by a delta, unclamped —
+    -- composes with other @AdjustExtent@ effects queued in the same
+    -- frame for the same element, the same way @ScrollBy@ does. See
+    -- 'Blink.View.Extent.requestExtentBy'.
   | SetSelectionAt e Selection
     -- ^ See 'Blink.View.Selection.requestSelectionAt'.
   | SetHoldState e (Maybe HoldState)
@@ -571,11 +587,13 @@ data Out e msg
 
 -- | Cross-frame presentation state. Persists unchanged across frames; never
 -- exposed to the application. Scroll position is tracked per element
--- (@elmScrollStates@), as is repeat-press ("hold") state
--- (@elmHoldStates@); selection is exclusive across elements, tracked as a
--- single 'SelectionSlot' (@elmSelection@) rather than a map.
+-- (@elmScrollStates@), as is an unclamped accumulated extent
+-- (@elmExtentStates@) and repeat-press ("hold") state (@elmHoldStates@);
+-- selection is exclusive across elements, tracked as a single
+-- 'SelectionSlot' (@elmSelection@) rather than a map.
 data ElementState e = ElementState
   { elmScrollStates   :: Map.Map e ScrollState
+  , elmExtentStates   :: Map.Map e ExtentState
   , elmHoldStates     :: Map.Map e HoldState
   , elmSelection      :: SelectionSlot e
   }
@@ -711,6 +729,7 @@ emptyViewContext bounds input thm measurer = ViewContext
   , ctxMouse           = advanceButton False (inputLeftButtonDown input) emptyMouse
   , ctxElements        = ElementState
       { elmScrollStates  = Map.empty
+      , elmExtentStates  = Map.empty
       , elmHoldStates    = Map.empty
       , elmSelection     = NoSelection
       }
@@ -976,6 +995,12 @@ writeScrollState :: Ord e => e -> Double -> ViewContext e msg -> ViewContext e m
 writeScrollState eid v ctx = ctx { ctxElements = (ctxElements ctx)
   { elmScrollStates = Map.insert eid (ScrollState (clampScrollPos v)) (elmScrollStates (ctxElements ctx)) } }
 
+-- Internal: writes an extent value directly into the context, bypassing
+-- the deferred-effect queue. Used only by @applyUiEffects@.
+writeExtentState :: Ord e => e -> Double -> ViewContext e msg -> ViewContext e msg
+writeExtentState eid v ctx = ctx { ctxElements = (ctxElements ctx)
+  { elmExtentStates = Map.insert eid (ExtentState v) (elmExtentStates (ctxElements ctx)) } }
+
 -- Internal: writes (or clears) an element's repeat-press state directly
 -- into the context, bypassing the deferred-effect queue. Used only by
 -- @applyUiEffects@.
@@ -999,6 +1024,7 @@ applyUiEffects effects ctx0 = foldl' step ctx0 effects
   where
     step ctx (ScrollTo eid v)        = writeScrollState eid v ctx
     step ctx (ScrollBy eid dv)       = writeScrollState eid (currentScroll eid ctx + dv) ctx
+    step ctx (AdjustExtent eid dv)   = writeExtentState eid (currentExtent eid ctx + dv) ctx
     step ctx (SetSelectionAt eid sel) = writeSelection eid sel ctx
     step ctx (SetHoldState eid mhs)  = writeHoldState eid mhs ctx
     step ctx (Focus sid target)     = setFocusChange sid (Just target) ctx
@@ -1007,9 +1033,32 @@ applyUiEffects effects ctx0 = foldl' step ctx0 effects
     currentScroll eid ctx =
       scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
+    currentExtent eid ctx =
+      extentValue (Map.findWithDefault (ExtentState 0) eid (elmExtentStates (ctxElements ctx)))
+
 -- | Applies whatever effects are pending on @ctx@.
 settleEffects :: Ord e => ViewContext e msg -> ViewContext e msg
 settleEffects ctx = applyUiEffects (getUiEffects ctx) ctx
+
+-- | 'settleEffects', plus drops the settled 'UiEffect's (only) from the
+-- output queue -- unlike bare 'settleEffects', safe to treat as "this
+-- frame is done" and use as the seed for a later frame, since a
+-- non-idempotent effect (e.g. @ScrollBy@\/@AdjustExtent@) queued on the
+-- settled frame can't then be re-applied a second time when that later
+-- frame's own 'nextFrameContext'\/'rerenderContext' settles again. Draw
+-- commands and messages already queued are left untouched (dropping them
+-- here would falsify a caller reading them off the very context this
+-- returns). Distinct from either of those: it leaves
+-- bounds\/input\/theme\/focus\/hover exactly as they were, rather than
+-- also advancing them the way a genuinely new (or re-rendered) frame
+-- would.
+settleAndClearEffects :: Ord e => ViewContext e msg -> ViewContext e msg
+settleAndClearEffects ctx = ctx'
+  { ctxOutputs = (ctxOutputs ctx') { outEvents = filter isMsg (outEvents (ctxOutputs ctx')) } }
+  where
+    ctx' = settleEffects ctx
+    isMsg (OutMsg _) = True
+    isMsg (OutUi _)  = False
 
 -- | 'True' when any effect is pending on @ctx@.
 hasPendingUiEffects :: ViewContext e msg -> Bool

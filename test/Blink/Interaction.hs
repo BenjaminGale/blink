@@ -126,7 +126,17 @@ runInteractions bounds seed action setupIxns testIxns = do
     }
   where
     testFrames = if null testIxns then [Wait 1] else testIxns
-    settle = settleEffects
+    -- Plain 'settleEffects' applies queued effects but leaves them in the
+    -- output queue -- fine for a one-shot read, but chaining 'resultContext'
+    -- into a further 'runInteractions' call (a documented, common pattern)
+    -- would then settle them a *second* time when that call's own first
+    -- frame starts, silently double-applying anything non-idempotent (e.g.
+    -- 'Blink.View.requestExtentBy', 'Blink.View.requestScrollBy'). Use
+    -- 'settleAndClearEffects' instead, which also clears the queue --
+    -- unlike 'rerenderContext', it does that *without* also advancing
+    -- focus\/hover the way a genuinely new (or re-rendered) frame would,
+    -- which 'resultContext' must not do on its own.
+    settle = settleAndClearEffects
 
     step ctx frame = runView action (nextFrameContext bounds frame (contextTheme ctx) (contextAnimation ctx) ctx)
 
