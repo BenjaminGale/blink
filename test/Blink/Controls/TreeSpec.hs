@@ -8,9 +8,11 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
 import Blink.Controls.List
-  ( Direction (..), MultiSelection, SingleSelection, isItem, moveCursor, multiSelected, onSelectionChanged
-  , rowHeight, selectItem, selectedItems, selection, unselected
+  ( Direction (..), ListPart (..), MultiSelection, SingleSelection, isItem, moveCursor, multiSelected
+  , onSelectionChanged, rowHeight, selectItem, selectedItems, selection, unselected
   )
+import Blink.Controls.List.Style (listStyleKey)
+import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Controls.Tree
 import Blink.Element (Element (..), runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
@@ -85,6 +87,20 @@ testTheme = Theme
     emptyMetrics = Metrics
       { metricsMargin      = uniform 0
       , metricsPadding     = uniform 0
+      , metricsBorderEdges = noBorder
+      }
+
+-- | 'testTheme', but with real padding on the list's own chrome -- a
+-- regression case for the bug where a Right\/Left-driven scroll read the
+-- list's outer, pre-chrome bounds instead of the padded interior
+-- 'listBase' itself actually scrolls rows within (see 'tree').
+chromeTheme :: Theme TestElem
+chromeTheme = testTheme
+  { themeElementStyles = Map.singleton listStyleKey (chromeMetrics, snd (themeDefaultStyle testTheme)) }
+  where
+    chromeMetrics = Metrics
+      { metricsMargin      = uniform 0
+      , metricsPadding     = uniform 8
       , metricsBorderEdges = noBorder
       }
 
@@ -235,9 +251,171 @@ multiKeyboardSpec = describe "tree keyboard with MultiSelection" $
     resultMessages result `shouldBe` ["Selected:" ++ show expected]
     selectedItems expected `shouldBe` ["src"]
 
+-- | The tree's own scrollbar id -- 'tree' reads\/writes its position
+-- under @mkId (TreeRow (ListScrollBar ScrollBar))@, the same @tag@
+-- pattern 'Blink.Controls.List.list' documents for its own.
+treeScrollEid :: TestElem
+treeScrollEid = Part (TreeRow (ListScrollBar ScrollBar))
+
+-- | Narrower than 'testBounds' -- with both "src" and "src/Controls"
+-- expanded there are 5 rows (100px), so a 40px viewport (2 rows) is
+-- scrollable.
+scrollTestBounds :: Rectangle
+scrollTestBounds = Rectangle 0 0 100 40
+
+scrollingKeyboardSpec :: Spec
+scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
+  it "scrolls a Left-driven parent jump into view, the same way Up/Down already does" $ do
+    let expandedBoth   = Set.fromList ["src", "src/Controls"]
+        visibleItems   = map fst (flattenVisible forest0 expandedBoth)
+        cursorOnButton = selectItem "src/Controls/Button.hs" visibleItems
+
+    -- Scrolled all the way down: rows 0-2 ("src".."src/Controls") are out
+    -- of view, cursor starts on the last row, "src/Controls/Button.hs".
+    seeded <- resultContext <$> runInteractions scrollTestBounds seedCtx
+      (requestScrollTo treeScrollEid 1)
+      []
+      []
+
+    -- Left moves the cursor up one row to its parent, "src/Controls" (row
+    -- 2 of 5, y 40-60) -- above the current 40px window (y 60-100) -- so
+    -- this should scroll just enough to bring its top edge into view.
+    result <- runInteractions scrollTestBounds seeded
+      (renderSilentTree
+        [ expanded expandedBoth
+        , selection cursorOnButton
+        , onSelectionChanged (\s -> [OutMsg (selectedMsg s)])
+        ])
+      []
+      [PressKey KeyLeft []]
+
+    resultMessages result `shouldBe` [selectedMsg (moveCursor Prev cursorOnButton)]
+    contextScrollState treeScrollEid (resultContext result) `shouldBe` (2 / 3)
+
+  it "scrolls a Right-driven move into a sibling below the viewport into view" $ do
+    let expandedBoth  = Set.fromList ["src", "src/Controls"]
+        visibleItems  = map fst (flattenVisible forest0 expandedBoth)
+        cursorOnChild = selectItem "src/List.hs" visibleItems
+
+    -- Starts scrolled to the top: rows 0-1 ("src", "src/List.hs") are in
+    -- view, cursor on the second (a leaf, no chevron to expand).
+    result <- runInteractions scrollTestBounds seedCtx
+      (renderSilentTree
+        [ expanded expandedBoth
+        , selection cursorOnChild
+        , onSelectionChanged (\s -> [OutMsg (selectedMsg s)])
+        ])
+      []
+      [PressKey KeyRight []]
+
+    -- Right moves the cursor down one row to "src/Controls" (row 3 of 5,
+    -- y 40-60) -- below the current 40px window (y 0-40) -- so this
+    -- should scroll just enough to bring its bottom edge into view.
+    resultMessages result `shouldBe` [selectedMsg (moveCursor Next cursorOnChild)]
+    contextScrollState treeScrollEid (resultContext result) `shouldBe` (1 / 3)
+
+  it "scrolls the child revealed by expanding a bottom-edge row into view once Right navigates onto it" $ do
+    let expandedSrc      = Set.singleton "src"
+        expandedBoth     = Set.fromList ["src", "src/Controls"]
+        visibleBefore    = map fst (flattenVisible forest0 expandedSrc)
+        cursorOnControls = selectItem "src/Controls" visibleBefore
+
+    -- Scrolled so "src/Controls" (row 2 of 4, y 40-60) is the last row in
+    -- the 40px window (y 20-60) -- at the bottom edge, still fully
+    -- visible, before it has any children of its own in view.
+    step1 <- runInteractions scrollTestBounds seedCtx
+      (requestScrollTo treeScrollEid (1 / 2))
+      []
+      []
+
+    -- Right expands "src/Controls": the cursor stays put (still fully in
+    -- view), so nothing scrolls yet -- its new child,
+    -- "src/Controls/Button.hs", is now the row just below the viewport.
+    step2 <- runInteractions scrollTestBounds (resultContext step1)
+      (renderSilentTree
+        [ expanded expandedSrc
+        , selection cursorOnControls
+        , onExpansionChanged (\s -> [OutMsg (expandedMsg s)])
+        ])
+      []
+      [PressKey KeyRight []]
+    resultMessages step2 `shouldBe` [expandedMsg expandedBoth]
+    contextScrollState treeScrollEid (resultContext step2) `shouldBe` (1 / 2)
+
+    -- Right again, now that "src/Controls" is expanded and the app has
+    -- passed the updated set back in: moves the cursor onto that child,
+    -- which should scroll it fully into view.
+    let visibleAfter    = map fst (flattenVisible forest0 expandedBoth)
+        cursorOnControls' = selectItem "src/Controls" visibleAfter
+    step3 <- runInteractions scrollTestBounds (resultContext step2)
+      (renderSilentTree
+        [ expanded expandedBoth
+        , selection cursorOnControls'
+        , onSelectionChanged (\s -> [OutMsg (selectedMsg s)])
+        ])
+      []
+      [PressKey KeyRight []]
+    resultMessages step3 `shouldBe` [selectedMsg (moveCursor Next cursorOnControls')]
+    contextScrollState treeScrollEid (resultContext step3) `shouldBe` (2 / 3)
+
+  it "scrolls a later, unrelated sibling pushed down by an earlier expansion into view" $ do
+    let expandedBoth = Set.fromList ["src", "src/Controls"]
+        visibleItems  = map fst (flattenVisible forest0 expandedBoth)
+        cursorOnButton = selectItem "src/Controls/Button.hs" visibleItems
+
+    -- Scrolled so the window shows rows 2-3 of 5 ("src/Controls" and
+    -- "src/Controls/Button.hs", y 40-80); cursor on the last of those, a
+    -- leaf. "test" (row 4, y 80-100) -- not a descendant of anything just
+    -- expanded, simply the next later sibling, pushed down by "src" and
+    -- "src/Controls" both being expanded -- sits just below the window.
+    seeded <- resultContext <$> runInteractions scrollTestBounds seedCtx
+      (requestScrollTo treeScrollEid (2 / 3))
+      []
+      []
+
+    result <- runInteractions scrollTestBounds seeded
+      (renderSilentTree
+        [ expanded expandedBoth
+        , selection cursorOnButton
+        , onSelectionChanged (\s -> [OutMsg (selectedMsg s)])
+        ])
+      []
+      [PressKey KeyRight []]
+
+    resultMessages result `shouldBe` [selectedMsg (moveCursor Next cursorOnButton)]
+    contextScrollState treeScrollEid (resultContext result) `shouldBe` 1
+
+chromeSeedCtx :: ViewContext TestElem String
+chromeSeedCtx = emptyViewContext scrollTestBounds noInput chromeTheme noOpTextMeasurer
+
+chromeSpec :: Spec
+chromeSpec = describe "tree keyboard scrolling with list chrome" $
+  it "accounts for the list's own padding, not just its outer bounds, when scrolling a row into view" $ do
+    let expandedBoth = Set.fromList ["src", "src/Controls"]
+        visibleItems  = map fst (flattenVisible forest0 expandedBoth)
+        cursorOnSrc   = selectItem "src" visibleItems
+
+    result <- runInteractions scrollTestBounds chromeSeedCtx
+      (renderSilentTree
+        [ expanded expandedBoth
+        , selection cursorOnSrc
+        , onSelectionChanged (\s -> [OutMsg (selectedMsg s)])
+        ])
+      []
+      [PressKey KeyRight []]
+
+    resultMessages result `shouldBe` [selectedMsg (moveCursor Next cursorOnSrc)]
+    -- 40px outer bounds, 8px padding each side -> 24px usable viewport;
+    -- content 100px -> max offset 76px. Row 1 (y 20-40) doesn't fit the
+    -- 24px window, so this must scroll -- reading the outer 40px bounds
+    -- alone would wrongly conclude it already fits.
+    contextScrollState treeScrollEid (resultContext result) `shouldBe` (16 / 76)
+
 spec :: Spec
 spec = describe "Blink.Controls.Tree" $ do
   flattenVisibleSpec
   widgetSpec
   keyboardSpec
   multiKeyboardSpec
+  scrollingKeyboardSpec
+  chromeSpec

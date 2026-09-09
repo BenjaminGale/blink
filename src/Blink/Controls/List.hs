@@ -88,6 +88,7 @@ module Blink.Controls.List
   , listBase
   , list
   , rowsSpacer
+  , scrollRowIntoView
   , selection
   , renderItem
   , rowHeight
@@ -571,10 +572,10 @@ listBase mkId cfg = do
   where
     s0   = lcSelection cfg
 
-    -- 'contentHeight' as the viewport height: guarantees 'scrollRowIntoView'
-    -- always no-ops for these rows, correctly, since they're never actually
-    -- scrolled -- 'rows' is used only for the plain, fits-without-scrolling
-    -- render path (see 'renderViewport').
+    -- 'rows' is used only for the plain, fits-without-scrolling render
+    -- path (see 'renderViewport'), where a row is never actually
+    -- scrollable -- 'contentHeight' as the viewport height guarantees
+    -- 'scrollRowIntoView' always no-ops for these rows, correctly.
     rows = vBox [children (zipWith (row contentHeight) [0 :: Int ..] (itemStates s0))]
 
     itemCount = length (itemStates s0)
@@ -625,28 +626,7 @@ listBase mkId cfg = do
       Nothing  -> pure ()
       Just idx -> do
         bounds <- getBounds
-        scrollRowIntoView (rectHeight bounds) idx
-
-    -- Requests just enough scroll to bring row @idx@ (0-based, into the
-    -- full item list) into a @viewportHeight@-tall viewport -- top-aligned
-    -- if it currently falls above, bottom-aligned if below. A no-op when
-    -- the list isn't scrollable at all, or the row is already fully
-    -- within the viewport. Shared by 'scrollCursorIntoView' (a keyboard
-    -- move) and 'rowActivated' (a click landing on a row not yet fully
-    -- scrolled into view -- see its own comment).
-    scrollRowIntoView viewportHeight idx = when (maxOffset > 0) $ do
-      scrollFrac <- getScrollState listScrollEid
-      let rh        = lcRowHeight cfg
-          rowTop    = fromIntegral idx * rh
-          rowBottom = rowTop + rh
-          offsetY   = scrollFrac * maxOffset
-          newFrac
-            | rowTop < offsetY                    = Just (rowTop / maxOffset)
-            | rowBottom > offsetY + viewportHeight = Just ((rowBottom - viewportHeight) / maxOffset)
-            | otherwise                            = Nothing
-      mapM_ (requestScrollTo listScrollEid) newFrac
-      where
-        maxOffset = contentHeight - viewportHeight
+        scrollRowIntoView mkId cfg itemCount (rectHeight bounds) idx
 
     -- Renders 'rows' plain when they fit the list's own bounds; once they
     -- overflow, composites a vertical 'scrollBar' alongside them (an
@@ -722,7 +702,7 @@ listBase mkId cfg = do
       let s' = activate item s0
       fireSelectionChanged s'
       fireItemActivated item
-      scrollRowIntoView viewportHeight idx
+      scrollRowIntoView mkId cfg itemCount viewportHeight idx
 
     rowStates st = Set.fromList
       [ if isSelected st then listSelected else listUnselected
@@ -762,6 +742,38 @@ list mkId attrs = Element
   }
   where
     cfg = resolve defaultListConfig attrs
+
+-- | Requests just enough scroll to bring row @idx@ (0-based, into a flat
+-- list of @itemCount@ rows at @cfg@'s own 'lcRowHeight') into a
+-- @viewportHeight@-tall viewport -- top-aligned if it currently falls
+-- above, bottom-aligned if below. A no-op when the content already fits
+-- without scrolling, or the row is already fully in view. 'listBase'
+-- itself uses this for both a keyboard-moved cursor and a click landing
+-- on a row not yet fully in view; exported so a control built on top
+-- (e.g. 'Blink.Controls.Tree.tree', for its own Left\/Right-driven
+-- cursor moves) can keep its own moves in view the same way.
+--
+-- @viewportHeight@ is always the caller's own current bounds height
+-- ('Blink.View.getBounds' read at the right point), never fetched here
+-- -- a row's own nested 'control' sees only its own, much smaller,
+-- bounds, not its list's, so the read has to happen at the right level
+-- and be passed down.
+scrollRowIntoView :: Ord e => (ListPart a -> e) -> ListConfig sel e msg a -> Int -> Double -> Int -> View e msg ()
+scrollRowIntoView mkId cfg itemCount viewportHeight idx = when (maxOffset > 0) $ do
+  scrollFrac <- getScrollState listScrollEid
+  let rh        = lcRowHeight cfg
+      rowTop    = fromIntegral idx * rh
+      rowBottom = rowTop + rh
+      offsetY   = scrollFrac * maxOffset
+      newFrac
+        | rowTop < offsetY                    = Just (rowTop / maxOffset)
+        | rowBottom > offsetY + viewportHeight = Just ((rowBottom - viewportHeight) / maxOffset)
+        | otherwise                            = Nothing
+  mapM_ (requestScrollTo listScrollEid) newFrac
+  where
+    listScrollEid = mkId (ListScrollBar ScrollBar)
+    contentHeight = fromIntegral itemCount * lcRowHeight cfg
+    maxOffset     = contentHeight - viewportHeight
 
 -- | A single fixed-height stand-in for every current row stacked
 -- vertically, used only to measure a list-like control's own height --

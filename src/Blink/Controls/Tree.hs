@@ -30,6 +30,7 @@ module Blink.Controls.Tree
   ) where
 
 import Control.Monad (void, when)
+import Data.List (findIndex)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (listToMaybe)
 import Data.Set (Set)
@@ -41,13 +42,13 @@ import Blink.Controls.Control
 import Blink.Controls.List
 import Blink.Controls.Tree.Style (treeChevronStyleKey)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, noIntrinsicSize)
-import Blink.Geometry (Alignment (TopLeft))
+import Blink.Geometry (Alignment (TopLeft), Rectangle (..), insetRect)
 import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (TextAlign (AlignCenter))
-import Blink.Style (Style (..))
-import Blink.View (Out, currentStyle)
+import Blink.Style (Style (..), StyleSet (..))
+import Blink.View (Out, currentStyle, getBounds, getStyleSet)
 import Blink.View.Drawing (drawText)
 
 -- | Every currently visible row of @forest@, in document order, paired
@@ -181,9 +182,15 @@ tree mkId attrs = Element
     visRows  = visibleNodes (tcForest cfg) (tcExpanded cfg)
     nodeInfo = Map.fromList [ (x, (depth, hasChildren)) | (x, depth, hasChildren) <- visRows ]
 
+    -- 'getBounds' here is the outer, pre-chrome rectangle; 'listBase'
+    -- itself only sees the chrome-inset one, inside 'control''s own
+    -- content callback, so 'chromeInsets' has to be applied again here.
     run = do
-      li <- listBase (mkId . TreeRow) listCfg
-      mapM_ (handleKey li) (ciKeysPressed (liControl li))
+      li            <- listBase (mkId . TreeRow) listCfg
+      (m, styleSet) <- getStyleSet (ccStyleKey (lcControl listCfg))
+      outer         <- getBounds
+      let viewportHeight = rectHeight (insetRect (chromeInsets m (styleBase styleSet)) outer)
+      mapM_ (handleKey viewportHeight) (ciKeysPressed (liControl li))
 
     -- | Right expands a collapsed node with children (cursor stays), or
     -- -- once it's already expanded -- moves the cursor to the very next
@@ -192,7 +199,8 @@ tree mkId attrs = Element
     -- children (cursor stays), or otherwise moves the cursor up to the
     -- node's parent (see 'stepsToParent'). Either way, a change to the
     -- expansion set or the selection is reported the same way clicking a
-    -- chevron\/pressing Up\/Down already reports one.
+    -- chevron\/pressing Up\/Down already reports one, and a moved cursor
+    -- is scrolled into view the same way one moved by Up\/Down already is.
     --
     -- Both moves reach the target purely via 'moveCursor' -- stepped
     -- once for Right, as many times as 'stepsToParent' says for Left --
@@ -201,20 +209,24 @@ tree mkId attrs = Element
     -- collapses a 'RangeSelection' run to a single item. A cursor move
     -- triggered by navigating the tree's shape must never carry either
     -- side effect, whatever selection model the caller has chosen.
-    handleKey li ev = case (key ev, cursorItem (liSelection li)) of
+    handleKey viewportHeight ev = case (key ev, cursorItem s0) of
       (KeyRight, Just x) -> case Map.lookup x nodeInfo of
         Just (_, True) | not (Set.member x (tcExpanded cfg)) -> setExpanded (Set.insert x (tcExpanded cfg))
-        Just _                                               -> moveCursorTo (moveCursor Next (liSelection li))
+        Just _                                               -> moveCursorTo (moveCursor Next s0)
         Nothing                                              -> pure ()
       (KeyLeft, Just x) -> case Map.lookup x nodeInfo of
         Just (_, True) | Set.member x (tcExpanded cfg) -> setExpanded (Set.delete x (tcExpanded cfg))
         _                                               -> maybe (pure ()) climbToParent (stepsToParent x)
       _ -> pure ()
       where
-        setExpanded s'    = runHandlers (tcOnExpansionChanged cfg) s'
-        moveCursorTo s'   = when (s' /= liSelection li) (runHandlers (lcOnSelectionChanged listCfg) s')
-        climbToParent n   = moveCursorTo (applyN n (moveCursor Prev) (liSelection li))
-        applyN n f        = (!! n) . iterate f
+        s0              = lcSelection listCfg
+        setExpanded s'  = runHandlers (tcOnExpansionChanged cfg) s'
+        moveCursorTo s' = when (s' /= s0) $ do
+          runHandlers (lcOnSelectionChanged listCfg) s'
+          let rowIndex = cursorItem s' >>= \x -> findIndex (\(y, _, _) -> y == x) visRows
+          mapM_ (scrollRowIntoView (mkId . TreeRow) listCfg (length visRows) viewportHeight) rowIndex
+        climbToParent n = moveCursorTo (applyN n (moveCursor Prev) s0)
+        applyN n f       = (!! n) . iterate f
 
     -- | How many rows back from @x@ its parent sits -- the nearest
     -- earlier visible row shallower than @x@'s own depth -- if it has
