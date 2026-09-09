@@ -7,11 +7,14 @@ import Data.Tree (Tree (..))
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
-import Blink.Controls.List (SingleSelection, isItem, rowHeight, selection, unselected)
+import Blink.Controls.List
+  ( Direction (..), SingleSelection, activate, isItem, moveCursor, onSelectionChanged, rowHeight, selectItem
+  , selection, unselected
+  )
 import Blink.Controls.Tree
 import Blink.Element (Element (..), runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
-import Blink.Input (InputState (..))
+import Blink.Input (InputState (..), Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), TextAlign (..))
@@ -167,7 +170,48 @@ widgetSpec = describe "tree" $ do
       [ClickAt (atRow 2 24)]
     resultMessages result `shouldBe` []
 
+expandedMsg :: Set.Set String -> String
+expandedMsg s = "Expanded:" ++ show (Set.toList s)
+
+selectedMsg :: SingleSelection String -> String
+selectedMsg s = "Selected:" ++ show s
+
+keyReactions :: [Attribute (TreeConfig SingleSelection TestElem String String)]
+keyReactions =
+  [ onExpansionChanged (\s -> [OutMsg (expandedMsg s)])
+  , onSelectionChanged (\s -> [OutMsg (selectedMsg s)])
+  ]
+
+keyboardSpec :: Spec
+keyboardSpec = describe "tree keyboard expand/collapse" $
+  it "Right expands a collapsed parent, Right again moves into its first child, Left moves back to the parent" $ do
+    let cursorOnSrc = selectItem "src" items
+
+    -- Right on the collapsed root: expands it, cursor stays on "src".
+    step1 <- runInteractions testBounds seedCtx
+      (renderSilentTree (expanded Set.empty : selection cursorOnSrc : keyReactions))
+      []
+      [PressKey KeyRight []]
+    resultMessages step1 `shouldBe` [expandedMsg (Set.singleton "src")]
+
+    -- Right again, now that "src" is expanded: moves the cursor to the
+    -- very next visible row, its first child "src/List.hs".
+    step2 <- runInteractions testBounds (resultContext step1)
+      (renderSilentTree (expanded (Set.singleton "src") : selection cursorOnSrc : keyReactions))
+      []
+      [PressKey KeyRight []]
+    let cursorOnFirstChild = moveCursor Next cursorOnSrc
+    resultMessages step2 `shouldBe` [selectedMsg cursorOnFirstChild]
+
+    -- Left on that leaf child: moves the cursor back to its parent, "src".
+    step3 <- runInteractions testBounds (resultContext step2)
+      (renderSilentTree (expanded (Set.singleton "src") : selection cursorOnFirstChild : keyReactions))
+      []
+      [PressKey KeyLeft []]
+    resultMessages step3 `shouldBe` [selectedMsg (activate "src" cursorOnFirstChild)]
+
 spec :: Spec
 spec = describe "Blink.Controls.Tree" $ do
   flattenVisibleSpec
   widgetSpec
+  keyboardSpec

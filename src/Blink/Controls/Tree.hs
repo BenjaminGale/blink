@@ -31,6 +31,7 @@ module Blink.Controls.Tree
 
 import Control.Monad (void, when)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (listToMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -41,6 +42,7 @@ import Blink.Controls.List
 import Blink.Controls.Tree.Style (treeChevronStyleKey)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, noIntrinsicSize)
 import Blink.Geometry (Alignment (TopLeft))
+import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (TextAlign (AlignCenter))
@@ -159,7 +161,9 @@ chevronGlyph isExpanded = if isExpanded then "\9660" else "\9654"
 
 -- | A tree built on 'listBase' (see the module header). @mkId@ builds
 -- every part's element id from a 'TreePart', the same relationship
--- 'listBase's own @mkId@ has to 'ListPart'.
+-- 'listBase's own @mkId@ has to 'ListPart'. Left\/Right additionally
+-- expand\/collapse a node with children, or move the cursor to its
+-- first child\/parent once it's already expanded\/collapsed.
 tree
   :: (Ord e, Ord a, SelectionModel sel, Eq (sel a))
   => (TreePart a -> e)
@@ -168,13 +172,46 @@ tree
 tree mkId attrs = Element
   { elLayout  = lcLayout listCfg
   , elMeasure = measureChrome (ccStyleKey (lcControl listCfg)) (rowsSpacer listCfg (itemStates (lcSelection listCfg)))
-  , elRun     = void (listBase (mkId . TreeRow) listCfg)
+  , elRun     = void run
   }
   where
     cfg     = resolve defaultTreeConfig attrs
     listCfg = (tcList cfg) { lcRenderItem = renderRow }
 
-    nodeInfo = Map.fromList [ (x, (depth, hasChildren)) | (x, depth, hasChildren) <- visibleNodes (tcForest cfg) (tcExpanded cfg) ]
+    visRows  = visibleNodes (tcForest cfg) (tcExpanded cfg)
+    nodeInfo = Map.fromList [ (x, (depth, hasChildren)) | (x, depth, hasChildren) <- visRows ]
+
+    run = do
+      li <- listBase (mkId . TreeRow) listCfg
+      mapM_ (handleKey li) (ciKeysPressed (liControl li))
+
+    -- | Right expands a collapsed node with children (cursor stays), or
+    -- -- once it's already expanded -- moves the cursor to the very next
+    -- visible row, which 'visibleNodes' always places right after it and
+    -- is exactly its first child. Left collapses an expanded node with
+    -- children (cursor stays), or otherwise moves the cursor to the
+    -- node's parent (see 'parentOf'). Either way, a change to the
+    -- expansion set or the selection is reported the same way clicking a
+    -- chevron\/pressing Up\/Down already reports one.
+    handleKey li ev = case (key ev, cursorItem (liSelection li)) of
+      (KeyRight, Just x) -> case Map.lookup x nodeInfo of
+        Just (_, True) | not (Set.member x (tcExpanded cfg)) -> setExpanded (Set.insert x (tcExpanded cfg))
+        Just _                                               -> moveCursorTo (moveCursor Next (liSelection li))
+        Nothing                                              -> pure ()
+      (KeyLeft, Just x) -> case Map.lookup x nodeInfo of
+        Just (_, True) | Set.member x (tcExpanded cfg) -> setExpanded (Set.delete x (tcExpanded cfg))
+        _                                               -> maybe (pure ()) (moveCursorTo . flip activate (liSelection li)) (parentOf x)
+      _ -> pure ()
+      where
+        setExpanded s' = runHandlers (tcOnExpansionChanged cfg) s'
+        moveCursorTo s' = when (s' /= liSelection li) (runHandlers (lcOnSelectionChanged listCfg) s')
+
+    -- | The nearest earlier visible row shallower than @x@'s own depth
+    -- -- @x@'s parent, if it has one.
+    parentOf x = listToMaybe [ y | (y, d, _) <- reverse before, d < myDepth ]
+      where
+        (before, atX)         = break (\(y, _, _) -> y == x) visRows
+        myDepth                = case atX of { (_, d, _) : _ -> d; [] -> 0 }
 
     renderRow st = hBox [children [indentCell depth, chevronCell x hasChildren, tcRenderNode cfg tis]]
       where
