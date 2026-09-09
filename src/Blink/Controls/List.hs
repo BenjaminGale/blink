@@ -106,11 +106,12 @@ import Blink.Controls.Control
 import Blink.Controls.List.Style (listCursor, listItemStyleKey, listNoCursor, listSelected, listStyleKey, listUnselected)
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBar, visibleFraction)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, height, noIntrinsicSize, runElement)
-import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
+import Blink.Geometry (Alignment (TopLeft), Rectangle (..), insetRect)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Shift))
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
-import Blink.View (Out, View, getBounds, getScrollState, requestScrollTo, withBounds)
+import Blink.Style (StyleSet (..))
+import Blink.View (Out, View, getBounds, getScrollState, getStyleSet, requestScrollTo, withBounds)
 import Blink.View.Drawing (withClip)
 
 -- * Selection models
@@ -528,15 +529,18 @@ onItemActivated h = overList (Attribute (\c -> c { lcOnItemActivated = lcOnItemA
 -- 'ControlInteraction' (so a control built on top of 'listBase' -- e.g. a
 -- tree, wanting Left\/Right for expand\/collapse -- can inspect keys
 -- 'listBase' itself didn't consume, via 'ciKeysPressed'), the selection
--- model resolved against this frame's /keyboard/ input, and the items
--- activated by keyboard (Enter\/Space) this frame. A click's resulting
--- change is still only ever reported via 'onSelectionChanged'\/
+-- model resolved against this frame's /keyboard/ input, the items
+-- activated by keyboard (Enter\/Space) this frame, and the chrome-inset
+-- viewport height 'scrollRowIntoView' expects, computed inside the
+-- 'control' call's own content callback where that inset applies. A click's
+-- resulting change is still only ever reported via 'onSelectionChanged'\/
 -- 'onItemActivated' -- each row is its own independently-clicked
 -- 'control', so its outcome isn't available to reflect here.
 data ListInteraction sel e msg a = ListInteraction
-  { liControl   :: ControlInteraction e msg
-  , liSelection :: sel a
-  , liActivated :: [a]
+  { liControl        :: ControlInteraction e msg
+  , liSelection      :: sel a
+  , liActivated      :: [a]
+  , liViewportHeight :: Double
   }
 
 -- | Everything 'list' does, minus being an 'Element': one 'Focusable'
@@ -566,9 +570,12 @@ listBase
   -> ListConfig sel e msg a
   -> View e msg (ListInteraction sel e msg a)
 listBase mkId cfg = do
-  r <- control ccfg
+  r             <- control ccfg
+  (m, styleSet) <- getStyleSet (ccStyleKey (lcControl cfg))
+  outer         <- getBounds
   let (finalModel, activated) = keyboardResult (ciKeysPressed r)
-  pure (ListInteraction r finalModel activated)
+      viewportHeight           = rectHeight (insetRect (chromeInsets m (styleBase styleSet)) outer)
+  pure (ListInteraction r finalModel activated viewportHeight)
   where
     s0   = lcSelection cfg
 

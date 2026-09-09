@@ -42,13 +42,13 @@ import Blink.Controls.Control
 import Blink.Controls.List
 import Blink.Controls.Tree.Style (treeChevronStyleKey)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, noIntrinsicSize)
-import Blink.Geometry (Alignment (TopLeft), Rectangle (..), insetRect)
+import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (TextAlign (AlignCenter))
-import Blink.Style (Style (..), StyleSet (..))
-import Blink.View (Out, currentStyle, getBounds, getStyleSet)
+import Blink.Style (Style (..))
+import Blink.View (Out, currentStyle)
 import Blink.View.Drawing (drawText)
 
 -- | Every currently visible row of @forest@, in document order, paired
@@ -182,15 +182,9 @@ tree mkId attrs = Element
     visRows  = visibleNodes (tcForest cfg) (tcExpanded cfg)
     nodeInfo = Map.fromList [ (x, (depth, hasChildren)) | (x, depth, hasChildren) <- visRows ]
 
-    -- 'getBounds' here is the outer, pre-chrome rectangle; 'listBase'
-    -- itself only sees the chrome-inset one, inside 'control''s own
-    -- content callback, so 'chromeInsets' has to be applied again here.
     run = do
-      li            <- listBase (mkId . TreeRow) listCfg
-      (m, styleSet) <- getStyleSet (ccStyleKey (lcControl listCfg))
-      outer         <- getBounds
-      let viewportHeight = rectHeight (insetRect (chromeInsets m (styleBase styleSet)) outer)
-      mapM_ (handleKey viewportHeight) (ciKeysPressed (liControl li))
+      li <- listBase (mkId . TreeRow) listCfg
+      mapM_ (handleKey (liViewportHeight li)) (ciKeysPressed (liControl li))
 
     -- | Right expands a collapsed node with children (cursor stays), or
     -- -- once it's already expanded -- moves the cursor to the very next
