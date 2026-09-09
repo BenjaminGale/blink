@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Data.List.NonEmpty (NonEmpty (..))
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute)
+import Blink.Controls.Control (Attribute, resolve)
 import Blink.Controls.List
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Element (Element (..), height, runElement, width)
@@ -256,6 +256,23 @@ widgetSpec = describe "list" $ do
       [Wait 1]
       [PressKey KeyDown [Shift]]
     resultMessages result `shouldBe` [selectedMsg (extendCursor Next rstart)]
+
+  it "listBase reports this frame's keyboard-driven selection/activation, matching the same-frame reactions" $ do
+    let cfg = resolve defaultListConfig
+          ( renderItem (const fixedRow)
+          : width (exactly 100)
+          : rowHeight 20
+          : selection start
+          : reactions
+          )
+        render' = do
+          li <- listBase Part cfg
+          emit ("Interaction:" ++ show (liSelection li) ++ "/" ++ show (liActivated li))
+    result <- runInteractions testBounds seedCtx render' [Wait 1] [PressKey KeyDown []]
+    resultMessages result `shouldBe`
+      [ selectedMsg (moveCursor Next start)
+      , "Interaction:" ++ show (moveCursor Next start) ++ "/[]"
+      ]
 
   it "rowHeight forces every row to that height, regardless of what renderItem itself requests" $ do
     let tallRow = Element (Layout fill (exactly 999) TopLeft) (const (pure (Size 0 999))) (pure ())

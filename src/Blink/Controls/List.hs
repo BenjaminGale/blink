@@ -82,6 +82,8 @@ module Blink.Controls.List
   , ListPart (..)
   , ListConfig (..)
   , defaultListConfig
+  , ListInteraction (..)
+  , listBase
   , list
   , selection
   , renderItem
@@ -104,7 +106,7 @@ import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Shift))
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
-import Blink.View (Out, getBounds, getScrollState, requestScrollTo, withBounds)
+import Blink.View (Out, View, getBounds, getScrollState, requestScrollTo, withBounds)
 import Blink.View.Drawing (withClip)
 
 -- * Selection models
@@ -419,10 +421,10 @@ rangeFrom anchor cursor xs = case (elemIndex anchor xs, elemIndex cursor xs) of
 -- reordering\/inserting\/removing items elsewhere in the list never
 -- disturbs another row's hover\/focus\/capture state), or a part of the
 -- vertical scrollbar composited in once the rows overflow the list's own
--- bounds (see 'list'). The same pattern
+-- bounds (see 'listBase'). The same pattern
 -- 'Blink.Controls.ToggleGroup.ToggleGroupPart'\/'Blink.Controls.ScrollBar.ScrollBarPart'
--- already use: every part's id is minted from one @tag@ function (see
--- 'list'), so the root, its rows, and its scrollbar's own parts are
+-- already use: every part's id is built from one @mkId@ function (see
+-- 'listBase'), so the root, its rows, and its scrollbar's own parts are
 -- visibly related and can't collide, rather than being independently
 -- chosen, unrelated ids.
 data ListPart a
@@ -506,40 +508,58 @@ onSelectionChanged h = Attribute (\c -> c { lcOnSelectionChanged = lcOnSelection
 onItemActivated :: (a -> [Out e msg]) -> Attribute (ListConfig sel e msg a)
 onItemActivated h = Attribute (\c -> c { lcOnItemActivated = lcOnItemActivated c ++ [h] })
 
--- | A list: one 'Focusable' stop (unless overridden via
--- 'Blink.Controls.Control.focusPolicy') whose rows are never tab stops.
--- Up\/Down move the cursor, Shift-Up\/Down extend a range, Enter\/Space
--- act on the cursor, a click on a row activates it. Every change is
--- computed against the model exactly as passed in via 'selection' this
--- frame, never against any locally-derived value -- rendering, keyboard
--- handling, and click handling all read 'lcSelection' as given, and
--- 'onSelectionChanged'\/'onItemActivated' report the result for the app
--- to store and pass back in next frame.
+-- | What 'listBase' reports back: the underlying 'control' call's own
+-- 'ControlInteraction' (so a control built on top of 'listBase' -- e.g. a
+-- tree, wanting Left\/Right for expand\/collapse -- can inspect keys
+-- 'listBase' itself didn't consume, via 'ciKeysPressed'), the selection
+-- model resolved against this frame's /keyboard/ input, and the items
+-- activated by keyboard (Enter\/Space) this frame. A click's resulting
+-- change is still only ever reported via 'onSelectionChanged'\/
+-- 'onItemActivated' -- each row is its own independently-clicked
+-- 'control', so its outcome isn't available to reflect here.
+data ListInteraction sel e msg a = ListInteraction
+  { liControl   :: ControlInteraction e msg
+  , liSelection :: sel a
+  , liActivated :: [a]
+  }
+
+-- | Everything 'list' does, minus being an 'Element': one 'Focusable'
+-- stop (unless overridden via 'Blink.Controls.Control.focusPolicy')
+-- whose rows are never tab stops. Up\/Down move the cursor, Shift-Up\/Down
+-- extend a range, Enter\/Space act on the cursor, a click on a row
+-- activates it. Every change is computed against the model exactly as
+-- passed in via 'lcSelection' this frame, never against any
+-- locally-derived value -- rendering, keyboard handling, and click
+-- handling all read it as given, and 'lcOnSelectionChanged'\/
+-- 'lcOnItemActivated' report the result for the app to store and pass
+-- back in next frame.
 --
--- @tag@ builds every part's element id from a 'ListPart': the list's own
+-- @mkId@ builds every part's element id from a 'ListPart': the list's own
 -- root id from 'List', and each row's id from 'ListItem' applied to the
 -- row's own item value -- so the caller never writes a per-row id by
 -- hand, and can't accidentally give the root and a row the same id (see
--- 'ListPart'). Any 'Blink.Controls.Control.elementId' attribute passed in
--- @attrs@ is discarded in favour of @tag List@, the same as
+-- 'ListPart'). Any 'Blink.Controls.Control.elementId' attribute set on
+-- 'lcControl' is discarded in favour of @mkId List@, the same as
 -- 'Blink.Controls.ToggleGroup.toggleButtonGroup'.
-list
+--
+-- The shape every list-like control ('list', and
+-- table\/tree\/tree-table wrappers built on top of it) resolves from.
+listBase
   :: (Ord e, Eq a, SelectionModel sel, Eq (sel a))
   => (ListPart a -> e)
-  -> [Attribute (ListConfig sel e msg a)]
-  -> Element e msg
-list tag attrs = Element
-  { elLayout  = lcLayout cfg
-  , elMeasure = measureChrome (ccStyleKey (lcControl cfg)) rows
-  , elRun     = void (control ccfg)
-  }
+  -> ListConfig sel e msg a
+  -> View e msg (ListInteraction sel e msg a)
+listBase mkId cfg = do
+  r <- control ccfg
+  let (finalModel, activated) = keyboardResult (ciKeysPressed r)
+  pure (ListInteraction r finalModel activated)
   where
-    cfg  = resolve defaultListConfig attrs
     s0   = lcSelection cfg
+
     -- 'contentHeight' as the viewport height: guarantees 'scrollRowIntoView'
     -- always no-ops for these rows, correctly, since they're never actually
-    -- scrolled -- 'rows' is used only for measurement and for the plain,
-    -- fits-without-scrolling render path (see 'renderViewport').
+    -- scrolled -- 'rows' is used only for the plain, fits-without-scrolling
+    -- render path (see 'renderViewport').
     rows = vBox [children (zipWith (row contentHeight) [0 :: Int ..] (itemStates s0))]
 
     itemCount = length (itemStates s0)
@@ -548,7 +568,7 @@ list tag attrs = Element
     -- every row is fixed at 'lcRowHeight' -- see 'rowHeight'.
     contentHeight = fromIntegral itemCount * lcRowHeight cfg
 
-    scrollBarTag = tag . ListScrollBar
+    scrollBarTag = mkId . ListScrollBar
 
     -- The id 'scrollBar' itself reads\/writes its position under -- see
     -- its own module header.
@@ -557,10 +577,22 @@ list tag attrs = Element
     fireSelectionChanged s = when (s /= s0) $ runHandlers (lcOnSelectionChanged cfg) s
     fireItemActivated      = runHandlers (lcOnItemActivated cfg)
 
+    -- The selection model and activated items that this frame's keyboard
+    -- input (if any) produces, starting from 'lcSelection' as given.
+    -- Called both from 'ccContent' (to fire the reactions and adjust
+    -- scroll, exactly as before this function existed) and again from
+    -- 'listBase' itself, on the same 'ciKeysPressed' value, purely to
+    -- report the result via 'ListInteraction' -- a click's own outcome
+    -- can't be recovered the same way (see 'ListInteraction'), but a
+    -- keyboard change never needs anything a row's own nested 'control'
+    -- computed, so recomputing this pure fold a second time is exact and
+    -- side-effect-free.
+    keyboardResult = foldl stepKey (s0, [])
+
     ccfg = (lcControl cfg)
-      { ccElementId = Just (tag List)
+      { ccElementId = Just (mkId List)
       , ccContent = \ci -> do
-          let (finalModel, activated) = foldl stepKey (s0, []) (ciKeysPressed ci)
+          let (finalModel, activated) = keyboardResult (ciKeysPressed ci)
           fireSelectionChanged finalModel
           mapM_ fireItemActivated activated
           when (cursorItem finalModel /= cursorItem s0) (scrollCursorIntoView finalModel)
@@ -686,7 +718,7 @@ list tag attrs = Element
       { elLayout  = Layout fill (exactly (lcRowHeight cfg)) TopLeft
       , elMeasure = noIntrinsicSize
       , elRun     = void $ control defaultControlConfig
-          { ccElementId    = Just (tag (ListItem (isItem st)))
+          { ccElementId    = Just (mkId (ListItem (isItem st)))
           , ccStyleKey     = listItemStyleKey
           , ccFocusPolicy  = NotFocusable
           , ccActiveStates = rowStates st
@@ -695,3 +727,33 @@ list tag attrs = Element
               runElement (lcRenderItem cfg st)
           }
       }
+
+-- | A list built on 'listBase', exposing exactly its own attributes
+-- ('selection', 'renderItem', 'rowHeight', 'onSelectionChanged',
+-- 'onItemActivated') and discarding the 'ListInteraction' it reports back
+-- -- the same relationship 'Blink.Controls.Button.button' has to
+-- 'Blink.Controls.Button.buttonBase'. Table\/tree\/tree-table wrappers
+-- built on 'listBase' expose a different, narrower set of attributes of
+-- their own instead.
+list
+  :: (Ord e, Eq a, SelectionModel sel, Eq (sel a))
+  => (ListPart a -> e)
+  -> [Attribute (ListConfig sel e msg a)]
+  -> Element e msg
+list mkId attrs = Element
+  { elLayout  = lcLayout cfg
+  , elMeasure = measureChrome (ccStyleKey (lcControl cfg)) (rowsSpacer cfg (itemStates (lcSelection cfg)))
+  , elRun     = void (listBase mkId cfg)
+  }
+  where
+    cfg = resolve defaultListConfig attrs
+
+-- | A single fixed-height stand-in for every current row stacked
+-- vertically, used only to measure a list-like control's own height --
+-- the virtualised rendering inside 'listBase' already substitutes a
+-- plain spacer for a skipped row for exactly the same reason: since
+-- every row is fixed at 'lcRowHeight', only the total count times that
+-- height matters for measurement, never any row's actual content.
+rowsSpacer :: ListConfig sel e msg a -> [ItemState a] -> Element e msg
+rowsSpacer cfg states =
+  elementWithLayout (Layout fill (exactly (fromIntegral (length states) * lcRowHeight cfg)) TopLeft) (pure ())
