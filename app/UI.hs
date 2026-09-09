@@ -9,8 +9,8 @@ import Blink.Controls.Control
   , postWith, resolve, style
   )
 import Blink.Controls.Label (LabelConfig)
-import Blink.Controls.List (ItemState, MultiSelection (..), SingleSelection (..), multiSelection, selectFirst, selectedItems, singleSelection)
-import qualified Blink.Controls.List as List (isItem, isSelected, onSelectionChanged)
+import Blink.Controls.List (MultiSelection (..), SingleSelection (..), multiSelection, selectFirst, selectedItems, singleSelection)
+import qualified Blink.Controls.List as List (isItem, onSelectionChanged)
 import Blink.Controls.ProgressBar (ProgressValue (..))
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)
 import qualified Blink.Controls.Slider as Slider (value)
@@ -693,8 +693,7 @@ groceries :: [Text]
 groceries = ["Milk", "Eggs", "Bread", "Butter", "Coffee"]
 
 -- | A row's own text, filling its row and vertically centred -- shared
--- shape for both lists below (the checklist adds a glyph prefix on top).
--- Has no element id of its own: the row (see
+-- shape for every list on this page. Has no element id of its own: the row (see
 -- 'Blink.Controls.List.ListPart') is already the one identified control a
 -- click there should reach.
 listCaption :: Text -> Element ControlId Msg
@@ -731,17 +730,11 @@ fruitSection s =
       [x] -> "Selected: " <> x
       _   -> "Selected: none"
 
--- | @☑\/☐@ prefixed onto the item text -- redundant with the row's own
--- selected pseudo-state background (see "Blink.Controls.List.Style"), but
--- readable even in a theme with no colour difference.
-groceryRowText :: ItemState Text -> Text
-groceryRowText st = (if List.isSelected st then "\9745 " else "\9744 ") <> List.isItem st
-
 groceryListElem :: AppState -> Element ControlId Msg
 groceryListElem s =
   list GroceryList
     [ selection (groceryList s)
-    , renderItem (listCaption . groceryRowText)
+    , renderItem (listCaption . List.isItem)
     , List.onSelectionChanged (postWith GroceryListChanged)
     , height fill
     ]
