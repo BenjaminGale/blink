@@ -665,10 +665,19 @@ fruits = ["Apple", "Banana", "Cherry", "Date", "Elderberry"]
 groceries :: [Text]
 groceries = ["Milk", "Eggs", "Bread", "Butter", "Coffee"]
 
--- | A plain caption row, filling its row and vertically centred -- shared
+-- | A row's own text, filling its row and vertically centred -- shared
 -- shape for both lists below (the checklist adds a glyph prefix on top).
+-- Has no element id of its own: the row (see
+-- 'Blink.Controls.List.ListPart') is already the one identified control a
+-- click there should reach.
 listCaption :: Text -> Element ControlId Msg
-listCaption t = caption t [width fill, height fill, align MiddleLeft]
+listCaption t = Element
+  { elLayout  = Layout fill fill MiddleLeft
+  , elMeasure = const (measureText t)
+  , elRun     = do
+      s <- currentStyle
+      drawText (styleTextColour s) (styleTextAlign s) t
+  }
 
 fruitListElem :: AppState -> Element ControlId Msg
 fruitListElem s =
