@@ -17,6 +17,7 @@ import qualified Blink.Controls.SliderSpec as Slider
 import qualified Blink.Controls.TextInputSpec as TextInput
 import qualified Blink.Controls.ToggleButtonSpec as ToggleButton
 import qualified Blink.Controls.ToggleGroupSpec as ToggleGroup
+import qualified Blink.Controls.TreeSpec as Tree
 import qualified Blink.GeometrySpec as Geometry
 import qualified Blink.InputSpec as Input
 import qualified Blink.InteractionSpec as Interaction
@@ -41,6 +42,7 @@ main = hspec $ do
   ToggleGroup.spec
   Checkbox.spec
   List.spec
+  Tree.spec
   ProgressBar.spec
   RadioButton.spec
   RepeatButton.spec
