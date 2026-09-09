@@ -355,6 +355,32 @@ scrollingSpec = describe "list scrolling" $ do
     atBottom <- runInteractions testBounds ctx renderMarked [] [Wait 1]
     resultMessages atBottom `shouldBe` ["Rendered:3", "Rendered:4", "Rendered:5"]
 
+  it "keeps the scrollbar's thumb geometry the same no matter which rows are currently virtualised" $ do
+    -- Not the track's exact vertical centre -- that point maps to 0.5
+    -- for *any* thumb length (see 'Blink.Controls.ScrollBar.fractionAt':
+    -- centre minus half the thumb, over the track length minus the
+    -- thumb, is always exactly half), so it can't actually distinguish a
+    -- wrong thumb length from a right one. y 28 sits off-centre in the
+    -- 16-44 track, where the mapped fraction (0.25, for the 20px thumb
+    -- 'contentHeight' 100 \/ viewport 60 always produces here) does
+    -- depend on the thumb's own length -- so if virtualisation ever let
+    -- 'contentHeight' drift with which rows happen to be built, clicking
+    -- this same point would land on a different value depending on
+    -- which scroll position -- and so which rows -- was already in
+    -- effect.
+    let trackPoint = Point 92 28
+        clickTrack ctx = runInteractions testBounds ctx
+          (renderScrollList [selection start])
+          [MoveTo trackPoint]
+          [MouseDown trackPoint]
+
+    atTop <- clickTrack seedCtx
+    contextScrollState listScrollEid (resultContext atTop) `shouldBe` 0.25
+
+    seededAtEnd <- resultContext <$> runInteractions testBounds seedCtx (requestScrollTo listScrollEid 1) [] []
+    atBottom <- clickTrack seededAtEnd
+    contextScrollState listScrollEid (resultContext atBottom) `shouldBe` 0.25
+
   it "does not move the scroll position while the keyboard cursor stays within the viewport" $ do
     result <- runInteractions testBounds seedCtx
       (renderScrollList [selection start])
