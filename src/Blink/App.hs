@@ -108,8 +108,8 @@ import GHC.Clock (getMonotonicTimeNSec)
 import Blink.Geometry (Point (..), Rectangle, Size (..), rectFromSize)
 import Blink.Input (KeyEvent, InputState (..), advanceButton)
 import Blink.View.Context (ctxMouse)
-import Blink.View.Rendering (DrawCommand, TextMeasurer (..))
-import Blink.View.Style (Theme)
+import Blink.Rendering (DrawCommand, TextMeasurer (..))
+import Blink.Style (Theme)
 import Blink.View
   ( ViewContext
   , AnimationState (animElapsed)
@@ -118,7 +118,7 @@ import Blink.View
   , runView, getDrawCommands, getMessages, hasPendingUiEffects
   , contextAnimation, contextRequiresAnimation
   )
-import Blink.View.Element (Element, runElement)
+import Blink.Element (Element, runElement)
 import Blink.Update (Update, runUpdate)
 
 -- | Describes a complete Blink application.

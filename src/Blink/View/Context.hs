@@ -120,13 +120,13 @@ import Data.List (foldl')
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Blink.View.Rendering (DrawCommand, TextMeasurer (..))
+import Blink.Rendering (DrawCommand, TextMeasurer (..))
 import Blink.Geometry (Rectangle, Size)
 import Blink.Input
   ( Key (..), KeyEvent (..), Modifier (..), InputState (..)
   , Mouse (..), emptyMouse, advanceButton, advanceHover
   )
-import Blink.View.Style (Style, StyleSet, Metrics, StyleKey (..), Theme (..), resolveStyle)
+import Blink.Style (Style, StyleSet, Metrics, StyleKey (..), Theme (..), resolveStyle)
 
 --------------------------------------------------------------------------------
 -- Focus (pure)
@@ -418,7 +418,7 @@ extendActive f s = s { selectionActive = f (selectionActive s) }
 --------------------------------------------------------------------------------
 
 -- | Per-element bookkeeping for a control that keeps firing while held down
--- -- e.g. 'Blink.View.Controls.RepeatButton.repeatButton' -- rather than
+-- -- e.g. 'Blink.Controls.RepeatButton.repeatButton' -- rather than
 -- once per press: the animation clock's elapsed time when the current
 -- continuous press began, and how many repeats have fired during it so
 -- far.
@@ -479,7 +479,7 @@ mkAnimationState delta elapsed isTick = AnimationState
 -- | The specific key\/modifier combinations that currently mean "give up
 -- focus here and let the next render claim it" ('navAdvance') or "return to
 -- whichever tab stop was previous" ('navRetreat'). Every
--- 'Blink.View.Controls.Control.control' consults this instead of a
+-- 'Blink.Controls.Control.control' consults this instead of a
 -- hardcoded Tab\/Shift-Tab, so a container can redefine it for its own
 -- children by opening a new ambient set around them with
 -- 'Blink.View.Navigation.withNavigationKeys'.
@@ -511,8 +511,8 @@ defaultNavigationKeys = NavigationKeys
 -- specifically for an explicit "make a different, named element focused (or
 -- clear whoever is)" change, triggered from a place that only knows the
 -- winner (or that there's no winner), not who's currently focused —
--- 'Blink.View.Controls.Label.label' redirecting a click onto its
--- 'Blink.View.Controls.Label.target', say. Whoever is displaced is looked up
+-- 'Blink.Controls.Label.label' redirecting a click onto its
+-- 'Blink.Controls.Label.target', say. Whoever is displaced is looked up
 -- when the effect is *applied* (real 'ViewContext' access, unlike the
 -- reaction that queued it), and deferring lets every affected element
 -- observe the change consistently regardless of render order — see
@@ -527,10 +527,10 @@ defaultNavigationKeys = NavigationKeys
 data UiEffect e
   = ScrollTo e Double
     -- ^ Sets the scroll position to an absolute value, clamped to @[0, 1]@
-    -- when applied. Every caller ('Blink.View.Controls.ScrollBar.scrollBar',
-    -- 'Blink.View.Controls.TextInput.textInput') already passes a value in
+    -- when applied. Every caller ('Blink.Controls.ScrollBar.scrollBar',
+    -- 'Blink.Controls.TextInput.textInput') already passes a value in
     -- the @[0, 1]@ convention documented on 'ScrollState';
-    -- 'Blink.View.Controls.TextInput.textInput' converts to and from pixels
+    -- 'Blink.Controls.TextInput.textInput' converts to and from pixels
     -- locally since its selection\/cursor math is naturally pixel-based.
     -- See 'Blink.View.Scroll.requestScrollTo'.
   | ScrollBy e Double
@@ -658,7 +658,7 @@ data ViewContext e msg = ViewContext
 -- | The View monad. A state-threading computation in 'IO' that reads from a
 -- 'ViewContext' and emits draw commands and messages as a side effect. Use the
 -- 'Functor', 'Applicative', and 'Monad' instances to compose view trees. See
--- 'Blink.View.Controls.control' for higher-level building blocks.
+-- 'Blink.Controls.control' for higher-level building blocks.
 --
 -- [@e@] Element identity type.
 -- [@msg@] Message type emitted via 'emit'.
@@ -830,7 +830,7 @@ consumeKey k = modify $ \ctx ->
   in ctx { ctxInput = input { inputKeyEvents = filter (\e -> key e /= k) (inputKeyEvents input) } }
 
 -- | Hides the given key\/modifier combinations from 'getInput' -- and so
--- from anything reading raw key events, e.g. 'Blink.View.Controls.Control.onKeyPressed'
+-- from anything reading raw key events, e.g. 'Blink.Controls.Control.onKeyPressed'
 -- -- for the duration of @action@, restoring the real input once it
 -- completes. Unlike 'consumeKey', this doesn't affect what anyone else
 -- sees: a control that itself observes some keys as reserved navigation
@@ -940,7 +940,7 @@ emit msg = modifyOut $ \out -> out { outEvents = OutMsg msg : outEvents out }
 -- | Queues a 'UiEffect' — a focus, scroll, or selection change — to be
 -- applied by @applyUiEffects@ between this frame and the next.
 -- @Blink.View.Focus.setFocus@, @Blink.View.Focus.clearFocus@, and the
--- scroll\/selection writes inside "Blink.View.Controls" are built on this;
+-- scroll\/selection writes inside "Blink.Controls" are built on this;
 -- reach for it directly only when writing a custom control.
 emitUi :: UiEffect e -> View e msg ()
 emitUi eff = modifyOut $ \out -> out { outEvents = OutUi eff : outEvents out }

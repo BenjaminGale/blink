@@ -1,0 +1,199 @@
+{- |
+Module: Blink.Controls.Style
+
+The shape vocabulary shared by more than one built-in control -- the
+"bordered box" ('buttonStyle') and "flat row" ('flatRowStyle') looks, the
+track look ('sliderStyle') shared by a slider and a scrollbar's own
+track, and the plain wrapper look ('toggleGroupStyle') shared by a toggle
+group, a radio group, and a scrollbar's own container -- plus the
+'Metrics' each pairs with in 'Blink.Style.Defaults.defaultTheme'.
+Also 'containerStyle', not registered by 'Blink.Style.Defaults.defaultTheme'
+itself (no built-in control needs it) but exported the same way
+'buttonStyle' is, for an app to register against its own
+'Blink.Controls.Control.FocusScope' composites -- see
+"Theme"'s @withStatusBar@-style registration in the sample app.
+
+A shape used by exactly one control lives in that control's own
+@Blink.Style.\<Control\>@ module instead (e.g.
+"Blink.Controls.ProgressBar.Style", "Blink.Controls.Divider.Style",
+"Blink.Controls.Label.Style") -- this module is only for shapes more than one
+control resolves to. 'buttonStyle' is also 'Blink.Style.Defaults.defaultTheme's
+'Blink.Style.themeDefaultStyle' fallback, making it the library's
+one universal default look.
+-}
+module Blink.Controls.Style
+  ( transparent
+  , controlMetrics
+  , flatRowMetrics
+  , progressBarMetrics
+  , toggleGroupMetrics
+  , buttonStyle
+  , flatRowStyle
+  , sliderStyle
+  , toggleGroupStyle
+  , containerStyle
+  ) where
+
+import qualified Data.Map.Strict as Map
+
+import Blink.Geometry (uniform)
+import Blink.Rendering (Colour (..), TextAlign (..))
+import Blink.Style
+
+-- | Fully transparent -- used, like 'app/Theme.hs's @invisibleBorder@,
+-- as a border colour that's really invisible rather than as 'Nothing':
+-- a control whose border becomes visible on another state (e.g.
+-- 'FocusFocused') must keep a @Just@ border at rest too, or gaining a
+-- real border colour would also change its measured size.
+transparent :: Colour
+transparent = RGBA 0 0 0 0
+
+-- | Paired with 'buttonStyle' -- a bordered box with visible margin and
+-- padding. Used for buttons, toggle buttons, text inputs, and a
+-- scrollbar's own buttons.
+controlMetrics :: Metrics
+controlMetrics = Metrics
+  { metricsMargin      = uniform 3
+  , metricsPadding     = uniform 6
+  , metricsBorderEdges = uniformBorder 1
+  }
+
+-- | Paired with 'flatRowStyle' -- a bordered row, tighter than
+-- 'controlMetrics'. Used for checkboxes and radio buttons.
+flatRowMetrics :: Metrics
+flatRowMetrics = Metrics
+  { metricsMargin      = uniform 2
+  , metricsPadding     = uniform 4
+  , metricsBorderEdges = uniformBorder 1
+  }
+
+-- | Shared by 'Blink.Controls.ProgressBar.Style', 'Blink.Controls.Slider.Style',
+-- and 'Blink.Controls.ScrollBar.Style's track -- despite the name, this is
+-- the generic track metrics, not something owned by the progress bar.
+progressBarMetrics :: Metrics
+progressBarMetrics = Metrics
+  { metricsMargin      = uniform 3
+  , metricsPadding     = uniform 0
+  , metricsBorderEdges = noBorder
+  }
+
+-- | No margin\/padding\/border of its own -- a
+-- 'Blink.Controls.ToggleGroup.toggleButtonGroup'\/'Blink.Controls.ToggleGroup.radioButtonGroup'
+-- is just a plain wrapper around its items; any chrome belongs on the
+-- items themselves ('Blink.Controls.Button.Style.buttonStyleKey'\/'Blink.Controls.RadioButton.Style.radioButtonStyleKey'),
+-- not doubled up on their container. Shared by
+-- 'Blink.Controls.ScrollBar.Style's own outer container for the same reason.
+toggleGroupMetrics :: Metrics
+toggleGroupMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = uniform 0
+  , metricsBorderEdges = noBorder
+  }
+
+-- | A bordered-box control style: background/border step through
+-- hover/press/focus/disabled, with a bold accent fill on press. Used for
+-- buttons, toggle buttons, text inputs, and a scrollbar's own buttons --
+-- see "Blink.Controls.ToggleButton.Style" for the extra accent fill a toggle
+-- button adds on top while selected.
+buttonStyle :: TextAlign -> Palette -> StyleSet
+buttonStyle align p = StyleSet
+  { styleBase = Style
+      { styleBackground   = paletteSurface p
+      , styleTextColour   = paletteTextPrimary p
+      , styleTextAlign    = align
+      , styleBorderColour = Just (paletteBorder p)
+      }
+  , styleOverrides = Map.fromList
+      [ (CommonMouseOver, \s -> s { styleBackground = paletteSurfaceHover p, styleBorderColour = Just (paletteBorderHover p) })
+      , (CommonPressed,   \s -> s { styleBackground = paletteAccent p, styleTextColour = paletteTextOnAccent p, styleBorderColour = Just (paletteAccent p) })
+      , (CommonDisabled,  \s -> s { styleBackground = paletteSurfaceDisabled p, styleTextColour = paletteTextMuted p, styleBorderColour = Just (paletteBorder p) })
+      , (FocusFocused,    \s -> s { styleBorderColour = Just (paletteFocusRing p) })
+      ]
+  }
+
+-- | A flat, mostly-invisible row style: no background or border
+-- normally, just a hover tint and a focus ring, so it reads as a plain
+-- row rather than a button. Used for checkboxes and radio buttons.
+-- No 'Blink.Controls.ToggleButton.Style.toggleChecked' override -- the glyph itself (checkmark or filled
+-- dot) already shows selected state, and overriding it here would mask
+-- the hover/press tint above whenever a row is selected.
+flatRowStyle :: Palette -> StyleSet
+flatRowStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = transparent
+      , styleTextColour   = paletteTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleBorderColour = Just transparent
+      }
+  , styleOverrides = Map.fromList
+      [ (CommonMouseOver, \s -> s { styleBackground = paletteSurfaceHover p })
+      , (CommonPressed,   \s -> s { styleBackground = paletteSurfaceHover p })
+      , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
+      , (FocusFocused,    \s -> s { styleBorderColour = Just (paletteFocusRing p) })
+      ]
+  }
+
+-- | A track/fill style: transparent background, 'paletteBorder' for the
+-- groove (drawn via 'styleBorderColour'), 'paletteAccent' for the filled
+-- track and thumb (drawn via 'styleTextColour'). Used for a slider (which
+-- is focusable by default, hence the focus ring below) and a scrollbar's
+-- own track (which is 'Blink.Controls.Control.NotFocusable', so the
+-- override just never triggers there).
+sliderStyle :: Palette -> StyleSet
+sliderStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = transparent
+      , styleTextColour   = paletteAccent p
+      , styleTextAlign    = AlignLeft
+      , styleBorderColour = Just (paletteBorder p)
+      }
+  , styleOverrides = Map.fromList
+      [ (CommonDisabled, \s -> s { styleTextColour = paletteTextMuted p })
+      , (FocusFocused,   \s -> s { styleBorderColour = Just (paletteFocusRing p) })
+      ]
+  }
+
+-- | A plain, transparent, borderless style for a group's own container --
+-- paired with 'toggleGroupMetrics' alongside it above. Shared by
+-- 'Blink.Controls.ToggleGroup.toggleButtonGroup', 'Blink.Controls.ToggleGroup.radioButtonGroup',
+-- and a scrollbar's own outer container; the items inside still resolve
+-- their own look from 'buttonStyle'\/'flatRowStyle'. No 'FocusFocused'
+-- override either -- unlike 'containerStyle' below, none of these three
+-- containers ever holds keyboard focus itself (each is
+-- 'Blink.Controls.Control.NotFocusable', fixed), so a ring here
+-- would never actually draw.
+toggleGroupStyle :: Palette -> StyleSet
+toggleGroupStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = transparent
+      , styleTextColour   = paletteTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleBorderColour = Nothing
+      }
+  , styleOverrides = Map.empty
+  }
+
+-- | 'buttonStyle's boxed look with its background held fixed -- hover only
+-- steps the border colour, never 'styleBackground', the way a container
+-- that merely holds focusable children, rather than being one itself,
+-- should read (no fill tint, no press fill). Keeps 'CommonDisabled' and
+-- 'FocusFocused' too -- the latter is a state such a container does
+-- reach: a 'Blink.Controls.Control.FocusScope' composite (unlike
+-- 'toggleGroupStyle's wrappers above) reads as focused whenever any child
+-- inside it does, so its own border still needs to answer that. Paired
+-- with 'controlMetrics' (real border width, so both overrides have
+-- something to draw into) rather than 'toggleGroupMetrics'.
+containerStyle :: Palette -> StyleSet
+containerStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = paletteSurface p
+      , styleTextColour   = paletteTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleBorderColour = Just (paletteBorder p)
+      }
+  , styleOverrides = Map.fromList
+      [ (CommonMouseOver, \s -> s { styleBorderColour = Just (paletteBorderHover p) })
+      , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
+      , (FocusFocused,    \s -> s { styleBorderColour = Just (paletteFocusRing p) })
+      ]
+  }

@@ -4,7 +4,7 @@ module Blink.Generators (genPointIn) where
 import Test.QuickCheck
 
 import Blink.Geometry (Alignment, Insets (..), Point (..), Rectangle (..), Size (..))
-import Blink.View.Layout (Layout (..), Length, atLeast, atMost, between, exactly, fill)
+import Blink.Layout (Layout (..), Length, atLeast, atMost, between, exactly, fill)
 
 coord :: Gen Double
 coord = fromIntegral <$> (choose (-500, 500) :: Gen Int)

@@ -80,9 +80,9 @@ data KeyEvent = KeyEvent
     -- keyboard auto-repeat (holding the key down), rather than the initial
     -- physical press. Most consumers of a raw @['KeyEvent']@ want these --
     -- holding Backspace\/an arrow key repeating is ordinary text-editing
-    -- behaviour (see "Blink.View.Controls.TextInput"). A control that only
+    -- behaviour (see "Blink.Controls.TextInput"). A control that only
     -- wants to react once per physical press (e.g.
-    -- "Blink.View.Controls.Button"'s Enter-while-focused activation) checks
+    -- "Blink.Controls.Button"'s Enter-while-focused activation) checks
     -- this and ignores the event when it's 'True'.
   } deriving (Eq, Show)
 
@@ -213,7 +213,7 @@ data HitRect = HitRect
 --
 -- 'mouseHitRectsNext' only ever gains an entry for a control that was
 -- actually hit (and enabled) this frame -- see
--- 'Blink.View.Controls.Control.watchInteraction' -- so its size tracks the
+-- 'Blink.Controls.Control.watchInteraction' -- so its size tracks the
 -- depth of whatever's currently under the pointer, not the size of the
 -- whole view. The registration index records visiting order (root before
 -- the children it renders), so comparing indices lets a later query tell

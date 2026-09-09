@@ -2,7 +2,7 @@
 -- | The sample app's theme.
 --
 -- Both 'lightTheme' and 'darkTheme' are built from the library's
--- 'Blink.View.Style.Defaults.defaultTheme', each fed a 'Palette' sampled from a
+-- 'Blink.Style.Defaults.defaultTheme', each fed a 'Palette' sampled from a
 -- reference screenshot ('lightPalette'\/'darkPalette') -- see
 -- 'withStatusBar' for the one entry added on top of what 'defaultTheme'
 -- registers ('StatusBar' is an app-specific 'ElementId', not a built-in
@@ -19,13 +19,13 @@ import qualified Data.Map.Strict as Map
 
 import Data.Text (Text)
 import Blink.Geometry
-import Blink.View.Controls.ScrollBar (ScrollBarPart)
-import Blink.View.Controls.ToggleGroup (ToggleGroupPart)
-import Blink.View.Rendering
-import Blink.View.Style
-import Blink.View.Style.Defaults (containerStyle, defaultTheme)
-import Blink.View.Style.Divider (dividerStyle)
-import Blink.View.Style.Control (controlMetrics)
+import Blink.Controls.ScrollBar (ScrollBarPart)
+import Blink.Controls.ToggleGroup (ToggleGroupPart)
+import Blink.Rendering
+import Blink.Style
+import Blink.Style.Defaults (containerStyle, defaultTheme)
+import Blink.Controls.Divider.Style (dividerStyle)
+import Blink.Controls.Style (controlMetrics)
 
 -- | Which of the demo's sidebar-selected pages is showing.
 data Page = ControlsPage | ScrollBarsPage | ContinuePage | ContainedPage
@@ -104,7 +104,7 @@ statusBarMetrics = Metrics
   }
 
 -- | Inserts the status bar's look -- an 'ElementId'-keyed entry, not a
--- built-in control class, so 'Blink.View.Style.Defaults.defaultTheme' doesn't
+-- built-in control class, so 'Blink.Style.Defaults.defaultTheme' doesn't
 -- (and can't) register it itself. Reuses 'dividerStyle' for the look (a
 -- plain line in 'paletteBorder' is exactly what a status bar's own top
 -- rule wants), with its own 'Metrics' for the top-only border edge.

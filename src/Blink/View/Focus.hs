@@ -60,8 +60,8 @@ contextFocus = currentFocus . focusClaim . ftAmbient . ctxFocus
 -- debugging tools that want to see the whole nested claim at once.
 --
 -- Guards against revisiting an id already on the chain: a click can
--- redirect focus onto any id (as 'Blink.View.Controls.Label.label' does with its
--- own 'Blink.View.Controls.Label.target'), including an enclosing composite's
+-- redirect focus onto any id (as 'Blink.Controls.Label.label' does with its
+-- own 'Blink.Controls.Label.target'), including an enclosing composite's
 -- own — a composite could use this so that clicking an item leaves the
 -- composite itself focused, not the item — which writes that id into its
 -- own scope entry in @ftScopes@. That's harmless for the single-hop checks
@@ -179,7 +179,7 @@ requestClearFocus scopeId = emitUi (ClearFocus scopeId)
 -- 'BlockFreshClaim' overrides the "nothing is focused, free to claim" half
 -- of the first case for one frame, and changes what "blocking" value gets
 -- used in the second. It exists for a caller (see
--- 'Blink.View.Controls.compositeControl') that gives the composite's own id an
+-- 'Blink.Controls.compositeControl') that gives the composite's own id an
 -- ordinary focus claim of its own, ahead of this call: if that claim was
 -- just given up via Tab this very frame, real ambient reads empty for an
 -- instant reason that has nothing to do with "nothing was ever focused" —
@@ -206,7 +206,7 @@ requestClearFocus scopeId = emitUi (ClearFocus scopeId)
 -- ambient says and regardless of whether the caller remembered to check
 -- 'isDisabled' itself. This is enforced here, once, rather than left as a
 -- convention every caller (present or future) has to uphold on its own —
--- see the integration coverage in "Blink.View.ControlsSpec" for the regression
+-- see the integration coverage in "Blink.ControlsSpec" for the regression
 -- this guards against.
 withFocusScope :: Ord e => e -> FreshClaim -> View e msg a -> View e msg a
 withFocusScope scopeId freshClaim (View f) = View $ \ctx ->
@@ -291,7 +291,7 @@ foldBackAsClaim scopeId base after ctx' = ctx'
 
 -- | The element that was the most recent tab stop before the current one,
 -- scoped to the currently ambient scope (root, or a composite's own while
--- inside 'withFocusScope') — used by 'Blink.View.Controls.control' to implement
+-- inside 'withFocusScope') — used by 'Blink.Controls.control' to implement
 -- Shift-Tab navigation.
 getPreviousTabStop :: View e msg (Maybe e)
 getPreviousTabStop = gets contextPreviousTabStop
@@ -302,7 +302,7 @@ contextPreviousTabStop :: ViewContext e msg -> Maybe e
 contextPreviousTabStop = previousTabStop . ftAmbient . ctxFocus
 
 -- | Records the current element as the previous tab stop, scoped to the
--- currently ambient scope. Called automatically by 'Blink.View.Controls.control';
+-- currently ambient scope. Called automatically by 'Blink.Controls.control';
 -- call manually when building custom focusable controls.
 setPreviousTabStop :: e -> View e msg ()
 setPreviousTabStop eid = modifyFocusState $ \fs -> fs { previousTabStop = Just eid }

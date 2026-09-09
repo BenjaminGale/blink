@@ -28,7 +28,7 @@ data MyElem = OkButton | CancelButton | NameInput
   deriving (Eq, Ord)
 @
 
-Element IDs are used to look up styles from the active 'Blink.View.Style.Theme', to track hover
+Element IDs are used to look up styles from the active 'Blink.Style.Theme', to track hover
 and press state within a frame, and to route keyboard events to the focused
 control.
 
@@ -80,7 +80,7 @@ Each frame follows the same three steps:
   3. Pass the resulting context to 'getDrawCommands' to obtain the renderer
      input, and to 'getMessages' to advance the application state.
 
-The 'TextMeasurer' re-exported from "Blink.View.Rendering" is threaded through
+The 'TextMeasurer' re-exported from "Blink.Rendering" is threaded through
 'emptyViewContext' at step 1; see /Text measurement/ below for how controls use
 it during step 2.
 
@@ -118,7 +118,7 @@ the current bounds; drawing outside the region is discarded.
 Interaction queries are scoped to an element ID. 'registerMouseOver' \/
 'wasMouseOverLastFrame' \/ 'isAnyMouseOver' let any number of elements
 independently register and query "over" this frame, with no shared slot to
-contend over — this is what 'Blink.View.Controls.control' uses.
+contend over — this is what 'Blink.Controls.control' uses.
 
 'isRegionHit' is the lower-level primitive this builds on: it checks whether
 the mouse is within the /current bounds/, without reference to any element ID.
@@ -143,11 +143,11 @@ for its own while its children render, and folds the result back.
     handled by multiple controls in the same frame.
 
 Tab and Shift-Tab navigation between controls is managed automatically by
-'Blink.View.Controls.control'.
+'Blink.Controls.control'.
 
 = Styles
 
-'getStyleSet' returns all style variants for a 'Blink.View.Style.StyleKey'
+'getStyleSet' returns all style variants for a 'Blink.Style.StyleKey'
 (normal, hovered, pressed, focused, disabled); a control resolves the
 active variant from its current interaction state and makes it available to
 its own content via 'currentStyle'.
@@ -169,7 +169,7 @@ when disabled.
 
 = Putting it together
 
-Higher-level controls in "Blink.View.Controls" are built entirely from the
+Higher-level controls in "Blink.Controls" are built entirely from the
 primitives above, using the geometric hover model. A minimal button,
 stripped of styling and focus handling, shows how the pieces interlock:
 
@@ -187,7 +187,7 @@ miniButton eid label = do
 'registerMouseOver' records the hit so a later frame can look back at it via
 'wasMouseOverLastFrame'; 'Blink.View.Drawing.fillRect' and
 'Blink.View.Drawing.drawText' read the current bounds implicitly. See
-'Blink.View.Controls.control' for the full version, which adds focus, tab
+'Blink.Controls.control' for the full version, which adds focus, tab
 navigation, and style-driven chrome on top of exactly this shape.
 
 = Module organisation
@@ -208,7 +208,7 @@ module Blink.View
   , runView
   , ViewContext
     -- * Re-export for convenience
-    -- | From "Blink.View.Rendering"; re-exported since 'emptyViewContext' takes a
+    -- | From "Blink.Rendering"; re-exported since 'emptyViewContext' takes a
     -- 'TextMeasurer' and 'noOpTextMeasurer' is the usual choice outside a
     -- real backend (tests, headless rendering).
   , TextMeasurer (..)
@@ -345,7 +345,7 @@ module Blink.View
   , contextAnimation
   ) where
 
-import Blink.View.Rendering (TextMeasurer (..), noOpTextMeasurer)
+import Blink.Rendering (TextMeasurer (..), noOpTextMeasurer)
 import Blink.Input (MouseCapture (..))
 import Blink.View.Context
 import Blink.View.Mouse

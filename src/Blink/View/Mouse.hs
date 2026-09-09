@@ -2,7 +2,7 @@
 Module: Blink.View.Mouse
 
 Mouse position, button state, capture, geometric hover, and hit-rect
-occlusion — the interaction queries 'Blink.View.Controls.control' uses to
+occlusion — the interaction queries 'Blink.Controls.control' uses to
 implement the geometric hover model. See "Blink.View" for the module
 overview; import that instead of this module directly.
 -}
@@ -58,7 +58,7 @@ getMousePos = inputMousePosition <$> getInput
 -- active interaction clip region (set by 'Blink.View.Drawing.withClip').
 -- This is the lower-level, element-agnostic primitive; for a specific
 -- control's hit area (bounds inset by its margin), see
--- 'Blink.View.Controls.isMouseOver'.
+-- 'Blink.Controls.isMouseOver'.
 isRegionHit :: View e msg Bool
 isRegionHit = do
   r    <- getBounds
@@ -138,7 +138,7 @@ registerHitRect eid = do
 -- GUIs (Dear ImGui, egui) accepts.
 --
 -- Meant to gate a control's own 'acquireCapture' (see
--- 'Blink.View.Controls.Control.watchHover'): a container backs off letting
+-- 'Blink.Controls.Control.watchHover'): a container backs off letting
 -- a nested child it rendered after it — and which is consequently ahead of
 -- it in next frame's registration order — win capture for a click that
 -- landed on the child, instead of the container claiming it purely because
@@ -186,7 +186,7 @@ isDragging eid = (== MouseCapturedBy eid) <$> gets contextCaptured
 
 -- | Which element currently holds mouse capture, if any. Exported for
 -- control authors that need to inspect capture state directly, e.g. when
--- implementing focus-on-click without using 'Blink.View.Controls.control'.
+-- implementing focus-on-click without using 'Blink.Controls.control'.
 getCaptured :: View e msg (MouseCapture e)
 getCaptured = gets contextCaptured
 

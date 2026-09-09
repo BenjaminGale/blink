@@ -1,6 +1,6 @@
 # The control primitive
 
-Every ready-made widget in `Blink.View.Controls` — button, checkbox,
+Every ready-made widget in `Blink.Controls` — button, checkbox,
 toggle, radio button, slider, text input — requires the same handling:
 focus management, tab navigation, hover/press styling, and reporting of
 mouse and keyboard activity. This is implemented once, in `control`, on
@@ -63,8 +63,8 @@ queued handler dispatch cannot guarantee.
 
 ## Summary
 
-Every ready-made control in `Blink.View.Controls` calls `control` — or, for
+Every ready-made control in `Blink.Controls` calls `control` — or, for
 a control with no focus or chrome of its own, such as
-`Blink.View.Controls.Label`, resolves hover/click state directly — plus its
+`Blink.Controls.Label`, resolves hover/click state directly — plus its
 own visual content and attributes. See each widget's module for what it
 adds on top of this shared foundation.

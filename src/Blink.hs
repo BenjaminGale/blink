@@ -10,7 +10,7 @@ drives the loop and calls into Blink each frame.
 = Architecture
 
 An application is described by an 'App', which bundles the initial state,
-theme, a view returning an 'Blink.View.Element.Element', and an update handler.
+theme, a view returning an 'Blink.Element.Element', and an update handler.
 Passing an 'App' to 'configureContinuous' or
 'configureEventDriven' produces a 'BlinkHandle'. The backend then calls
 'stepFrame' each iteration, passing a 'FrameInput' assembled from platform
@@ -50,48 +50,43 @@ and messages flow through it — start with the
 <https://github.com/BenjaminGale/blink/blob/main/docs/concepts/README.md concepts guide>
 instead.
 
-  * "Blink.App"      — Application definition and backend integration.
-                       Start here when implementing a new backend.
+  * "Blink.App"       — Application definition and backend integration.
+                        Start here when implementing a new backend.
   * "Blink.View"       — The View monad: drawing, interaction, focus, and style
-                       queries. Start here when building views.
-  * "Blink.View.Element" — The 'Blink.View.Element.Element' type every view
-                       returns: a component's size request paired with how
-                       to measure and run it. Every ready-made control and
-                       layout container already produces one; reach for
-                       'Blink.View.Element.elementWithLayout' only when placing
-                       a hand-written 'Blink.View.View' action as a container
-                       child. Not re-exported here, since @e@ (the element
-                       identity type — see above) is conventionally itself
-                       named @Element@, which would clash; import this
-                       module qualified alongside "Blink".
-  * "Blink.Update"   — The Update monad: turns a message emitted by the view
-                       into an updated application state.
-  * "Blink.View.Controls.Control" — The shared control primitive every
-                       ready-made widget is built from: focus, chrome, and
-                       events. Import alongside whichever of
-                       "Blink.View.Controls.Button", "Blink.View.Controls.ToggleButton",
-                       "Blink.View.Controls.Checkbox",
-                       "Blink.View.Controls.RadioButton",
-                       "Blink.View.Controls.TextInput",
-                       "Blink.View.Controls.ProgressBar",
-                       "Blink.View.Controls.Slider", or
-                       "Blink.View.Controls.Label" a view actually uses — their
-                       overlapping attribute names (e.g. @text@) mean they
-                       aren't re-exported together here.
-  * "Blink.View.Layout"   — Box layout and constraint-based sizing.
-  * "Blink.View.Style"    — Themes and per-state styles.
-  * "Blink.View.Rendering"— The draw command list produced each frame.
-  * "Blink.Geometry" — Primitive geometry types.
-  * "Blink.Input"    — Raw keyboard and mouse types assembled by the backend
-                       each frame.
+                        queries. Start here when building views.
+  * "Blink.Element"    — The 'Blink.Element.Element' type every view
+                        returns: a component's size request paired with how
+                        to measure and run it. Every ready-made control and
+                        layout container already produces one; reach for
+                        'Blink.Element.elementWithLayout' only when placing
+                        a hand-written 'Blink.View.View' action as a container
+                        child. Re-exported here; if the application's own
+                        element identity type (@e@ — see above) is itself
+                        named @Element@, import that module qualified
+                        alongside this one instead.
+  * "Blink.Update"     — The Update monad: turns a message emitted by the view
+                        into an updated application state.
+  * "Blink.Controls"   — Every ready-made widget's constructor and
+                        attribute functions, re-exported here; see
+                        "Blink.Controls.Control" for the shared control
+                        primitive every one of them is built from -- focus,
+                        chrome, and events.
+  * "Blink.Layout"     — Box layout and constraint-based sizing.
+  * "Blink.Style"      — Themes and per-state styles.
+  * "Blink.Rendering"  — The draw command list produced each frame.
+  * "Blink.Geometry"   — Primitive geometry types.
+  * "Blink.Input"      — Raw keyboard and mouse types assembled by the backend
+                        each frame.
 -}
 module Blink
   ( module Blink.App
   , module Blink.Geometry
   , module Blink.Input
-  , module Blink.View.Layout
-  , module Blink.View.Rendering
-  , module Blink.View.Style
+  , module Blink.Controls
+  , module Blink.Element
+  , module Blink.Layout
+  , module Blink.Rendering
+  , module Blink.Style
   , module Blink.View
   , module Blink.Update
   ) where
@@ -99,8 +94,10 @@ module Blink
 import Blink.App
 import Blink.Geometry
 import Blink.Input
-import Blink.View.Layout
-import Blink.View.Rendering
-import Blink.View.Style
+import Blink.Controls
+import Blink.Element
+import Blink.Layout
+import Blink.Rendering
+import Blink.Style
 import Blink.View
 import Blink.Update

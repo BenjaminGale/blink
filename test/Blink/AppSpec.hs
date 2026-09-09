@@ -10,17 +10,17 @@ import Test.Hspec
 import Blink.App
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
-import Blink.View.Layout.Constraints (Layout (..), fill)
-import Blink.View.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
-import Blink.View.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
+import Blink.Layout.Constraints (Layout (..), fill)
+import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
 import Blink.View
 import Blink.View.Drawing (fillRect, drawText)
-import Blink.View.Element (Element, elLayout, elementWithLayout)
-import Blink.View.Controls.Checkbox (checkbox)
-import Blink.View.Controls.Control (control, defaultControlConfig, elementId, onFocusGained, onFocusLost, resolve)
-import Blink.View.Controls.ToggleButton (isSelected, onSelectedChanged)
-import qualified Blink.View.Controls.Slider as Slider
-import qualified Blink.View.Controls.TextInput as TextInput
+import Blink.Element (Element, elLayout, elementWithLayout)
+import Blink.Controls.Checkbox (checkbox)
+import Blink.Controls.Control (control, defaultControlConfig, elementId, onFocusGained, onFocusLost, resolve)
+import Blink.Controls.ToggleButton (isSelected, onSelectedChanged)
+import qualified Blink.Controls.Slider as Slider
+import qualified Blink.Controls.TextInput as TextInput
 import Blink.Update (modify)
 
 -- | Every test app below fills the whole test bounds; only the body of the

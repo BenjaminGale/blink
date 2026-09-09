@@ -36,7 +36,7 @@ module Blink.Interaction
 import Data.Text (Text)
 import Blink.Geometry (Point, Rectangle)
 import Blink.Input (Key (..), Modifier (..), InputState (..), KeyEvent (..))
-import Blink.View.Rendering (DrawCommand)
+import Blink.Rendering (DrawCommand)
 import Blink.View
 
 -- | One simulated real-input step. A list of these is expanded into one or
@@ -55,7 +55,7 @@ data Interaction
     -- ^ 'MouseDown' then 'MouseUp' at the given point (2 frames). Note this
     -- clicks "cold" -- with no frame establishing the point as already
     -- hovered first. For a control nested inside another identified
-    -- control (see "Blink.View.Controls.Control"'s occlusion\/capture
+    -- control (see "Blink.Controls.Control"'s occlusion\/capture
     -- model), that differs from real mouse input, which always arrives at
     -- a point on some earlier frame before a button event can happen
     -- there: occlusion is judged against the *previous* frame's hit-rect

@@ -2,32 +2,24 @@
 module UI (ControlId, AppState (..), demoApp) where
 
 import Blink.App hiding (Continue)
-import Blink.View.Attribute (Attribute)
-import Blink.View.Controls
-import Blink.View.Controls.Button (onActivated)
-import Blink.View.Controls.Control
+import Blink.Controls
+import Blink.Controls.Control
   (ChildNavigation (..), ContainedNavigation (..), ControlConfig (..), EntryPolicy (..), FocusPolicy (..)
   , WrapPolicy (..), control, defaultControlConfig, elementId, focusPolicy, isEnabled, measureChrome, post
   , postWith, resolve, style
   )
-import Blink.View.Controls.Divider (orientation)
-import Blink.View.Controls.Label (LabelConfig, target, text)
-import Blink.View.Controls.ProgressBar (ProgressValue (..), progress)
-import Blink.View.Controls.ScrollBar (ScrollBarPart (..), scrollBar, scrollBarOrientation, scrollBarTrackStyleKey, visibleFraction)
-import Blink.View.Controls.Slider (onValueChanged)
-import qualified Blink.View.Controls.Slider as Slider (value)
-import Blink.View.Style (Style (..))
-import Blink.View.Controls.TextInput (displayFilter, onInput, value)
-import Blink.View.Controls.ToggleButton (isSelected, onSelectedChanged)
-import Blink.View.Controls.ToggleGroup
-  (groupOrientation, itemSpacing, items, onSelectionChanged, selectedItem, toggleAttributes)
+import Blink.Controls.Label (LabelConfig)
+import Blink.Controls.ProgressBar (ProgressValue (..))
+import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)
+import qualified Blink.Controls.Slider as Slider (value)
+import Blink.Style (Style (..))
 import Blink.Geometry
 import Blink.Input
-import Blink.View.Layout
-import Blink.View.Rendering
+import Blink.Layout
+import Blink.Rendering
 import Blink.View
 import Blink.View.Drawing (drawText, fillRect, withClip)
-import Blink.View.Element (Element (..), elementWithLayout, noIntrinsicSize, runElement)
+import Blink.Element (Attribute, Element (..), elementWithLayout, noIntrinsicSize, runElement)
 import Blink.Update
 import Theme (ControlId (..), Page (..), containerStyleKey, lightTheme, darkTheme)
 import Control.Monad (forM_, void, when)
@@ -417,8 +409,8 @@ footer s = do
 -- The screen has grown enough controls that it needed a way to switch
 -- between them: a fixed sidebar of page buttons on the left, the selected
 -- page's content filling the rest. 'ContainedPage' is here specifically to
--- show off 'Blink.View.Controls.Control.FocusScope'\'s
--- 'Blink.View.Controls.Control.Contained' navigation -- a group of options
+-- show off 'Blink.Controls.Control.FocusScope'\'s
+-- 'Blink.Controls.Control.Contained' navigation -- a group of options
 -- that Tab treats as a single stop, with Up\/Down moving the selection
 -- between them, and its own radio\/checkbox controls to reconfigure the
 -- group's 'WrapPolicy'\/'EntryPolicy' live. 'Continue' isn't demonstrated
@@ -440,7 +432,7 @@ pages =
 -- exactly the "only one selected at a time" invariant 'toggleButtonGroup'
 -- already enforces, so there's no need for the old hand-rolled "disable
 -- whichever page is already showing" trick: clicking the already-selected
--- page is simply a no-op (see 'Blink.View.Controls.ToggleGroup.allowDeselect'),
+-- page is simply a no-op (see 'Blink.Controls.ToggleGroup.allowDeselect'),
 -- and the selected item's own look already says "you are here".
 sidebar :: AppState -> DemoUI ()
 sidebar s =
@@ -489,7 +481,7 @@ continuePage s =
       \container weren't here at all -- but the container's own border \
       \still shows it as focused whenever either one does."
 
--- | A 'Blink.View.Controls.Control.FocusScope' composite wrapping an
+-- | A 'Blink.Controls.Control.FocusScope' composite wrapping an
 -- ordinary search field: a text input and a Clear button, Tab-reachable
 -- individually exactly as if this container didn't exist, with no
 -- traversal logic of its own -- 'FocusScope' 'Continue' needs none. The
@@ -531,7 +523,7 @@ containedMargin    = 6
 -- | A measurement-only element reporting a fixed natural size -- content
 -- is rendered separately (via @ccContent@), never through this; it exists
 -- purely for 'measureChrome' to inflate by the wrapping control's own
--- chrome, the same way e.g. 'Blink.View.Controls.ToggleButton.glyphCaptionElement'
+-- chrome, the same way e.g. 'Blink.Controls.ToggleButton.glyphCaptionElement'
 -- stands in for a checkbox's actual content when measuring 'toggleBase'.
 fixedSize :: Double -> Double -> Element e msg
 fixedSize w h = Element
@@ -609,7 +601,7 @@ containedPage s =
       "Tab moves between Before, the group, and After as three ordinary stops. \
       \Up/Down move the selection between options, per the wrap mode below."
 
--- | A 'Blink.View.Controls.Control.FocusScope' composite: a single Tab stop
+-- | A 'Blink.Controls.Control.FocusScope' composite: a single Tab stop
 -- from outside, with 'containedOptions' as its own distinctly-identified
 -- children navigated by Up\/Down instead, reconfigured live from
 -- 'rowContainedWrap'\/'rowContainedRemember'.

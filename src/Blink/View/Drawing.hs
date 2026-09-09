@@ -21,7 +21,7 @@ import Control.Monad (when)
 import Data.Text (Text)
 import Blink.Geometry (Rectangle, BorderEdges, intersectRect)
 import Blink.View (View, draw, getBounds, getInteractionClip, withInteractionClip)
-import Blink.View.Rendering (Colour, TextAlign, DrawCommand (..), isVisible)
+import Blink.Rendering (Colour, TextAlign, DrawCommand (..), isVisible)
 
 -- | Builds a 'DrawCommand' from the current bounds and queues it.
 drawAt :: (Rectangle -> DrawCommand) -> View e msg ()

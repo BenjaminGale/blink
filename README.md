@@ -57,7 +57,7 @@ A minimal todo list, showing the shape of a Blink application:
 
 ```haskell
 import Blink
-import Blink.View.Element (Element)
+import Blink.Element (Element)
 
 data ControlId = NewItemInput | AddButton | ItemCheckbox Int
   deriving (Eq, Ord)

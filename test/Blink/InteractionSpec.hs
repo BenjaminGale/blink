@@ -7,8 +7,8 @@ import Test.Hspec
 import Blink.Geometry (Point (..), Rectangle (..), uniform, noBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
 import Blink.Interaction
-import Blink.View.Rendering (Colour (..), TextAlign (..))
-import Blink.View.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Rendering (Colour (..), TextAlign (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.View
 
 emptyStyle :: Style
