@@ -8,8 +8,8 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
 import Blink.Controls.List
-  ( Direction (..), SingleSelection, activate, isItem, moveCursor, onSelectionChanged, rowHeight, selectItem
-  , selection, unselected
+  ( Direction (..), MultiSelection, SingleSelection, isItem, moveCursor, multiSelected, onSelectionChanged
+  , rowHeight, selectItem, selectedItems, selection, unselected
   )
 import Blink.Controls.Tree
 import Blink.Element (Element (..), runElement, width)
@@ -203,15 +203,41 @@ keyboardSpec = describe "tree keyboard expand/collapse" $
     let cursorOnFirstChild = moveCursor Next cursorOnSrc
     resultMessages step2 `shouldBe` [selectedMsg cursorOnFirstChild]
 
-    -- Left on that leaf child: moves the cursor back to its parent, "src".
+    -- Left on that leaf child: moves the cursor back to its parent, "src"
+    -- -- via 'moveCursor', not 'activate' (see 'Blink.Controls.Tree.tree'
+    -- for why: 'activate' carries model-specific side effects a plain
+    -- cursor move must never have for a 'MultiSelection'\/'RangeSelection'
+    -- caller).
     step3 <- runInteractions testBounds (resultContext step2)
       (renderSilentTree (expanded (Set.singleton "src") : selection cursorOnFirstChild : keyReactions))
       []
       [PressKey KeyLeft []]
-    resultMessages step3 `shouldBe` [selectedMsg (activate "src" cursorOnFirstChild)]
+    resultMessages step3 `shouldBe` [selectedMsg (moveCursor Prev cursorOnFirstChild)]
+
+-- | 'Blink.Controls.List.activate' would be the wrong primitive for a
+-- parent-jump: for a 'MultiSelection' it also toggles the target's own
+-- checked state, which navigating the tree's shape must never do.
+multiKeyboardSpec :: Spec
+multiKeyboardSpec = describe "tree keyboard with MultiSelection" $
+  it "Left's parent-jump moves the cursor without toggling the parent's checked state" $ do
+    let cursorOnFirstChild = moveCursor Next (multiSelected items ["src"])
+        render' :: [Attribute (TreeConfig MultiSelection TestElem String String)] -> View TestElem String ()
+        render' attrs = runElement $ tree Part (width (exactly 100) : rowHeight 20 : forest forest0 : attrs)
+    result <- runInteractions testBounds seedCtx
+      (render'
+        [ expanded (Set.singleton "src")
+        , selection cursorOnFirstChild
+        , onSelectionChanged (\s -> [OutMsg ("Selected:" ++ show s)])
+        ])
+      []
+      [PressKey KeyLeft []]
+    let expected = moveCursor Prev cursorOnFirstChild
+    resultMessages result `shouldBe` ["Selected:" ++ show expected]
+    selectedItems expected `shouldBe` ["src"]
 
 spec :: Spec
 spec = describe "Blink.Controls.Tree" $ do
   flattenVisibleSpec
   widgetSpec
   keyboardSpec
+  multiKeyboardSpec

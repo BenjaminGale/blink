@@ -189,10 +189,18 @@ tree mkId attrs = Element
     -- -- once it's already expanded -- moves the cursor to the very next
     -- visible row, which 'visibleNodes' always places right after it and
     -- is exactly its first child. Left collapses an expanded node with
-    -- children (cursor stays), or otherwise moves the cursor to the
-    -- node's parent (see 'parentOf'). Either way, a change to the
+    -- children (cursor stays), or otherwise moves the cursor up to the
+    -- node's parent (see 'stepsToParent'). Either way, a change to the
     -- expansion set or the selection is reported the same way clicking a
     -- chevron\/pressing Up\/Down already reports one.
+    --
+    -- Both moves reach the target purely via 'moveCursor' -- stepped
+    -- once for Right, as many times as 'stepsToParent' says for Left --
+    -- rather than 'activate', which also means "the user acted on this
+    -- item": it flips a 'MultiSelection' row's own checked state, and
+    -- collapses a 'RangeSelection' run to a single item. A cursor move
+    -- triggered by navigating the tree's shape must never carry either
+    -- side effect, whatever selection model the caller has chosen.
     handleKey li ev = case (key ev, cursorItem (liSelection li)) of
       (KeyRight, Just x) -> case Map.lookup x nodeInfo of
         Just (_, True) | not (Set.member x (tcExpanded cfg)) -> setExpanded (Set.insert x (tcExpanded cfg))
@@ -200,18 +208,22 @@ tree mkId attrs = Element
         Nothing                                              -> pure ()
       (KeyLeft, Just x) -> case Map.lookup x nodeInfo of
         Just (_, True) | Set.member x (tcExpanded cfg) -> setExpanded (Set.delete x (tcExpanded cfg))
-        _                                               -> maybe (pure ()) (moveCursorTo . flip activate (liSelection li)) (parentOf x)
+        _                                               -> maybe (pure ()) climbToParent (stepsToParent x)
       _ -> pure ()
       where
-        setExpanded s' = runHandlers (tcOnExpansionChanged cfg) s'
-        moveCursorTo s' = when (s' /= liSelection li) (runHandlers (lcOnSelectionChanged listCfg) s')
+        setExpanded s'    = runHandlers (tcOnExpansionChanged cfg) s'
+        moveCursorTo s'   = when (s' /= liSelection li) (runHandlers (lcOnSelectionChanged listCfg) s')
+        climbToParent n   = moveCursorTo (applyN n (moveCursor Prev) (liSelection li))
+        applyN n f        = (!! n) . iterate f
 
-    -- | The nearest earlier visible row shallower than @x@'s own depth
-    -- -- @x@'s parent, if it has one.
-    parentOf x = listToMaybe [ y | (y, d, _) <- reverse before, d < myDepth ]
+    -- | How many rows back from @x@ its parent sits -- the nearest
+    -- earlier visible row shallower than @x@'s own depth -- if it has
+    -- one.
+    stepsToParent x = listToMaybe
+      [ n | (n, (_, d, _)) <- zip [1 ..] (reverse before), d < myDepth ]
       where
-        (before, atX)         = break (\(y, _, _) -> y == x) visRows
-        myDepth                = case atX of { (_, d, _) : _ -> d; [] -> 0 }
+        (before, atX) = break (\(y, _, _) -> y == x) visRows
+        myDepth       = case atX of { (_, d, _) : _ -> d; [] -> 0 }
 
     renderRow st = hBox [children [indentCell depth, chevronCell x hasChildren, tcRenderNode cfg tis]]
       where
