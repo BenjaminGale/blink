@@ -30,7 +30,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
 import Blink.Style
-import Blink.Controls.Style (flatRowMetrics, flatRowStyle, toggleGroupMetrics, toggleGroupStyle)
+import Blink.Controls.Style (containerStyle, controlMetrics, flatRowMetrics, flatRowStyle)
 
 -- | The 'StyleKey' 'Blink.Controls.List.list' resolves its own chrome
 -- from unless overridden via 'Blink.Controls.Control.style'.
@@ -88,12 +88,16 @@ listItemStyle p = (flatRowStyle p)
       (styleOverrides (flatRowStyle p))
   }
 
--- | This control's entries in 'Blink.Style.Defaults.defaultTheme': a
--- plain wrapper look for the list itself ('toggleGroupStyle' -- any
--- chrome belongs on the rows, not doubled up on the container), and
--- @listItemStyle@ for its rows.
+-- | This control's entries in 'Blink.Style.Defaults.defaultTheme':
+-- 'containerStyle' for the list itself (unlike
+-- 'Blink.Controls.ToggleGroup.toggleButtonGroup'\/'Blink.Controls.ScrollBar.scrollBar',
+-- whose containers are never themselves a focus target, the root of
+-- 'Blink.Controls.List.list' is exactly what keyboard input reaches, so
+-- it needs a real border and a 'Blink.Style.FocusFocused' ring of its
+-- own, not the borderless wrapper look those use), and @listItemStyle@
+-- for its rows.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
-  [ (listStyleKey,     (toggleGroupMetrics, toggleGroupStyle p))
+  [ (listStyleKey,     (controlMetrics, containerStyle p))
   , (listItemStyleKey, (flatRowMetrics, listItemStyle p))
   ]
