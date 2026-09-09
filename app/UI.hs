@@ -2,7 +2,7 @@
 module UI (ControlId, AppState (..), demoApp) where
 
 import Blink.App hiding (Continue)
-import Blink.Controls
+import Blink.Controls hiding (rowHeight)
 import Blink.Controls.Control
   (ChildNavigation (..), ContainedNavigation (..), ControlConfig (..), EntryPolicy (..), FocusPolicy (..)
   , WrapPolicy (..), control, defaultControlConfig, elementId, focusPolicy, isEnabled, measureChrome, post
@@ -51,6 +51,7 @@ data AppState = AppState
   , fruitSelection     :: SingleSelection Text
   , fruitLastActivated :: Text
   , groceryList        :: MultiSelection Text
+  , longListSelection  :: SingleSelection Int
   }
 
 data Msg
@@ -74,6 +75,7 @@ data Msg
   | FruitSelectionChanged (SingleSelection Text)
   | FruitActivated Text
   | GroceryListChanged (MultiSelection Text)
+  | LongListChanged (SingleSelection Int)
 
 demoApp :: App ControlId Msg AppState
 demoApp = App
@@ -98,6 +100,7 @@ demoApp = App
       , fruitSelection     = selectFirst fruits
       , fruitLastActivated = ""
       , groceryList        = multiSelection groceries
+      , longListSelection  = selectFirst longListItems
       }
   , theme   = \s -> if darkMode s then darkTheme else lightTheme
   , view    = demoView
@@ -132,6 +135,7 @@ updateApp msg = case msg of
   FruitSelectionChanged v -> modify $ \s -> s { fruitSelection = v }
   FruitActivated t        -> modify $ \s -> s { fruitLastActivated = t }
   GroceryListChanged v    -> modify $ \s -> s { groceryList = v }
+  LongListChanged v       -> modify $ \s -> s { longListSelection = v }
 
 type DemoUI = View ControlId Msg
 
@@ -734,6 +738,37 @@ grocerySection s =
       [] -> "Checked: none"
       xs -> "Checked: " <> T.intercalate ", " xs
 
+-- | Thirty items -- comfortably more than a 200px, 24px-row viewport (see
+-- 'longListElem') can show at once, so the list's own scrollbar and
+-- keyboard auto-scroll (see "Blink.Controls.List") both have something to
+-- demonstrate.
+longListItems :: [Int]
+longListItems = [1 .. 30]
+
+longListElem :: AppState -> Element ControlId Msg
+longListElem s =
+  list LongList
+    [ selection (longListSelection s)
+    , renderItem (listCaption . (\n -> "Item " <> T.pack (show n)) . List.isItem)
+    , List.onSelectionChanged (postWith LongListChanged)
+    , width fill, height (exactly 200)
+    ]
+
+longListSection :: AppState -> Element ControlId Msg
+longListSection s =
+  vBox
+    [ spacing 8
+    , children
+        [ caption "Scrolling (30 items, 200px viewport)" [width fill, align TopLeft]
+        , longListElem s
+        , caption detailText [width fill, align TopLeft]
+        ]
+    ]
+  where
+    detailText = case selectedItems (longListSelection s) of
+      [x] -> "Selected: Item " <> T.pack (show x)
+      _   -> "Selected: none"
+
 listPage :: AppState -> DemoUI ()
 listPage s =
   runElement $ vBox
@@ -743,15 +778,17 @@ listPage s =
         , caption description [width fill, height (exactly 40), align TopLeft]
         , hBox
             [ spacing 24, height fill
-            , children [fruitSection s, grocerySection s]
+            , children [fruitSection s, grocerySection s, longListSection s]
             ]
         ]
     ]
   where
     description =
-      "Click a row, or Tab to the list and use Up/Down + Enter/Space. Both \
-      \lists are the same `list` widget over the same item type -- only \
-      \the selection model passed via `selection` differs."
+      "Click a row, or Tab to the list and use Up/Down + Enter/Space. All \
+      \three lists are the same `list` widget over the same item type -- \
+      \only the selection model passed via `selection` differs. The third \
+      \is bounded shorter than its content, so it scrolls -- drag its bar, \
+      \or arrow the cursor past either edge to see it auto-scroll into view."
 
 -- Top-level view
 

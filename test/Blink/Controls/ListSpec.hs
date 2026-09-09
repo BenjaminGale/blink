@@ -7,7 +7,8 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
 import Blink.Controls.List
-import Blink.Element (Element (..), runElement, width)
+import Blink.Controls.ScrollBar (ScrollBarPart (..))
+import Blink.Element (Element (..), height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -25,6 +26,7 @@ spec = describe "Blink.Controls.List" $ do
   multiSpec
   rangeSpec
   widgetSpec
+  scrollingSpec
 
 singleSpec :: Spec
 singleSpec = describe "SingleSelection" $ do
@@ -199,6 +201,7 @@ renderList :: (SelectionModel sel, Eq (sel Int)) => [Attribute (ListConfig sel T
 renderList attrs = runElement $ list Part
   ( renderItem (const fixedRow)
   : width (exactly 100)
+  : rowHeight 20
   : attrs
   )
 
@@ -253,3 +256,131 @@ widgetSpec = describe "list" $ do
       [Wait 1]
       [PressKey KeyDown [Shift]]
     resultMessages result `shouldBe` [selectedMsg (extendCursor Next rstart)]
+
+  it "rowHeight forces every row to that height, regardless of what renderItem itself requests" $ do
+    let tallRow = Element (Layout fill (exactly 999) TopLeft) (const (pure (Size 0 999))) (pure ())
+        render' = runElement $ list Part
+          ( renderItem (const tallRow)
+          : width (exactly 100)
+          : rowHeight 10
+          : selection start
+          : reactions
+          )
+        -- With rows forced to 10px each, item 2's row spans y 10-20; if
+        -- 'renderItem's own 999px request leaked through instead, item 1
+        -- alone would still occupy this point.
+        inTallRow2 = Point 50 15
+    result <- runInteractions testBounds seedCtx render' [MoveTo inTallRow2] [ClickAt inTallRow2]
+    resultMessages result `shouldBe` [selectedMsg (activate 2 start), activatedMsg 2]
+
+-- * Scrolling
+
+-- | Five 20px rows (see 'fixedRow') is 100px of content, bounded to a 60px
+-- list -- exactly the 'testBounds' the scene itself renders into, so
+-- scrolling is visible without also having to bound the scene smaller
+-- than the list.
+scrollItems :: [Int]
+scrollItems = [1, 2, 3, 4, 5]
+
+-- | The id 'Blink.Controls.List.list' itself reads\/writes its scrollbar's
+-- position under (see its module header) -- the same @tag ('ListScrollBar'
+-- 'ScrollBar')@ pattern 'Blink.Controls.ScrollBar.scrollBar' documents for
+-- its own composite.
+listScrollEid :: TestElem
+listScrollEid = Part (ListScrollBar ScrollBar)
+
+renderScrollList :: (SelectionModel sel, Eq (sel Int)) => [Attribute (ListConfig sel TestElem String Int)] -> View TestElem String ()
+renderScrollList attrs = runElement $ list Part
+  ( renderItem (const fixedRow)
+  : width (exactly 100)
+  : rowHeight 20
+  : height (exactly 60)
+  : attrs
+  )
+
+scrollingSpec :: Spec
+scrollingSpec = describe "list scrolling" $ do
+  let start = selectFirst scrollItems
+
+  it "reserves no width for a scrollbar when every row already fits the bounds" $ do
+    let fitStart = selectFirst testItems
+    result <- runInteractions testBounds seedCtx
+      (renderList (selection fitStart : reactions))
+      [MoveTo (Point 90 10)]
+      [ClickAt (Point 90 10)]
+    resultMessages result `shouldBe` [activatedMsg 1]
+
+  it "composites a scrollbar (reserving its own width) once the rows overflow the bounds" $ do
+    result <- runInteractions testBounds seedCtx
+      (renderScrollList (selection start : reactions))
+      [MoveTo (Point 90 10)]
+      [ClickAt (Point 90 10)]
+    resultMessages result `shouldBe` []
+
+  it "offsets and clips the rows by the scrollbar's own scroll position" $ do
+    ctx <- resultContext <$> runInteractions testBounds seedCtx (requestScrollTo listScrollEid 1) [] []
+    -- Scrolled all the way down (40px of the 100px content is out of
+    -- view), item 3's row is now the first one visible, at the top of
+    -- the viewport.
+    result <- runInteractions testBounds ctx
+      (renderScrollList (selection start : reactions))
+      [MoveTo (Point 50 10)]
+      [ClickAt (Point 50 10)]
+    resultMessages result `shouldBe` [selectedMsg (activate 3 start), activatedMsg 3]
+
+  it "only builds and runs the rows currently intersecting the viewport" $ do
+    -- A marker row that reports its own item purely by being run at all
+    -- -- unlike 'fixedRow', which draws nothing observable, this proves
+    -- whether a row's 'Blink.Controls.Control.control' (and so its own
+    -- 'renderItem') ran this frame, not just where it would have been
+    -- positioned.
+    let marker item = Element
+          { elLayout  = Layout fill fill TopLeft
+          , elMeasure = const (pure (Size 0 0))
+          , elRun     = emit ("Rendered:" ++ show item)
+          }
+        renderMarked :: View TestElem String ()
+        renderMarked = runElement $ list Part
+          ( renderItem (marker . isItem)
+          : width (exactly 100)
+          : rowHeight 20
+          : height (exactly 60)
+          : [selection start]
+          )
+
+    atTop <- runInteractions testBounds seedCtx renderMarked [] [Wait 1]
+    resultMessages atTop `shouldBe` ["Rendered:1", "Rendered:2", "Rendered:3"]
+
+    ctx <- resultContext <$> runInteractions testBounds seedCtx (requestScrollTo listScrollEid 1) [] []
+    atBottom <- runInteractions testBounds ctx renderMarked [] [Wait 1]
+    resultMessages atBottom `shouldBe` ["Rendered:3", "Rendered:4", "Rendered:5"]
+
+  it "does not move the scroll position while the keyboard cursor stays within the viewport" $ do
+    result <- runInteractions testBounds seedCtx
+      (renderScrollList [selection start])
+      [Wait 1]
+      [PressKey KeyDown []]
+    contextScrollState listScrollEid (resultContext result) `shouldBe` 0
+
+  it "scrolls down just enough to keep a cursor moved below the viewport visible" $ do
+    -- Cursor starts on item 3 (y 40-60), the viewport's own bottom row;
+    -- one Down moves it to item 4 (y 60-80), one row past the bottom
+    -- edge.
+    let atRow3 = selectAt 2 scrollItems
+    result <- runInteractions testBounds seedCtx
+      (renderScrollList [selection atRow3])
+      [Wait 1]
+      [PressKey KeyDown []]
+    contextScrollState listScrollEid (resultContext result) `shouldBe` 0.5
+
+  it "scrolls up just enough to keep a cursor moved above the viewport visible" $ do
+    let atRow3 = selectAt 2 scrollItems -- cursor on item 3
+    seeded <- resultContext <$> runInteractions testBounds seedCtx (requestScrollTo listScrollEid 1) [] []
+    -- Scrolled to the bottom, items 3-5 (y 40-100) are in view; one Up
+    -- moves the cursor from item 3 to item 2 (y 20-40), one row above
+    -- the top edge.
+    result <- runInteractions testBounds seeded
+      (renderScrollList [selection atRow3])
+      [Wait 1]
+      [PressKey KeyUp []]
+    contextScrollState listScrollEid (resultContext result) `shouldBe` 0.5

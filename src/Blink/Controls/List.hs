@@ -85,24 +85,27 @@ module Blink.Controls.List
   , list
   , selection
   , renderItem
+  , rowHeight
   , onSelectionChanged
   , onItemActivated
   ) where
 
 import Control.Monad (void, when)
-import Data.List (elemIndex, find)
+import Data.List (elemIndex, find, findIndex)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 
 import Blink.Controls.Control
 import Blink.Controls.List.Style (listCursor, listItemStyleKey, listNoCursor, listSelected, listStyleKey, listUnselected)
-import Blink.Element (Element (..), HasLayoutConfig (..), emptyElement, runElement)
-import Blink.Geometry (Alignment (TopLeft))
+import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBar, visibleFraction)
+import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, height, noIntrinsicSize, runElement)
+import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Shift))
-import Blink.Layout.Box (children, vBox)
-import Blink.Layout.Constraints (Layout (..), fill, fitContent)
-import Blink.View (Out)
+import Blink.Layout.Box (children, hBox, vBox)
+import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
+import Blink.View (Out, getBounds, getScrollState, requestScrollTo, withBounds)
+import Blink.View.Drawing (withClip)
 
 -- * Selection models
 
@@ -411,27 +414,33 @@ rangeFrom anchor cursor xs = case (elemIndex anchor xs, elemIndex cursor xs) of
 -- * The list widget
 
 -- | Identifies one part of a 'list' for the purpose of building element
--- ids: the list's own root, or one of its rows, tagged by the row's own
--- item value rather than its position in the list -- so
+-- ids: the list's own root, one of its rows (tagged by the row's own item
+-- value rather than its position in the list -- so
 -- reordering\/inserting\/removing items elsewhere in the list never
--- disturbs another row's hover\/focus\/capture state. The same pattern
+-- disturbs another row's hover\/focus\/capture state), or a part of the
+-- vertical scrollbar composited in once the rows overflow the list's own
+-- bounds (see 'list'). The same pattern
 -- 'Blink.Controls.ToggleGroup.ToggleGroupPart'\/'Blink.Controls.ScrollBar.ScrollBarPart'
 -- already use: every part's id is minted from one @tag@ function (see
--- 'list'), so the root and its rows are visibly related and can't collide,
--- rather than being two independently-chosen, unrelated ids.
+-- 'list'), so the root, its rows, and its scrollbar's own parts are
+-- visibly related and can't collide, rather than being independently
+-- chosen, unrelated ids.
 data ListPart a
   = List
   | ListItem a
+  | ListScrollBar ScrollBarPart
   deriving (Eq, Ord, Show)
 
 -- | Every capability 'list' resolves: the wrapped 'ControlConfig'\/
 -- 'Layout', the whole model (items and selection together), how a row
--- draws its item, and its reactions.
+-- draws its item, the fixed height every row is drawn at, and its
+-- reactions.
 data ListConfig sel e msg a = ListConfig
   { lcControl            :: ControlConfig e msg
   , lcLayout             :: Layout
   , lcSelection          :: sel a
   , lcRenderItem         :: ItemState a -> Element e msg
+  , lcRowHeight          :: Double
   , lcOnSelectionChanged :: [sel a -> [Out e msg]]
   , lcOnItemActivated    :: [a -> [Out e msg]]
   }
@@ -442,15 +451,25 @@ instance HasControlConfig e msg (ListConfig sel e msg a) where
 instance HasLayoutConfig (ListConfig sel e msg a) where
   overLayout attr = Attribute (\c -> c { lcLayout = runAttribute attr (lcLayout c) })
 
+-- | The row height 'list' uses when the caller sets no 'rowHeight' of its
+-- own -- tall enough for a single line of body text plus
+-- 'Blink.Controls.Style.flatRowMetrics' chrome at a typical UI font size,
+-- the same weight 'listItemStyleKey' already styles rows with. Every real
+-- font differs, so a caller whose rows clip or float in extra space
+-- should set 'rowHeight' explicitly rather than lean on this guess.
+defaultRowHeight :: Double
+defaultRowHeight = 32
+
 -- | 'defaultControlConfig' (styled via @Class \"list\"@), filling its
 -- parent's width and sizing its height to its own rows, 'emptySelection',
--- no per-row render (draws nothing), and no reactions.
+-- no per-row render (draws nothing), a 32px row height, and no reactions.
 defaultListConfig :: SelectionModel sel => ListConfig sel e msg a
 defaultListConfig = ListConfig
   { lcControl            = defaultControlConfig { ccStyleKey = listStyleKey }
   , lcLayout             = Layout fill fitContent TopLeft
   , lcSelection          = emptySelection
   , lcRenderItem         = const emptyElement
+  , lcRowHeight          = defaultRowHeight
   , lcOnSelectionChanged = []
   , lcOnItemActivated    = []
   }
@@ -464,6 +483,11 @@ selection s = Attribute (\c -> c { lcSelection = s })
 -- for styling.
 renderItem :: (ItemState a -> Element e msg) -> Attribute (ListConfig sel e msg a)
 renderItem f = Attribute (\c -> c { lcRenderItem = f })
+
+-- | The height every row is drawn at, overriding whatever height
+-- 'renderItem'\/'s own element requests. Defaults to 32px.
+rowHeight :: Double -> Attribute (ListConfig sel e msg a)
+rowHeight h = Attribute (\c -> c { lcRowHeight = h })
 
 -- | Reacts whenever a user-driven change actually moves the model to a
 -- new value, with the complete new model. Without it the list still
@@ -514,6 +538,18 @@ list tag attrs = Element
     s0   = lcSelection cfg
     rows = vBox [children (map row (itemStates s0))]
 
+    itemCount = length (itemStates s0)
+
+    -- The rows' own total extent, known exactly (no measuring) since
+    -- every row is fixed at 'lcRowHeight' -- see 'rowHeight'.
+    contentHeight = fromIntegral itemCount * lcRowHeight cfg
+
+    scrollBarTag = tag . ListScrollBar
+
+    -- The id 'scrollBar' itself reads\/writes its position under -- see
+    -- its own module header.
+    listScrollEid = scrollBarTag ScrollBar
+
     fireSelectionChanged s = when (s /= s0) $ runHandlers (lcOnSelectionChanged cfg) s
     fireItemActivated      = runHandlers (lcOnItemActivated cfg)
 
@@ -523,8 +559,86 @@ list tag attrs = Element
           let (finalModel, activated) = foldl stepKey (s0, []) (ciKeysPressed ci)
           fireSelectionChanged finalModel
           mapM_ fireItemActivated activated
-          runElement rows
+          when (cursorItem finalModel /= cursorItem s0) (scrollCursorIntoView finalModel)
+          renderViewport
       }
+
+    -- Keeps a keyboard-moved cursor visible: once its row falls above or
+    -- below the viewport, requests just enough scroll to bring that edge
+    -- back into view (top-aligned above, bottom-aligned below). A no-op
+    -- when the list isn't scrollable at all, or the cursor's row is
+    -- already fully within the viewport. Only ever called when the
+    -- cursor actually moved this frame (see 'ccContent' above) -- an
+    -- unconditional check on every frame would fight a scroll position
+    -- set some other way (a drag on the bar itself, or seeded directly)
+    -- while the cursor sits still.
+    scrollCursorIntoView s = case findIndex isCursor (itemStates s) of
+      Nothing  -> pure ()
+      Just idx -> do
+        bounds <- getBounds
+        let viewportHeight = rectHeight bounds
+            maxOffset       = contentHeight - viewportHeight
+        when (maxOffset > 0) $ do
+          scrollFrac <- getScrollState listScrollEid
+          let rh        = lcRowHeight cfg
+              rowTop    = fromIntegral idx * rh
+              rowBottom = rowTop + rh
+              offsetY   = scrollFrac * maxOffset
+              newFrac
+                | rowTop < offsetY                    = Just (rowTop / maxOffset)
+                | rowBottom > offsetY + viewportHeight = Just ((rowBottom - viewportHeight) / maxOffset)
+                | otherwise                            = Nothing
+          mapM_ (requestScrollTo listScrollEid) newFrac
+
+    -- Renders 'rows' plain when they fit the list's own bounds; once they
+    -- overflow, composites a vertical 'scrollBar' alongside them (an
+    -- 'hBox' of the two, the same L-shaped arrangement
+    -- 'Blink.Controls.ScrollBar.scrollBar's own module header points to
+    -- as the pattern any real scrolling viewport uses), and offsets\/clips
+    -- the rows by the bar's own scroll position.
+    renderViewport = do
+      bounds <- getBounds
+      let viewportHeight = rectHeight bounds
+      if contentHeight > viewportHeight
+        then runElement (scrollableRows viewportHeight)
+        else runElement rows
+
+    scrollableRows viewportHeight = hBox
+      [ children
+          [ elementWithLayout (Layout fill fill TopLeft) (clippedRows viewportHeight)
+          , scrollBar scrollBarTag [ height fill, visibleFraction (viewportHeight / contentHeight) ]
+          ]
+      ]
+
+    -- Offsets the visible rows (see 'visibleRows') by the bar's current
+    -- scroll fraction and clips them to the viewport slot -- 'withClip'
+    -- captures /this/ bounds (the viewport's own, not yet offset) as the
+    -- clip region before the rows move within it, the same ordering
+    -- 'Blink.Layout.Box.hBox'\/'vBox' use for their own children.
+    clippedRows viewportHeight = do
+      bounds     <- getBounds
+      scrollFrac <- getScrollState listScrollEid
+      let offsetY    = scrollFrac * (contentHeight - viewportHeight)
+          rowsBounds = bounds { rectY = rectY bounds - offsetY, rectHeight = contentHeight }
+      withClip $ withBounds rowsBounds (runElement (visibleRows offsetY viewportHeight))
+
+    -- Only the rows whose fixed-height span intersects the viewport
+    -- (@offsetY@ to @offsetY + viewportHeight@) are actually built and
+    -- run; a spacer above and below -- sized for however many rows are
+    -- skipped on that side -- keeps this vBox's own total height at
+    -- 'contentHeight' regardless of which rows are currently skipped, so
+    -- the scrollbar's thumb geometry (driven by 'contentHeight') never
+    -- shifts as the visible set changes.
+    visibleRows offsetY viewportHeight =
+      vBox [children (spacer topSkipped : map row visibleStates ++ [spacer bottomSkipped])]
+      where
+        rh            = lcRowHeight cfg
+        loIdx         = max 0 (floor (offsetY / rh))
+        hiIdx         = min itemCount (ceiling ((offsetY + viewportHeight) / rh))
+        visibleStates = take (hiIdx - loIdx) (drop loIdx (itemStates s0))
+        topSkipped    = fromIntegral loIdx * rh
+        bottomSkipped = fromIntegral (itemCount - hiIdx) * rh
+        spacer h      = elementWithLayout (Layout fill (exactly h) TopLeft) (pure ())
 
     stepKey (s, activated) ev = case key ev of
       KeyUp                        -> (move Prev, activated)
@@ -551,8 +665,8 @@ list tag attrs = Element
       ]
 
     row st = Element
-      { elLayout  = Layout fill fitContent TopLeft
-      , elMeasure = measureChrome listItemStyleKey (lcRenderItem cfg st)
+      { elLayout  = Layout fill (exactly (lcRowHeight cfg)) TopLeft
+      , elMeasure = noIntrinsicSize
       , elRun     = void $ control defaultControlConfig
           { ccElementId    = Just (tag (ListItem (isItem st)))
           , ccStyleKey     = listItemStyleKey

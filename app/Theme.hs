@@ -62,6 +62,7 @@ data ControlId = Label
              | ContinueAfter
              | FruitList (ListPart Text)
              | GroceryList (ListPart Text)
+             | LongList (ListPart Int)
   deriving (Eq, Ord)
 
 -- | Colours sampled from a light-mode reference screenshot (an inspector
