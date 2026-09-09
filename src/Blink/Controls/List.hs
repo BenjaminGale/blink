@@ -536,7 +536,11 @@ list tag attrs = Element
   where
     cfg  = resolve defaultListConfig attrs
     s0   = lcSelection cfg
-    rows = vBox [children (map row (itemStates s0))]
+    -- 'contentHeight' as the viewport height: guarantees 'scrollRowIntoView'
+    -- always no-ops for these rows, correctly, since they're never actually
+    -- scrolled -- 'rows' is used only for measurement and for the plain,
+    -- fits-without-scrolling render path (see 'renderViewport').
+    rows = vBox [children (zipWith (row contentHeight) [0 :: Int ..] (itemStates s0))]
 
     itemCount = length (itemStates s0)
 
@@ -565,9 +569,7 @@ list tag attrs = Element
 
     -- Keeps a keyboard-moved cursor visible: once its row falls above or
     -- below the viewport, requests just enough scroll to bring that edge
-    -- back into view (top-aligned above, bottom-aligned below). A no-op
-    -- when the list isn't scrollable at all, or the cursor's row is
-    -- already fully within the viewport. Only ever called when the
+    -- back into view (see 'scrollRowIntoView'). Only ever called when the
     -- cursor actually moved this frame (see 'ccContent' above) -- an
     -- unconditional check on every frame would fight a scroll position
     -- set some other way (a drag on the bar itself, or seeded directly)
@@ -576,19 +578,28 @@ list tag attrs = Element
       Nothing  -> pure ()
       Just idx -> do
         bounds <- getBounds
-        let viewportHeight = rectHeight bounds
-            maxOffset       = contentHeight - viewportHeight
-        when (maxOffset > 0) $ do
-          scrollFrac <- getScrollState listScrollEid
-          let rh        = lcRowHeight cfg
-              rowTop    = fromIntegral idx * rh
-              rowBottom = rowTop + rh
-              offsetY   = scrollFrac * maxOffset
-              newFrac
-                | rowTop < offsetY                    = Just (rowTop / maxOffset)
-                | rowBottom > offsetY + viewportHeight = Just ((rowBottom - viewportHeight) / maxOffset)
-                | otherwise                            = Nothing
-          mapM_ (requestScrollTo listScrollEid) newFrac
+        scrollRowIntoView (rectHeight bounds) idx
+
+    -- Requests just enough scroll to bring row @idx@ (0-based, into the
+    -- full item list) into a @viewportHeight@-tall viewport -- top-aligned
+    -- if it currently falls above, bottom-aligned if below. A no-op when
+    -- the list isn't scrollable at all, or the row is already fully
+    -- within the viewport. Shared by 'scrollCursorIntoView' (a keyboard
+    -- move) and 'rowActivated' (a click landing on a row not yet fully
+    -- scrolled into view -- see its own comment).
+    scrollRowIntoView viewportHeight idx = when (maxOffset > 0) $ do
+      scrollFrac <- getScrollState listScrollEid
+      let rh        = lcRowHeight cfg
+          rowTop    = fromIntegral idx * rh
+          rowBottom = rowTop + rh
+          offsetY   = scrollFrac * maxOffset
+          newFrac
+            | rowTop < offsetY                    = Just (rowTop / maxOffset)
+            | rowBottom > offsetY + viewportHeight = Just ((rowBottom - viewportHeight) / maxOffset)
+            | otherwise                            = Nothing
+      mapM_ (requestScrollTo listScrollEid) newFrac
+      where
+        maxOffset = contentHeight - viewportHeight
 
     -- Renders 'rows' plain when they fit the list's own bounds; once they
     -- overflow, composites a vertical 'scrollBar' alongside them (an
@@ -630,7 +641,7 @@ list tag attrs = Element
     -- the scrollbar's thumb geometry (driven by 'contentHeight') never
     -- shifts as the visible set changes.
     visibleRows offsetY viewportHeight =
-      vBox [children (spacer topSkipped : map row visibleStates ++ [spacer bottomSkipped])]
+      vBox [children (spacer topSkipped : zipWith (row viewportHeight) [loIdx ..] visibleStates ++ [spacer bottomSkipped])]
       where
         rh            = lcRowHeight cfg
         loIdx         = max 0 (floor (offsetY / rh))
@@ -654,17 +665,24 @@ list tag attrs = Element
           Just x  -> (activate x s, activated ++ [x])
           Nothing -> (s, activated)
 
-    rowActivated item = do
+    -- A click always lands on a row that's at least partly visible (an
+    -- off-screen, virtualised-out row is never built, so never hit-tested
+    -- -- see 'visibleRows'), but that row can still be only partially
+    -- within the viewport, straddling its top or bottom edge. Scrolling
+    -- it fully into view on the same click, via 'scrollRowIntoView',
+    -- matches keyboard navigation already doing the same for the cursor.
+    rowActivated viewportHeight idx item = do
       let s' = activate item s0
       fireSelectionChanged s'
       fireItemActivated item
+      scrollRowIntoView viewportHeight idx
 
     rowStates st = Set.fromList
       [ if isSelected st then listSelected else listUnselected
       , if isCursor   st then listCursor   else listNoCursor
       ]
 
-    row st = Element
+    row viewportHeight idx st = Element
       { elLayout  = Layout fill (exactly (lcRowHeight cfg)) TopLeft
       , elMeasure = noIntrinsicSize
       , elRun     = void $ control defaultControlConfig
@@ -673,7 +691,7 @@ list tag attrs = Element
           , ccFocusPolicy  = NotFocusable
           , ccActiveStates = rowStates st
           , ccContent      = \rci -> do
-              when (ciClicked rci) (rowActivated (isItem st))
+              when (ciClicked rci) (rowActivated viewportHeight idx (isItem st))
               runElement (lcRenderItem cfg st)
           }
       }

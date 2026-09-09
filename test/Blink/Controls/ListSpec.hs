@@ -410,3 +410,36 @@ scrollingSpec = describe "list scrolling" $ do
       [Wait 1]
       [PressKey KeyUp []]
     contextScrollState listScrollEid (resultContext result) `shouldBe` 0.5
+
+  describe "clicking a row only partly in view" $ do
+    -- Scrolled 10px into the 100px content (a quarter of the 40px
+    -- scrollable range): item 1's row (y 0-20) now straddles the top
+    -- edge, showing only its bottom 10px (y 0-10 in the viewport); item
+    -- 4's row (y 60-80) straddles the bottom edge, showing only its top
+    -- 10px (y 50-60). Both are still clickable on their visible sliver
+    -- -- virtualisation only excludes rows with *no* overlap at all (see
+    -- 'visibleRows') -- and neither is fully in view yet.
+    let seededPartway = resultContext <$> runInteractions testBounds seedCtx (requestScrollTo listScrollEid 0.25) [] []
+
+    it "scrolls a row straddling the top edge fully into view on click" $ do
+      seeded <- seededPartway
+      let clickPoint = Point 50 5
+      result <- runInteractions testBounds seeded
+        (renderScrollList (selection start : reactions))
+        [MoveTo clickPoint]
+        [ClickAt clickPoint]
+      -- Item 1 is already the cursor/selection, so only the click itself
+      -- fires -- see "clicking the already-selected row only activates
+      -- it" above.
+      resultMessages result `shouldBe` [activatedMsg 1]
+      contextScrollState listScrollEid (resultContext result) `shouldBe` 0
+
+    it "scrolls a row straddling the bottom edge fully into view on click" $ do
+      seeded <- seededPartway
+      let clickPoint = Point 50 55
+      result <- runInteractions testBounds seeded
+        (renderScrollList (selection start : reactions))
+        [MoveTo clickPoint]
+        [ClickAt clickPoint]
+      resultMessages result `shouldBe` [selectedMsg (activate 4 start), activatedMsg 4]
+      contextScrollState listScrollEid (resultContext result) `shouldBe` 0.5
