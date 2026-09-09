@@ -9,6 +9,11 @@
 -- respectively, so those two stay out
 -- of this umbrella -- import "Blink.Controls.Slider" qualified for
 -- them, the way the sample app's @UI@ module does.
+--
+-- 'Blink.Controls.List.onSelectionChanged' clashes with
+-- 'Blink.Controls.ToggleGroup.onSelectionChanged' (the latter stays in
+-- this umbrella, being here first) -- import "Blink.Controls.List"
+-- qualified for it.
 module Blink.Controls
   ( -- * Button
     button
@@ -30,6 +35,12 @@ module Blink.Controls
   , label
   , text
   , target
+    -- * List
+  , list
+  , selection
+  , renderItem
+  , itemId
+  , onItemActivated
     -- * ProgressBar
   , progressBar
   , progress
@@ -69,6 +80,7 @@ import Blink.Controls.Button (activation, button, onActivated)
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Divider (divider, orientation, thickness)
 import Blink.Controls.Label (label, target, text)
+import Blink.Controls.List (itemId, list, onItemActivated, renderItem, selection)
 import Blink.Controls.ProgressBar (bandSpeed, progress, progressBar)
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.RepeatButton (initialDelay, repeatButton, repeatInterval)

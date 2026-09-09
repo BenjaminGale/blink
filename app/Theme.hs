@@ -28,7 +28,7 @@ import Blink.Controls.Divider.Style (dividerStyle)
 import Blink.Controls.Style (controlMetrics)
 
 -- | Which of the demo's sidebar-selected pages is showing.
-data Page = ControlsPage | ScrollBarsPage | ContinuePage | ContainedPage
+data Page = ControlsPage | ScrollBarsPage | ContinuePage | ContainedPage | ListPage
   deriving (Eq, Ord, Show)
 
 data ControlId = Label
@@ -59,6 +59,10 @@ data ControlId = Label
              | ContinueSearchInput
              | ContinueClearButton
              | ContinueAfter
+             | FruitList
+             | FruitRow Text
+             | GroceryList
+             | GroceryRow Text
   deriving (Eq, Ord)
 
 -- | Colours sampled from a light-mode reference screenshot (an inspector

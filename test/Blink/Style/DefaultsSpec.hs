@@ -9,6 +9,7 @@ import Blink.Controls.Button (buttonStyleKey)
 import Blink.Controls.Checkbox (checkboxStyleKey)
 import Blink.Controls.Divider (dividerStyleKey)
 import Blink.Controls.Label (labelStyleKey)
+import Blink.Controls.List.Style (listItemStyleKey, listStyleKey)
 import Blink.Controls.ProgressBar (progressBarStyleKey)
 import Blink.Controls.RadioButton (radioButtonStyleKey)
 import Blink.Controls.ScrollBar (scrollBarButtonStyleKey, scrollBarStyleKey, scrollBarTrackStyleKey)
@@ -52,6 +53,7 @@ spec = describe "Blink.Style.Defaults" $ do
           , progressBarStyleKey, sliderStyleKey, dividerStyleKey, labelStyleKey
           , toggleButtonGroupStyleKey, radioButtonGroupStyleKey
           , scrollBarStyleKey, scrollBarButtonStyleKey, scrollBarTrackStyleKey
+          , listStyleKey, listItemStyleKey
           ]
 
     it "gives a button the surface colour at rest" $ do

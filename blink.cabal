@@ -55,6 +55,7 @@ library
         Blink.Controls.Control
         Blink.Controls.Divider
         Blink.Controls.Label
+        Blink.Controls.List
         Blink.Controls.ProgressBar
         Blink.Controls.RadioButton
         Blink.Controls.RepeatButton
@@ -76,6 +77,7 @@ library
         Blink.Style.Defaults
         Blink.Controls.Divider.Style
         Blink.Controls.Label.Style
+        Blink.Controls.List.Style
         Blink.Controls.ProgressBar.Style
         Blink.Controls.RadioButton.Style
         Blink.Controls.ScrollBar.Style
@@ -122,6 +124,7 @@ test-suite blink-tests
         Blink.Controls.FixedFocusBehaviour
         Blink.Controls.FocusScopeSpec
         Blink.Controls.LabelSpec
+        Blink.Controls.ListSpec
         Blink.Controls.ProgressBarSpec
         Blink.Controls.RadioButtonSpec
         Blink.Controls.RepeatButtonSpec

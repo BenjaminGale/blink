@@ -61,6 +61,7 @@ import qualified Blink.Controls.Button.Style as Button
 import qualified Blink.Controls.Checkbox.Style as Checkbox
 import qualified Blink.Controls.Divider.Style as Divider
 import qualified Blink.Controls.Label.Style as Label
+import qualified Blink.Controls.List.Style as List
 import qualified Blink.Controls.ProgressBar.Style as ProgressBar
 import qualified Blink.Controls.RadioButton.Style as RadioButton
 import qualified Blink.Controls.ScrollBar.Style as ScrollBar
@@ -88,6 +89,7 @@ defaultTheme p = Theme
       , Label.defaultStyleEntries p
       , ToggleGroup.defaultStyleEntries p
       , ScrollBar.defaultStyleEntries p
+      , List.defaultStyleEntries p
       ])
   , themeDefaultStyle = (controlMetrics, buttonStyle AlignCenter p)
   }

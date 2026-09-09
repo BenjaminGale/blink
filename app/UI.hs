@@ -9,6 +9,8 @@ import Blink.Controls.Control
   , postWith, resolve, style
   )
 import Blink.Controls.Label (LabelConfig)
+import Blink.Controls.List (ItemState, MultiSelection (..), SingleSelection (..), multiSelection, selectFirst, selectedItems)
+import qualified Blink.Controls.List as List (isItem, isSelected, onSelectionChanged)
 import Blink.Controls.ProgressBar (ProgressValue (..))
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)
 import qualified Blink.Controls.Slider as Slider (value)
@@ -46,6 +48,9 @@ data AppState = AppState
   , containedWrap     :: WrapPolicy
   , containedRemember :: Bool
   , continueSearchText :: Text
+  , fruitSelection     :: SingleSelection Text
+  , fruitLastActivated :: Text
+  , groceryList        :: MultiSelection Text
   }
 
 data Msg
@@ -66,6 +71,9 @@ data Msg
   | SetContainedRemember Bool
   | SetContinueSearch Text
   | ClearContinueSearch
+  | FruitSelectionChanged (SingleSelection Text)
+  | FruitActivated Text
+  | GroceryListChanged (MultiSelection Text)
 
 demoApp :: App ControlId Msg AppState
 demoApp = App
@@ -87,6 +95,9 @@ demoApp = App
       , containedWrap     = WrapCycle
       , containedRemember = False
       , continueSearchText = ""
+      , fruitSelection     = selectFirst fruits
+      , fruitLastActivated = ""
+      , groceryList        = multiSelection groceries
       }
   , theme   = \s -> if darkMode s then darkTheme else lightTheme
   , view    = demoView
@@ -118,6 +129,9 @@ updateApp msg = case msg of
   SetContainedRemember v  -> modify $ \s -> s { containedRemember = v }
   SetContinueSearch t     -> modify $ \s -> s { continueSearchText = t }
   ClearContinueSearch     -> modify $ \s -> s { continueSearchText = "" }
+  FruitSelectionChanged v -> modify $ \s -> s { fruitSelection = v }
+  FruitActivated t        -> modify $ \s -> s { fruitLastActivated = t }
+  GroceryListChanged v    -> modify $ \s -> s { groceryList = v }
 
 type DemoUI = View ControlId Msg
 
@@ -426,6 +440,7 @@ pages =
   , (ScrollBarsPage,  "Scroll bars")
   , (ContinuePage,    "Continue")
   , (ContainedPage,   "Contained")
+  , (ListPage,        "List")
   ]
 
 -- | A toggle button group of one item per 'Page' -- selecting a page is
@@ -457,6 +472,7 @@ pageContent s = case currentPage s of
   ScrollBarsPage -> scrollBarsPage s
   ContinuePage   -> continuePage s
   ContainedPage  -> containedPage s
+  ListPage       -> listPage s
 
 -- | 'continueGroup's own natural height (its own margin plus one row of
 -- content, at 'rowHeight') -- same reasoning as 'containedGroupHeight'.
@@ -630,6 +646,111 @@ containedGroup s = Element
           [ text opt, onActivated (post (ContainedActivated opt)), width fill, height (exactly containedRowHeight) ]
       | (i, opt) <- zip [0 :: Int ..] containedOptions
       ]
+
+-- List page
+--
+-- Two 'list's side by side, over the same fixed item type ('Text') but
+-- different selection models -- the point being that 'list' itself never
+-- changes, only which model 'selection' is fed. Left: 'SingleSelection'
+-- with a live detail panel, driven by clicking a row, arrowing to it, or
+-- pressing Enter\/Space on the cursor (all three go through
+-- 'FruitSelectionChanged', and a click\/Enter also reports through
+-- 'FruitActivated'). Right: 'MultiSelection', where each row toggles
+-- independently -- click\/Space flips just that row, with its own cursor
+-- separate from what's checked.
+
+fruits :: [Text]
+fruits = ["Apple", "Banana", "Cherry", "Date", "Elderberry"]
+
+groceries :: [Text]
+groceries = ["Milk", "Eggs", "Bread", "Butter", "Coffee"]
+
+listWidth, listHeight :: Double
+listWidth  = 220
+listHeight = 150
+
+-- | A plain caption row, filling its row and vertically centred -- shared
+-- shape for both lists below (the checklist adds a glyph prefix on top).
+listCaption :: Text -> Element ControlId Msg
+listCaption t = caption t [width fill, height fill, align MiddleLeft]
+
+fruitListElem :: AppState -> Element ControlId Msg
+fruitListElem s =
+  list
+    [ elementId FruitList
+    , itemId FruitRow
+    , selection (fruitSelection s)
+    , renderItem (listCaption . List.isItem)
+    , List.onSelectionChanged (postWith FruitSelectionChanged)
+    , onItemActivated (postWith FruitActivated)
+    , width (exactly listWidth), height (exactly listHeight)
+    ]
+
+fruitSection :: AppState -> Element ControlId Msg
+fruitSection s =
+  vBox
+    [ width (exactly listWidth), spacing 8
+    , children
+        [ caption "Single selection" [width fill, height (exactly 20), align TopLeft]
+        , fruitListElem s
+        , caption detailText [width fill, height (exactly 20), align TopLeft]
+        ]
+    ]
+  where
+    detailText = case selectedItems (fruitSelection s) of
+      [x] -> "Selected: " <> x
+      _   -> "Selected: none"
+
+-- | @☑\/☐@ prefixed onto the item text -- redundant with the row's own
+-- selected pseudo-state background (see "Blink.Controls.List.Style"), but
+-- readable even in a theme with no colour difference.
+groceryRowText :: ItemState Text -> Text
+groceryRowText st = (if List.isSelected st then "\9745 " else "\9744 ") <> List.isItem st
+
+groceryListElem :: AppState -> Element ControlId Msg
+groceryListElem s =
+  list
+    [ elementId GroceryList
+    , itemId GroceryRow
+    , selection (groceryList s)
+    , renderItem (listCaption . groceryRowText)
+    , List.onSelectionChanged (postWith GroceryListChanged)
+    , width (exactly listWidth), height (exactly listHeight)
+    ]
+
+grocerySection :: AppState -> Element ControlId Msg
+grocerySection s =
+  vBox
+    [ width (exactly listWidth), spacing 8
+    , children
+        [ caption "Multi selection" [width fill, height (exactly 20), align TopLeft]
+        , groceryListElem s
+        , caption checkedText [width fill, height (exactly 20), align TopLeft]
+        ]
+    ]
+  where
+    checkedText = case selectedItems (groceryList s) of
+      [] -> "Checked: none"
+      xs -> "Checked: " <> T.intercalate ", " xs
+
+listPage :: AppState -> DemoUI ()
+listPage s =
+  runElement $ vBox
+    [ spacing 12, margin 12
+    , children
+        [ caption "List" [width fill, height (exactly 24), align TopLeft]
+        , caption description [width fill, height (exactly 40), align TopLeft]
+        , hBox
+            [ spacing 24, height (exactly (20 + listHeight + 20 + 8 * 2))
+            , children [fruitSection s, grocerySection s]
+            ]
+        ]
+    ]
+  where
+    description =
+      "Click a row, or Tab to the list and use Up/Down + Enter/Space. Both \
+      \lists are the same `list` widget over the same item type -- only \
+      \the selection model passed via `selection` differs."
 
 -- Top-level view
 
