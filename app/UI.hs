@@ -665,10 +665,6 @@ fruits = ["Apple", "Banana", "Cherry", "Date", "Elderberry"]
 groceries :: [Text]
 groceries = ["Milk", "Eggs", "Bread", "Butter", "Coffee"]
 
-listWidth, listHeight :: Double
-listWidth  = 220
-listHeight = 150
-
 -- | A plain caption row, filling its row and vertically centred -- shared
 -- shape for both lists below (the checklist adds a glyph prefix on top).
 listCaption :: Text -> Element ControlId Msg
@@ -681,17 +677,17 @@ fruitListElem s =
     , renderItem (listCaption . List.isItem)
     , List.onSelectionChanged (postWith FruitSelectionChanged)
     , onItemActivated (postWith FruitActivated)
-    , width (exactly listWidth), height (exactly listHeight)
+    , height fill
     ]
 
 fruitSection :: AppState -> Element ControlId Msg
 fruitSection s =
   vBox
-    [ width (exactly listWidth), spacing 8
+    [ spacing 8
     , children
-        [ caption "Single selection" [width fill, height (exactly 20), align TopLeft]
+        [ caption "Single selection" [width fill, align TopLeft]
         , fruitListElem s
-        , caption detailText [width fill, height (exactly 20), align TopLeft]
+        , caption detailText [width fill, align TopLeft]
         ]
     ]
   where
@@ -711,17 +707,17 @@ groceryListElem s =
     [ selection (groceryList s)
     , renderItem (listCaption . groceryRowText)
     , List.onSelectionChanged (postWith GroceryListChanged)
-    , width (exactly listWidth), height (exactly listHeight)
+    , height fill
     ]
 
 grocerySection :: AppState -> Element ControlId Msg
 grocerySection s =
   vBox
-    [ width (exactly listWidth), spacing 8
+    [ spacing 8
     , children
-        [ caption "Multi selection" [width fill, height (exactly 20), align TopLeft]
+        [ caption "Multi selection" [width fill, align TopLeft]
         , groceryListElem s
-        , caption checkedText [width fill, height (exactly 20), align TopLeft]
+        , caption checkedText [width fill, align TopLeft]
         ]
     ]
   where
@@ -737,7 +733,7 @@ listPage s =
         [ caption "List" [width fill, height (exactly 24), align TopLeft]
         , caption description [width fill, height (exactly 40), align TopLeft]
         , hBox
-            [ spacing 24, height (exactly (20 + listHeight + 20 + 8 * 2))
+            [ spacing 24, height fill
             , children [fruitSection s, grocerySection s]
             ]
         ]
