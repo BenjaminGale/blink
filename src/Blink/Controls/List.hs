@@ -440,8 +440,11 @@ data ListPart a
 
 -- | Every capability 'list' resolves: the wrapped 'ControlConfig'\/
 -- 'Layout', the whole model (items and selection together), how a row
--- draws its item, the fixed height every row is drawn at, and its
--- reactions.
+-- draws its item, the fixed height every row is drawn at, its
+-- reactions, and an optional fixed header rendered above the scrollable
+-- rows (see 'listBase') -- never set directly by a 'list' caller, only
+-- by a wrapper built on 'listBase' (e.g. a table deriving one from its
+-- own column headers).
 data ListConfig sel e msg a = ListConfig
   { lcControl            :: ControlConfig e msg
   , lcLayout             :: Layout
@@ -450,6 +453,7 @@ data ListConfig sel e msg a = ListConfig
   , lcRowHeight          :: Double
   , lcOnSelectionChanged :: [sel a -> [Out e msg]]
   , lcOnItemActivated    :: [a -> [Out e msg]]
+  , lcHeader             :: Maybe (Element e msg)
   }
 
 instance HasControlConfig e msg (ListConfig sel e msg a) where
@@ -491,6 +495,7 @@ defaultListConfig = ListConfig
   , lcRowHeight          = defaultRowHeight
   , lcOnSelectionChanged = []
   , lcOnItemActivated    = []
+  , lcHeader             = Nothing
   }
 
 -- | The whole model -- items and selection together. The only way to set
@@ -574,7 +579,7 @@ listBase mkId cfg = do
   (m, styleSet) <- getStyleSet (ccStyleKey (lcControl cfg))
   outer         <- getBounds
   let (finalModel, activated) = keyboardResult (ciKeysPressed r)
-      viewportHeight           = rectHeight (insetRect (chromeInsets m (styleBase styleSet)) outer)
+      viewportHeight           = rectHeight (insetRect (chromeInsets m (styleBase styleSet)) outer) - headerHeight
   pure (ListInteraction r finalModel activated viewportHeight)
   where
     s0   = lcSelection cfg
@@ -590,6 +595,12 @@ listBase mkId cfg = do
     -- The rows' own total extent, known exactly (no measuring) since
     -- every row is fixed at 'lcRowHeight' -- see 'rowHeight'.
     contentHeight = fromIntegral itemCount * lcRowHeight cfg
+
+    -- The fixed header (see 'lcHeader') eats into the rows' own viewport
+    -- the same way chrome does -- 'liViewportHeight' has to account for
+    -- it too, alongside 'ccContent's own 'composite', which actually
+    -- lays the header out above the rows.
+    headerHeight = maybe 0 (const (lcRowHeight cfg)) (lcHeader cfg)
 
     scrollBarTag = mkId . ListScrollBar
 
@@ -618,9 +629,24 @@ listBase mkId cfg = do
           let (finalModel, activated) = keyboardResult (ciKeysPressed ci)
           fireSelectionChanged finalModel
           mapM_ fireItemActivated activated
-          when (cursorItem finalModel /= cursorItem s0) (scrollCursorIntoView finalModel)
-          renderViewport
+          case lcHeader cfg of
+            Nothing       -> rowsArea finalModel
+            Just headerEl -> runElement $ vBox
+              [ children
+                  [ elementWithLayout (Layout fill (exactly (lcRowHeight cfg)) TopLeft) (runElement headerEl)
+                  , elementWithLayout (Layout fill fill TopLeft) (rowsArea finalModel)
+                  ]
+              ]
       }
+
+    -- Keyboard-driven scroll adjustment plus the rows themselves --
+    -- composed via a real 'vBox' rather than manual bounds math when a
+    -- header is present (see 'lcHeader'), so 'getBounds' here already
+    -- reflects the space left after it, the same way it already does
+    -- for the scrollbar's own hBox split (see 'scrollableRows').
+    rowsArea finalModel = do
+      when (cursorItem finalModel /= cursorItem s0) (scrollCursorIntoView finalModel)
+      renderViewport
 
     -- Keeps a keyboard-moved cursor visible: once its row falls above or
     -- below the viewport, requests just enough scroll to bring that edge

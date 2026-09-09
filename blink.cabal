@@ -64,6 +64,7 @@ library
         Blink.Controls.TextInput
         Blink.Controls.ToggleButton
         Blink.Controls.ToggleGroup
+        Blink.Controls.Table
         Blink.Controls.Tree
         Blink.Element
         Blink.Layout
@@ -86,6 +87,7 @@ library
         Blink.Controls.TextInput.Style
         Blink.Controls.ToggleButton.Style
         Blink.Controls.ToggleGroup.Style
+        Blink.Controls.Table.Style
         Blink.Controls.Tree.Style
     hs-source-dirs: src
 
@@ -136,6 +138,7 @@ test-suite blink-tests
         Blink.Controls.ToggleBehaviour
         Blink.Controls.ToggleButtonSpec
         Blink.Controls.ToggleGroupSpec
+        Blink.Controls.TableSpec
         Blink.Controls.TreeSpec
         Blink.LayoutSpec
         Blink.Style.DefaultsSpec

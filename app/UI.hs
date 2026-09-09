@@ -14,6 +14,7 @@ import qualified Blink.Controls.List as List (isItem, onSelectionChanged)
 import Blink.Controls.ProgressBar (ProgressValue (..))
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)
 import qualified Blink.Controls.Slider as Slider (value)
+import Blink.Controls.Table (ColumnConfig (..))
 import Blink.Controls.Tree (TreeItemState (..), flattenVisible)
 import Blink.Style (Style (..))
 import Blink.Geometry
@@ -59,6 +60,7 @@ data AppState = AppState
   , longListSelection  :: SingleSelection Int
   , fileTreeExpanded   :: Set Text
   , fileTreeSelection  :: SingleSelection Text
+  , groceryTableSelection :: SingleSelection Text
   }
 
 data Msg
@@ -85,6 +87,7 @@ data Msg
   | LongListChanged (SingleSelection Int)
   | FileTreeExpansionChanged (Set Text)
   | FileTreeSelectionChanged (SingleSelection Text)
+  | GroceryTableSelectionChanged (SingleSelection Text)
 
 demoApp :: App ControlId Msg AppState
 demoApp = App
@@ -112,6 +115,7 @@ demoApp = App
       , longListSelection  = selectFirst longListItems
       , fileTreeExpanded   = defaultFileTreeExpanded
       , fileTreeSelection  = selectFirst (visibleFileTreeItems defaultFileTreeExpanded)
+      , groceryTableSelection = selectFirst (map fst groceryTableItems)
       }
   , theme   = \s -> if darkMode s then darkTheme else lightTheme
   , view    = demoView
@@ -157,6 +161,7 @@ updateApp msg = case msg of
     , fileTreeSelection = singleSelection (visibleFileTreeItems e) (listToMaybe (selectedItems (fileTreeSelection s)))
     }
   FileTreeSelectionChanged v -> modify $ \s -> s { fileTreeSelection = v }
+  GroceryTableSelectionChanged v -> modify $ \s -> s { groceryTableSelection = v }
 
 type DemoUI = View ControlId Msg
 
@@ -467,6 +472,7 @@ pages =
   , (ContainedPage,   "Contained")
   , (ListPage,        "List")
   , (TreePage,        "Tree")
+  , (TablePage,       "Table")
   ]
 
 -- | A toggle button group of one item per 'Page' -- selecting a page is
@@ -500,6 +506,7 @@ pageContent s = case currentPage s of
   ContainedPage  -> containedPage s
   ListPage       -> listPage s
   TreePage       -> treePage s
+  TablePage      -> tablePage s
 
 -- | 'continueGroup's own natural height (its own margin plus one row of
 -- content, at 'rowHeight') -- same reasoning as 'containedGroupHeight'.
@@ -862,6 +869,58 @@ treePage s =
       \Up/Down. Built entirely on `list` -- 'src' starts expanded, \
       \'test' collapsed."
     detailText = case selectedItems (fileTreeSelection s) of
+      [x] -> "Selected: " <> x
+      _   -> "Selected: none"
+
+-- | Item name paired with a quantity, shown as the table's two columns.
+groceryTableItems :: [(Text, Int)]
+groceryTableItems =
+  [ ("Milk", 2)
+  , ("Eggs", 12)
+  , ("Bread", 1)
+  , ("Butter", 1)
+  , ("Coffee", 3)
+  ]
+
+groceryTableColumns :: [ColumnConfig ControlId Msg Text]
+groceryTableColumns =
+  [ ColumnConfig
+      { colHeader = listCaption "Item"
+      , colWidth  = fill
+      , colCell   = listCaption . List.isItem
+      }
+  , ColumnConfig
+      { colHeader = listCaption "Qty"
+      , colWidth  = exactly 60
+      , colCell   = \st -> listCaption (maybe "" (T.pack . show) (lookup (List.isItem st) groceryTableItems))
+      }
+  ]
+
+groceryTableElem :: AppState -> Element ControlId Msg
+groceryTableElem s =
+  table GroceryTable
+    [ columns groceryTableColumns
+    , selection (groceryTableSelection s)
+    , List.onSelectionChanged (postWith GroceryTableSelectionChanged)
+    , width fill, height (exactly 200)
+    ]
+
+tablePage :: AppState -> DemoUI ()
+tablePage s =
+  runElement $ vBox
+    [ spacing 12, margin 12
+    , children
+        [ caption "Table" [width fill, height (exactly 24), align TopLeft]
+        , caption description [width fill, height (exactly 40), align TopLeft]
+        , groceryTableElem s
+        , caption detailText [width fill, align TopLeft]
+        ]
+    ]
+  where
+    description =
+      "Click a row, or Tab to the table and use Up/Down. Both columns \
+      \and the header are built from the same `columns` list."
+    detailText = case selectedItems (groceryTableSelection s) of
       [x] -> "Selected: " <> x
       _   -> "Selected: none"
 

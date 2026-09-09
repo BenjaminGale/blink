@@ -47,6 +47,9 @@ module Blink.Controls
   , expanded
   , renderNode
   , onExpansionChanged
+    -- * Table
+  , table
+  , columns
     -- * ProgressBar
   , progressBar
   , progress
@@ -98,4 +101,5 @@ import Blink.Controls.ToggleGroup
   ( allowDeselect, groupOrientation, itemSpacing, items, onSelectionChanged, radioButtonGroup
   , selectedItem, toggleAttributes, toggleButtonGroup
   )
+import Blink.Controls.Table (columns, table)
 import Blink.Controls.Tree (expanded, forest, onExpansionChanged, renderNode, tree)
