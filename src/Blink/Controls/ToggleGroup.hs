@@ -45,15 +45,15 @@ import Blink.View (Out)
 import Blink.Element (Element (..), HasLayoutConfig (..), runElement)
 
 -- | Identifies one part of a 'toggleButtonGroup'\/'radioButtonGroup' for the
--- purpose of minting element ids: the group's own container
--- ('ToggleGroupRoot'), or one of its items, tagged by the item's own data
+-- purpose of building element ids: the group's own container
+-- ('ToggleGroup'), or one of its items, tagged by the item's own data
 -- value rather than its position in the list -- so
 -- reordering\/inserting\/removing items elsewhere in the list never
 -- disturbs another item's hover\/focus\/capture state. Requires distinct
 -- item values (see 'items') the same way 'selectedItem' already does, since
--- two equal items would otherwise mint the same id.
+-- two equal items would otherwise build the same id.
 data ToggleGroupPart a
-  = ToggleGroupRoot
+  = ToggleGroup
   | ToggleGroupItem a
   deriving (Eq, Ord, Show)
 
@@ -199,8 +199,8 @@ radioButtonGroup = toggleGroup radioButtonGroupStyleKey radioButton
 -- fixed, not attr-settable): Tab moves directly between its items, each
 -- independently focusable, exactly as if the group weren't there.
 --
--- @tag@ mints every part's element id from a 'ToggleGroupPart': the group's
--- own container id from 'ToggleGroupRoot', and each item's id from
+-- @tag@ builds every part's element id from a 'ToggleGroupPart': the group's
+-- own container id from 'ToggleGroup', and each item's id from
 -- 'ToggleGroupItem' applied to the item's own data -- so the caller never
 -- writes a per-item id by hand.
 toggleGroup
@@ -226,7 +226,7 @@ toggleGroup styleKey widget tag attrs = Element
          ]
       )
     ccfg = (tggControl cfg)
-      { ccElementId   = Just (tag ToggleGroupRoot)
+      { ccElementId   = Just (tag ToggleGroup)
       , ccFocusPolicy = NotFocusable
       , ccContent     = const (runElement box)
       }

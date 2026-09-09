@@ -37,7 +37,7 @@ sizes = [minBound .. maxBound]
 data TestElement = Before | Group | Item Size deriving (Eq, Ord, Show)
 
 tag :: ToggleGroupPart Size -> TestElement
-tag ToggleGroupRoot     = Group
+tag ToggleGroup         = Group
 tag (ToggleGroupItem s) = Item s
 
 testTheme :: Theme TestElement

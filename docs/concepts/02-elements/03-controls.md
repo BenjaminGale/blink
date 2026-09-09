@@ -68,3 +68,9 @@ a control with no focus or chrome of its own, such as
 `Blink.Controls.Label`, resolves hover/click state directly — plus its
 own visual content and attributes. See each widget's module for what it
 adds on top of this shared foundation.
+
+Every widget covered so far takes a single element id. A few, such as
+`scrollBar` and `toggleButtonGroup`/`radioButtonGroup`, are built from
+several independently-tracked pieces and need more than one; see
+[Composite controls](04-composite-controls.md) for how they ask for a
+whole family of ids from one attribute.

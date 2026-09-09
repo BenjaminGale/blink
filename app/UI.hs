@@ -302,8 +302,8 @@ scrollContent = Element
     gridBody = do
       s      <- currentStyle
       bounds <- getBounds
-      hFrac  <- getScrollState (HScrollCtl ScrollBarRoot)
-      vFrac  <- getScrollState (VScrollCtl ScrollBarRoot)
+      hFrac  <- getScrollState (HScrollCtl ScrollBar)
+      vFrac  <- getScrollState (VScrollCtl ScrollBar)
       let offsetX = hFrac * max 0 (scrollContentW - rectWidth bounds)
           offsetY = vFrac * max 0 (scrollContentH - rectHeight bounds)
       withClip $ forM_ [0 .. scrollGridRows - 1] $ \row ->

@@ -19,6 +19,20 @@ Description — what it is, why it'd help, or what it'd take.
 
 ## Controls
 
+### Independent identity for more sub-parts of composite controls
+`scrollBar` and `toggleButtonGroup`/`radioButtonGroup` build a separate
+element id per part (see `ScrollBarPart`/`ToggleGroupPart`), but only for
+the pieces that are genuinely separate interactive controls today: the
+decrement/increment buttons and track, or each item. Several visually
+distinct sub-parts still share their parent's single id and interaction
+state instead of getting their own. `scrollBar`'s own thumb is drawn
+inside the track's control with no id of its own, and `slider`'s track
+and thumb work the same way (the whole control is one draggable region).
+Whether any of these should become independently
+hoverable/focusable/style-targetable is still open, including what that
+would take from `Blink.Controls.Slider`'s current single-draggable-region
+design in particular.
+
 ## Text Input
 Add a placeholderText attribute which is displayed (grayed out) when the control
 has no input.
@@ -135,12 +149,23 @@ a bespoke text-only field per control.
 ## Styling
 
 ### Pseudo styles for control sub-structures
+Depends on: Independent identity for more sub-parts of composite controls
+
 A control class styles a control as a whole, but composite controls are
-made of several visually distinct parts — a checkbox has a container, a box,
-and a label, each of which may need its own default look. This extends the
-control class idea downward: instead of a control only exposing one class to
-style, it would expose a class per named sub-part, so a theme can target
-"the box inside a checkbox" the same way it can already target "a checkbox."
+made of several visually distinct parts, each of which may need its own
+default look: a checkbox has a container, a box, and a label; a scrollbar
+has a track and a thumb. This extends the control class idea downward:
+instead of a control only exposing one class to style, it would expose a
+class per named sub-part, so a theme can target "the box inside a
+checkbox" or "a scrollbar's thumb" the same way it can already target "a
+checkbox" or "a scrollbar." `scrollBarTrackStyleKey`/`scrollBarButtonStyleKey`
+already do this for scrollBar's independently-interactive parts, each a
+plain `Class`, unrelated to that part's element id. The open question is
+what a sub-part-scoped style hook should look like for parts that don't
+have (or
+don't need) their own id, and whether it should ever support a per-instance
+override the way a control's own `style` attr does, not just a shared
+default.
 
 ## Geometry
 

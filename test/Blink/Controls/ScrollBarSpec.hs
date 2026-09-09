@@ -26,7 +26,7 @@ tag = Part
 -- | The 'Blink.View.ScrollState' key 'scrollBar' reads\/writes its own
 -- position under -- see its module header.
 scrollEid :: TestElement
-scrollEid = tag ScrollBarRoot
+scrollEid = tag ScrollBar
 
 testColour :: Colour
 testColour = RGBA 0 0 0 1

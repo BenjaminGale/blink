@@ -15,7 +15,7 @@
 -- A caller that needs to know the current position too -- to offset the
 -- content being scrolled, say -- reads it the same way, via
 -- 'Blink.View.getScrollState' passed the identical element id
--- (@tag 'ScrollBarRoot'@); no attribute\/reaction pair is needed to expose
+-- (@tag 'ScrollBar'@); no attribute\/reaction pair is needed to expose
 -- it, the same way none is needed to read a text input's own scroll
 -- offset from outside it.
 --
@@ -74,7 +74,7 @@ scrollBarThickness = 16
 minThumbLength :: Double
 minThumbLength = 20
 
--- | Identifies one part of a 'scrollBar' for the purpose of minting element
+-- | Identifies one part of a 'scrollBar' for the purpose of building element
 -- ids -- the draggable track, the two arrow buttons, and the composite's
 -- own root, which doubles as the 'Blink.View.ScrollState' key its position
 -- is stored under (see the module header).
@@ -82,7 +82,7 @@ data ScrollBarPart
   = ScrollBarTrack
   | ScrollBarDecrement
   | ScrollBarIncrement
-  | ScrollBarRoot
+  | ScrollBar
   deriving (Eq, Ord, Show)
 
 -- | Every capability 'scrollBar' resolves: the wrapped 'ControlConfig', its
@@ -225,8 +225,8 @@ arrowLayoutAttrs Vertical   = [width fill, height (exactly scrollBarThickness)]
 -- 'Blink.Controls.Slider.slider' does; holding either arrow steps the
 -- position by 'step', repeating for as long as it's held.
 --
--- @tag@ mints each part's element id from a 'ScrollBarPart' -- the caller
--- never writes a per-part id by hand. @tag 'ScrollBarRoot'@ doubles as the
+-- @tag@ builds each part's element id from a 'ScrollBarPart' -- the caller
+-- never writes a per-part id by hand. @tag 'ScrollBar'@ doubles as the
 -- 'Blink.View.ScrollState' key -- see the module header for reading it
 -- from elsewhere.
 scrollBar :: Ord e => (ScrollBarPart -> e) -> [Attribute (ScrollBarConfig e msg)] -> Element e msg
@@ -238,7 +238,7 @@ scrollBar tag attrs = Element
   where
     cfg       = resolve defaultScrollBarConfig attrs
     o         = sbOrientation cfg
-    scrollEid = tag ScrollBarRoot
+    scrollEid = tag ScrollBar
 
     box = (if o == Horizontal then hBox else vBox) [children [decrementBtn, trackEl, incrementBtn]]
 
