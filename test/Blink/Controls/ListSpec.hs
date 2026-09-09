@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Data.List.NonEmpty (NonEmpty (..))
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute, elementId)
+import Blink.Controls.Control (Attribute)
 import Blink.Controls.List
 import Blink.Element (Element (..), runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
@@ -148,7 +148,7 @@ rangeSpec = describe "RangeSelection" $ do
 -- | Rows are plain 20px-tall, full-width slots with no chrome (see
 -- 'testTheme'), so three items give exactly a 100x60 list with rows at
 -- y 0-20\/20-40\/40-60.
-data TestElem = ListRoot | Row Int deriving (Eq, Ord, Show)
+newtype TestElem = Part (ListPart Int) deriving (Eq, Ord, Show)
 
 testItems :: [Int]
 testItems = [1, 2, 3]
@@ -195,10 +195,9 @@ fixedRow = Element
   , elRun     = pure ()
   }
 
-renderList :: (SelectionModel sel, Eq a, Eq (sel a)) => [Attribute (ListConfig sel TestElem String a)] -> View TestElem String ()
-renderList attrs = runElement $ list
-  ( elementId ListRoot
-  : renderItem (const (fixedRow))
+renderList :: (SelectionModel sel, Eq (sel Int)) => [Attribute (ListConfig sel TestElem String Int)] -> View TestElem String ()
+renderList attrs = runElement $ list Part
+  ( renderItem (const fixedRow)
   : width (exactly 100)
   : attrs
   )
@@ -211,8 +210,7 @@ activatedMsg x = "Activated:" ++ show x
 
 reactions :: (Show (sel Int)) => [Attribute (ListConfig sel TestElem String Int)]
 reactions =
-  [ itemId Row
-  , onSelectionChanged (\s -> [OutMsg (selectedMsg s)])
+  [ onSelectionChanged (\s -> [OutMsg (selectedMsg s)])
   , onItemActivated (\x -> [OutMsg (activatedMsg x)])
   ]
 
@@ -255,14 +253,3 @@ widgetSpec = describe "list" $ do
       [Wait 1]
       [PressKey KeyDown [Shift]]
     resultMessages result `shouldBe` [selectedMsg (extendCursor Next rstart)]
-
-  it "an unclickable list (no itemId) still ignores clicks" $ do
-    result <- runInteractions testBounds seedCtx
-      (renderList
-        [ selection start
-        , renderItem (const (fixedRow))
-        , onSelectionChanged (\s -> [OutMsg (selectedMsg s)])
-        ])
-      [MoveTo (inRow 2)]
-      [ClickAt (inRow 2)]
-    resultMessages result `shouldBe` []

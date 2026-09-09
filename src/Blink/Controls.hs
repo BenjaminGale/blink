@@ -39,7 +39,6 @@ module Blink.Controls
   , list
   , selection
   , renderItem
-  , itemId
   , onItemActivated
     -- * ProgressBar
   , progressBar
@@ -80,7 +79,7 @@ import Blink.Controls.Button (activation, button, onActivated)
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Divider (divider, orientation, thickness)
 import Blink.Controls.Label (label, target, text)
-import Blink.Controls.List (itemId, list, onItemActivated, renderItem, selection)
+import Blink.Controls.List (list, onItemActivated, renderItem, selection)
 import Blink.Controls.ProgressBar (bandSpeed, progress, progressBar)
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.RepeatButton (initialDelay, repeatButton, repeatInterval)

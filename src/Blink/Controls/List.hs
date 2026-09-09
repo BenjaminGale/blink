@@ -79,12 +79,12 @@ module Blink.Controls.List
   , rangeFrom
 
     -- * The list widget
+  , ListPart (..)
   , ListConfig (..)
   , defaultListConfig
   , list
   , selection
   , renderItem
-  , itemId
   , onSelectionChanged
   , onItemActivated
   ) where
@@ -410,18 +410,28 @@ rangeFrom anchor cursor xs = case (elemIndex anchor xs, elemIndex cursor xs) of
 
 -- * The list widget
 
+-- | Identifies one part of a 'list' for the purpose of building element
+-- ids: the list's own root, or one of its rows, tagged by the row's own
+-- item value rather than its position in the list -- so
+-- reordering\/inserting\/removing items elsewhere in the list never
+-- disturbs another row's hover\/focus\/capture state. The same pattern
+-- 'Blink.Controls.ToggleGroup.ToggleGroupPart'\/'Blink.Controls.ScrollBar.ScrollBarPart'
+-- already use: every part's id is minted from one @tag@ function (see
+-- 'list'), so the root and its rows are visibly related and can't collide,
+-- rather than being two independently-chosen, unrelated ids.
+data ListPart a
+  = List
+  | ListItem a
+  deriving (Eq, Ord, Show)
+
 -- | Every capability 'list' resolves: the wrapped 'ControlConfig'\/
 -- 'Layout', the whole model (items and selection together), how a row
--- draws its item, how to mint a row's own element id, and its reactions.
+-- draws its item, and its reactions.
 data ListConfig sel e msg a = ListConfig
   { lcControl            :: ControlConfig e msg
   , lcLayout             :: Layout
   , lcSelection          :: sel a
   , lcRenderItem         :: ItemState a -> Element e msg
-  , lcItemId             :: Maybe (a -> e)
-    -- ^ Mints an id per row so each row is its own 'control' (hover\/
-    -- press chrome, click detection). Without it rows draw but can't be
-    -- clicked.
   , lcOnSelectionChanged :: [sel a -> [Out e msg]]
   , lcOnItemActivated    :: [a -> [Out e msg]]
   }
@@ -434,15 +444,13 @@ instance HasLayoutConfig (ListConfig sel e msg a) where
 
 -- | 'defaultControlConfig' (styled via @Class \"list\"@), filling its
 -- parent's width and sizing its height to its own rows, 'emptySelection',
--- no per-row render (draws nothing), no 'itemId' (rows aren't clickable),
--- and no reactions.
+-- no per-row render (draws nothing), and no reactions.
 defaultListConfig :: SelectionModel sel => ListConfig sel e msg a
 defaultListConfig = ListConfig
   { lcControl            = defaultControlConfig { ccStyleKey = listStyleKey }
   , lcLayout             = Layout fill fitContent TopLeft
   , lcSelection          = emptySelection
   , lcRenderItem         = const emptyElement
-  , lcItemId             = Nothing
   , lcOnSelectionChanged = []
   , lcOnItemActivated    = []
   }
@@ -456,11 +464,6 @@ selection s = Attribute (\c -> c { lcSelection = s })
 -- for styling.
 renderItem :: (ItemState a -> Element e msg) -> Attribute (ListConfig sel e msg a)
 renderItem f = Attribute (\c -> c { lcRenderItem = f })
-
--- | Mints an element id per row. Required for rows to be clickable and to
--- get hover\/press chrome.
-itemId :: (a -> e) -> Attribute (ListConfig sel e msg a)
-itemId f = Attribute (\c -> c { lcItemId = Just f })
 
 -- | Reacts whenever a user-driven change actually moves the model to a
 -- new value, with the complete new model. Without it the list still
@@ -488,8 +491,20 @@ onItemActivated h = Attribute (\c -> c { lcOnItemActivated = lcOnItemActivated c
 -- handling, and click handling all read 'lcSelection' as given, and
 -- 'onSelectionChanged'\/'onItemActivated' report the result for the app
 -- to store and pass back in next frame.
-list :: (Ord e, Eq a, SelectionModel sel, Eq (sel a)) => [Attribute (ListConfig sel e msg a)] -> Element e msg
-list attrs = Element
+--
+-- @tag@ builds every part's element id from a 'ListPart': the list's own
+-- root id from 'List', and each row's id from 'ListItem' applied to the
+-- row's own item value -- so the caller never writes a per-row id by
+-- hand, and can't accidentally give the root and a row the same id (see
+-- 'ListPart'). Any 'Blink.Controls.Control.elementId' attribute passed in
+-- @attrs@ is discarded in favour of @tag List@, the same as
+-- 'Blink.Controls.ToggleGroup.toggleButtonGroup'.
+list
+  :: (Ord e, Eq a, SelectionModel sel, Eq (sel a))
+  => (ListPart a -> e)
+  -> [Attribute (ListConfig sel e msg a)]
+  -> Element e msg
+list tag attrs = Element
   { elLayout  = lcLayout cfg
   , elMeasure = measureChrome (ccStyleKey (lcControl cfg)) rows
   , elRun     = void (control ccfg)
@@ -503,7 +518,8 @@ list attrs = Element
     fireItemActivated      = runHandlers (lcOnItemActivated cfg)
 
     ccfg = (lcControl cfg)
-      { ccContent = \ci -> do
+      { ccElementId = Just (tag List)
+      , ccContent = \ci -> do
           let (finalModel, activated) = foldl stepKey (s0, []) (ciKeysPressed ci)
           fireSelectionChanged finalModel
           mapM_ fireItemActivated activated
@@ -534,18 +550,16 @@ list attrs = Element
       , if isCursor   st then listCursor   else listNoCursor
       ]
 
-    row st = case lcItemId cfg of
-      Nothing -> lcRenderItem cfg st
-      Just mk -> Element
-        { elLayout  = Layout fill fitContent TopLeft
-        , elMeasure = measureChrome listItemStyleKey (lcRenderItem cfg st)
-        , elRun     = void $ control defaultControlConfig
-            { ccElementId    = Just (mk (isItem st))
-            , ccStyleKey     = listItemStyleKey
-            , ccFocusPolicy  = NotFocusable
-            , ccActiveStates = rowStates st
-            , ccContent      = \rci -> do
-                when (ciClicked rci) (rowActivated (isItem st))
-                runElement (lcRenderItem cfg st)
-            }
-        }
+    row st = Element
+      { elLayout  = Layout fill fitContent TopLeft
+      , elMeasure = measureChrome listItemStyleKey (lcRenderItem cfg st)
+      , elRun     = void $ control defaultControlConfig
+          { ccElementId    = Just (tag (ListItem (isItem st)))
+          , ccStyleKey     = listItemStyleKey
+          , ccFocusPolicy  = NotFocusable
+          , ccActiveStates = rowStates st
+          , ccContent      = \rci -> do
+              when (ciClicked rci) (rowActivated (isItem st))
+              runElement (lcRenderItem cfg st)
+          }
+      }

@@ -676,10 +676,8 @@ listCaption t = caption t [width fill, height fill, align MiddleLeft]
 
 fruitListElem :: AppState -> Element ControlId Msg
 fruitListElem s =
-  list
-    [ elementId FruitList
-    , itemId FruitRow
-    , selection (fruitSelection s)
+  list FruitList
+    [ selection (fruitSelection s)
     , renderItem (listCaption . List.isItem)
     , List.onSelectionChanged (postWith FruitSelectionChanged)
     , onItemActivated (postWith FruitActivated)
@@ -709,10 +707,8 @@ groceryRowText st = (if List.isSelected st then "\9745 " else "\9744 ") <> List.
 
 groceryListElem :: AppState -> Element ControlId Msg
 groceryListElem s =
-  list
-    [ elementId GroceryList
-    , itemId GroceryRow
-    , selection (groceryList s)
+  list GroceryList
+    [ selection (groceryList s)
     , renderItem (listCaption . groceryRowText)
     , List.onSelectionChanged (postWith GroceryListChanged)
     , width (exactly listWidth), height (exactly listHeight)

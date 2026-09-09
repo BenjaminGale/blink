@@ -19,6 +19,7 @@ import qualified Data.Map.Strict as Map
 
 import Data.Text (Text)
 import Blink.Geometry
+import Blink.Controls.List (ListPart)
 import Blink.Controls.ScrollBar (ScrollBarPart)
 import Blink.Controls.ToggleGroup (ToggleGroupPart)
 import Blink.Rendering
@@ -59,10 +60,8 @@ data ControlId = Label
              | ContinueSearchInput
              | ContinueClearButton
              | ContinueAfter
-             | FruitList
-             | FruitRow Text
-             | GroceryList
-             | GroceryRow Text
+             | FruitList (ListPart Text)
+             | GroceryList (ListPart Text)
   deriving (Eq, Ord)
 
 -- | Colours sampled from a light-mode reference screenshot (an inspector
