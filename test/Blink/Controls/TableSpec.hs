@@ -195,7 +195,7 @@ resizingSpec = describe "table column resizing" $
 
 sortingSpec :: Spec
 sortingSpec = describe "table column-click sorting" $
-  it "toggles Ascending/Descending on repeat clicks of a column, resets to Ascending on a different one" $ do
+  it "cycles Ascending/Descending on repeat clicks of a column, resets to Ascending on a different one" $ do
     let headerClick x = at x 10
         onSort        = onColumnSortRequested (\s -> [OutMsg ("Sort:" ++ show s)])
 
@@ -211,11 +211,19 @@ sortingSpec = describe "table column-click sorting" $
       [ClickAt (headerClick 10)]
     resultMessages step2 `shouldBe` ["Sort:(0,Descending)"]
 
+    -- A third click on the same, already-descending column cycles back
+    -- to Ascending rather than clearing the sort or repeating Descending.
     step3 <- runInteractions testBounds (resultContext step2)
       (renderSortableTable [selection (unselected items), sortedBy (Just (0, Descending)), onSort])
+      [MoveTo (headerClick 10)]
+      [ClickAt (headerClick 10)]
+    resultMessages step3 `shouldBe` ["Sort:(0,Ascending)"]
+
+    step4 <- runInteractions testBounds (resultContext step3)
+      (renderSortableTable [selection (unselected items), sortedBy (Just (0, Ascending)), onSort])
       [MoveTo (headerClick 70)]
       [ClickAt (headerClick 70)]
-    resultMessages step3 `shouldBe` ["Sort:(1,Ascending)"]
+    resultMessages step4 `shouldBe` ["Sort:(1,Ascending)"]
 
 scrollOnSortSpec :: Spec
 scrollOnSortSpec = describe "table sorting scrolls the selection into view" $
