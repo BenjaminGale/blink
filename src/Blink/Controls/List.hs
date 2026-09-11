@@ -74,6 +74,7 @@ module Blink.Controls.List
   , MultiSelection
   , multiSelection
   , multiSelected
+  , multiSelectedAt
   , multiItems
 
     -- ** Contiguous-range selection
@@ -82,6 +83,7 @@ module Blink.Controls.List
   , noRange
   , rangeAt
   , rangeFrom
+  , rangeAtPositions
   , rangeItems
   , rangeEnd
 
@@ -337,6 +339,15 @@ multiSelected :: Eq a => [a] -> [a] -> MultiSelection a
 multiSelected []       _   = MultiEmpty
 multiSelected (x : xs) sel = MultiSelection [] (x `elem` sel, x) [(y `elem` sel, y) | y <- xs]
 
+-- | Builds from separate items\/selected-positions pieces at the app
+-- edge, cursor on the first item. O(items * positions), needs nothing --
+-- use this instead of 'multiSelected' when the app already has
+-- positions and not items.
+multiSelectedAt :: [Int] -> [a] -> MultiSelection a
+multiSelectedAt _   []       = MultiEmpty
+multiSelectedAt sel (x : xs) =
+  MultiSelection [] (0 `elem` sel, x) [(i `elem` sel, y) | (i, y) <- zip [1 ..] xs]
+
 -- | Every item, in order.
 multiItems :: MultiSelection a -> [a]
 multiItems MultiEmpty              = []
@@ -383,9 +394,10 @@ anchorOf run AtStart = NE.last run
 anchorOf run AtEnd   = NE.head run
 
 -- | The range spanning the items at positions @ia@ and @ic@ (inclusive),
--- cursor on @ic@'s end.
-buildRange :: Int -> Int -> [a] -> RangeSelection a
-buildRange ia ic xs = case NE.nonEmpty runXs of
+-- cursor on @ic@'s end. O(length), needs nothing -- use this instead of
+-- 'rangeFrom' when the app already has positions and not items.
+rangeAtPositions :: Int -> Int -> [a] -> RangeSelection a
+rangeAtPositions ia ic xs = case NE.nonEmpty runXs of
   Just ne -> Range (reverse before) ne after end
   Nothing -> NoRange xs
   where
@@ -428,7 +440,7 @@ instance SelectionModel RangeSelection where
   extendTo x (NoRange xs)          = rangeAt x xs
   extendTo x s@(Range _ run _ end) =
     case (elemIndex (anchorOf run end) xs, elemIndex x xs) of
-      (Just ia, Just ix) -> buildRange ia ix xs
+      (Just ia, Just ix) -> rangeAtPositions ia ix xs
       _                  -> s
     where xs = rangeItems s
 
@@ -463,7 +475,7 @@ rangeAt x xs = maybe (NoRange xs) (\(b, y, a) -> Range b (y :| []) a AtEnd) (bre
 -- list; 'noRange' otherwise.
 rangeFrom :: Eq a => a -> a -> [a] -> RangeSelection a
 rangeFrom anchor cursor xs = case (elemIndex anchor xs, elemIndex cursor xs) of
-  (Just ia, Just ic) -> buildRange ia ic xs
+  (Just ia, Just ic) -> rangeAtPositions ia ic xs
   _                   -> NoRange xs
 
 -- * The list widget

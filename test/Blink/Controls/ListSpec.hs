@@ -123,6 +123,9 @@ multiSpec = describe "MultiSelection" $ do
   it "multiSelected marks the given subset" $
     selectedItems (multiSelected [1, 2, 3 :: Int] [2]) `shouldBe` [2]
 
+  it "multiSelectedAt marks the subset by position" $
+    selectedItems (multiSelectedAt [1] [1, 2, 3 :: Int]) `shouldBe` [2]
+
   it "activate toggles the target item on, moving the cursor to it" $ do
     let s = activate 2 (multiSelection [1, 2, 3 :: Int])
     selectedItems s `shouldBe` [2]
@@ -144,6 +147,9 @@ rangeSpec = describe "RangeSelection" $ do
 
   it "rangeAt preserves every item" $
     rangeItems (rangeAt 2 [1, 2, 3, 4 :: Int]) `shouldBe` [1, 2, 3, 4]
+
+  it "rangeAtPositions selects the run by position" $
+    selectedItems (rangeAtPositions 1 3 [1, 2, 3, 4 :: Int]) `shouldBe` [2, 3, 4]
 
   it "rangeAt anchors the cursor at the end of the run" $
     rangeEnd (rangeAt 2 [1, 2, 3, 4 :: Int]) `shouldBe` Just AtEnd
