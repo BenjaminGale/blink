@@ -240,6 +240,19 @@ scrollOnSortSpec = describe "table sorting scrolls the selection into view" $
 
     contextScrollState tableScrollEid (resultContext result) `shouldBe` 1
 
+focusSpec :: Spec
+focusSpec = describe "table header focus" $
+  it "clicking a header cell never claims focus for it, since it's NotFocusable" $ do
+    -- The table's own root auto-claims focus by the end of setup, since
+    -- nothing else is focused; a header cell taking focus on click (were
+    -- it wrongly Focusable) would change this chain, not leave it as-is.
+    let headerPoint = at 10 10
+    result <- runInteractions testBounds seedCtx
+      (renderSilentTable [selection (unselected items)])
+      [Wait 1, MoveTo headerPoint]
+      [ClickAt headerPoint, Wait 1]
+    contextFocusChain (resultContext result) `shouldBe` [Part (TableRow List)]
+
 spec :: Spec
 spec = describe "Blink.Controls.Table" $ do
   widgetSpec
@@ -247,3 +260,4 @@ spec = describe "Blink.Controls.Table" $ do
   resizingSpec
   sortingSpec
   scrollOnSortSpec
+  focusSpec
