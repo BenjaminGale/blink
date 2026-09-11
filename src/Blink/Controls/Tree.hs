@@ -117,7 +117,7 @@ instance HasListConfig sel e msg a (TreeConfig sel e msg a) where
 
 -- | 'defaultListConfig', an empty forest, nothing expanded, no per-node
 -- render (draws nothing), and no expansion reactions.
-defaultTreeConfig :: SelectionModel sel => TreeConfig sel e msg a
+defaultTreeConfig :: (SelectionModel sel, EmptySelection sel) => TreeConfig sel e msg a
 defaultTreeConfig = TreeConfig
   { tcList               = defaultListConfig
   , tcForest             = []
@@ -169,7 +169,7 @@ chevronGlyph isExpanded = if isExpanded then "\9660" else "\9654"
 -- expand\/collapse a node with children, or move the cursor to its
 -- first child\/parent once it's already expanded\/collapsed.
 tree
-  :: (Ord e, Ord a, SelectionModel sel, Eq (sel a))
+  :: (Ord e, Ord a, SelectionModel sel, EmptySelection sel, Eq (sel a))
   => (TreePart a -> e)
   -> [Attribute (TreeConfig sel e msg a)]
   -> Element e msg

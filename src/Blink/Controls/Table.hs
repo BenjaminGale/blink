@@ -98,7 +98,7 @@ instance HasListConfig sel e msg a (TableConfig sel e msg a) where
   overList attr = Attribute (\tc -> tc { tbList = runAttribute attr (tbList tc) })
 
 -- | 'defaultListConfig', no columns, no sort.
-defaultTableConfig :: SelectionModel sel => TableConfig sel e msg a
+defaultTableConfig :: (SelectionModel sel, EmptySelection sel) => TableConfig sel e msg a
 defaultTableConfig = TableConfig
   { tbList                  = defaultListConfig
   , tbColumns               = []
@@ -142,7 +142,7 @@ handleWidth = 5
 -- every part's element id from a 'TablePart', the same relationship
 -- 'listBase's own @mkId@ has to 'ListPart'.
 table
-  :: (Ord e, Eq a, SelectionModel sel, Eq (sel a))
+  :: (Ord e, Eq a, SelectionModel sel, EmptySelection sel, Eq (sel a))
   => (TablePart a -> e)
   -> [Attribute (TableConfig sel e msg a)]
   -> Element e msg

@@ -48,6 +48,7 @@
 module Blink.Controls.List
   ( -- * Selection models
     SelectionModel (..)
+  , EmptySelection (..)
   , ItemState (..)
   , Direction (..)
   , selectedItems
@@ -83,10 +84,12 @@ module Blink.Controls.List
   , ListPart (..)
   , ListConfig (..)
   , defaultListConfig
+  , requiredListConfig
   , ListInteraction (..)
   , HasListConfig (..)
   , listBase
   , list
+  , requiredList
   , rowsSpacer
   , scrollRowIntoView
   , selection
@@ -133,9 +136,6 @@ data Direction = Prev | Next
 -- -- anything an app needs beyond this (e.g. "which items are selected")
 -- is derived outside the class, via 'selectedItems'\/'cursorItem'.
 class SelectionModel sel where
-  -- | The model with no items.
-  emptySelection :: sel a
-
   -- | Every item, in order, with its selected\/cursor flags. What 'list'
   -- draws.
   itemStates :: sel a -> [ItemState a]
@@ -158,6 +158,16 @@ class SelectionModel sel where
   -- 'moveCursor'.
   extendCursor :: Direction -> sel a -> sel a
   extendCursor = moveCursor
+
+-- | A 'SelectionModel' that has a value with no items -- every model
+-- except 'RequiredSelection', whose whole invariant is that one item is
+-- always selected. Kept separate from 'SelectionModel' itself so that
+-- invariant is enforced at compile time: generic code needing an empty
+-- value (e.g. 'defaultListConfig') simply cannot be called at
+-- 'RequiredSelection', rather than compiling and crashing at runtime.
+class SelectionModel sel => EmptySelection sel where
+  -- | The model with no items.
+  emptySelection :: sel a
 
 -- | Items the model currently reports as selected.
 selectedItems :: SelectionModel sel => sel a -> [a]
@@ -186,9 +196,10 @@ singleItems :: SingleSelection a -> [a]
 singleItems (Unselected xs)  = xs
 singleItems (Selected b x a) = reverse b ++ [x] ++ a
 
-instance SelectionModel SingleSelection where
+instance EmptySelection SingleSelection where
   emptySelection = Unselected []
 
+instance SelectionModel SingleSelection where
   itemStates (Unselected xs)  = [ItemState x False False | x <- xs]
   itemStates (Selected b x a) =
     map plain (reverse b) ++ [ItemState x True True] ++ map plain a
@@ -230,9 +241,10 @@ singleSelection xs = maybe (Unselected xs) (`selectItem` xs)
 -- ** Single, required
 
 -- | Exactly one item always selected; an empty list is unrepresentable.
--- Consequently there is no 'emptySelection' -- a caller of 'list' with
--- this model must always pass 'selection' every frame; 'defaultListConfig'
--- cannot supply one.
+-- Consequently there is no 'EmptySelection' instance -- 'defaultListConfig'
+-- cannot supply an initial value for this model, so a caller builds a
+-- list with it via 'requiredList'\/'requiredListConfig' instead, which
+-- take the starting selection as a mandatory argument.
 data RequiredSelection a = RequiredSelection [a] a [a]
   deriving (Eq, Show)
 
@@ -240,8 +252,6 @@ requiredItems :: RequiredSelection a -> [a]
 requiredItems (RequiredSelection b x a) = reverse b ++ [x] ++ a
 
 instance SelectionModel RequiredSelection where
-  emptySelection = error "RequiredSelection has no empty value -- pass `selection` every frame"
-
   itemStates (RequiredSelection b x a) =
     map plain (reverse b) ++ [ItemState x True True] ++ map plain a
     where plain y = ItemState y False False
@@ -275,9 +285,10 @@ data MultiSelection a
   | MultiSelection [(Bool, a)] (Bool, a) [(Bool, a)]   -- ^ before (reversed), cursor, after
   deriving (Eq, Show)
 
-instance SelectionModel MultiSelection where
+instance EmptySelection MultiSelection where
   emptySelection = MultiEmpty
 
+instance SelectionModel MultiSelection where
   itemStates MultiEmpty = []
   itemStates (MultiSelection b (sx, x) a) =
     map plain (reverse b) ++ [ItemState x sx True] ++ map plain a
@@ -349,9 +360,10 @@ buildRange ia ic xs = case NE.nonEmpty runXs of
     (runXs, after) = splitAt (hi - lo + 1) rest
     end            = if ic >= ia then AtEnd else AtStart
 
-instance SelectionModel RangeSelection where
+instance EmptySelection RangeSelection where
   emptySelection = NoRange []
 
+instance SelectionModel RangeSelection where
   itemStates (NoRange xs)        = [ItemState x False False | x <- xs]
   itemStates (Range b run a end) =
     map plain (reverse b) ++ marked ++ map plain a
@@ -485,19 +497,35 @@ defaultRowHeight :: Double
 defaultRowHeight = 32
 
 -- | 'defaultControlConfig' (styled via @Class \"list\"@), filling its
--- parent's width and sizing its height to its own rows, 'emptySelection',
--- no per-row render (draws nothing), a 32px row height, and no reactions.
-defaultListConfig :: SelectionModel sel => ListConfig sel e msg a
-defaultListConfig = ListConfig
+-- parent's width and sizing its height to its own rows, no per-row render
+-- (draws nothing), a 32px row height, and no reactions, starting from the
+-- given selection.
+baseListConfig :: sel a -> ListConfig sel e msg a
+baseListConfig s0 = ListConfig
   { lcControl            = defaultControlConfig { ccStyleKey = listStyleKey }
   , lcLayout             = Layout fill fitContent TopLeft
-  , lcSelection          = emptySelection
+  , lcSelection          = s0
   , lcRenderItem         = const emptyElement
   , lcRowHeight          = defaultRowHeight
   , lcOnSelectionChanged = []
   , lcOnItemActivated    = []
   , lcHeader             = Nothing
   }
+
+-- | 'defaultControlConfig' (styled via @Class \"list\"@), filling its
+-- parent's width and sizing its height to its own rows, 'emptySelection',
+-- no per-row render (draws nothing), a 32px row height, and no reactions.
+-- Every 'SelectionModel' except 'RequiredSelection' has an empty value to
+-- start from this way -- see 'requiredListConfig' for that model instead.
+defaultListConfig :: EmptySelection sel => ListConfig sel e msg a
+defaultListConfig = baseListConfig emptySelection
+
+-- | The same starting config 'defaultListConfig' builds, for
+-- 'RequiredSelection', which has no empty value to start from -- @sel0@
+-- is the initial selection instead, required up front rather than
+-- defaulted.
+requiredListConfig :: RequiredSelection a -> ListConfig RequiredSelection e msg a
+requiredListConfig = baseListConfig
 
 -- | The whole model -- items and selection together. The only way to set
 -- either; @sel@ is inferred from this argument.
@@ -767,18 +795,38 @@ listBase mkId cfg = do
 -- 'Blink.Controls.Button.buttonBase'. Table\/tree\/tree-table wrappers
 -- built on 'listBase' expose a different, narrower set of attributes of
 -- their own instead.
+--
+-- Needs 'EmptySelection' to seed 'defaultListConfig' before 'selection'
+-- (if given) overrides it, so this can't be called at 'RequiredSelection'
+-- -- use 'requiredList' for that model instead.
 list
-  :: (Ord e, Eq a, SelectionModel sel, Eq (sel a))
+  :: (Ord e, Eq a, SelectionModel sel, EmptySelection sel, Eq (sel a))
   => (ListPart a -> e)
   -> [Attribute (ListConfig sel e msg a)]
   -> Element e msg
-list mkId attrs = Element
+list mkId attrs = listFrom mkId (resolve defaultListConfig attrs)
+
+-- | 'list' for 'RequiredSelection', which has no 'EmptySelection' instance
+-- to seed a default config with -- @sel0@ is the starting selection
+-- instead, required up front rather than defaulted.
+requiredList
+  :: (Ord e, Eq a)
+  => (ListPart a -> e)
+  -> RequiredSelection a
+  -> [Attribute (ListConfig RequiredSelection e msg a)]
+  -> Element e msg
+requiredList mkId sel0 attrs = listFrom mkId (resolve (requiredListConfig sel0) attrs)
+
+listFrom
+  :: (Ord e, Eq a, SelectionModel sel, Eq (sel a))
+  => (ListPart a -> e)
+  -> ListConfig sel e msg a
+  -> Element e msg
+listFrom mkId cfg = Element
   { elLayout  = lcLayout cfg
   , elMeasure = measureChrome (ccStyleKey (lcControl cfg)) (rowsSpacer cfg (itemStates (lcSelection cfg)))
   , elRun     = void (listBase mkId cfg)
   }
-  where
-    cfg = resolve defaultListConfig attrs
 
 -- | Requests just enough scroll to bring row @idx@ (0-based, into a flat
 -- list of @itemCount@ rows at @cfg@'s own 'lcRowHeight') into a

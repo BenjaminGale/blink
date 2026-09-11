@@ -73,7 +73,7 @@ instance HasListConfig sel e msg a (TreeTableConfig sel e msg a) where
 
 -- | 'defaultListConfig', no columns, no sort, an empty forest, and
 -- nothing expanded.
-defaultTreeTableConfig :: SelectionModel sel => TreeTableConfig sel e msg a
+defaultTreeTableConfig :: (SelectionModel sel, EmptySelection sel) => TreeTableConfig sel e msg a
 defaultTreeTableConfig = TreeTableConfig
   { ttList                  = defaultListConfig
   , ttColumns               = []
@@ -117,7 +117,7 @@ onExpansionChanged h = Attribute (\c -> c { ttOnExpansionChanged = ttOnExpansion
 -- @mkId@ builds every part's element id from a 'TreeTablePart', the
 -- same relationship 'listBase's own @mkId@ has to 'ListPart'.
 treeTable
-  :: (Ord e, Ord a, SelectionModel sel, Eq (sel a))
+  :: (Ord e, Ord a, SelectionModel sel, EmptySelection sel, Eq (sel a))
   => (TreeTablePart a -> e)
   -> [Attribute (TreeTableConfig sel e msg a)]
   -> Element e msg

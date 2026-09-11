@@ -197,7 +197,7 @@ fixedRow = Element
   , elRun     = pure ()
   }
 
-renderList :: (SelectionModel sel, Eq (sel Int)) => [Attribute (ListConfig sel TestElem String Int)] -> View TestElem String ()
+renderList :: (SelectionModel sel, EmptySelection sel, Eq (sel Int)) => [Attribute (ListConfig sel TestElem String Int)] -> View TestElem String ()
 renderList attrs = runElement $ list Part
   ( renderItem (const fixedRow)
   : width (exactly 100)
@@ -306,7 +306,7 @@ scrollItems = [1, 2, 3, 4, 5]
 listScrollEid :: TestElem
 listScrollEid = Part (ListScrollBar ScrollBar)
 
-renderScrollList :: (SelectionModel sel, Eq (sel Int)) => [Attribute (ListConfig sel TestElem String Int)] -> View TestElem String ()
+renderScrollList :: (SelectionModel sel, EmptySelection sel, Eq (sel Int)) => [Attribute (ListConfig sel TestElem String Int)] -> View TestElem String ()
 renderScrollList attrs = runElement $ list Part
   ( renderItem (const fixedRow)
   : width (exactly 100)
