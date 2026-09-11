@@ -253,6 +253,28 @@ focusSpec = describe "table header focus" $
       [ClickAt headerPoint, Wait 1]
     contextFocusChain (resultContext result) `shouldBe` [Part (TableRow List)]
 
+columnCountEdgeSpec :: Spec
+columnCountEdgeSpec = describe "table column count edge cases" $ do
+  it "renders no header and no cells at all when there are no columns" $ do
+    result <- runInteractions testBounds seedCtx
+      (runElement $ table Part [columns [], selection (unselected items), width (exactly 100), rowHeight 20])
+      []
+      [Wait 1]
+    resultMessages result `shouldBe` []
+
+  it "renders a single column with no divider woven in" $ do
+    let oneColumn = [ ColumnConfig { colHeader = marker "H-Solo", colWidth = ColumnFixed 40, colCell = cellMarker "Solo", colSortable = False } ]
+    result <- runInteractions testBounds seedCtx
+      (runElement $ table Part [columns oneColumn, selection (unselected items), width (exactly 100), rowHeight 20])
+      []
+      [Wait 1]
+    resultMessages result `shouldBe`
+      [ "H-Solo@0.0,0.0+40.0"
+      , "Solo1@0.0,20.0+40.0"
+      , "Solo2@0.0,40.0+40.0"
+      , "Solo3@0.0,60.0+40.0"
+      ]
+
 spec :: Spec
 spec = describe "Blink.Controls.Table" $ do
   widgetSpec
@@ -261,3 +283,4 @@ spec = describe "Blink.Controls.Table" $ do
   sortingSpec
   scrollOnSortSpec
   focusSpec
+  columnCountEdgeSpec
