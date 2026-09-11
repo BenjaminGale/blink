@@ -31,22 +31,40 @@ spec = describe "Blink.Controls.List" $ do
 singleSpec :: Spec
 singleSpec = describe "SingleSelection" $ do
   it "selectFirst selects the first item" $
-    selectFirst [1, 2, 3 :: Int] `shouldBe` Selected [] 1 [2, 3]
+    cursorItem (selectFirst [1, 2, 3 :: Int]) `shouldBe` Just 1
+
+  it "selectFirst preserves every item" $
+    singleItems (selectFirst [1, 2, 3 :: Int]) `shouldBe` [1, 2, 3]
 
   it "selectAt selects by position" $
-    selectAt 1 [1, 2, 3 :: Int] `shouldBe` Selected [1] 2 [3]
+    cursorItem (selectAt 1 [1, 2, 3 :: Int]) `shouldBe` Just 2
 
-  it "selectAt out of range yields Unselected" $
-    selectAt 5 [1, 2, 3 :: Int] `shouldBe` Unselected [1, 2, 3]
+  it "selectAt preserves every item" $
+    singleItems (selectAt 1 [1, 2, 3 :: Int]) `shouldBe` [1, 2, 3]
+
+  it "selectAt out of range selects nothing" $
+    cursorItem (selectAt 5 [1, 2, 3 :: Int]) `shouldBe` Nothing
+
+  it "selectAt out of range preserves every item" $
+    singleItems (selectAt 5 [1, 2, 3 :: Int]) `shouldBe` [1, 2, 3]
 
   it "selectItem selects by equality" $
-    selectItem 2 [1, 2, 3 :: Int] `shouldBe` Selected [1] 2 [3]
+    cursorItem (selectItem 2 [1, 2, 3 :: Int]) `shouldBe` Just 2
 
-  it "singleSelection with an absent item yields Unselected" $
-    singleSelection [1, 2, 3 :: Int] (Just 9) `shouldBe` Unselected [1, 2, 3]
+  it "selectItem preserves every item" $
+    singleItems (selectItem 2 [1, 2, 3 :: Int]) `shouldBe` [1, 2, 3]
+
+  it "singleSelection with an absent item selects nothing" $
+    cursorItem (singleSelection [1, 2, 3 :: Int] (Just 9)) `shouldBe` Nothing
+
+  it "singleSelection with an absent item preserves every item" $
+    singleItems (singleSelection [1, 2, 3 :: Int] (Just 9)) `shouldBe` [1, 2, 3]
 
   it "moveCursor Next advances the selection" $
-    moveCursor Next (selectFirst [1, 2, 3 :: Int]) `shouldBe` Selected [1] 2 [3]
+    cursorItem (moveCursor Next (selectFirst [1, 2, 3 :: Int])) `shouldBe` Just 2
+
+  it "moveCursor Next preserves every item" $
+    singleItems (moveCursor Next (selectFirst [1, 2, 3 :: Int])) `shouldBe` [1, 2, 3]
 
   it "moveCursor Prev at the first item is a no-op" $ do
     let s = selectFirst [1, 2, 3 :: Int]
@@ -57,7 +75,10 @@ singleSpec = describe "SingleSelection" $ do
     moveCursor Next s `shouldBe` s
 
   it "moveCursor on Unselected selects the first item regardless of direction" $
-    moveCursor Prev (unselected [1, 2, 3 :: Int]) `shouldBe` Selected [] 1 [2, 3]
+    cursorItem (moveCursor Prev (unselected [1, 2, 3 :: Int])) `shouldBe` Just 1
+
+  it "moveCursor on Unselected preserves every item" $
+    singleItems (moveCursor Prev (unselected [1, 2, 3 :: Int])) `shouldBe` [1, 2, 3]
 
   it "activate on an absent item leaves the model unchanged" $ do
     let s = selectFirst [1, 2, 3 :: Int]
@@ -71,7 +92,10 @@ singleSpec = describe "SingleSelection" $ do
 requiredSpec :: Spec
 requiredSpec = describe "RequiredSelection" $ do
   it "requireFirst selects the first item of a non-empty list" $
-    requireFirst (1 :| [2, 3 :: Int]) `shouldBe` RequiredSelection [] 1 [2, 3]
+    cursorItem (requireFirst (1 :| [2, 3 :: Int])) `shouldBe` Just 1
+
+  it "requireFirst preserves every item" $
+    requiredItems (requireFirst (1 :| [2, 3 :: Int])) `shouldBe` [1, 2, 3]
 
   it "requireItem on an absent item is Nothing" $
     requireItem 9 [1, 2, 3 :: Int] `shouldBe` Nothing
@@ -87,8 +111,14 @@ requiredSpec = describe "RequiredSelection" $ do
 
 multiSpec :: Spec
 multiSpec = describe "MultiSelection" $ do
-  it "multiSelection starts with nothing selected, cursor on the first item" $
-    multiSelection [1, 2, 3 :: Int] `shouldBe` MultiSelection [] (False, 1) [(False, 2), (False, 3)]
+  it "multiSelection starts with nothing selected" $
+    selectedItems (multiSelection [1, 2, 3 :: Int]) `shouldBe` []
+
+  it "multiSelection starts with the cursor on the first item" $
+    cursorItem (multiSelection [1, 2, 3 :: Int]) `shouldBe` Just 1
+
+  it "multiSelection preserves every item" $
+    multiItems (multiSelection [1, 2, 3 :: Int]) `shouldBe` [1, 2, 3]
 
   it "multiSelected marks the given subset" $
     selectedItems (multiSelected [1, 2, 3 :: Int] [2]) `shouldBe` [2]
@@ -110,29 +140,93 @@ multiSpec = describe "MultiSelection" $ do
 rangeSpec :: Spec
 rangeSpec = describe "RangeSelection" $ do
   it "rangeAt selects a single-item run" $
-    rangeAt 2 [1, 2, 3, 4 :: Int] `shouldBe` Range [1] (2 :| []) [3, 4] AtEnd
+    selectedItems (rangeAt 2 [1, 2, 3, 4 :: Int]) `shouldBe` [2]
+
+  it "rangeAt preserves every item" $
+    rangeItems (rangeAt 2 [1, 2, 3, 4 :: Int]) `shouldBe` [1, 2, 3, 4]
+
+  it "rangeAt anchors the cursor at the end of the run" $
+    rangeEnd (rangeAt 2 [1, 2, 3, 4 :: Int]) `shouldBe` Just AtEnd
 
   it "activate collapses to a single item, wherever the previous run was" $ do
     let extended = extendTo 4 (rangeAt 2 [1, 2, 3, 4, 5 :: Int])
-    activate 1 extended `shouldBe` Range [] (1 :| []) [2, 3, 4, 5] AtEnd
+    selectedItems (activate 1 extended) `shouldBe` [1]
+
+  it "activate collapsing to a single item preserves every item" $ do
+    let extended = extendTo 4 (rangeAt 2 [1, 2, 3, 4, 5 :: Int])
+    rangeItems (activate 1 extended) `shouldBe` [1, 2, 3, 4, 5]
+
+  it "activate collapsing to a single item anchors the cursor at the end" $ do
+    let extended = extendTo 4 (rangeAt 2 [1, 2, 3, 4, 5 :: Int])
+    rangeEnd (activate 1 extended) `shouldBe` Just AtEnd
 
   it "extendTo grows the run from the anchor to the target" $
-    extendTo 4 (rangeAt 2 [1, 2, 3, 4, 5 :: Int]) `shouldBe` Range [1] (2 :| [3, 4]) [5] AtEnd
+    selectedItems (extendTo 4 (rangeAt 2 [1, 2, 3, 4, 5 :: Int])) `shouldBe` [2, 3, 4]
+
+  it "extendTo puts the cursor on the target end" $
+    cursorItem (extendTo 4 (rangeAt 2 [1, 2, 3, 4, 5 :: Int])) `shouldBe` Just 4
+
+  it "extendTo preserves every item" $
+    rangeItems (extendTo 4 (rangeAt 2 [1, 2, 3, 4, 5 :: Int])) `shouldBe` [1, 2, 3, 4, 5]
+
+  it "extendTo anchors the cursor at the end of the run" $
+    rangeEnd (extendTo 4 (rangeAt 2 [1, 2, 3, 4, 5 :: Int])) `shouldBe` Just AtEnd
+
+  it "extendTo the other way selects the run between anchor and target" $
+    selectedItems (extendTo 1 (rangeAt 3 [1, 2, 3, 4, 5 :: Int])) `shouldBe` [1, 2, 3]
+
+  it "extendTo the other way puts the cursor on the target end" $
+    cursorItem (extendTo 1 (rangeAt 3 [1, 2, 3, 4, 5 :: Int])) `shouldBe` Just 1
+
+  it "extendTo the other way preserves every item" $
+    rangeItems (extendTo 1 (rangeAt 3 [1, 2, 3, 4, 5 :: Int])) `shouldBe` [1, 2, 3, 4, 5]
 
   it "extendTo the other way flips the cursor end" $
-    extendTo 1 (rangeAt 3 [1, 2, 3, 4, 5 :: Int]) `shouldBe` Range [] (1 :| [2, 3]) [4, 5] AtStart
+    rangeEnd (extendTo 1 (rangeAt 3 [1, 2, 3, 4, 5 :: Int])) `shouldBe` Just AtStart
 
   it "extendCursor grows one step away from the anchor" $ do
     let s = rangeAt 2 [1, 2, 3, 4, 5 :: Int]
-    extendCursor Next s `shouldBe` Range [1] (2 :| [3]) [4, 5] AtEnd
+    selectedItems (extendCursor Next s) `shouldBe` [2, 3]
+
+  it "extendCursor growing puts the cursor on the new end" $ do
+    let s = rangeAt 2 [1, 2, 3, 4, 5 :: Int]
+    cursorItem (extendCursor Next s) `shouldBe` Just 3
+
+  it "extendCursor growing preserves every item" $ do
+    let s = rangeAt 2 [1, 2, 3, 4, 5 :: Int]
+    rangeItems (extendCursor Next s) `shouldBe` [1, 2, 3, 4, 5]
+
+  it "extendCursor growing keeps the cursor at the end of the run" $ do
+    let s = rangeAt 2 [1, 2, 3, 4, 5 :: Int]
+    rangeEnd (extendCursor Next s) `shouldBe` Just AtEnd
 
   it "extendCursor toward the anchor shrinks the run" $ do
     let s = extendCursor Next (rangeAt 2 [1, 2, 3, 4, 5 :: Int])
-    extendCursor Prev s `shouldBe` Range [1] (2 :| []) [3, 4, 5] AtEnd
+    selectedItems (extendCursor Prev s) `shouldBe` [2]
+
+  it "extendCursor shrinking preserves every item" $ do
+    let s = extendCursor Next (rangeAt 2 [1, 2, 3, 4, 5 :: Int])
+    rangeItems (extendCursor Prev s) `shouldBe` [1, 2, 3, 4, 5]
+
+  it "extendCursor shrunk to the anchor stays ready to grow away from it again" $ do
+    let s = extendCursor Next (rangeAt 2 [1, 2, 3, 4, 5 :: Int])
+    rangeEnd (extendCursor Prev s) `shouldBe` Just AtEnd
 
   it "extendCursor past the anchor crosses over and continues on the other side" $ do
     let s = rangeAt 2 [1, 2, 3, 4, 5 :: Int]
-    extendCursor Prev s `shouldBe` Range [] (1 :| [2]) [3, 4, 5] AtStart
+    selectedItems (extendCursor Prev s) `shouldBe` [1, 2]
+
+  it "extendCursor crossing the anchor puts the cursor on the new end" $ do
+    let s = rangeAt 2 [1, 2, 3, 4, 5 :: Int]
+    cursorItem (extendCursor Prev s) `shouldBe` Just 1
+
+  it "extendCursor crossing the anchor preserves every item" $ do
+    let s = rangeAt 2 [1, 2, 3, 4, 5 :: Int]
+    rangeItems (extendCursor Prev s) `shouldBe` [1, 2, 3, 4, 5]
+
+  it "extendCursor crossing the anchor flips the cursor end" $ do
+    let s = rangeAt 2 [1, 2, 3, 4, 5 :: Int]
+    rangeEnd (extendCursor Prev s) `shouldBe` Just AtStart
 
   it "extendCursor at the very end of the list is a no-op" $ do
     let s = extendTo 5 (rangeAt 4 [1, 2, 3, 4, 5 :: Int])
@@ -140,7 +234,15 @@ rangeSpec = describe "RangeSelection" $ do
 
   it "moveCursor collapses the run to the cursor item, then steps once more" $ do
     let s = extendTo 3 (rangeAt 1 [1, 2, 3, 4, 5 :: Int]) -- run {1,2,3}, cursor 3
-    moveCursor Prev s `shouldBe` Range [1] (2 :| []) [3, 4, 5] AtEnd
+    selectedItems (moveCursor Prev s) `shouldBe` [2]
+
+  it "moveCursor collapsing then stepping preserves every item" $ do
+    let s = extendTo 3 (rangeAt 1 [1, 2, 3, 4, 5 :: Int])
+    rangeItems (moveCursor Prev s) `shouldBe` [1, 2, 3, 4, 5]
+
+  it "moveCursor collapsing then stepping leaves the run ready to grow forward again" $ do
+    let s = extendTo 3 (rangeAt 1 [1, 2, 3, 4, 5 :: Int])
+    rangeEnd (moveCursor Prev s) `shouldBe` Just AtEnd
 
   it "selectedItems is exactly the contiguous run" $
     selectedItems (extendTo 4 (rangeAt 2 [1, 2, 3, 4, 5 :: Int])) `shouldBe` [2, 3, 4]

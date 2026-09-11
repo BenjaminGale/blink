@@ -9,7 +9,7 @@ import Blink.Controls.Control
   , postWith, resolve, style
   )
 import Blink.Controls.Label (LabelConfig)
-import Blink.Controls.List (MultiSelection (..), SingleSelection (..), multiSelection, selectFirst, selectedItems, singleSelection)
+import Blink.Controls.List (MultiSelection, SingleSelection, multiSelection, selectFirst, selectedItems, singleSelection)
 import qualified Blink.Controls.List as List (isItem, onSelectionChanged)
 import Blink.Controls.ProgressBar (ProgressValue (..))
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)

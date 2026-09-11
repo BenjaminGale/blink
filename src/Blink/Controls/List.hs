@@ -55,30 +55,35 @@ module Blink.Controls.List
   , cursorItem
 
     -- ** Single selection
-  , SingleSelection (..)
+  , SingleSelection
   , unselected
   , selectItem
   , selectAt
   , selectFirst
   , singleSelection
+  , singleItems
 
     -- ** Required (always-one) selection
-  , RequiredSelection (..)
+  , RequiredSelection
   , requireItem
   , requireAt
   , requireFirst
+  , requiredItems
 
     -- ** Multi selection
-  , MultiSelection (..)
+  , MultiSelection
   , multiSelection
   , multiSelected
+  , multiItems
 
     -- ** Contiguous-range selection
-  , RangeSelection (..)
+  , RangeSelection
   , End (..)
   , noRange
   , rangeAt
   , rangeFrom
+  , rangeItems
+  , rangeEnd
 
     -- * The list widget
   , ListPart (..)
@@ -192,6 +197,7 @@ data SingleSelection a
   | Selected [a] a [a]          -- ^ before (reversed), selected, after
   deriving (Eq, Show)
 
+-- | Every item, in order.
 singleItems :: SingleSelection a -> [a]
 singleItems (Unselected xs)  = xs
 singleItems (Selected b x a) = reverse b ++ [x] ++ a
@@ -216,12 +222,12 @@ instance SelectionModel SingleSelection where
 unselected :: [a] -> SingleSelection a
 unselected = Unselected
 
--- | Selects @x@ if it's in the list; 'Unselected' otherwise. O(position),
+-- | Selects @x@ if it's in the list; 'unselected' otherwise. O(position),
 -- needs 'Eq'.
 selectItem :: Eq a => a -> [a] -> SingleSelection a
 selectItem x xs = maybe (Unselected xs) (\(b, y, a) -> Selected b y a) (breakAt x xs)
 
--- | Selects the item at position @i@ if it's in range; 'Unselected'
+-- | Selects the item at position @i@ if it's in range; 'unselected'
 -- otherwise. O(i), needs nothing -- use this instead of 'selectItem' when
 -- the app already has the position and not the item.
 selectAt :: Int -> [a] -> SingleSelection a
@@ -229,7 +235,7 @@ selectAt i xs = case splitAt i xs of
   (b, x : a) | i >= 0 -> Selected (reverse b) x a
   _                   -> Unselected xs
 
--- | Selects the first item, or 'Unselected' for an empty list.
+-- | Selects the first item, or 'unselected' for an empty list.
 selectFirst :: [a] -> SingleSelection a
 selectFirst = selectAt 0
 
@@ -248,6 +254,7 @@ singleSelection xs = maybe (Unselected xs) (`selectItem` xs)
 data RequiredSelection a = RequiredSelection [a] a [a]
   deriving (Eq, Show)
 
+-- | Every item, in order.
 requiredItems :: RequiredSelection a -> [a]
 requiredItems (RequiredSelection b x a) = reverse b ++ [x] ++ a
 
@@ -316,6 +323,11 @@ multiSelected :: Eq a => [a] -> [a] -> MultiSelection a
 multiSelected []       _   = MultiEmpty
 multiSelected (x : xs) sel = MultiSelection [] (x `elem` sel, x) [(y `elem` sel, y) | y <- xs]
 
+-- | Every item, in order.
+multiItems :: MultiSelection a -> [a]
+multiItems MultiEmpty              = []
+multiItems (MultiSelection b c a)  = reverse (map snd b) ++ [snd c] ++ map snd a
+
 -- ** Contiguous range
 
 -- | Which end of the selected run the cursor sits on; the other end is
@@ -331,9 +343,18 @@ data RangeSelection a
   | Range [a] (NonEmpty a) [a] End    -- ^ before (reversed), selected run, after, cursor end
   deriving (Eq, Show)
 
+-- | Every item, in order.
 rangeItems :: RangeSelection a -> [a]
 rangeItems (NoRange xs)      = xs
 rangeItems (Range b run a _) = reverse b ++ NE.toList run ++ a
+
+-- | Which end of the run the cursor is on -- see the module header.
+-- Distinguishes a single-item run's own two otherwise-identical-looking
+-- states (about to grow towards, vs. away from, the anchor on the next
+-- extend), which 'itemStates' alone can't.
+rangeEnd :: RangeSelection a -> Maybe End
+rangeEnd (NoRange _)     = Nothing
+rangeEnd (Range _ _ _ e) = Just e
 
 -- | The zipper (before reversed, focus, after) for the item currently
 -- holding the cursor -- one end of @run@, per @end@.
@@ -419,13 +440,13 @@ instance SelectionModel RangeSelection where
 noRange :: [a] -> RangeSelection a
 noRange = NoRange
 
--- | Selects the single-item run @{x}@ if @x@ is in the list; 'NoRange'
+-- | Selects the single-item run @{x}@ if @x@ is in the list; 'noRange'
 -- otherwise.
 rangeAt :: Eq a => a -> [a] -> RangeSelection a
 rangeAt x xs = maybe (NoRange xs) (\(b, y, a) -> Range b (y :| []) a AtEnd) (breakAt x xs)
 
 -- | The run from @anchor@ to @cursor@ (inclusive) if both are in the
--- list; 'NoRange' otherwise.
+-- list; 'noRange' otherwise.
 rangeFrom :: Eq a => a -> a -> [a] -> RangeSelection a
 rangeFrom anchor cursor xs = case (elemIndex anchor xs, elemIndex cursor xs) of
   (Just ia, Just ic) -> buildRange ia ic xs
