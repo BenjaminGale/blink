@@ -245,15 +245,6 @@ agree between the two. Draws aren't expected to match exactly: continuous
 mode is one frame stale by design, so a draws comparison needs to account
 for that offset rather than requiring byte-identical output.
 
-### `scrollIntoView`
-`Blink.Controls.List.list` already does this for its own keyboard
-cursor, but the logic is private to that module, not reusable. The
-remaining idea is a shared helper that, given a scrollable container and
-where a target region sits within its content, computes and emits the
-minimal scroll needed to bring that region into view, so another
-scrollable composite (a viewport, a future list-like control) can reuse
-it instead of reimplementing the same math.
-
 ### Row edit mode for composite controls
 A composite control's rows can already render arbitrary content, including
 real interactive controls (an inline text field for rename, a checkbox, a
