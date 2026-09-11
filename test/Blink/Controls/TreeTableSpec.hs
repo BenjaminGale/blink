@@ -149,7 +149,7 @@ expansionSpec = describe "treeTable expansion" $
 
 keyboardSpec :: Spec
 keyboardSpec = describe "treeTable keyboard expand/collapse" $
-  it "Right expands the collapsed root, moving into its child on the next Right" $ do
+  it "Right expands the collapsed root and moves into its child, Left moves back to the parent" $ do
     let cursorOnSrc = selectItem "src" items
 
     step1 <- runInteractions testBounds seedCtx
@@ -172,6 +172,17 @@ keyboardSpec = describe "treeTable keyboard expand/collapse" $
       [PressKey KeyRight []]
     let cursorOnFirstChild = moveCursor Next cursorOnSrc
     resultMessages step2 `shouldBe` ["Selected:" ++ show cursorOnFirstChild]
+
+    -- Left on that leaf child: moves the cursor back to its parent, "src".
+    step3 <- runInteractions testBounds (resultContext step2)
+      (renderSilentTreeTable
+        [ expanded (Set.singleton "src")
+        , selection cursorOnFirstChild
+        , onSelectionChanged (\s -> [OutMsg ("Selected:" ++ show s)])
+        ])
+      []
+      [PressKey KeyLeft []]
+    resultMessages step3 `shouldBe` ["Selected:" ++ show (moveCursor Prev cursorOnFirstChild)]
 
 resizingSpec :: Spec
 resizingSpec = describe "treeTable column resizing" $
