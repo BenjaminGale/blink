@@ -14,7 +14,7 @@ import qualified Blink.Controls.List as List (isItem, onSelectionChanged)
 import Blink.Controls.ProgressBar (ProgressValue (..))
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)
 import qualified Blink.Controls.Slider as Slider (value)
-import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..))
+import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..), SortDirection (..), onColumnSortRequested, sortedBy)
 import Blink.Controls.Tree (TreeItemState (..), flattenVisible)
 import Blink.Style (Style (..))
 import Blink.Geometry
@@ -27,7 +27,9 @@ import Blink.Element (Attribute, Element (..), elementWithLayout, noIntrinsicSiz
 import Blink.Update
 import Theme (ControlId (..), Page (..), containerStyleKey, lightTheme, darkTheme)
 import Control.Monad (forM_, void, when)
+import Data.List (sortOn)
 import Data.Maybe (listToMaybe)
+import Data.Ord (Down (..))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -61,6 +63,7 @@ data AppState = AppState
   , fileTreeExpanded   :: Set Text
   , fileTreeSelection  :: SingleSelection Text
   , groceryTableSelection :: SingleSelection Text
+  , groceryTableSort      :: Maybe (Int, SortDirection)
   }
 
 data Msg
@@ -88,6 +91,7 @@ data Msg
   | FileTreeExpansionChanged (Set Text)
   | FileTreeSelectionChanged (SingleSelection Text)
   | GroceryTableSelectionChanged (SingleSelection Text)
+  | GroceryTableSortRequested (Int, SortDirection)
 
 demoApp :: App ControlId Msg AppState
 demoApp = App
@@ -116,6 +120,7 @@ demoApp = App
       , fileTreeExpanded   = defaultFileTreeExpanded
       , fileTreeSelection  = selectFirst (visibleFileTreeItems defaultFileTreeExpanded)
       , groceryTableSelection = selectFirst (map fst groceryTableItems)
+      , groceryTableSort      = Nothing
       }
   , theme   = \s -> if darkMode s then darkTheme else lightTheme
   , view    = demoView
@@ -162,6 +167,16 @@ updateApp msg = case msg of
     }
   FileTreeSelectionChanged v -> modify $ \s -> s { fileTreeSelection = v }
   GroceryTableSelectionChanged v -> modify $ \s -> s { groceryTableSelection = v }
+  -- Re-sorting can change which item a given position holds, so the
+  -- selection is rebuilt against the newly-sorted order rather than
+  -- just carried over -- the same reason 'FileTreeExpansionChanged'
+  -- rebuilds 'fileTreeSelection' above.
+  GroceryTableSortRequested req -> modify $ \s -> s
+    { groceryTableSort      = Just req
+    , groceryTableSelection = singleSelection
+        (map fst (sortedGroceryItems (Just req)))
+        (listToMaybe (selectedItems (groceryTableSelection s)))
+    }
 
 type DemoUI = View ControlId Msg
 
@@ -882,17 +897,29 @@ groceryTableItems =
   , ("Coffee", 3)
   ]
 
+-- | 'groceryTableItems', ordered per a requested column sort -- column 0
+-- (Item) sorts by name, column 1 (Qty) by quantity; 'Nothing' keeps the
+-- original order.
+sortedGroceryItems :: Maybe (Int, SortDirection) -> [(Text, Int)]
+sortedGroceryItems Nothing               = groceryTableItems
+sortedGroceryItems (Just (0, Ascending)) = sortOn fst groceryTableItems
+sortedGroceryItems (Just (0, Descending)) = sortOn (Down . fst) groceryTableItems
+sortedGroceryItems (Just (_, Ascending)) = sortOn snd groceryTableItems
+sortedGroceryItems (Just (_, Descending)) = sortOn (Down . snd) groceryTableItems
+
 groceryTableColumns :: [ColumnConfig ControlId Msg Text]
 groceryTableColumns =
   [ ColumnConfig
-      { colHeader = listCaption "Item"
-      , colWidth  = ColumnFill
-      , colCell   = listCaption . List.isItem
+      { colHeader   = listCaption "Item"
+      , colWidth    = ColumnFill
+      , colCell     = listCaption . List.isItem
+      , colSortable = True
       }
   , ColumnConfig
-      { colHeader = listCaption "Qty"
-      , colWidth  = ColumnFixed 60
-      , colCell   = \st -> listCaption (maybe "" (T.pack . show) (lookup (List.isItem st) groceryTableItems))
+      { colHeader   = listCaption "Qty"
+      , colWidth    = ColumnFixed 60
+      , colCell     = \st -> listCaption (maybe "" (T.pack . show) (lookup (List.isItem st) groceryTableItems))
+      , colSortable = True
       }
   ]
 
@@ -902,6 +929,8 @@ groceryTableElem s =
     [ columns groceryTableColumns
     , selection (groceryTableSelection s)
     , List.onSelectionChanged (postWith GroceryTableSelectionChanged)
+    , sortedBy (groceryTableSort s)
+    , onColumnSortRequested (postWith GroceryTableSortRequested)
     , width fill, height (exactly 200)
     ]
 
@@ -918,8 +947,8 @@ tablePage s =
     ]
   where
     description =
-      "Click a row, or Tab to the table and use Up/Down. Both columns \
-      \and the header are built from the same `columns` list."
+      "Click a row, or Tab to the table and use Up/Down. Click a \
+      \column header to sort by it; click again to reverse."
     detailText = case selectedItems (groceryTableSelection s) of
       [x] -> "Selected: " <> x
       _   -> "Selected: none"

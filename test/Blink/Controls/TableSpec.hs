@@ -71,8 +71,8 @@ items = [1, 2, 3]
 
 testColumns :: [ColumnConfig TestElem String Int]
 testColumns =
-  [ ColumnConfig { colHeader = marker "H-Name", colWidth = ColumnFixed 40, colCell = cellMarker "Name" }
-  , ColumnConfig { colHeader = marker "H-Age",  colWidth = ColumnFixed 60, colCell = cellMarker "Age" }
+  [ ColumnConfig { colHeader = marker "H-Name", colWidth = ColumnFixed 40, colCell = cellMarker "Name", colSortable = False }
+  , ColumnConfig { colHeader = marker "H-Age",  colWidth = ColumnFixed 60, colCell = cellMarker "Age", colSortable = False }
   ]
 
 renderTable :: [Attribute (TableConfig SingleSelection TestElem String Int)] -> View TestElem String ()
@@ -85,9 +85,25 @@ renderTable attrs = runElement $ table Part
 
 silentColumns :: [ColumnConfig TestElem String Int]
 silentColumns =
-  [ ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 40, colCell = const emptyElement }
-  , ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 60, colCell = const emptyElement }
+  [ ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 40, colCell = const emptyElement, colSortable = False }
+  , ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 60, colCell = const emptyElement, colSortable = False }
   ]
+
+sortableColumns :: [ColumnConfig TestElem String Int]
+sortableColumns =
+  [ ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 40, colCell = const emptyElement, colSortable = True }
+  , ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 60, colCell = const emptyElement, colSortable = True }
+  ]
+
+-- | Like 'renderSilentTable', but with both columns sortable -- for
+-- 'sortingSpec'.
+renderSortableTable :: [Attribute (TableConfig SingleSelection TestElem String Int)] -> View TestElem String ()
+renderSortableTable attrs = runElement $ table Part
+  ( columns sortableColumns
+  : width (exactly 100)
+  : rowHeight 20
+  : attrs
+  )
 
 -- | Like 'renderTable', but with silent cells\/header -- for tests that
 -- only care about a click's reaction, not what each cell draws (every
@@ -175,8 +191,33 @@ resizingSpec = describe "table column resizing" $
       , "Age3@50.0,60.0+50.0"
       ]
 
+sortingSpec :: Spec
+sortingSpec = describe "table column-click sorting" $
+  it "toggles Ascending/Descending on repeat clicks of a column, resets to Ascending on a different one" $ do
+    let headerClick x = at x 10
+        onSort        = onColumnSortRequested (\s -> [OutMsg ("Sort:" ++ show s)])
+
+    step1 <- runInteractions testBounds seedCtx
+      (renderSortableTable [selection (unselected items), onSort])
+      [MoveTo (headerClick 10)]
+      [ClickAt (headerClick 10)]
+    resultMessages step1 `shouldBe` ["Sort:(0,Ascending)"]
+
+    step2 <- runInteractions testBounds (resultContext step1)
+      (renderSortableTable [selection (unselected items), sortedBy (Just (0, Ascending)), onSort])
+      [MoveTo (headerClick 10)]
+      [ClickAt (headerClick 10)]
+    resultMessages step2 `shouldBe` ["Sort:(0,Descending)"]
+
+    step3 <- runInteractions testBounds (resultContext step2)
+      (renderSortableTable [selection (unselected items), sortedBy (Just (0, Descending)), onSort])
+      [MoveTo (headerClick 70)]
+      [ClickAt (headerClick 70)]
+    resultMessages step3 `shouldBe` ["Sort:(1,Ascending)"]
+
 spec :: Spec
 spec = describe "Blink.Controls.Table" $ do
   widgetSpec
   scrollingSpec
   resizingSpec
+  sortingSpec

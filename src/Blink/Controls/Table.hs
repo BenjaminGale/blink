@@ -10,10 +10,13 @@ module Blink.Controls.Table
   ( TablePart (..)
   , ColumnWidth (..)
   , ColumnConfig (..)
+  , SortDirection (..)
   , TableConfig (..)
   , defaultTableConfig
   , table
   , columns
+  , sortedBy
+  , onColumnSortRequested
   ) where
 
 import Control.Monad (forM_, void, when)
@@ -28,7 +31,7 @@ import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), Length, exactly, fill)
 import Blink.Style (Style (..))
 import Blink.View
-  (View, currentStyle, getBounds, getExtentState, getMousePos, isDragging, requestExtentBy, withBounds)
+  (Out, View, currentStyle, getBounds, getExtentState, getMousePos, isDragging, requestExtentBy, withBounds)
 import Blink.View.Drawing (fillRect)
 
 -- | Identifies one part of a 'table' for the purpose of building
@@ -50,20 +53,30 @@ data ColumnWidth
   = ColumnFixed Double
   | ColumnFill
 
--- | One column: its header content, its own width, and how a row draws
--- its cell in it.
+-- | One column: its header content, its own width, how a row draws its
+-- cell in it, and whether clicking its header requests a sort (see
+-- 'onColumnSortRequested').
 data ColumnConfig e msg a = ColumnConfig
-  { colHeader :: Element e msg
-  , colWidth  :: ColumnWidth
-  , colCell   :: ItemState a -> Element e msg
+  { colHeader   :: Element e msg
+  , colWidth    :: ColumnWidth
+  , colCell     :: ItemState a -> Element e msg
+  , colSortable :: Bool
   }
+
+-- | Which way a sorted column's own header click requests next -- see
+-- 'onColumnSortRequested'.
+data SortDirection = Ascending | Descending
+  deriving (Eq, Show)
 
 -- | Every capability 'table' resolves: the embedded 'ListConfig' (for
 -- 'Blink.Controls.List.selection'\/'Blink.Controls.List.rowHeight'\/etc,
--- via 'HasListConfig'), and its columns.
+-- via 'HasListConfig'), its columns, and the caller-owned current sort
+-- (see 'sortedBy').
 data TableConfig sel e msg a = TableConfig
-  { tbList    :: ListConfig sel e msg a
-  , tbColumns :: [ColumnConfig e msg a]
+  { tbList                  :: ListConfig sel e msg a
+  , tbColumns               :: [ColumnConfig e msg a]
+  , tbSort                  :: Maybe (Int, SortDirection)
+  , tbOnColumnSortRequested :: [(Int, SortDirection) -> [Out e msg]]
   }
 
 instance HasControlConfig e msg (TableConfig sel e msg a) where
@@ -75,17 +88,33 @@ instance HasLayoutConfig (TableConfig sel e msg a) where
 instance HasListConfig sel e msg a (TableConfig sel e msg a) where
   overList attr = Attribute (\tc -> tc { tbList = runAttribute attr (tbList tc) })
 
--- | 'defaultListConfig' and no columns.
+-- | 'defaultListConfig', no columns, no sort.
 defaultTableConfig :: SelectionModel sel => TableConfig sel e msg a
 defaultTableConfig = TableConfig
-  { tbList    = defaultListConfig
-  , tbColumns = []
+  { tbList                  = defaultListConfig
+  , tbColumns               = []
+  , tbSort                  = Nothing
+  , tbOnColumnSortRequested = []
   }
 
 -- | The table's own columns, in order -- both a row's cells and the
 -- header row are built from this same list, so they always line up.
 columns :: [ColumnConfig e msg a] -> Attribute (TableConfig sel e msg a)
 columns cs = Attribute (\c -> c { tbColumns = cs })
+
+-- | Which column is currently sorted and which direction, if any --
+-- caller-owned, the same stateless relationship 'Blink.Controls.List.selection'
+-- has to the selection model: 'table' never sorts rows itself, only
+-- reports the user's requested sort via 'onColumnSortRequested' for the
+-- app to store, re-sort by, and pass back in here.
+sortedBy :: Maybe (Int, SortDirection) -> Attribute (TableConfig sel e msg a)
+sortedBy s = Attribute (\c -> c { tbSort = s })
+
+-- | Reacts when clicking a sortable column's header cell (see
+-- 'colSortable') requests a sort: 'Ascending' for a column not already
+-- sorted, otherwise the opposite of its current direction.
+onColumnSortRequested :: ((Int, SortDirection) -> [Out e msg]) -> Attribute (TableConfig sel e msg a)
+onColumnSortRequested h = Attribute (\c -> c { tbOnColumnSortRequested = tbOnColumnSortRequested c ++ [h] })
 
 -- | Never let a drag squeeze a column narrower than this, however far
 -- past it the pointer moves -- a column can always be dragged back out
@@ -149,9 +178,21 @@ table mkId attrs = Element
           { ccElementId   = Just (mkId (TableHeaderCell idx))
           , ccStyleKey    = tableHeaderStyleKey
           , ccFocusPolicy = NotFocusable
-          , ccContent     = const (runElement (colHeader c))
+          , ccContent     = \hci -> do
+              when (colSortable c && ciClicked hci) (requestSort idx)
+              runElement (colHeader c)
           }
       }
+
+    -- | 'Ascending' for a column not already sorted, otherwise the
+    -- opposite of whatever direction it's currently sorted in.
+    requestSort idx = runHandlers (tbOnColumnSortRequested cfg) (idx, nextDirection)
+      where
+        nextDirection = case tbSort cfg of
+          Just (i, dir) | i == idx -> flipDirection dir
+          _                        -> Ascending
+        flipDirection Ascending  = Descending
+        flipDirection Descending = Ascending
 
 -- | Resolves every column's current 'Layout' width: a 'ColumnFixed'
 -- column's own pixel value, adjusted by however far the dividers on
