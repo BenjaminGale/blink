@@ -189,6 +189,25 @@ breakAt x xs = case break (== x) xs of
   (b, y : a) -> Just (reverse b, y, a)
   _          -> Nothing
 
+-- | Shifts a (before, cursor, after) zipper one step; 'Nothing' at either
+-- end, where the shift has nothing to move into.
+shiftZipper :: Direction -> ([a], a, [a]) -> Maybe ([a], a, [a])
+shiftZipper Next (b, x, y : a) = Just (x : b, y, a)
+shiftZipper Prev (y : b, x, a) = Just (b, y, x : a)
+shiftZipper _    _             = Nothing
+
+-- | Every item of a (before, cursor, after) zipper, the cursor marked
+-- selected, everything else not.
+zipperItemStates :: [a] -> a -> [a] -> [ItemState a]
+zipperItemStates b x a = map plain (reverse b) ++ [ItemState x True True] ++ map plain a
+  where plain y = ItemState y False False
+
+-- | 'activate' for a plain (before, cursor, after) zipper: re-zips onto
+-- whichever item now equals @x@, via @rebuild@, or leaves @s@ unchanged
+-- if @x@ isn't in @items@.
+activateZipper :: Eq a => (([a], a, [a]) -> sel a) -> a -> [a] -> sel a -> sel a
+activateZipper rebuild x items s = maybe s rebuild (breakAt x items)
+
 -- ** Single, optional
 
 -- | At most one item selected; clicking or arrowing selects that item.
@@ -207,16 +226,14 @@ instance EmptySelection SingleSelection where
 
 instance SelectionModel SingleSelection where
   itemStates (Unselected xs)  = [ItemState x False False | x <- xs]
-  itemStates (Selected b x a) =
-    map plain (reverse b) ++ [ItemState x True True] ++ map plain a
-    where plain y = ItemState y False False
+  itemStates (Selected b x a) = zipperItemStates b x a
 
-  activate x s = maybe s (\(b, y, a) -> Selected b y a) (breakAt x (singleItems s))
+  activate x s = activateZipper (\(b, y, a) -> Selected b y a) x (singleItems s) s
 
-  moveCursor Next (Selected b x (y : a)) = Selected (x : b) y a
-  moveCursor Prev (Selected (y : b) x a) = Selected b y (x : a)
-  moveCursor _    (Unselected (x : xs))  = Selected [] x xs   -- first key press selects the first item
-  moveCursor _    s                      = s
+  moveCursor _ (Unselected (x : xs)) = Selected [] x xs   -- first key press selects the first item
+  moveCursor _ (Unselected [])       = Unselected []
+  moveCursor d s@(Selected b x a)    =
+    maybe s (\(b', x', a') -> Selected b' x' a') (shiftZipper d (b, x, a))
 
 -- | No selection, every item unselected.
 unselected :: [a] -> SingleSelection a
@@ -259,15 +276,12 @@ requiredItems :: RequiredSelection a -> [a]
 requiredItems (RequiredSelection b x a) = reverse b ++ [x] ++ a
 
 instance SelectionModel RequiredSelection where
-  itemStates (RequiredSelection b x a) =
-    map plain (reverse b) ++ [ItemState x True True] ++ map plain a
-    where plain y = ItemState y False False
+  itemStates (RequiredSelection b x a) = zipperItemStates b x a
 
-  activate x s = maybe s (\(b, y, a) -> RequiredSelection b y a) (breakAt x (requiredItems s))
+  activate x s = activateZipper (\(b, y, a) -> RequiredSelection b y a) x (requiredItems s) s
 
-  moveCursor Next (RequiredSelection b x (y : a)) = RequiredSelection (x : b) y a
-  moveCursor Prev (RequiredSelection (y : b) x a) = RequiredSelection b y (x : a)
-  moveCursor _    s                               = s
+  moveCursor d s@(RequiredSelection b x a) =
+    maybe s (\(b', x', a') -> RequiredSelection b' x' a') (shiftZipper d (b, x, a))
 
 -- | Requires @x@ in @xs@; 'Nothing' otherwise.
 requireItem :: Eq a => a -> [a] -> Maybe (RequiredSelection a)
@@ -308,9 +322,9 @@ instance SelectionModel MultiSelection where
       (b', (sx, y) : a') -> MultiSelection (reverse b') (not sx, y) a'
       _                  -> s
 
-  moveCursor Next (MultiSelection b x (y : a)) = MultiSelection (x : b) y a
-  moveCursor Prev (MultiSelection (y : b) x a) = MultiSelection b y (x : a)
-  moveCursor _    s                            = s
+  moveCursor _ MultiEmpty                = MultiEmpty
+  moveCursor d s@(MultiSelection b x a)  =
+    maybe s (\(b', x', a') -> MultiSelection b' x' a') (shiftZipper d (b, x, a))
 
 -- | Nothing selected, cursor on the first item.
 multiSelection :: [a] -> MultiSelection a
