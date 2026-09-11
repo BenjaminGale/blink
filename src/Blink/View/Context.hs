@@ -97,6 +97,8 @@ module Blink.View.Context
   , clampScrollPos
     -- * Extent (pure)
   , ExtentState (..)
+    -- * Cursor index (pure)
+  , CursorIndexState (..)
     -- * Selection (pure)
   , Selection (..)
   , selectionLow
@@ -380,6 +382,16 @@ newtype ExtentState = ExtentState { extentValue :: Double }
   deriving (Eq, Ord, Show)
 
 --------------------------------------------------------------------------------
+-- Cursor index (pure)
+--------------------------------------------------------------------------------
+
+-- | The row index a list-like control's cursor last held, so
+-- 'Blink.Controls.List.listBase' can notice it moving between frames.
+-- Absent for an element nothing has recorded yet.
+newtype CursorIndexState = CursorIndexState { cursorIndexValue :: Int }
+  deriving (Eq, Ord, Show)
+
+--------------------------------------------------------------------------------
 -- Selection (pure)
 --------------------------------------------------------------------------------
 
@@ -564,6 +576,10 @@ data UiEffect e
     -- there's no absolute\/relative pair since a repeat-press has no
     -- meaningful "adjust by" -- a control either anchors a fresh press or
     -- clears one.
+  | SetCursorIndex e (Maybe Int)
+    -- ^ Sets ('Just') or clears ('Nothing') a list-like control's
+    -- 'CursorIndexState' -- see 'Blink.Controls.List.listBase', its only
+    -- caller. Last-write-wins, the same as @SetHoldState@.
   | Focus (Maybe e) e
     -- ^ Makes the given element focused within the given scope (@Nothing@ =
     -- root, @Just scopeId@ = the composite scope with that id — see
@@ -588,13 +604,15 @@ data Out e msg
 -- | Cross-frame presentation state. Persists unchanged across frames; never
 -- exposed to the application. Scroll position is tracked per element
 -- (@elmScrollStates@), as is an unclamped accumulated extent
--- (@elmExtentStates@) and repeat-press ("hold") state (@elmHoldStates@);
+-- (@elmExtentStates@), repeat-press ("hold") state (@elmHoldStates@), and a
+-- list-like control's last-known cursor row index (@elmCursorIndices@);
 -- selection is exclusive across elements, tracked as a single
 -- 'SelectionSlot' (@elmSelection@) rather than a map.
 data ElementState e = ElementState
   { elmScrollStates   :: Map.Map e ScrollState
   , elmExtentStates   :: Map.Map e ExtentState
   , elmHoldStates     :: Map.Map e HoldState
+  , elmCursorIndices  :: Map.Map e CursorIndexState
   , elmSelection      :: SelectionSlot e
   }
 
@@ -731,6 +749,7 @@ emptyViewContext bounds input thm measurer = ViewContext
       { elmScrollStates  = Map.empty
       , elmExtentStates  = Map.empty
       , elmHoldStates    = Map.empty
+      , elmCursorIndices = Map.empty
       , elmSelection     = NoSelection
       }
   , ctxOutputs         = emptyFrameOutputs
@@ -1011,6 +1030,16 @@ writeHoldState eid mhs ctx = ctx { ctxElements = (ctxElements ctx)
       Nothing -> Map.delete eid (elmHoldStates (ctxElements ctx))
   } }
 
+-- Internal: writes (or clears) a list-like control's cursor index directly
+-- into the context, bypassing the deferred-effect queue. Used only by
+-- @applyUiEffects@.
+writeCursorIndexState :: Ord e => e -> Maybe Int -> ViewContext e msg -> ViewContext e msg
+writeCursorIndexState eid mi ctx = ctx { ctxElements = (ctxElements ctx)
+  { elmCursorIndices = case mi of
+      Just i  -> Map.insert eid (CursorIndexState i) (elmCursorIndices (ctxElements ctx))
+      Nothing -> Map.delete eid (elmCursorIndices (ctxElements ctx))
+  } }
+
 -- Internal: writes a selection directly into the context, bypassing the
 -- deferred-effect queue, replacing whichever element held the selection
 -- before. Used only by @applyUiEffects@.
@@ -1027,6 +1056,7 @@ applyUiEffects effects ctx0 = foldl' step ctx0 effects
     step ctx (AdjustExtent eid dv)   = writeExtentState eid (currentExtent eid ctx + dv) ctx
     step ctx (SetSelectionAt eid sel) = writeSelection eid sel ctx
     step ctx (SetHoldState eid mhs)  = writeHoldState eid mhs ctx
+    step ctx (SetCursorIndex eid mi) = writeCursorIndexState eid mi ctx
     step ctx (Focus sid target)     = setFocusChange sid (Just target) ctx
     step ctx (ClearFocus sid)       = setFocusChange sid Nothing ctx
 

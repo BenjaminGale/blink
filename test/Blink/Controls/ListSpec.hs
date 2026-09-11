@@ -460,3 +460,23 @@ scrollingSpec = describe "list scrolling" $ do
         [ClickAt clickPoint]
       resultMessages result `shouldBe` [selectedMsg (activate 4 start), activatedMsg 4]
       contextScrollState listScrollEid (resultContext result) `shouldBe` 0.5
+
+  it "scrolls the cursor into view when the caller moves it directly, with no click or key press driving it" $ do
+    -- Establishes the list's persisted cursor position at item 1 --
+    -- already fully in view, so nothing about this first render scrolls
+    -- anything.
+    step1 <- runInteractions testBounds seedCtx
+      (renderScrollList [selection start])
+      []
+      [Wait 1]
+
+    -- The app jumps the cursor straight to the last item -- e.g. after
+    -- re-sorting its own items -- with no key press or click of this
+    -- list's own driving it.
+    let jumpedToLast = selectAt 4 scrollItems
+    result <- runInteractions testBounds (resultContext step1)
+      (renderScrollList [selection jumpedToLast])
+      []
+      [Wait 1]
+
+    contextScrollState listScrollEid (resultContext result) `shouldBe` 1

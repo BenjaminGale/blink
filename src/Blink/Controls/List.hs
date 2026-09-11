@@ -111,7 +111,8 @@ import Blink.Input (Key (..), KeyEvent (..), Modifier (Shift))
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
 import Blink.Style (StyleSet (..))
-import Blink.View (Out, View, getBounds, getScrollState, getStyleSet, requestScrollTo, withBounds)
+import Blink.View
+  (Out, View, getBounds, getCursorIndex, getScrollState, getStyleSet, requestScrollTo, setCursorIndex, withBounds)
 import Blink.View.Drawing (withClip)
 
 -- * Selection models
@@ -645,21 +646,24 @@ listBase mkId cfg = do
     -- reflects the space left after it, the same way it already does
     -- for the scrollbar's own hBox split (see 'scrollableRows').
     rowsArea finalModel = do
-      when (cursorItem finalModel /= cursorItem s0) (scrollCursorIntoView finalModel)
+      trackCursor finalModel
       renderViewport
 
-    -- Keeps a keyboard-moved cursor visible: once its row falls above or
-    -- below the viewport, requests just enough scroll to bring that edge
-    -- back into view (see 'scrollRowIntoView'). Only ever called when the
-    -- cursor actually moved this frame (see 'ccContent' above) -- an
-    -- unconditional check on every frame would fight a scroll position
-    -- set some other way (a drag on the bar itself, or seeded directly)
-    -- while the cursor sits still.
-    scrollCursorIntoView s = case findIndex isCursor (itemStates s) of
-      Nothing  -> pure ()
-      Just idx -> do
-        bounds <- getBounds
-        scrollRowIntoView mkId cfg itemCount (rectHeight bounds) idx
+    -- Scrolls the cursor into view whenever its row index differs from
+    -- the last one recorded for this list -- covers a keyboard move and
+    -- also a cursor that jumped for a reason outside this frame's own
+    -- handling (e.g. the caller re-sorting its items). Ignores the very
+    -- first observation so mounting doesn't force an initial scroll.
+    trackCursor finalModel = do
+      let mIdx = findIndex isCursor (itemStates finalModel)
+      lastIdx <- getCursorIndex (mkId List)
+      when (mIdx /= lastIdx) $ do
+        case lastIdx of
+          Just _  -> do
+            bounds <- getBounds
+            mapM_ (scrollRowIntoView mkId cfg itemCount (rectHeight bounds)) mIdx
+          Nothing -> pure ()
+        setCursorIndex (mkId List) mIdx
 
     -- Renders 'rows' plain when they fit the list's own bounds; once they
     -- overflow, composites a vertical 'scrollBar' alongside them (an

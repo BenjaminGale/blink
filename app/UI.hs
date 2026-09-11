@@ -167,10 +167,7 @@ updateApp msg = case msg of
     }
   FileTreeSelectionChanged v -> modify $ \s -> s { fileTreeSelection = v }
   GroceryTableSelectionChanged v -> modify $ \s -> s { groceryTableSelection = v }
-  -- Re-sorting can change which item a given position holds, so the
-  -- selection is rebuilt against the newly-sorted order rather than
-  -- just carried over -- the same reason 'FileTreeExpansionChanged'
-  -- rebuilds 'fileTreeSelection' above.
+  -- Rebuilds against the new order, same as 'FileTreeExpansionChanged'.
   GroceryTableSortRequested req -> modify $ \s -> s
     { groceryTableSort      = Just req
     , groceryTableSelection = singleSelection

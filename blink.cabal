@@ -50,6 +50,7 @@ library
         Blink.View.Navigation
         Blink.View.Scroll
         Blink.View.Extent
+        Blink.View.Cursor
         Blink.View.Selection
         Blink.Controls.Button
         Blink.Controls.Checkbox

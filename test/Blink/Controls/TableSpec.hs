@@ -5,7 +5,9 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
-import Blink.Controls.List (ItemState, SingleSelection, isItem, onSelectionChanged, rowHeight, selection, unselected)
+import Blink.Controls.List
+  (ItemState, ListPart (..), SingleSelection, isItem, onSelectionChanged, rowHeight, selectAt, selectFirst, selection, unselected)
+import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Controls.Table
 import Blink.Element (Element (..), emptyElement, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
@@ -215,9 +217,33 @@ sortingSpec = describe "table column-click sorting" $
       [ClickAt (headerClick 70)]
     resultMessages step3 `shouldBe` ["Sort:(1,Ascending)"]
 
+scrollOnSortSpec :: Spec
+scrollOnSortSpec = describe "table sorting scrolls the selection into view" $
+  it "scrolls a row a sort moved off-screen back into view" $ do
+    -- Header (20px) leaves a 30px row viewport (1.5 of 5 20px rows).
+    let shortBounds   = Rectangle 0 0 100 50
+        fiveItems     = [1, 2, 3, 4, 5]
+        cursorOnFirst = selectFirst fiveItems
+        tableScrollEid = Part (TableRow (ListScrollBar ScrollBar))
+
+    step1 <- runInteractions shortBounds seedCtx
+      (renderSortableTable [selection cursorOnFirst])
+      []
+      [Wait 1]
+
+    -- Simulates a sort moving the selected item from the top row to the
+    -- last, with no click or key press on the table itself driving it.
+    result <- runInteractions shortBounds (resultContext step1)
+      (renderSortableTable [selection (selectAt 4 fiveItems), sortedBy (Just (0, Ascending))])
+      []
+      [Wait 1]
+
+    contextScrollState tableScrollEid (resultContext result) `shouldBe` 1
+
 spec :: Spec
 spec = describe "Blink.Controls.Table" $ do
   widgetSpec
   scrollingSpec
   resizingSpec
   sortingSpec
+  scrollOnSortSpec
