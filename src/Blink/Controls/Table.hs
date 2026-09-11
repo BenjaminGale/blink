@@ -17,6 +17,15 @@ module Blink.Controls.Table
   , columns
   , sortedBy
   , onColumnSortRequested
+    -- * Shared column machinery
+    -- | Used by 'table' itself and by 'Blink.Controls.TreeTable.treeTable'
+    -- to lay out and resize the same kind of columns without duplicating
+    -- the logic.
+  , resolveColumnWidths
+  , columnCell
+  , columnHeaderRow
+  , requestColumnSort
+  , tableSpacer
   ) where
 
 import Control.Monad (forM_, void, when)
@@ -124,7 +133,7 @@ minColumnWidth :: Double
 minColumnWidth = 20
 
 -- | The width of the draggable handle between two header cells -- wider
--- than the 1px line it draws (see 'resizeHandle'), so it's actually
+-- than the 1px line it draws (see @resizeHandle@), so it's actually
 -- grabbable.
 handleWidth :: Double
 handleWidth = 5
@@ -150,60 +159,74 @@ table mkId attrs = Element
     -- ahead of 'listBase', and closed over by both the header and every
     -- row's own cells -- never re-derived per row.
     run = do
-      widths <- resolveColumnWidths mkId (tbColumns cfg)
+      widths <- resolveColumnWidths (mkId . TableColumnDivider) (tbColumns cfg)
       let listCfg = (tbList cfg)
-            { lcRenderItem = \st -> hBox [children (zipWith (\w c -> cellFor w c st) widths (tbColumns cfg))]
-            , lcHeader     = if null (tbColumns cfg) then Nothing else Just (headerCells widths)
+            { lcRenderItem = \st -> hBox [children (zipWith (\w c -> columnCell w c st) widths (tbColumns cfg))]
+            , lcHeader     = if null (tbColumns cfg) then Nothing else
+                Just (columnHeaderRow (mkId . TableHeaderCell) (mkId . TableColumnDivider)
+                        (requestColumnSort (tbSort cfg) (tbOnColumnSortRequested cfg)) widths (tbColumns cfg))
             }
       listBase (mkId . TableRow) listCfg
 
-    cellFor w c st = elementWithLayout (Layout w fill TopLeft) (runElement (colCell c st))
+-- | One cell, sized to its column's own resolved width, drawing its
+-- 'colCell' content -- shared by 'table' and
+-- 'Blink.Controls.TreeTable.treeTable'.
+columnCell :: Length -> ColumnConfig e msg a -> ItemState a -> Element e msg
+columnCell w c st = elementWithLayout (Layout w fill TopLeft) (runElement (colCell c st))
 
-    -- Each header cell is its own, unfocusable, hoverable 'control' (see
-    -- 'tableHeaderStyleKey'), with a draggable 'resizeHandle' (numbered
-    -- the same as the cell just before it) between each pair rather
-    -- than a border.
-    headerCells widths = hBox [children (weave cells)]
-      where
-        cells = [ headerCell idx w c | (idx, w, c) <- zip3 [0 :: Int ..] widths (tbColumns cfg) ]
-        weave = go 0
-        go _ []                  = []
-        go _ [x]                 = [x]
-        go i (x : rest@(_ : _)) = x : resizeHandle mkId i : go (i + 1) rest
+-- | 'Ascending' for a column not already sorted, otherwise the opposite
+-- of whatever direction it's currently sorted in -- shared by 'table'
+-- and 'Blink.Controls.TreeTable.treeTable'.
+requestColumnSort :: Maybe (Int, SortDirection) -> [(Int, SortDirection) -> [Out e msg]] -> Int -> View e msg ()
+requestColumnSort currentSort handlers idx = runHandlers handlers (idx, nextDirection)
+  where
+    nextDirection = case currentSort of
+      Just (i, dir) | i == idx -> flipDirection dir
+      _                        -> Ascending
+    flipDirection Ascending  = Descending
+    flipDirection Descending = Ascending
 
+-- | A row of header cells at the given widths, with a draggable
+-- @resizeHandle@ (numbered the same as the cell just before it) woven in
+-- between each pair rather than a border. Clicking a sortable column's
+-- header (see 'colSortable') calls @onSortClick@ with its index -- shared
+-- by 'table' and 'Blink.Controls.TreeTable.treeTable'.
+columnHeaderRow
+  :: Ord e
+  => (Int -> e) -> (Int -> e) -> (Int -> View e msg ()) -> [Length] -> [ColumnConfig e msg a] -> Element e msg
+columnHeaderRow mkHeaderId mkDividerId onSortClick widths cols = hBox [children (weave cells)]
+  where
+    cells = [ headerCell idx w c | (idx, w, c) <- zip3 [0 :: Int ..] widths cols ]
+    weave = go 0
+    go _ []                 = []
+    go _ [x]                = [x]
+    go i (x : rest@(_ : _)) = x : resizeHandle mkDividerId i : go (i + 1) rest
+
+    -- Its own, unfocusable, hoverable 'control' (see 'tableHeaderStyleKey').
     headerCell idx w c = Element
       { elLayout  = Layout w fill TopLeft
       , elMeasure = noIntrinsicSize
       , elRun     = void $ control defaultControlConfig
-          { ccElementId   = Just (mkId (TableHeaderCell idx))
+          { ccElementId   = Just (mkHeaderId idx)
           , ccStyleKey    = tableHeaderStyleKey
           , ccFocusPolicy = NotFocusable
           , ccContent     = \hci -> do
-              when (colSortable c && ciClicked hci) (requestSort idx)
+              when (colSortable c && ciClicked hci) (onSortClick idx)
               runElement (colHeader c)
           }
       }
 
-    -- | 'Ascending' for a column not already sorted, otherwise the
-    -- opposite of whatever direction it's currently sorted in.
-    requestSort idx = runHandlers (tbOnColumnSortRequested cfg) (idx, nextDirection)
-      where
-        nextDirection = case tbSort cfg of
-          Just (i, dir) | i == idx -> flipDirection dir
-          _                        -> Ascending
-        flipDirection Ascending  = Descending
-        flipDirection Descending = Ascending
-
 -- | Resolves every column's current 'Layout' width: a 'ColumnFixed'
 -- column's own pixel value, adjusted by however far the dividers on
--- either side of it (see 'TableColumnDivider') have been dragged --
--- growing when its right-hand divider (its own index) moves right,
--- shrinking when its left-hand divider (the previous index) does, and
--- never below 'minColumnWidth'. A 'ColumnFill' column is never adjusted
--- directly; it simply absorbs whatever its neighbours give up.
-resolveColumnWidths :: Ord e => (TablePart a -> e) -> [ColumnConfig e msg a] -> View e msg [Length]
-resolveColumnWidths mkId cols = do
-  extents <- mapM (\i -> getExtentState (mkId (TableColumnDivider i))) [0 .. length cols - 2]
+-- either side of it have been dragged -- growing when its right-hand
+-- divider (its own index) moves right, shrinking when its left-hand
+-- divider (the previous index) does, and never below @minColumnWidth@.
+-- A 'ColumnFill' column is never adjusted directly; it simply absorbs
+-- whatever its neighbours give up. Shared by 'table' and
+-- 'Blink.Controls.TreeTable.treeTable'.
+resolveColumnWidths :: Ord e => (Int -> e) -> [ColumnConfig e msg a] -> View e msg [Length]
+resolveColumnWidths mkDividerId cols = do
+  extents <- mapM (\i -> getExtentState (mkDividerId i)) [0 .. length cols - 2]
   let netDeltas = zipWith (-) (extents ++ [0]) (0 : extents)
   pure (zipWith effectiveLength cols netDeltas)
   where
@@ -221,8 +244,8 @@ resolveColumnWidths mkId cols = do
 -- since (unlike a scrollbar's track) the handle's own position moves as
 -- the drag proceeds, so there's no fixed range to map the pointer onto
 -- absolutely.
-resizeHandle :: Ord e => (TablePart a -> e) -> Int -> Element e msg
-resizeHandle mkId idx = Element
+resizeHandle :: Ord e => (Int -> e) -> Int -> Element e msg
+resizeHandle mkDividerId idx = Element
   { elLayout  = Layout (exactly handleWidth) fill TopLeft
   , elMeasure = noIntrinsicSize
   , elRun     = void $ control defaultControlConfig
@@ -234,7 +257,7 @@ resizeHandle mkId idx = Element
       }
   }
   where
-    eid = mkId (TableColumnDivider idx)
+    eid = mkDividerId idx
     body = do
       dragging <- isDragging eid
       bounds   <- getBounds

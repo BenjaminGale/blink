@@ -16,6 +16,8 @@ import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)
 import qualified Blink.Controls.Slider as Slider (value)
 import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..), SortDirection (..), onColumnSortRequested, sortedBy)
 import Blink.Controls.Tree (TreeItemState (..), flattenVisible)
+import Blink.Controls.TreeTable (treeTable)
+import qualified Blink.Controls.TreeTable as TreeTable
 import Blink.Style (Style (..))
 import Blink.Geometry
 import Blink.Input
@@ -64,6 +66,9 @@ data AppState = AppState
   , fileTreeSelection  :: SingleSelection Text
   , groceryTableSelection :: SingleSelection Text
   , groceryTableSort      :: Maybe (Int, SortDirection)
+  , fileSizeTreeExpanded  :: Set Text
+  , fileSizeTreeSelection :: SingleSelection Text
+  , fileSizeTreeSort      :: Maybe (Int, SortDirection)
   }
 
 data Msg
@@ -92,6 +97,9 @@ data Msg
   | FileTreeSelectionChanged (SingleSelection Text)
   | GroceryTableSelectionChanged (SingleSelection Text)
   | GroceryTableSortRequested (Int, SortDirection)
+  | FileSizeTreeExpansionChanged (Set Text)
+  | FileSizeTreeSelectionChanged (SingleSelection Text)
+  | FileSizeTreeSortRequested (Int, SortDirection)
 
 demoApp :: App ControlId Msg AppState
 demoApp = App
@@ -121,6 +129,9 @@ demoApp = App
       , fileTreeSelection  = selectFirst (visibleFileTreeItems defaultFileTreeExpanded)
       , groceryTableSelection = selectFirst (map fst groceryTableItems)
       , groceryTableSort      = Nothing
+      , fileSizeTreeExpanded  = defaultFileTreeExpanded
+      , fileSizeTreeSelection = selectFirst (visibleFileSizeTreeItems Nothing defaultFileTreeExpanded)
+      , fileSizeTreeSort      = Nothing
       }
   , theme   = \s -> if darkMode s then darkTheme else lightTheme
   , view    = demoView
@@ -173,6 +184,19 @@ updateApp msg = case msg of
     , groceryTableSelection = singleSelection
         (map fst (sortedGroceryItems (Just req)))
         (listToMaybe (selectedItems (groceryTableSelection s)))
+    }
+  FileSizeTreeExpansionChanged e -> modify $ \s -> s
+    { fileSizeTreeExpanded  = e
+    , fileSizeTreeSelection = singleSelection
+        (visibleFileSizeTreeItems (fileSizeTreeSort s) e)
+        (listToMaybe (selectedItems (fileSizeTreeSelection s)))
+    }
+  FileSizeTreeSelectionChanged v -> modify $ \s -> s { fileSizeTreeSelection = v }
+  FileSizeTreeSortRequested req -> modify $ \s -> s
+    { fileSizeTreeSort      = Just req
+    , fileSizeTreeSelection = singleSelection
+        (visibleFileSizeTreeItems (Just req) (fileSizeTreeExpanded s))
+        (listToMaybe (selectedItems (fileSizeTreeSelection s)))
     }
 
 type DemoUI = View ControlId Msg
@@ -485,6 +509,7 @@ pages =
   , (ListPage,        "List")
   , (TreePage,        "Tree")
   , (TablePage,       "Table")
+  , (TreeTablePage,   "Tree table")
   ]
 
 -- | A toggle button group of one item per 'Page' -- selecting a page is
@@ -519,6 +544,7 @@ pageContent s = case currentPage s of
   ListPage       -> listPage s
   TreePage       -> treePage s
   TablePage      -> tablePage s
+  TreeTablePage  -> treeTablePage s
 
 -- | 'continueGroup's own natural height (its own margin plus one row of
 -- content, at 'rowHeight') -- same reasoning as 'containedGroupHeight'.
@@ -947,6 +973,95 @@ tablePage s =
       "Click a row, or Tab to the table and use Up/Down. Click a \
       \column header to sort by it; click again to reverse."
     detailText = case selectedItems (groceryTableSelection s) of
+      [x] -> "Selected: " <> x
+      _   -> "Selected: none"
+
+-- | A size in KB for each leaf in 'fileForest' -- 0 (shown blank, see
+-- 'fileSizeLabel') for a directory, which has none of its own.
+fileSizes :: [(Text, Int)]
+fileSizes =
+  [ ("List.hs", 220), ("Tree.hs", 260), ("Button.hs", 140)
+  , ("Blink.hs", 90), ("Main.hs", 60), ("README.md", 4)
+  ]
+
+fileSizeOf :: Text -> Int
+fileSizeOf name = maybe 0 id (lookup name fileSizes)
+
+fileSizeLabel :: Text -> Text
+fileSizeLabel name = case fileSizeOf name of
+  0 -> ""
+  n -> T.pack (show n)
+
+-- | 'fileForest', sorted per a requested column sort -- column 0 (Name)
+-- sorts by name, column 1 (Size) by size -- applied to each level's own
+-- siblings, so the hierarchy itself is unchanged. 'Nothing' keeps the
+-- original order.
+sortedFileForest :: Maybe (Int, SortDirection) -> Forest Text
+sortedFileForest Nothing          = fileForest
+sortedFileForest (Just (0, dir))  = sortForestBy id dir fileForest
+sortedFileForest (Just (_, dir))  = sortForestBy fileSizeOf dir fileForest
+
+sortForestBy :: Ord b => (Text -> b) -> SortDirection -> Forest Text -> Forest Text
+sortForestBy sortKey dir = order . map sortChildren
+  where
+    sortChildren (Node x kids) = Node x (sortForestBy sortKey dir kids)
+    order = case dir of
+      Ascending  -> sortOn (sortKey . rootLabel)
+      Descending -> sortOn (Down . sortKey . rootLabel)
+
+-- | The plain, flattened item list 'fileSizeTreeSelection' is built
+-- over, given a sort and which nodes are expanded -- see
+-- 'FileSizeTreeExpansionChanged'\/'FileSizeTreeSortRequested'.
+visibleFileSizeTreeItems :: Maybe (Int, SortDirection) -> Set Text -> [Text]
+visibleFileSizeTreeItems sortReq e = map fst (flattenVisible (sortedFileForest sortReq) e)
+
+fileSizeTreeColumns :: [ColumnConfig ControlId Msg Text]
+fileSizeTreeColumns =
+  [ ColumnConfig
+      { colHeader   = listCaption "Name"
+      , colWidth    = ColumnFill
+      , colCell     = listCaption . List.isItem
+      , colSortable = True
+      }
+  , ColumnConfig
+      { colHeader   = listCaption "Size (KB)"
+      , colWidth    = ColumnFixed 80
+      , colCell     = listCaption . fileSizeLabel . List.isItem
+      , colSortable = True
+      }
+  ]
+
+fileSizeTreeTableElem :: AppState -> Element ControlId Msg
+fileSizeTreeTableElem s =
+  treeTable FileSizeTreeTable
+    [ TreeTable.columns fileSizeTreeColumns
+    , TreeTable.forest (sortedFileForest (fileSizeTreeSort s))
+    , TreeTable.expanded (fileSizeTreeExpanded s)
+    , selection (fileSizeTreeSelection s)
+    , List.onSelectionChanged (postWith FileSizeTreeSelectionChanged)
+    , TreeTable.onExpansionChanged (postWith FileSizeTreeExpansionChanged)
+    , TreeTable.sortedBy (fileSizeTreeSort s)
+    , TreeTable.onColumnSortRequested (postWith FileSizeTreeSortRequested)
+    , width fill, height (exactly 200)
+    ]
+
+treeTablePage :: AppState -> DemoUI ()
+treeTablePage s =
+  runElement $ vBox
+    [ spacing 12, margin 12
+    , children
+        [ caption "Tree table" [width fill, height (exactly 24), align TopLeft]
+        , caption description [width fill, height (exactly 40), align TopLeft]
+        , fileSizeTreeTableElem s
+        , caption detailText [width fill, align TopLeft]
+        ]
+    ]
+  where
+    description =
+      "Click a chevron to expand/collapse, drag a column divider to \
+      \resize, or click a column header to sort (each level's own \
+      \siblings, not the whole hierarchy)."
+    detailText = case selectedItems (fileSizeTreeSelection s) of
       [x] -> "Selected: " <> x
       _   -> "Selected: none"
 

@@ -68,6 +68,7 @@ library
         Blink.Controls.ToggleGroup
         Blink.Controls.Table
         Blink.Controls.Tree
+        Blink.Controls.TreeTable
         Blink.Element
         Blink.Layout
         Blink.Layout.Border
@@ -142,6 +143,7 @@ test-suite blink-tests
         Blink.Controls.ToggleGroupSpec
         Blink.Controls.TableSpec
         Blink.Controls.TreeSpec
+        Blink.Controls.TreeTableSpec
         Blink.LayoutSpec
         Blink.Style.DefaultsSpec
         Blink.ViewSpec

@@ -24,6 +24,7 @@ import Blink.Controls.ScrollBar (ScrollBarPart)
 import Blink.Controls.ToggleGroup (ToggleGroupPart)
 import Blink.Controls.Table (TablePart)
 import Blink.Controls.Tree (TreePart)
+import Blink.Controls.TreeTable (TreeTablePart)
 import Blink.Rendering
 import Blink.Style
 import Blink.Style.Defaults (containerStyle, defaultTheme)
@@ -31,7 +32,7 @@ import Blink.Controls.Divider.Style (dividerStyle)
 import Blink.Controls.Style (controlMetrics)
 
 -- | Which of the demo's sidebar-selected pages is showing.
-data Page = ControlsPage | ScrollBarsPage | ContinuePage | ContainedPage | ListPage | TreePage | TablePage
+data Page = ControlsPage | ScrollBarsPage | ContinuePage | ContainedPage | ListPage | TreePage | TablePage | TreeTablePage
   deriving (Eq, Ord, Show)
 
 data ControlId = Label
@@ -67,6 +68,7 @@ data ControlId = Label
              | LongList (ListPart Int)
              | FileTree (TreePart Text)
              | GroceryTable (TablePart Text)
+             | FileSizeTreeTable (TreeTablePart Text)
   deriving (Eq, Ord)
 
 -- | Colours sampled from a light-mode reference screenshot (an inspector

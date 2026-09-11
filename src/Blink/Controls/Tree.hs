@@ -18,6 +18,9 @@
 -- already have for the selection model.
 module Blink.Controls.Tree
   ( flattenVisible
+  , visibleNodes
+  , indentAndChevron
+  , handleExpansionKey
   , TreePart (..)
   , TreeItemState (..)
   , TreeConfig (..)
@@ -48,7 +51,7 @@ import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (TextAlign (AlignCenter))
 import Blink.Style (Style (..))
-import Blink.View (Out, currentStyle)
+import Blink.View (Out, View, currentStyle)
 import Blink.View.Drawing (drawText)
 
 -- | Every currently visible row of @forest@, in document order, paired
@@ -184,77 +187,102 @@ tree mkId attrs = Element
 
     run = do
       li <- listBase (mkId . TreeRow) listCfg
-      mapM_ (handleKey (liViewportHeight li)) (ciKeysPressed (liControl li))
+      mapM_ (handleExpansionKey (mkId . TreeRow) listCfg visRows (tcExpanded cfg) (tcOnExpansionChanged cfg) (liViewportHeight li))
+        (ciKeysPressed (liControl li))
 
-    -- | Right expands a collapsed node with children (cursor stays), or
-    -- -- once it's already expanded -- moves the cursor to the very next
-    -- visible row, which 'visibleNodes' always places right after it and
-    -- is exactly its first child. Left collapses an expanded node with
-    -- children (cursor stays), or otherwise moves the cursor up to the
-    -- node's parent (see 'stepsToParent'). Either way, a change to the
-    -- expansion set or the selection is reported the same way clicking a
-    -- chevron\/pressing Up\/Down already reports one, and a moved cursor
-    -- is scrolled into view the same way one moved by Up\/Down already is.
-    --
-    -- Both moves reach the target purely via 'moveCursor' -- stepped
-    -- once for Right, as many times as 'stepsToParent' says for Left --
-    -- rather than 'activate', which also means "the user acted on this
-    -- item": it flips a 'MultiSelection' row's own checked state, and
-    -- collapses a 'RangeSelection' run to a single item. A cursor move
-    -- triggered by navigating the tree's shape must never carry either
-    -- side effect, whatever selection model the caller has chosen.
-    handleKey viewportHeight ev = case (key ev, cursorItem s0) of
-      (KeyRight, Just x) -> case Map.lookup x nodeInfo of
-        Just (_, True) | not (Set.member x (tcExpanded cfg)) -> setExpanded (Set.insert x (tcExpanded cfg))
-        Just _                                               -> moveCursorTo (moveCursor Next s0)
-        Nothing                                              -> pure ()
-      (KeyLeft, Just x) -> case Map.lookup x nodeInfo of
-        Just (_, True) | Set.member x (tcExpanded cfg) -> setExpanded (Set.delete x (tcExpanded cfg))
-        _                                               -> maybe (pure ()) climbToParent (stepsToParent x)
-      _ -> pure ()
-      where
-        s0              = lcSelection listCfg
-        setExpanded s'  = runHandlers (tcOnExpansionChanged cfg) s'
-        moveCursorTo s' = when (s' /= s0) $ do
-          runHandlers (lcOnSelectionChanged listCfg) s'
-          let rowIndex = cursorItem s' >>= \x -> findIndex (\(y, _, _) -> y == x) visRows
-          mapM_ (scrollRowIntoView (mkId . TreeRow) listCfg (length visRows) viewportHeight) rowIndex
-        climbToParent n = moveCursorTo (applyN n (moveCursor Prev) s0)
-        applyN n f       = (!! n) . iterate f
-
-    -- | How many rows back from @x@ its parent sits -- the nearest
-    -- earlier visible row shallower than @x@'s own depth -- if it has
-    -- one.
-    stepsToParent x = listToMaybe
-      [ n | (n, (_, d, _)) <- zip [1 ..] (reverse before), d < myDepth ]
-      where
-        (before, atX) = break (\(y, _, _) -> y == x) visRows
-        myDepth       = case atX of { (_, d, _) : _ -> d; [] -> 0 }
-
-    renderRow st = hBox [children [indentCell depth, chevronCell x hasChildren, tcRenderNode cfg tis]]
+    renderRow st = hBox [children (indentAndChevron (mkId . TreeChevron) (tcOnExpansionChanged cfg) (tcExpanded cfg) depth hasChildren x ++ [tcRenderNode cfg tis])]
       where
         x                     = isItem st
         (depth, hasChildren) = Map.findWithDefault (0, False) x nodeInfo
         tis                   = TreeItemState st depth hasChildren (Set.member x (tcExpanded cfg))
 
-    indentCell depth = elementWithLayout (Layout (exactly (fromIntegral depth * treeStepWidth)) fill TopLeft) (pure ())
+-- | The indent (proportional to @depth@) and, when @hasChildren@, a
+-- clickable chevron reflecting whether @x@ is a member of @expanded@ --
+-- prepended before a row's own content by 'tree' and
+-- 'Blink.Controls.TreeTable.treeTable' alike. Clicking the chevron fires
+-- @onExpansionChanged@ with @x@'s membership toggled.
+indentAndChevron
+  :: (Ord e, Ord a)
+  => (a -> e) -> [Set a -> [Out e msg]] -> Set a -> Int -> Bool -> a -> [Element e msg]
+indentAndChevron mkChevronId onExpansionChanged0 expanded0 depth hasChildren x =
+  [indentCell, chevronCell]
+  where
+    indentCell = elementWithLayout (Layout (exactly (fromIntegral depth * treeStepWidth)) fill TopLeft) (pure ())
 
-    chevronCell x hasChildren
+    chevronCell
       | not hasChildren = elementWithLayout (Layout (exactly treeStepWidth) fill TopLeft) (pure ())
       | otherwise = Element
           { elLayout  = Layout (exactly treeStepWidth) fill TopLeft
           , elMeasure = noIntrinsicSize
           , elRun     = void $ control defaultControlConfig
-              { ccElementId   = Just (mkId (TreeChevron x))
+              { ccElementId   = Just (mkChevronId x)
               , ccStyleKey    = treeChevronStyleKey
               , ccFocusPolicy = NotFocusable
               , ccContent     = \ci -> do
-                  when (ciClicked ci) (runHandlers (tcOnExpansionChanged cfg) (toggleMembership x))
+                  when (ciClicked ci) (runHandlers onExpansionChanged0 (toggleMembership x))
                   s <- currentStyle
-                  drawText (styleTextColour s) AlignCenter (chevronGlyph (Set.member x (tcExpanded cfg)))
+                  drawText (styleTextColour s) AlignCenter (chevronGlyph (Set.member x expanded0))
               }
           }
+
+    toggleMembership y
+      | Set.member y expanded0 = Set.delete y expanded0
+      | otherwise               = Set.insert y expanded0
+
+-- | Handles Left\/Right against a flattened forest: Right expands a
+-- collapsed node with children (cursor stays), or -- once it's already
+-- expanded -- moves the cursor to the very next visible row, which
+-- 'visibleNodes' always places right after it and is exactly its first
+-- child. Left collapses an expanded node with children (cursor stays),
+-- or otherwise moves the cursor up to the node's parent. Either way, a
+-- change to the expansion set or the selection is reported the same way
+-- clicking a chevron\/pressing Up\/Down already reports one, and a moved
+-- cursor is scrolled into view the same way one moved by Up\/Down
+-- already is. Shared by 'tree' and 'Blink.Controls.TreeTable.treeTable'.
+--
+-- Both moves reach the target purely via 'moveCursor' -- stepped once
+-- for Right, as many times as needed to reach the parent for Left --
+-- rather than 'activate', which also means "the user acted on this
+-- item": it flips a 'MultiSelection' row's own checked state, and
+-- collapses a 'RangeSelection' run to a single item. A cursor move
+-- triggered by navigating the tree's shape must never carry either side
+-- effect, whatever selection model the caller has chosen.
+handleExpansionKey
+  :: (Ord e, Ord a, SelectionModel sel, Eq (sel a))
+  => (ListPart a -> e)
+  -> ListConfig sel e msg a
+  -> [(a, Int, Bool)]
+  -> Set a
+  -> [Set a -> [Out e msg]]
+  -> Double
+  -> KeyEvent
+  -> View e msg ()
+handleExpansionKey mkRowId listCfg visRows expanded0 onExpansionChanged0 viewportHeight ev =
+  case (key ev, cursorItem s0) of
+    (KeyRight, Just x) -> case Map.lookup x nodeInfo of
+      Just (_, True) | not (Set.member x expanded0) -> setExpanded (Set.insert x expanded0)
+      Just _                                        -> moveCursorTo (moveCursor Next s0)
+      Nothing                                       -> pure ()
+    (KeyLeft, Just x) -> case Map.lookup x nodeInfo of
+      Just (_, True) | Set.member x expanded0 -> setExpanded (Set.delete x expanded0)
+      _                                        -> maybe (pure ()) climbToParent (stepsToParent x)
+    _ -> pure ()
+  where
+    s0       = lcSelection listCfg
+    nodeInfo = Map.fromList [ (x, (depth, hasChildren)) | (x, depth, hasChildren) <- visRows ]
+
+    setExpanded s'  = runHandlers onExpansionChanged0 s'
+    moveCursorTo s' = when (s' /= s0) $ do
+      runHandlers (lcOnSelectionChanged listCfg) s'
+      let rowIndex = cursorItem s' >>= \x -> findIndex (\(y, _, _) -> y == x) visRows
+      mapM_ (scrollRowIntoView mkRowId listCfg (length visRows) viewportHeight) rowIndex
+    climbToParent n = moveCursorTo (applyN n (moveCursor Prev) s0)
+    applyN n f       = (!! n) . iterate f
+
+    -- How many rows back from @x@ its parent sits -- the nearest earlier
+    -- visible row shallower than @x@'s own depth -- if it has one.
+    stepsToParent x = listToMaybe
+      [ n | (n, (_, d, _)) <- zip [1 ..] (reverse before), d < myDepth ]
       where
-        toggleMembership y
-          | Set.member y (tcExpanded cfg) = Set.delete y (tcExpanded cfg)
-          | otherwise                     = Set.insert y (tcExpanded cfg)
+        (before, atX) = break (\(y, _, _) -> y == x) visRows
+        myDepth       = case atX of { (_, d, _) : _ -> d; [] -> 0 }

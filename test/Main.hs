@@ -19,6 +19,7 @@ import qualified Blink.Controls.ToggleButtonSpec as ToggleButton
 import qualified Blink.Controls.ToggleGroupSpec as ToggleGroup
 import qualified Blink.Controls.TableSpec as Table
 import qualified Blink.Controls.TreeSpec as Tree
+import qualified Blink.Controls.TreeTableSpec as TreeTable
 import qualified Blink.GeometrySpec as Geometry
 import qualified Blink.InputSpec as Input
 import qualified Blink.InteractionSpec as Interaction
@@ -45,6 +46,7 @@ main = hspec $ do
   List.spec
   Tree.spec
   Table.spec
+  TreeTable.spec
   ProgressBar.spec
   RadioButton.spec
   RepeatButton.spec
