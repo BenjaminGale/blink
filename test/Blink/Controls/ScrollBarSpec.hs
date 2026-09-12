@@ -11,7 +11,7 @@ import Blink.Controls.ScrollBar (ScrollBarConfig, ScrollBarPart (..), scrollBar,
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Rendering (Colour (..), TextAlign (..))
+import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.View
 import Blink.Element (runElement)
@@ -109,6 +109,25 @@ spec = describe "Blink.Controls.ScrollBar" $ do
     it "starts scrolled to the start when nothing has set a position" $ do
       result <- runInteractions barBounds seedCtx (render []) [] [Wait 1]
       contextScrollState scrollEid (resultContext result) `shouldBe` 0
+
+  describe "arrow icons" $ do
+    -- Each icon draws 2px past its 16px button on every side (see
+    -- 'Blink.Controls.ScrollBar.arrowButton'), so a 16x16 button's icon
+    -- rect is 20x20, inset by -2 on each edge.
+    it "draws up/down arrows for the default (vertical) orientation" $ do
+      result <- runInteractions barBounds seedCtx (render []) [] [Wait 1]
+      resultDraws result `shouldContain`
+        [DrawImage (Rectangle (-2) (-2) 20 20) "assets/icons/arrow_drop_up.svg" testColour]
+      resultDraws result `shouldContain`
+        [DrawImage (Rectangle (-2) 82 20 20) "assets/icons/arrow_drop_down.svg" testColour]
+
+    it "draws left/right arrows when set to Horizontal" $ do
+      let horizontalBounds = Rectangle 0 0 100 16
+      result <- runInteractions horizontalBounds seedCtx (render [scrollBarOrientation Horizontal]) [] [Wait 1]
+      resultDraws result `shouldContain`
+        [DrawImage (Rectangle (-2) (-2) 20 20) "assets/icons/arrow_left.svg" testColour]
+      resultDraws result `shouldContain`
+        [DrawImage (Rectangle 82 (-2) 20 20) "assets/icons/arrow_right.svg" testColour]
 
   -- Every click\/drag below is preceded by a 'MoveTo' at the same point, as
   -- setup -- see 'Blink.Controls.ToggleGroupSpec' for why: without a

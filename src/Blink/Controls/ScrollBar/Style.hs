@@ -6,8 +6,10 @@ Module: Blink.Controls.ScrollBar.Style
 'Blink.Style.Defaults.defaultTheme' -- a composite of three shapes
 defined in "Blink.Controls.Style", none of them owned by the
 scrollbar itself: its outer container reuses the plain wrapper look, its
-buttons reuse the bordered-box look, and its track reuses the slider's
-track look.
+arrow buttons reuse the same plain-icon look
+'Blink.Controls.Tree.Style.treeChevronStyle' uses (no background\/border
+of their own -- just the icon, recolouring on hover), and its track
+reuses the slider's track look.
 -}
 module Blink.Controls.ScrollBar.Style
   ( scrollBarStyleKey
@@ -16,9 +18,8 @@ module Blink.Controls.ScrollBar.Style
   , defaultStyleEntries
   ) where
 
-import Blink.Rendering (TextAlign (..))
 import Blink.Style
-import Blink.Controls.Style (buttonStyle, controlMetrics, progressBarMetrics, sliderStyle, toggleGroupMetrics, toggleGroupStyle)
+import Blink.Controls.Style (iconStyle, progressBarMetrics, sliderStyle, toggleGroupMetrics, toggleGroupStyle)
 
 -- | 'StyleKey's 'Blink.Controls.ScrollBar.scrollBar' resolves its own
 -- chrome, its arrow buttons, and its track from unless overridden via
@@ -32,6 +33,6 @@ scrollBarTrackStyleKey  = Class "scrollBarTrack"
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
   [ (scrollBarStyleKey,       (toggleGroupMetrics, toggleGroupStyle p))
-  , (scrollBarButtonStyleKey, (controlMetrics,     buttonStyle AlignCenter p))
+  , (scrollBarButtonStyleKey, (toggleGroupMetrics, iconStyle p))
   , (scrollBarTrackStyleKey,  (progressBarMetrics, sliderStyle p))
   ]
