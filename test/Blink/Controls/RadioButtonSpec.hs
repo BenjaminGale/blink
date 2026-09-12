@@ -57,7 +57,7 @@ noInput = InputState
 
 -- | The margin-inset hit area for a control rendered at 'testBounds' with
 -- the 10px margin the test style here uses -- covers both the radio
--- button's glyph (x: 15-35) and caption (x: 35-85), so random points from
+-- button's glyph (x: 15-35) and caption (x: 41-85), so random points from
 -- within it exercise both halves.
 hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
@@ -86,13 +86,13 @@ spec = describe "Blink.Controls.RadioButton" $ do
   -- it selected, so it reports nothing.
   toggleBehaviourSpec (const True) testBounds seedCtx OptionA (Point 5 5) hitRect (Point 200 200) fullSize
 
-  it "draws the unselected glyph and its caption while not selected" $ do
+  it "draws the unselected-bullet icon and its caption while not selected" $ do
     ctx <- start [text "Option A"]
     getDrawCommands ctx `shouldContain`
-      [ DrawText (Rectangle 15 15 20 70) "\9675" testColour AlignCenter
-      , DrawText (Rectangle 35 15 50 70) "Option A" testColour AlignCenter
+      [ DrawImage (Rectangle 15 40 20 20) "assets/icons/radio_button_unchecked.svg" testColour
+      , DrawText (Rectangle 41 15 44 70) "Option A" testColour AlignCenter
       ]
 
-  it "draws the selected glyph while selected" $ do
+  it "draws the selected-bullet icon while selected" $ do
     ctx <- start [text "Option A", isSelected True]
-    getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 20 70) "\9679" testColour AlignCenter]
+    getDrawCommands ctx `shouldContain` [DrawImage (Rectangle 15 40 20 20) "assets/icons/radio_button_checked.svg" testColour]

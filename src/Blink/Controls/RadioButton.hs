@@ -11,7 +11,7 @@ module Blink.Controls.RadioButton
   ) where
 
 import Control.Monad (void)
-import Data.Text (Text)
+import qualified Data.Set as Set
 
 import Blink.Controls.Button (ButtonConfig (..))
 import Blink.Controls.Control
@@ -19,29 +19,29 @@ import Blink.Controls.Label (lcText)
 import Blink.Controls.ToggleButton
   (ToggleConfig (..), defaultGlyphToggleConfig, glyphCaptionContent, glyphCaptionElement, toggleBase)
 import Blink.Controls.RadioButton.Style (radioButtonStyleKey)
-import Blink.Rendering (TextAlign (..))
-import Blink.Style (Style (..))
-import Blink.View (currentStyle)
-import Blink.View.Drawing (drawText)
+import Blink.Controls.Style (iconStyleKey)
+import Blink.Geometry (Rectangle (..))
+import Blink.Rendering (ImagePath)
+import Blink.Style (Style (..), VisualState (..), resolveStyle)
+import Blink.View (getBounds, getStyleSet, isDisabled, isRegionHit, withBounds)
+import Blink.View.Drawing (drawImage)
 import Blink.Element (Element (..))
 
 -- | The fixed width reserved for the glyph, on the left of the caption.
 glyphWidth :: Double
 glyphWidth = 20
 
--- | The gap between the glyph and the caption beside it -- a radio button's
--- glyph, unlike 'Blink.Controls.Checkbox.checkbox''s, sits flush against
--- its caption.
+-- | The gap between the glyph and the caption beside it.
 glyphGap :: Double
-glyphGap = 0
+glyphGap = 6
 
--- | 'CIRCLED BULLET' (U+25C9) would read better but isn't in most UI
--- fonts' coverage (including this project's demo font); 'BLACK CIRCLE' is
--- near-universally supported and pairs the same way
--- 'Blink.Controls.Checkbox.checkTick' pairs its box.
-radioGlyph :: Bool -> Text
-radioGlyph True  = "\9679" -- BLACK CIRCLE
-radioGlyph False = "\9675" -- WHITE CIRCLE
+-- | The bullet, filled while selected.
+radioCheckedIcon :: ImagePath
+radioCheckedIcon = "assets/icons/radio_button_checked.svg"
+
+-- | The bullet, an empty ring while not selected.
+radioUncheckedIcon :: ImagePath
+radioUncheckedIcon = "assets/icons/radio_button_unchecked.svg"
 
 -- | A radio button: a glyph showing whether it's currently selected (see
 -- 'Blink.Controls.ToggleButton.isSelected'), beside a caption set via
@@ -66,9 +66,30 @@ radioButton eid attrs = Element
     cfg      = resolve (defaultGlyphToggleConfig radioButtonStyleKey) attrs
     btn      = tgcButton cfg
     selected = tgcSelected cfg
+    -- | The bullet icon, centred within the glyph column's own bounds --
+    -- see 'Blink.Controls.Checkbox.checkbox's @drawBox@ for why this
+    -- resolves 'iconStyleKey' itself (rather than using the row's own
+    -- resolved style) and scopes hover to the icon's own rectangle.
     drawGlyph = do
-      s <- currentStyle
-      drawText (styleTextColour s) AlignCenter (radioGlyph selected)
+      (_, iconStyleSet) <- getStyleSet iconStyleKey
+      disabled          <- isDisabled
+      bounds            <- getBounds
+      let boxSize = max 0 (min glyphWidth (rectHeight bounds))
+          boxRect = Rectangle
+            { rectX      = rectX bounds + (glyphWidth - boxSize) / 2
+            , rectY      = rectY bounds + (rectHeight bounds - boxSize) / 2
+            , rectWidth  = boxSize
+            , rectHeight = boxSize
+            }
+          icon = if selected then radioCheckedIcon else radioUncheckedIcon
+      withBounds boxRect $ do
+        hovered <- isRegionHit
+        let iconState
+              | disabled  = CommonDisabled
+              | hovered   = CommonMouseOver
+              | otherwise = CommonNormal
+            colour = styleTextColour (resolveStyle iconStyleSet (Set.singleton iconState))
+        drawImage colour icon
     glyphContent = glyphCaptionContent glyphWidth glyphGap drawGlyph (bcLabelled btn)
     ctrl = (bcControl btn) { ccContent = const glyphContent }
     cfg' = cfg
