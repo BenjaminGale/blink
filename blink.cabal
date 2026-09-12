@@ -152,7 +152,15 @@ test-suite blink-tests
         Blink.Controls.TreeTableSpec
         Blink.LayoutSpec
         Blink.Style.DefaultsSpec
-        Blink.ViewSpec
+        Blink.View.AnimationSpec
+        Blink.View.ContextSpec
+        Blink.View.DrawingSpec
+        Blink.View.Fixtures
+        Blink.View.FocusSpec
+        Blink.View.HoldSpec
+        Blink.View.MouseSpec
+        Blink.View.ScrollSpec
+        Blink.View.SelectionSpec
     build-depends:
         blink,
         hspec ^>=2.11.17,
