@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {- |
 Module: Blink.View.Context
 
@@ -38,8 +41,10 @@ module Blink.View.Context
     -- * Messages
   , Effect (..)
   , UiEffect (..)
+  , HasUiEffect (..)
   , emit
   , emitUi
+  , queueUiEffects
     -- * Bounds
   , getBounds
   , getWindowSize
@@ -547,7 +552,10 @@ defaultNavigationKeys = NavigationKeys
 -- from "Blink.View": produced only via 'Blink.View.Scroll.requestScrollTo',
 -- 'Blink.View.Scroll.requestScrollBy', 'Blink.View.Scroll.postScrollBy',
 -- 'Blink.View.Extent.requestExtentBy', 'Blink.View.Selection.requestSelectionAt',
--- @Blink.View.Focus.requestFocus@, or @Blink.View.Focus.requestClearFocus@.
+-- @Blink.View.Focus.requestFocus@, or @Blink.View.Focus.requestClearFocus@ --
+-- each of which, via 'HasUiEffect', also works from a
+-- 'Blink.Update.Update' handler reacting to a message, not only from
+-- view code reacting to an input event.
 data UiEffect e
   = ScrollTo e Double
     -- ^ Sets the scroll position to an absolute value, clamped to @[0, 1]@
@@ -984,6 +992,18 @@ emit msg = modifyOut $ \out -> out { outEvents = EffectMsg msg : outEvents out }
 emitUi :: UiEffect e -> View e msg ()
 emitUi eff = modifyOut $ \out -> out { outEvents = EffectUi eff : outEvents out }
 
+-- | Contexts that can queue a 'UiEffect' to take effect from the next frame
+-- onward: 'View' (via 'emitUi', queuing immediately as view code runs) and
+-- 'Blink.Update.Update' (queuing to be applied once the frame's messages
+-- have all been folded). Lets 'Blink.View.Scroll.requestScrollTo' and its
+-- siblings work unchanged from either, rather than needing a separate copy
+-- of each for 'Blink.Update.Update'.
+class HasUiEffect e m | m -> e where
+  queueEffect :: UiEffect e -> m ()
+
+instance HasUiEffect e (View e msg) where
+  queueEffect = emitUi
+
 -- | Extracts the draw commands produced during the frame, in submission order.
 getDrawCommands :: ViewContext e msg -> [DrawCommand]
 getDrawCommands = reverse . outDrawCommands . ctxOutputs
@@ -994,6 +1014,16 @@ getDrawCommands = reverse . outDrawCommands . ctxOutputs
 -- 'nextFrameContext' and never reach the application.
 getMessages :: ViewContext e msg -> [msg]
 getMessages ctx = [msg | EffectMsg msg <- reverse (outEvents (ctxOutputs ctx))]
+
+-- | Queues extra 'UiEffect's as though 'emitUi' had queued them during the
+-- frame that just completed, ordered after whatever the view itself already
+-- queued. Lets the frame loop fold in 'UiEffect's a 'Blink.Update.Update'
+-- handler requested (via its own 'HasUiEffect' instance) -- it has no
+-- 'ViewContext' of its own to queue them through directly, since it only
+-- runs after the frame's view pass has already produced one.
+queueUiEffects :: [UiEffect e] -> ViewContext e msg -> ViewContext e msg
+queueUiEffects effs ctx = ctx { ctxOutputs = foldl' queueOne (ctxOutputs ctx) effs }
+  where queueOne out eff = out { outEvents = EffectUi eff : outEvents out }
 
 -- Internal: the 'UiEffect's queued with 'emitUi' during the frame, in emit
 -- order, messages discarded.

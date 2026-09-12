@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {- |
 Module: Blink.View.Scroll
 
@@ -34,15 +35,18 @@ contextScrollState eid ctx =
   scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
 -- | Sets the given element's scroll position, clamped to @[0, 1]@, from the
--- next frame onward.
-requestScrollTo :: e -> Double -> View e msg ()
-requestScrollTo eid v = emitUi (ScrollTo eid v)
+-- next frame onward. Callable from 'View' (queued immediately) or
+-- 'Blink.Update.Update' (queued to apply once the frame's messages are
+-- folded) -- see 'HasUiEffect'.
+requestScrollTo :: HasUiEffect e m => e -> Double -> m ()
+requestScrollTo eid v = queueEffect (ScrollTo eid v)
 
 -- | Adjusts the given element's scroll position by @dv@, clamped to
 -- @[0, 1]@, from the next frame onward. Multiple calls in the same frame
--- for the same element accumulate.
-requestScrollBy :: e -> Double -> View e msg ()
-requestScrollBy eid dv = emitUi (ScrollBy eid dv)
+-- for the same element accumulate. Callable from 'View' or
+-- 'Blink.Update.Update' -- see 'HasUiEffect'.
+requestScrollBy :: HasUiEffect e m => e -> Double -> m ()
+requestScrollBy eid dv = queueEffect (ScrollBy eid dv)
 
 -- | 'requestScrollBy' as a handler reaction, ignoring the triggering
 -- event's own data.

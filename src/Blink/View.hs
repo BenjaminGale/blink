@@ -267,8 +267,10 @@ module Blink.View
     -- * Messages
   , Effect
   , UiEffect
+  , HasUiEffect (..)
   , emit
   , emitUi
+  , queueUiEffects
     -- * Scroll state
     -- | 'ScrollState' and 'clampScrollPos' live in "Blink.View.Scroll";
     -- re-exported here since a 'ScrollState' is threaded through

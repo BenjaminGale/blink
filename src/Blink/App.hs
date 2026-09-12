@@ -12,7 +12,7 @@ data App e msg s = App
   { startUp :: IO s
   , theme   :: s -> Theme e
   , view    :: s -> Element e msg
-  , update  :: msg -> Update s msg ()
+  , update  :: msg -> Update s e msg ()
   }
 @
 
@@ -86,6 +86,14 @@ per frame before folding messages into the state. Blink has no opinion on
 the queue's underlying data structure or backpressure policy -- the backend
 supplies one, typically built on "Control.Concurrent.STM"'s @TBQueue@.
 
+= UI effects
+
+An 'Blink.Update.Update' handler can also request a 'UiEffect' -- the same
+'Blink.View.requestScrollTo'\/'Blink.View.requestFocus'-style functions
+view code uses, since 'Blink.Update.Update' shares their @HasUiEffect@
+typeclass -- as a reaction to a message instead of an input event. It takes
+effect from the next frame onward, the same way any other 'UiEffect' does.
+
 = Text measurement
 
 'TextMeasurer' is provided at configure time for cursor positioning and layout.
@@ -128,10 +136,11 @@ import Blink.View
   , mkAnimationState
   , emptyViewContext, nextFrameContext, rerenderContext
   , runView, getDrawCommands, getMessages, hasPendingUiEffects
+  , UiEffect, queueUiEffects
   , contextAnimation, contextRequiresAnimation
   )
 import Blink.Element (Element, runElement)
-import Blink.Update (Update, runUpdateCmds)
+import Blink.Update (Update, runUpdateEffects)
 
 -- | Describes a complete Blink application.
 --
@@ -148,10 +157,12 @@ data App e msg s = App
     -- ^ The view tree, given the application state as it was at the start of
     -- the frame. Queues messages with 'Blink.View.emit'; run once or twice per
     -- frame depending on the render mode.
-  , update :: msg -> Update s msg ()
+  , update :: msg -> Update s e msg ()
     -- ^ Folds one message emitted by 'view' into the application state.
     -- Every message queued during a frame is applied in emission order. May
-    -- request a 'Cmd' via 'Blink.Update.cmd' -- see \"Commands\" above.
+    -- request a 'Cmd' via 'Blink.Update.cmd' (see \"Commands\" above) or a
+    -- 'UiEffect' via 'Blink.View.requestScrollTo' and its siblings (see
+    -- \"UI effects\" above).
   }
 
 -- | Delivery mechanism for messages produced by a 'Cmd' completing off the
@@ -260,14 +271,14 @@ buildCtx app winRect inputState delta isAnimTick state prevCtx =
   in nextFrameContext winRect inputState (theme app state) animState prevCtx
 
 -- | Folds a batch of messages into state via @update@, in order, collecting
--- every 'Cmd' any of them requested along the way.
-foldMsgs :: App e msg s -> s -> [msg] -> (s, [Cmd msg])
-foldMsgs app = go []
+-- every 'Cmd' and 'UiEffect' any of them requested along the way.
+foldMsgs :: App e msg s -> s -> [msg] -> (s, [Cmd msg], [UiEffect e])
+foldMsgs app = go [] []
   where
-    go cs s []       = (s, cs)
-    go cs s (m : ms) =
-      let (s', cs') = runUpdateCmds (update app m) s
-      in go (cs ++ cs') s' ms
+    go cs us s []       = (s, cs, us)
+    go cs us s (m : ms) =
+      let (s', cs', us') = runUpdateEffects (update app m) s
+      in go (cs ++ cs') (us ++ us') s' ms
 
 -- | Forks each 'Cmd', posting its result to @queue@ and calling @notify@
 -- once it completes -- the same wake-up path 'forkAnimationTicker' already
@@ -302,12 +313,17 @@ runFrame app refs queue notify input = do
   -- Cmd results that completed since the last frame are treated as having
   -- happened before this frame's own view emissions.
   pending <- drainMsgs queue
-  let (state', cmds) = foldMsgs app state (pending ++ getMessages ctx')
+  let (state', cmds, uiEffs) = foldMsgs app state (pending ++ getMessages ctx')
+      -- Queued as though the view itself had queued them, so the existing
+      -- 'hasPendingUiEffects'/settling machinery picks them up unchanged --
+      -- including, in event-driven mode, triggering the same-frame second
+      -- pass that a view-side 'emitUi' already would.
+      ctx'' = queueUiEffects uiEffs ctx'
 
   dispatchCmds queue notify cmds
   writeIORef (refsState refs) state'
 
-  pure (ctx', state')
+  pure (ctx'', state')
 
 doStepContinuous :: Ord e => App e msg s -> AppRefs e msg s -> MsgQueue msg -> FrameInput -> IO (FrameResult s)
 doStepContinuous app refs queue input = do
@@ -345,9 +361,9 @@ doStepEventDriven app refs queue notify input = do
         -- behind whatever folding these messages changes in state -- the
         -- same one-frame staleness continuous mode already has, just
         -- reached from the second pass instead of the first.
-        let (state2, cmds2) = foldMsgs app state1 (getMessages ctx2)
+        let (state2, cmds2, uiEffs2) = foldMsgs app state1 (getMessages ctx2)
         dispatchCmds queue notify cmds2
-        pure (ctx2, state2)
+        pure (queueUiEffects uiEffs2 ctx2, state2)
   writeIORef (refsCtx refs) renderedCtx
   writeIORef (refsState refs) state2
   wasActive <- readIORef (refsAnimActive refs)

@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {- |
 Module: Blink.View.Selection
 
@@ -40,5 +41,6 @@ contextSelection eid ctx = case elmSelection (ctxElements ctx) of
   _                                    -> Nothing
 
 -- | Sets the given element's selection, from the next frame onward.
-requestSelectionAt :: e -> Selection -> View e msg ()
-requestSelectionAt eid sel = emitUi (SetSelectionAt eid sel)
+-- Callable from 'View' or 'Blink.Update.Update' -- see 'HasUiEffect'.
+requestSelectionAt :: HasUiEffect e m => e -> Selection -> m ()
+requestSelectionAt eid sel = queueEffect (SetSelectionAt eid sel)

@@ -23,7 +23,7 @@ import Blink.Controls.Control (control, defaultControlConfig, elementId, onFocus
 import Blink.Controls.ToggleButton (isSelected, onSelectedChanged)
 import qualified Blink.Controls.Slider as Slider
 import qualified Blink.Controls.TextInput as TextInput
-import Blink.Update (cmd, modify)
+import Blink.Update (cmd, modify, put)
 
 -- | Every test app below fills the whole test bounds; only the body of the
 -- wrapped action varies per app.
@@ -316,6 +316,24 @@ cmdApp = App
       Done t -> modify (++ [t])
   }
 
+data UiEffectMsg = RequestScroll | ReportScroll Double
+
+-- | Calls 'requestScrollTo' from 'update' (rather than from the view, the
+-- usual way) the first time it renders, then reports the resulting scroll
+-- state as app state every frame.
+uiEffectApp :: App () UiEffectMsg (Maybe Double)
+uiEffectApp = App
+  { startUp = pure Nothing
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \s -> fullView $ do
+      when (s == Nothing) (emit RequestScroll)
+      pos <- getScrollState ()
+      emit (ReportScroll pos)
+  , update  = \m -> case m of
+      RequestScroll    -> requestScrollTo () 1
+      ReportScroll pos -> put (Just pos)
+  }
+
 spec :: Spec
 spec = do
   describe "App integration" $ do
@@ -468,3 +486,10 @@ spec = do
         r2     <- stepFrame handle normalInput -- drains and folds it
         resultState r1 `shouldBe` []
         resultState r2 `shouldBe` ["done"]
+
+    describe "UiEffect dispatch" $
+      it "a UiEffect requested from update takes effect on a later frame" $ do
+        handle <- configureContinuous uiEffectApp nullMsgQueue nullMeasurer
+        r1     <- stepFrame handle normalInput -- requests the ScrollTo; too soon to see it applied
+        r2     <- stepFrame handle normalInput -- settled between frames, now visible
+        (resultState r1, resultState r2) `shouldBe` (Just 0, Just 1)

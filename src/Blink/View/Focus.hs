@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {- |
 Module: Blink.View.Focus
 
@@ -139,14 +140,16 @@ disclaimFocus = modifyFocusState $ \fs -> fs
 -- up when the effect is applied, not supplied here, and deferring lets
 -- every affected element observe the change consistently regardless of
 -- render order (see 'hasGainedFocus'\/'hasLostFocus').
-requestFocus :: Maybe e -> e -> View e msg ()
-requestFocus scopeId target = emitUi (Focus scopeId target)
+-- Callable from 'View' or 'Blink.Update.Update' -- see 'HasUiEffect'.
+requestFocus :: HasUiEffect e m => Maybe e -> e -> m ()
+requestFocus scopeId target = queueEffect (Focus scopeId target)
 
 -- | Queues a @ClearFocus@ effect: clears whoever is focused within the
 -- given scope, with nothing new claiming it, taking effect at the next
--- frame boundary — the "clear" counterpart to 'requestFocus'.
-requestClearFocus :: Maybe e -> View e msg ()
-requestClearFocus scopeId = emitUi (ClearFocus scopeId)
+-- frame boundary — the "clear" counterpart to 'requestFocus'. Callable
+-- from 'View' or 'Blink.Update.Update' -- see 'HasUiEffect'.
+requestClearFocus :: HasUiEffect e m => Maybe e -> m ()
+requestClearFocus scopeId = queueEffect (ClearFocus scopeId)
 
 -- | Marks a sub-tree as belonging to a composite focus scope (a list, a
 -- tree — anything with sub-items), addressed by its own globally-unique id.

@@ -72,6 +72,7 @@ data ControlId = Label
              | GroceryTable (TablePart Text)
              | FileSizeTreeTable (TreeTablePart Text)
              | BackgroundStartButton
+             | LongListJumpButton
   deriving (Eq, Ord)
 
 -- | Colours sampled from a light-mode reference screenshot (an inspector

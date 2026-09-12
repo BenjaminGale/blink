@@ -10,7 +10,8 @@ import Blink.Controls.Control
   , postWith, resolve, style
   )
 import Blink.Controls.Label (LabelConfig)
-import Blink.Controls.List (MultiSelection, SingleSelection, multiSelection, selectFirst, selectedItems, singleSelection)
+import Blink.Controls.List
+  (ListPart (..), MultiSelection, SingleSelection, multiSelection, selectFirst, selectedItems, singleSelection)
 import qualified Blink.Controls.List as List (isItem, onSelectionChanged)
 import Blink.Controls.ProgressBar (ProgressValue (..))
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)
@@ -112,6 +113,7 @@ data Msg
   | FileSizeTreeSortRequested (Int, SortDirection)
   | StartFetch
   | FetchFinished Text
+  | JumpToLongListEnd
 
 demoApp :: App ControlId Msg AppState
 demoApp = App
@@ -151,7 +153,7 @@ demoApp = App
   , update  = updateApp
   }
 
-updateApp :: Msg -> Update AppState Msg ()
+updateApp :: Msg -> Update AppState ControlId Msg ()
 updateApp msg = case msg of
   SetDarkMode v       -> modify $ \s -> s { darkMode = v }
   SetEditingEnabled v -> modify $ \s -> s { editingEnabled = v }
@@ -215,6 +217,7 @@ updateApp msg = case msg of
     modify $ \s -> s { backgroundStatus = Fetching }
     cmd (Cmd fetchDemoFile)
   FetchFinished contents -> modify $ \s -> s { backgroundStatus = Fetched contents }
+  JumpToLongListEnd -> requestScrollTo (LongList (ListScrollBar ScrollBar)) 1
 
 -- | Stands in for an async IO operation (fetching a file, calling an API):
 -- waits somewhere between 3 and 5 seconds -- the delay seeded from the
@@ -846,6 +849,13 @@ longListElem s =
     , width fill, height (exactly 200)
     ]
 
+-- | Demonstrates calling 'requestScrollTo' from 'updateApp': clicking this
+-- button posts a message, and the scroll request happens as a reaction to
+-- that message rather than directly from the click itself.
+longListJumpButton :: Element ControlId Msg
+longListJumpButton =
+  button LongListJumpButton [text "Jump to end", onActivated (post JumpToLongListEnd), width fill, height (exactly 28)]
+
 longListSection :: AppState -> Element ControlId Msg
 longListSection s =
   vBox
@@ -853,6 +863,7 @@ longListSection s =
     , children
         [ caption "Scrolling (30 items, 200px viewport)" [width fill, align TopLeft]
         , longListElem s
+        , longListJumpButton
         , caption detailText [width fill, align TopLeft]
         ]
     ]

@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {- |
 Module: Blink.View.Extent
 
@@ -35,6 +36,7 @@ contextExtentState eid ctx =
 
 -- | Adjusts the given element's extent by @dv@, from the next frame
 -- onward. Multiple calls in the same frame for the same element
--- accumulate.
-requestExtentBy :: e -> Double -> View e msg ()
-requestExtentBy eid dv = emitUi (AdjustExtent eid dv)
+-- accumulate. Callable from 'View' or 'Blink.Update.Update' -- see
+-- 'HasUiEffect'.
+requestExtentBy :: HasUiEffect e m => e -> Double -> m ()
+requestExtentBy eid dv = queueEffect (AdjustExtent eid dv)
