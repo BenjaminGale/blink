@@ -295,7 +295,7 @@ rowRadio s =
       , items radioOptions
       , toggleAttributes (\opt -> [text opt, width (exactly 100), height fill, align MiddleLeft])
       , selectedItem (radioChoice s)
-      , onSelectionChanged (maybe [] (\opt -> [OutMsg (PickRadio opt)]))
+      , onSelectionChanged (maybe [] (postWith PickRadio))
       , isEnabled (editingEnabled s)
       ]
     )
@@ -528,7 +528,7 @@ sidebar s =
             , items (map fst pages)
             , toggleAttributes (\page -> [text (pageLabel page), width fill, height (exactly 32)])
             , selectedItem (Just (currentPage s))
-            , onSelectionChanged (maybe [] (\page -> [OutMsg (SetPage page)]))
+            , onSelectionChanged (maybe [] (postWith SetPage))
             ]
         ]
     ]
@@ -655,7 +655,7 @@ rowContainedWrap s =
   where
     radioOption i wrap opt =
       radioButton (ContainedWrapRadio i)
-        [ text opt, isSelected (containedWrap s == wrap), onSelectedChanged (\_ -> [OutMsg (SetContainedWrap wrap)])
+        [ text opt, isSelected (containedWrap s == wrap), onSelectedChanged (post (SetContainedWrap wrap))
         , width (exactly 220), height fill, align MiddleLeft
         ]
 

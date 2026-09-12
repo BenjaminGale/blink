@@ -92,16 +92,17 @@ import Blink.Input (ButtonState (..), InputState (..), Key, KeyEvent (..), Modif
 import Blink.Layout.Constraints (MeasureCtx (..), shrink)
 import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), VisualState (..), resolveStyle)
 import Blink.View
+import Blink.View.Context (Effect (..))
 import Blink.View.Drawing (withClip, withBackground, withBorder)
 import Blink.Element (Attribute (..), Element (..), resolve)
 
 -- * Raw events
 
 -- | A handler for an element event with no data of its own.
-type EventHandler e msg = () -> [Out e msg]
+type EventHandler e msg = () -> [Effect e msg]
 
 -- | A handler for 'onKeyPressed', with the triggering 'KeyEvent'.
-type KeyEventHandler e msg = KeyEvent -> [Out e msg]
+type KeyEventHandler e msg = KeyEvent -> [Effect e msg]
 
 -- | How a control's own mouse-button activity translates into 'ciClicked'
 -- -- and, transitively, into 'control's own click-to-focus. A control
@@ -183,23 +184,23 @@ onFocusLost = addHandler ccOnFocusLost (\cc hs -> cc { ccOnFocusLost = hs })
 mouseActivation :: HasControlConfig e msg cfg => MouseActivation -> Attribute cfg
 mouseActivation a = overControl (Attribute (\cc -> cc { ccMouseActivation = a }))
 
--- | Runs every handler in @hs@ on @a@, dispatching the resulting 'Out's.
-runHandlers :: [a -> [Out e msg]] -> a -> View e msg ()
+-- | Runs every handler in @hs@ on @a@, dispatching the resulting 'Effect's.
+runHandlers :: [a -> [Effect e msg]] -> a -> View e msg ()
 runHandlers hs a = mapM_ dispatch (concatMap ($ a) hs)
   where
-    dispatch (OutMsg msg) = emit msg
-    dispatch (OutUi eff)  = emitUi eff
+    dispatch (EffectMsg msg) = emit msg
+    dispatch (EffectUi eff)  = emitUi eff
 
 -- | Builds a reaction (an 'EventHandler'\/'Blink.Controls.ToggleButton.onSelectedChanged'-shaped
--- function into @['Out' e msg]@) that emits @msg@, ignoring whatever data
+-- function into @['Effect' e msg]@) that emits @msg@, ignoring whatever data
 -- the triggering event carried.
-post :: msg -> a -> [Out e msg]
-post msg = const [OutMsg msg]
+post :: msg -> a -> [Effect e msg]
+post msg = const [EffectMsg msg]
 
 -- | Builds a reaction that emits @f a@ -- uses the triggering event's own
 -- data to build the message.
-postWith :: (a -> msg) -> a -> [Out e msg]
-postWith f a = [OutMsg (f a)]
+postWith :: (a -> msg) -> a -> [Effect e msg]
+postWith f a = [EffectMsg (f a)]
 
 -- | 'True' when nothing else holds mouse capture, or this control itself
 -- does (a drag in progress on this control doesn't count as contention), or

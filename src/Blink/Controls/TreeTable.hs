@@ -34,7 +34,7 @@ import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, run
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill)
-import Blink.View (Out)
+import Blink.View (Effect)
 
 -- | Identifies one part of a 'treeTable' for the purpose of building
 -- element ids -- every part 'listBase' itself already needs, plus a
@@ -56,10 +56,10 @@ data TreeTableConfig sel e msg a = TreeTableConfig
   { ttList                  :: ListConfig sel e msg a
   , ttColumns               :: [ColumnConfig e msg a]
   , ttSort                  :: Maybe (Int, SortDirection)
-  , ttOnColumnSortRequested :: [(Int, SortDirection) -> [Out e msg]]
+  , ttOnColumnSortRequested :: [(Int, SortDirection) -> [Effect e msg]]
   , ttForest                :: Forest a
   , ttExpanded              :: Set a
-  , ttOnExpansionChanged    :: [Set a -> [Out e msg]]
+  , ttOnExpansionChanged    :: [Set a -> [Effect e msg]]
   }
 
 instance HasControlConfig e msg (TreeTableConfig sel e msg a) where
@@ -96,7 +96,7 @@ sortedBy s = Attribute (\c -> c { ttSort = s })
 
 -- | Reacts to a sortable column's header click -- see
 -- 'Blink.Controls.Table.onColumnSortRequested'.
-onColumnSortRequested :: ((Int, SortDirection) -> [Out e msg]) -> Attribute (TreeTableConfig sel e msg a)
+onColumnSortRequested :: ((Int, SortDirection) -> [Effect e msg]) -> Attribute (TreeTableConfig sel e msg a)
 onColumnSortRequested h = Attribute (\c -> c { ttOnColumnSortRequested = ttOnColumnSortRequested c ++ [h] })
 
 -- | The tree table's own data, as a plain 'Forest' -- see
@@ -110,7 +110,7 @@ expanded s = Attribute (\c -> c { ttExpanded = s })
 
 -- | Reacts to a chevron click -- see
 -- 'Blink.Controls.Tree.onExpansionChanged'.
-onExpansionChanged :: (Set a -> [Out e msg]) -> Attribute (TreeTableConfig sel e msg a)
+onExpansionChanged :: (Set a -> [Effect e msg]) -> Attribute (TreeTableConfig sel e msg a)
 onExpansionChanged h = Attribute (\c -> c { ttOnExpansionChanged = ttOnExpansionChanged c ++ [h] })
 
 -- | A table whose column 0 is also a tree (see the module header).

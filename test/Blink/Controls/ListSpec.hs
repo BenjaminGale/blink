@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Data.List.NonEmpty (NonEmpty (..))
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute, resolve)
+import Blink.Controls.Control (Attribute, postWith, resolve)
 import Blink.Controls.List
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Element (Element (..), height, runElement, width)
@@ -321,8 +321,8 @@ activatedMsg x = "Activated:" ++ show x
 
 reactions :: (Show (sel Int)) => [Attribute (ListConfig sel TestElem String Int)]
 reactions =
-  [ onSelectionChanged (\s -> [OutMsg (selectedMsg s)])
-  , onItemActivated (\x -> [OutMsg (activatedMsg x)])
+  [ onSelectionChanged (postWith (\s -> (selectedMsg s)))
+  , onItemActivated (postWith (\x -> (activatedMsg x)))
   ]
 
 widgetSpec :: Spec

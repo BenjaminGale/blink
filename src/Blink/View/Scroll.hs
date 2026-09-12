@@ -46,8 +46,8 @@ requestScrollBy eid dv = emitUi (ScrollBy eid dv)
 
 -- | 'requestScrollBy' as a handler reaction, ignoring the triggering
 -- event's own data.
-postScrollBy :: e -> Double -> a -> [Out e msg]
-postScrollBy eid dv = const [OutUi (ScrollBy eid dv)]
+postScrollBy :: e -> Double -> a -> [Effect e msg]
+postScrollBy eid dv = const [EffectUi (ScrollBy eid dv)]
 
 -- | Sets the given element's scroll position, clamped to @[0, 1]@,
 -- immediately -- visible to a later 'getScrollState' read in this same

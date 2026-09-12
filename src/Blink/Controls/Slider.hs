@@ -94,7 +94,7 @@ data SliderConfig e msg = SliderConfig
   { scControl        :: ControlConfig e msg
   , scValue          :: Double
   , scStep           :: Double
-  , scOnValueChanged :: [Double -> [Out e msg]]
+  , scOnValueChanged :: [Double -> [Effect e msg]]
   , scLayout         :: Layout
   }
 
@@ -135,7 +135,7 @@ step s = Attribute (\sc -> sc { scStep = s })
 -- | Reacts with the new value whenever dragging, clicking the track, or an
 -- arrow key press would change it. It's up to the reaction to actually
 -- store the new value and pass it back in via 'value' next frame.
-onValueChanged :: (Double -> [Out e msg]) -> Attribute (SliderConfig e msg)
+onValueChanged :: (Double -> [Effect e msg]) -> Attribute (SliderConfig e msg)
 onValueChanged f = Attribute (\sc -> sc { scOnValueChanged = scOnValueChanged sc ++ [f] })
 
 -- | Clamps a value to @[0, 1]@.

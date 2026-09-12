@@ -122,7 +122,7 @@ import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
 import Blink.Style (StyleSet (..))
 import Blink.View
-  (Out, View, getBounds, getCursorIndex, getScrollState, getStyleSet, setCursorIndex, setScrollStateNow, withBounds)
+  (Effect, View, getBounds, getCursorIndex, getScrollState, getStyleSet, setCursorIndex, setScrollStateNow, withBounds)
 import Blink.View.Drawing (withClip)
 
 -- * Selection models
@@ -511,8 +511,8 @@ data ListConfig sel e msg a = ListConfig
   , lcSelection          :: sel a
   , lcRenderItem         :: ItemState a -> Element e msg
   , lcRowHeight          :: Double
-  , lcOnSelectionChanged :: [sel a -> [Out e msg]]
-  , lcOnItemActivated    :: [a -> [Out e msg]]
+  , lcOnSelectionChanged :: [sel a -> [Effect e msg]]
+  , lcOnItemActivated    :: [a -> [Effect e msg]]
   , lcHeader             :: Maybe (Element e msg)
   }
 
@@ -594,7 +594,7 @@ rowHeight h = overList (Attribute (\c -> c { lcRowHeight = h }))
 -- reflects keyboard\/click interaction locally within the frame (see
 -- 'list'), but the app never learns of it, so next frame's 'selection'
 -- puts it right back -- the list is then read-only in practice.
-onSelectionChanged :: HasListConfig sel e msg a cfg => (sel a -> [Out e msg]) -> Attribute cfg
+onSelectionChanged :: HasListConfig sel e msg a cfg => (sel a -> [Effect e msg]) -> Attribute cfg
 onSelectionChanged h = overList (Attribute (\c -> c { lcOnSelectionChanged = lcOnSelectionChanged c ++ [h] }))
 
 -- | Reacts when the user acts on a specific item: a click on its row, or
@@ -603,7 +603,7 @@ onSelectionChanged h = overList (Attribute (\c -> c { lcOnSelectionChanged = lcO
 -- fires this) -- "the user chose this, act on it", distinct from
 -- 'onSelectionChanged' keeping selection state in sync. Arrowing never
 -- fires this.
-onItemActivated :: HasListConfig sel e msg a cfg => (a -> [Out e msg]) -> Attribute cfg
+onItemActivated :: HasListConfig sel e msg a cfg => (a -> [Effect e msg]) -> Attribute cfg
 onItemActivated h = overList (Attribute (\c -> c { lcOnItemActivated = lcOnItemActivated c ++ [h] }))
 
 -- | What 'listBase' reports back: the underlying 'control' call's own

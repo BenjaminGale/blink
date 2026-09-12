@@ -45,7 +45,7 @@ data TextInputConfig e msg = TextInputConfig
   , ticValue         :: Text
   , ticInputFilter   :: Text -> Text
   , ticDisplayFilter :: Text -> Text
-  , ticOnInput       :: [Text -> [Out e msg]]
+  , ticOnInput       :: [Text -> [Effect e msg]]
   , ticOnSubmit      :: [EventHandler e msg]
   , ticLayout        :: Layout
   }
@@ -94,7 +94,7 @@ displayFilter :: (Text -> Text) -> Attribute (TextInputConfig e msg)
 displayFilter f = Attribute (\tc -> tc { ticDisplayFilter = f })
 
 -- | Reacts with the new value whenever a keystroke changes it.
-onInput :: (Text -> [Out e msg]) -> Attribute (TextInputConfig e msg)
+onInput :: (Text -> [Effect e msg]) -> Attribute (TextInputConfig e msg)
 onInput f = Attribute (\tc -> tc { ticOnInput = ticOnInput tc ++ [f] })
 
 -- | Reacts when Enter is pressed while the field is focused and enabled.

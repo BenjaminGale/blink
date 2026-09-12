@@ -6,7 +6,7 @@ import qualified Data.Set as Set
 import Data.Tree (Tree (..))
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute)
+import Blink.Controls.Control (Attribute, postWith)
 import Blink.Controls.List
   (Direction (..), ItemState, SingleSelection, isItem, moveCursor, onSelectionChanged, rowHeight, selectItem, selection, unselected)
 import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..))
@@ -141,7 +141,7 @@ expansionSpec = describe "treeTable expansion" $
       (renderSilentTreeTable
         [ expanded (Set.singleton "src")
         , selection (unselected items)
-        , onExpansionChanged (\s -> [OutMsg ("Expanded:" ++ show (Set.toList s))])
+        , onExpansionChanged (postWith (\s -> ("Expanded:" ++ show (Set.toList s))))
         ])
       [MoveTo atRow1Chevron]
       [ClickAt atRow1Chevron]
@@ -156,7 +156,7 @@ keyboardSpec = describe "treeTable keyboard expand/collapse" $
       (renderSilentTreeTable
         [ expanded Set.empty
         , selection cursorOnSrc
-        , onExpansionChanged (\s -> [OutMsg ("Expanded:" ++ show (Set.toList s))])
+        , onExpansionChanged (postWith (\s -> ("Expanded:" ++ show (Set.toList s))))
         ])
       []
       [PressKey KeyRight []]
@@ -166,7 +166,7 @@ keyboardSpec = describe "treeTable keyboard expand/collapse" $
       (renderSilentTreeTable
         [ expanded (Set.singleton "src")
         , selection cursorOnSrc
-        , onSelectionChanged (\s -> [OutMsg ("Selected:" ++ show s)])
+        , onSelectionChanged (postWith (\s -> ("Selected:" ++ show s)))
         ])
       []
       [PressKey KeyRight []]
@@ -178,7 +178,7 @@ keyboardSpec = describe "treeTable keyboard expand/collapse" $
       (renderSilentTreeTable
         [ expanded (Set.singleton "src")
         , selection cursorOnFirstChild
-        , onSelectionChanged (\s -> [OutMsg ("Selected:" ++ show s)])
+        , onSelectionChanged (postWith (\s -> ("Selected:" ++ show s)))
         ])
       []
       [PressKey KeyLeft []]
@@ -217,7 +217,7 @@ sortingSpec = describe "treeTable column-click sorting" $
       (renderSilentTreeTable
         [ expanded (Set.singleton "src")
         , selection (unselected items)
-        , onColumnSortRequested (\s -> [OutMsg ("Sort:" ++ show s)])
+        , onColumnSortRequested (postWith (\s -> ("Sort:" ++ show s)))
         ])
       [MoveTo (at 30 10)]
       [ClickAt (at 30 10)]

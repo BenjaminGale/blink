@@ -43,12 +43,15 @@ and folds them into its own state via "Blink.Update".
 = Effects and settling
 
 A control queues two kinds of thing during a frame, both riding in the
-same 'Out' queue: a @msg@ via 'emit', for the application, and a
+same 'Effect' queue: a @msg@ via 'emit', for the application, and a
 'UiEffect' via 'emitUi', for Blink's own presentation state, never seen by
-the application. A handler returning @['Out' e msg]@ (see
-'Blink.Controls.Table.onColumnSortRequested' for an example) can queue
-both from the same reaction: the message that tells the application what
-happened, and an effect reacting to it on the presentation side.
+the application. 'Effect' is opaque outside "Blink.View.Context" — a
+handler builds its @['Effect' e msg]@ result with
+'Blink.Controls.Control.post' or 'Blink.Controls.Control.postWith' (see
+'Blink.Controls.Table.onColumnSortRequested' for an example), and can
+queue both kinds from the same reaction: the message that tells the
+application what happened, and an effect reacting to it on the
+presentation side.
 
 'emitUi' only appends a 'UiEffect' to the queue; it does not change the
 running 'ViewContext'. 'nextFrameContext' (or, mid-frame,
@@ -262,7 +265,7 @@ module Blink.View
   , settleAndClearEffects
   , contextRequiresAnimation
     -- * Messages
-  , Out (..)
+  , Effect
   , UiEffect
   , emit
   , emitUi

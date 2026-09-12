@@ -45,7 +45,7 @@ import Blink.Controls.Label
 import Blink.Controls.ToggleButton.Style (toggleButtonStyleKey, toggleChecked, toggleStyleGroup, toggleUnchecked)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
-import Blink.View (Out, View, getBounds, measureText, withBounds)
+import Blink.View (Effect, View, getBounds, measureText, withBounds)
 import Blink.Element (Element (..), HasLayoutConfig (..))
 
 -- | Whether the control is currently selected.
@@ -56,7 +56,7 @@ isSelected b = Attribute (\cfg -> cfg { tgcSelected = b })
 -- moves its selected state to a new value, with the value it changed to.
 -- It's up to the reaction to actually store the new value and pass it back
 -- in via 'isSelected' next frame.
-onSelectedChanged :: (Bool -> [Out e msg]) -> Attribute (ToggleConfig e msg)
+onSelectedChanged :: (Bool -> [Effect e msg]) -> Attribute (ToggleConfig e msg)
 onSelectedChanged f = Attribute (\cfg -> cfg { tgcOnSelectedChanged = tgcOnSelectedChanged cfg ++ [f] })
 
 -- | Every capability 'toggleButton' (and any checkbox\/radio button) shares:
@@ -69,7 +69,7 @@ data ToggleConfig e msg = ToggleConfig
   { tgcButton            :: ButtonConfig e msg
   , tgcNext              :: Bool -> Bool
   , tgcSelected          :: Bool
-  , tgcOnSelectedChanged :: [Bool -> [Out e msg]]
+  , tgcOnSelectedChanged :: [Bool -> [Effect e msg]]
   }
 
 -- | 'defaultButtonConfig' (styled via 'toggleButtonStyleKey'), @not@ (a

@@ -18,7 +18,7 @@ import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec, defaultButtonBehaviourConfig)
 import Blink.Controls.ToggleButton (ToggleConfig, isSelected, onSelectedChanged)
-import Blink.Controls.Control (Attribute)
+import Blink.Controls.Control (Attribute, postWith)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)
@@ -29,7 +29,7 @@ import Blink.View
 -- | Every raw\/activation reaction, plus a tagged reaction to
 -- 'onSelectedChanged' naming the value it changed to.
 taggedToggle :: [Attribute (ToggleConfig e String)]
-taggedToggle = onSelectedChanged (\b -> [OutMsg ("SelectedChanged:" ++ show b)]) : tagged
+taggedToggle = onSelectedChanged (postWith (\b -> ("SelectedChanged:" ++ show b))) : tagged
 
 -- | 'True' when @msgs@ reports activating a control starting at @current@
 -- the way @next@ says it should: the changed-to value when that's actually

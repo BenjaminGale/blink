@@ -51,7 +51,7 @@ import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (TextAlign (AlignCenter))
 import Blink.Style (Style (..))
-import Blink.View (Out, View, currentStyle)
+import Blink.View (Effect, View, currentStyle)
 import Blink.View.Drawing (drawText)
 
 -- | Every currently visible row of @forest@, in document order, paired
@@ -103,7 +103,7 @@ data TreeConfig sel e msg a = TreeConfig
   , tcForest            :: Forest a
   , tcExpanded          :: Set a
   , tcRenderNode        :: TreeItemState a -> Element e msg
-  , tcOnExpansionChanged :: [Set a -> [Out e msg]]
+  , tcOnExpansionChanged :: [Set a -> [Effect e msg]]
   }
 
 instance HasControlConfig e msg (TreeConfig sel e msg a) where
@@ -144,7 +144,7 @@ renderNode f = Attribute (\c -> c { tcRenderNode = f })
 -- back in next frame, the same relationship
 -- 'Blink.Controls.List.onSelectionChanged' has to
 -- 'Blink.Controls.List.selection'.
-onExpansionChanged :: (Set a -> [Out e msg]) -> Attribute (TreeConfig sel e msg a)
+onExpansionChanged :: (Set a -> [Effect e msg]) -> Attribute (TreeConfig sel e msg a)
 onExpansionChanged h = Attribute (\c -> c { tcOnExpansionChanged = tcOnExpansionChanged c ++ [h] })
 
 -- | The width of one level of indent, and of the chevron column every
@@ -203,7 +203,7 @@ tree mkId attrs = Element
 -- @onExpansionChanged@ with @x@'s membership toggled.
 indentAndChevron
   :: (Ord e, Ord a)
-  => (a -> e) -> [Set a -> [Out e msg]] -> Set a -> Int -> Bool -> a -> [Element e msg]
+  => (a -> e) -> [Set a -> [Effect e msg]] -> Set a -> Int -> Bool -> a -> [Element e msg]
 indentAndChevron mkChevronId onExpansionChanged0 expanded0 depth hasChildren x =
   [indentCell, chevronCell]
   where
@@ -253,7 +253,7 @@ handleExpansionKey
   -> ListConfig sel e msg a
   -> [(a, Int, Bool)]
   -> Set a
-  -> [Set a -> [Out e msg]]
+  -> [Set a -> [Effect e msg]]
   -> Double
   -> KeyEvent
   -> View e msg ()

@@ -9,7 +9,7 @@ import Test.QuickCheck.Monadic (assert, monadicIO, run)
 
 import Blink.Controls.Button (onActivated)
 import Blink.Controls.ButtonBehaviour (ButtonBehaviourConfig (..), buttonBehaviourSpec, defaultButtonBehaviourConfig)
-import Blink.Controls.Control (Attribute, elementId)
+import Blink.Controls.Control (Attribute, elementId, post)
 import Blink.Controls.RepeatButton (RepeatButtonConfig, initialDelay, repeatButton, repeatInterval)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
@@ -79,7 +79,7 @@ renderWithId :: [Attribute'] -> View TestElement String ()
 renderWithId attrs = runElement (repeatButton Ok attrs) { elLayout = Layout fill fill TopLeft }
 
 taggedActivated :: [Attribute']
-taggedActivated = [onActivated (const [OutMsg "Activated"])]
+taggedActivated = [onActivated (post "Activated")]
 
 action :: View TestElement String ()
 action = renderWithId taggedActivated

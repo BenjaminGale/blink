@@ -4,7 +4,7 @@ module Blink.Controls.SliderSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute, FocusPolicy (..), focusPolicy, onFocusGained, onFocusLost)
+import Blink.Controls.Control (Attribute, FocusPolicy (..), focusPolicy, onFocusGained, onFocusLost, post, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
 import Blink.Input (InputState (..), Key (..))
@@ -191,18 +191,18 @@ spec = describe "Blink.Controls.Slider" $ do
 
   describe "dragging" $ do
     it "reports the value at the clicked position on mouse down" $ do
-      let attrs = [value 0, onValueChanged (\v -> [OutMsg (show v)])]
+      let attrs = [value 0, onValueChanged (postWith (\v -> (show v)))]
       result <- runInteractions testBounds seedCtx (runElement (slider Handle attrs)) [] [MouseDown midPoint]
       resultMessages result `shouldBe` ["0.5"]
 
     it "keeps reporting the value as the drag continues past the track" $ do
-      let attrs = [value 0, onValueChanged (\v -> [OutMsg (show v)])]
+      let attrs = [value 0, onValueChanged (postWith (\v -> (show v)))]
       result <- runInteractions testBounds seedCtx (runElement (slider Handle attrs)) []
                   [MouseDown midPoint, DragTo (Point 200 50)]
       resultMessages result `shouldBe` ["0.5", "1.0"]
 
     it "does not report a value while disabled" $ do
-      let attrs = [value 0, onValueChanged (\v -> [OutMsg (show v)])]
+      let attrs = [value 0, onValueChanged (postWith (\v -> (show v)))]
       result <- runInteractions testBounds seedCtx (disableWhen True (runElement (slider Handle attrs))) [] [MouseDown midPoint]
       resultMessages result `shouldBe` []
 
@@ -221,12 +221,12 @@ spec = describe "Blink.Controls.Slider" $ do
           withBounds sliderRect (runElement (slider Handle attrs))
 
     it "takes focus as soon as the drag starts, before any movement or release" $ do
-      let attrs = [onFocusGained (const [OutMsg ("gained" :: String)])]
+      let attrs = [onFocusGained (post ("gained" :: String))]
       result <- runInteractions testBounds seedCtx (renderTwo attrs) [] [MouseDown grabPoint, Wait 1]
       resultMessages result `shouldBe` ["gained"]
 
     it "keeps focus once taken, even if the drag ends with a release outside its bounds" $ do
-      let attrs = [onFocusLost (const [OutMsg ("lost" :: String)])]
+      let attrs = [onFocusLost (post ("lost" :: String))]
       result <- runInteractions testBounds seedCtx (renderTwo attrs)
                   [MouseDown grabPoint, Wait 1]
                   [DragTo farAway, MouseUp farAway, Wait 1]
@@ -236,41 +236,41 @@ spec = describe "Blink.Controls.Slider" $ do
     let focused attrs = runInteractions testBounds seedCtx (runElement (slider Handle attrs)) [Wait 1]
 
     it "increases the value by the step on Right while focused" $ do
-      let attrs = [value 0.5, onValueChanged (\v -> [OutMsg (show v)])]
+      let attrs = [value 0.5, onValueChanged (postWith (\v -> (show v)))]
       result <- focused attrs [PressKey KeyRight []]
       resultMessages result `shouldBe` ["0.6"]
 
     it "decreases the value by the step on Left while focused" $ do
-      let attrs = [value 0.5, onValueChanged (\v -> [OutMsg (show v)])]
+      let attrs = [value 0.5, onValueChanged (postWith (\v -> (show v)))]
       result <- focused attrs [PressKey KeyLeft []]
       resultMessages result `shouldBe` ["0.4"]
 
     it "increases the value by the step on Up while focused" $ do
-      let attrs = [value 0.5, onValueChanged (\v -> [OutMsg (show v)])]
+      let attrs = [value 0.5, onValueChanged (postWith (\v -> (show v)))]
       result <- focused attrs [PressKey KeyUp []]
       resultMessages result `shouldBe` ["0.6"]
 
     it "decreases the value by the step on Down while focused" $ do
-      let attrs = [value 0.5, onValueChanged (\v -> [OutMsg (show v)])]
+      let attrs = [value 0.5, onValueChanged (postWith (\v -> (show v)))]
       result <- focused attrs [PressKey KeyDown []]
       resultMessages result `shouldBe` ["0.4"]
 
     it "respects a custom step" $ do
-      let attrs = [value 0.5, step 0.25, onValueChanged (\v -> [OutMsg (show v)])]
+      let attrs = [value 0.5, step 0.25, onValueChanged (postWith (\v -> (show v)))]
       result <- focused attrs [PressKey KeyRight []]
       resultMessages result `shouldBe` ["0.75"]
 
     it "clamps to the minimum instead of going below it" $ do
-      let attrs = [value 0.05, onValueChanged (\v -> [OutMsg (show v)])]
+      let attrs = [value 0.05, onValueChanged (postWith (\v -> (show v)))]
       result <- focused attrs [PressKey KeyLeft []]
       resultMessages result `shouldBe` ["0.0"]
 
     it "does not fire again once already at the minimum" $ do
-      let attrs = [value 0.0, onValueChanged (\v -> [OutMsg (show v)])]
+      let attrs = [value 0.0, onValueChanged (postWith (\v -> (show v)))]
       result <- focused attrs [PressKey KeyLeft []]
       resultMessages result `shouldBe` []
 
     it "does not fire again once already at the maximum" $ do
-      let attrs = [value 1.0, onValueChanged (\v -> [OutMsg (show v)])]
+      let attrs = [value 1.0, onValueChanged (postWith (\v -> (show v)))]
       result <- focused attrs [PressKey KeyRight []]
       resultMessages result `shouldBe` []

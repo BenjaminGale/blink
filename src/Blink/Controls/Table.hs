@@ -40,7 +40,7 @@ import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), Length, exactly, fill)
 import Blink.Style (Style (..))
 import Blink.View
-  (Out, View, currentStyle, getBounds, getExtentState, getMousePos, isDragging, requestExtentBy, withBounds)
+  (Effect, View, currentStyle, getBounds, getExtentState, getMousePos, isDragging, requestExtentBy, withBounds)
 import Blink.View.Drawing (fillRect)
 
 -- | Identifies one part of a 'table' for the purpose of building
@@ -85,7 +85,7 @@ data TableConfig sel e msg a = TableConfig
   { tbList                  :: ListConfig sel e msg a
   , tbColumns               :: [ColumnConfig e msg a]
   , tbSort                  :: Maybe (Int, SortDirection)
-  , tbOnColumnSortRequested :: [(Int, SortDirection) -> [Out e msg]]
+  , tbOnColumnSortRequested :: [(Int, SortDirection) -> [Effect e msg]]
   }
 
 instance HasControlConfig e msg (TableConfig sel e msg a) where
@@ -122,7 +122,7 @@ sortedBy s = Attribute (\c -> c { tbSort = s })
 -- | Reacts when clicking a sortable column's header cell (see
 -- 'colSortable') requests a sort: 'Ascending' for a column not already
 -- sorted, otherwise the opposite of its current direction.
-onColumnSortRequested :: ((Int, SortDirection) -> [Out e msg]) -> Attribute (TableConfig sel e msg a)
+onColumnSortRequested :: ((Int, SortDirection) -> [Effect e msg]) -> Attribute (TableConfig sel e msg a)
 onColumnSortRequested h = Attribute (\c -> c { tbOnColumnSortRequested = tbOnColumnSortRequested c ++ [h] })
 
 -- | Never let a drag squeeze a column narrower than this, however far
@@ -177,7 +177,7 @@ columnCell w c st = elementWithLayout (Layout w fill TopLeft) (runElement (colCe
 -- | 'Ascending' for a column not already sorted, otherwise the opposite
 -- of whatever direction it's currently sorted in -- shared by 'table'
 -- and 'Blink.Controls.TreeTable.treeTable'.
-requestColumnSort :: Maybe (Int, SortDirection) -> [(Int, SortDirection) -> [Out e msg]] -> Int -> View e msg ()
+requestColumnSort :: Maybe (Int, SortDirection) -> [(Int, SortDirection) -> [Effect e msg]] -> Int -> View e msg ()
 requestColumnSort currentSort handlers idx = runHandlers handlers (idx, nextDirection)
   where
     nextDirection = case currentSort of

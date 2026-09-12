@@ -167,7 +167,7 @@ spec = describe "Blink.Controls.Control.FocusScope" $ do
         focusedOn Child1 result `shouldBe` True
 
       it "Composite's own focus-gained handler fires too, via focus-within" $ do
-        let cfg = (resolve defaultControlConfig [elementId Composite, focusPolicy policy, onFocusGained (const [OutMsg ("Composite gained" :: String)])])
+        let cfg = (resolve defaultControlConfig [elementId Composite, focusPolicy policy, onFocusGained (post ("Composite gained" :: String))])
               { ccContent = const $ do
                   leaf Child1 rectChild1 []
                   leaf Child2 rectChild2 []

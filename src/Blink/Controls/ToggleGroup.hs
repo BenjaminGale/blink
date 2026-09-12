@@ -41,7 +41,7 @@ import Blink.Controls.ToggleGroup.Style (radioButtonGroupStyleKey, toggleButtonG
 import Blink.Geometry (Alignment (TopLeft), Orientation (..))
 import Blink.Layout.Box (children, hBox, spacing, vBox)
 import Blink.Layout.Constraints (Layout (..), fill)
-import Blink.View (Out)
+import Blink.View (Effect)
 import Blink.Element (Element (..), HasLayoutConfig (..), runElement)
 
 -- | Identifies one part of a 'toggleButtonGroup'\/'radioButtonGroup' for the
@@ -72,7 +72,7 @@ data ToggleGroupConfig e a msg = ToggleGroupConfig
   , tggToggleAttrs        :: a -> [Attribute (ToggleConfig e msg)]
   , tggSelected           :: Maybe a
   , tggAllowDeselect      :: Bool
-  , tggOnSelectionChanged :: [Maybe a -> [Out e msg]]
+  , tggOnSelectionChanged :: [Maybe a -> [Effect e msg]]
   }
 
 -- | 'defaultControlConfig' (styled via @styleKey@), filling its parent on
@@ -142,7 +142,7 @@ allowDeselect b = Attribute (\c -> c { tggAllowDeselect = b })
 
 -- | Reacts when selecting or clearing an item actually changes the group's
 -- selection -- see 'toggleGroup' for exactly which clicks fire this.
-onSelectionChanged :: (Maybe a -> [Out e msg]) -> Attribute (ToggleGroupConfig e a msg)
+onSelectionChanged :: (Maybe a -> [Effect e msg]) -> Attribute (ToggleGroupConfig e a msg)
 onSelectionChanged f = Attribute (\c -> c { tggOnSelectionChanged = tggOnSelectionChanged c ++ [f] })
 
 -- | A row (or column, see 'groupOrientation') of
@@ -236,7 +236,7 @@ toggleGroup styleKey widget tag attrs = Element
 -- to 'True', deselecting (moving the group's selection to 'Nothing') when
 -- it would move to 'False' and 'tggAllowDeselect' allows it, or reporting
 -- nothing -- leaving the group's selection exactly as it was -- otherwise.
-onItemToggled :: ToggleGroupConfig e a msg -> a -> Bool -> [Out e msg]
+onItemToggled :: ToggleGroupConfig e a msg -> a -> Bool -> [Effect e msg]
 onItemToggled cfg item newlySelected
   | newlySelected        = fire (Just item)
   | tggAllowDeselect cfg = fire Nothing

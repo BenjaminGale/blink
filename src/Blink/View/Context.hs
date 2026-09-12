@@ -36,7 +36,7 @@ module Blink.View.Context
   , settleAndClearEffects
   , contextRequiresAnimation
     -- * Messages
-  , Out (..)
+  , Effect (..)
   , UiEffect (..)
   , emit
   , emitUi
@@ -597,9 +597,9 @@ data UiEffect e
 -- a 'UiEffect'. A single ordered queue holds both so that the relative
 -- ordering between a message and an effect emitted in the same frame is
 -- preserved.
-data Out e msg
-  = OutMsg msg
-  | OutUi (UiEffect e)
+data Effect e msg
+  = EffectMsg msg
+  | EffectUi (UiEffect e)
   deriving (Eq, Show)
 
 -- | Cross-frame presentation state. Persists unchanged across frames; never
@@ -624,12 +624,12 @@ data SelectionSlot e
   | SelectionAt e Selection
 
 -- | Outputs accumulated during a single frame: draw commands, the queued
--- 'Out' events (messages and 'UiEffect's, in emit order), and the animation
+-- 'Effect' events (messages and 'UiEffect's, in emit order), and the animation
 -- continuation flag. Reset to empty at the start of each frame by
 -- 'nextFrameContext'.
 data FrameOutputs e msg = FrameOutputs
   { outDrawCommands       :: [DrawCommand]
-  , outEvents             :: [Out e msg]
+  , outEvents             :: [Effect e msg]
   , outRequiresAnimation  :: Bool
   }
 
@@ -974,7 +974,7 @@ withInteractionClip = withField ctxInteractionClip (\v c -> c { ctxInteractionCl
 -- | Queues a message to be delivered to the application once the frame
 -- completes. Messages are delivered in emit order by 'getMessages'.
 emit :: msg -> View e msg ()
-emit msg = modifyOut $ \out -> out { outEvents = OutMsg msg : outEvents out }
+emit msg = modifyOut $ \out -> out { outEvents = EffectMsg msg : outEvents out }
 
 -- | Queues a 'UiEffect' — a focus, scroll, or selection change — to be
 -- applied by @applyUiEffects@ between this frame and the next.
@@ -982,7 +982,7 @@ emit msg = modifyOut $ \out -> out { outEvents = OutMsg msg : outEvents out }
 -- scroll\/selection writes inside "Blink.Controls" are built on this;
 -- reach for it directly only when writing a custom control.
 emitUi :: UiEffect e -> View e msg ()
-emitUi eff = modifyOut $ \out -> out { outEvents = OutUi eff : outEvents out }
+emitUi eff = modifyOut $ \out -> out { outEvents = EffectUi eff : outEvents out }
 
 -- | Extracts the draw commands produced during the frame, in submission order.
 getDrawCommands :: ViewContext e msg -> [DrawCommand]
@@ -993,12 +993,12 @@ getDrawCommands = reverse . outDrawCommands . ctxOutputs
 -- built on it) are excluded; they are applied automatically by
 -- 'nextFrameContext' and never reach the application.
 getMessages :: ViewContext e msg -> [msg]
-getMessages ctx = [msg | OutMsg msg <- reverse (outEvents (ctxOutputs ctx))]
+getMessages ctx = [msg | EffectMsg msg <- reverse (outEvents (ctxOutputs ctx))]
 
 -- Internal: the 'UiEffect's queued with 'emitUi' during the frame, in emit
 -- order, messages discarded.
 getUiEffects :: ViewContext e msg -> [UiEffect e]
-getUiEffects ctx = [eff | OutUi eff <- reverse (outEvents (ctxOutputs ctx))]
+getUiEffects ctx = [eff | EffectUi eff <- reverse (outEvents (ctxOutputs ctx))]
 
 -- | 'True' when 'Blink.View.Animation.requiresAnimation' was called at
 -- least once during the frame, read directly from a 'ViewContext' outside
@@ -1097,8 +1097,8 @@ settleAndClearEffects ctx = ctx'
   { ctxOutputs = (ctxOutputs ctx') { outEvents = filter isMsg (outEvents (ctxOutputs ctx')) } }
   where
     ctx' = settleEffects ctx
-    isMsg (OutMsg _) = True
-    isMsg (OutUi _)  = False
+    isMsg (EffectMsg _) = True
+    isMsg (EffectUi _)  = False
 
 -- | 'True' when any effect is pending on @ctx@.
 hasPendingUiEffects :: ViewContext e msg -> Bool

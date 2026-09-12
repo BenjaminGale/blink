@@ -9,7 +9,7 @@ import Blink.Controls.Control
   ( Attribute, ControlConfig (..), FocusPolicy (..)
   , control, defaultControlConfig, elementId, focusTargetOnClick, isEnabled, focusPolicy
   , onClicked, onFocusGained, onFocusLost, onKeyPressed
-  , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, resolve
+  , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, post, postWith, resolve
   )
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
@@ -166,7 +166,7 @@ spec = describe "Blink.Controls.Control.control" $ do
 
       it "raises no click event from the child, even though only the container has isEnabled False" $ do
         result <- runInteractions testBounds seedCtx
-          (containerDisabledWithChild [onClicked (const [OutMsg ("B clicked" :: String)])])
+          (containerDisabledWithChild [onClicked (post ("B clicked" :: String))])
           [MoveTo childClickPoint] [MouseDown childClickPoint, MouseUp childClickPoint]
         resultMessages result `shouldBe` []
 
@@ -237,19 +237,19 @@ spec = describe "Blink.Controls.Control.control" $ do
       getDrawCommands (resultContext result) `shouldNotContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
 
     it "raises no focus gained event by rendering first, even though nothing else is focused" $ do
-      let attrs = [onFocusGained (const [OutMsg ("gained" :: String)])]
+      let attrs = [onFocusGained (post ("gained" :: String))]
       result <- runInteractions testBounds seedCtx (renderNoId attrs) [] []
       resultMessages result `shouldBe` []
 
     it "raises no click event for a press and release over it" $ do
-      let attrs = [onClicked (const [OutMsg ("clicked" :: String)])]
+      let attrs = [onClicked (post ("clicked" :: String))]
       result <- runInteractions testBounds seedCtx (renderNoId attrs) [] [ClickAt (Point 50 50)]
       resultMessages result `shouldBe` []
 
   describe "auto-claim" $
     it "raises a focus gained event for only the first of several simultaneously-eligible controls" $ do
-      let attrsA = [onFocusGained (const [OutMsg ("A gained" :: String)])]
-          attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
+      let attrsA = [onFocusGained (post ("A gained" :: String))]
+          attrsB = [onFocusGained (post ("B gained" :: String))]
       result <- runInteractions testBounds seedCtx (both attrsA attrsB) [] []
       resultMessages result `shouldBe` ["A gained"]
 
@@ -263,21 +263,21 @@ spec = describe "Blink.Controls.Control.control" $ do
       -- as a click for the second.
       let attrsA =
             [ focusPolicy NotFocusable
-            , onMouseEntered (const [OutMsg ("A entered" :: String)])
-            , onMouseExited  (const [OutMsg "A exited"])
-            , onMouseDown    (const [OutMsg "A down"])
+            , onMouseEntered (post ("A entered" :: String))
+            , onMouseExited  (post "A exited")
+            , onMouseDown    (post "A down")
             ]
           attrsB =
             [ focusPolicy NotFocusable
-            , onMouseEntered (const [OutMsg ("B entered" :: String)])
-            , onMouseUp      (const [OutMsg "B up"])
+            , onMouseEntered (post ("B entered" :: String))
+            , onMouseUp      (post "B up")
             ]
       result <- runInteractions testBounds seedCtx (both attrsA attrsB) []
         [MouseDown onA, DragTo onB, MouseUp onB]
       resultMessages result `shouldBe` ["A entered", "A down", "A exited", "B up"]
 
   describe "capture suppresses hover elsewhere" $ do
-    let attrsB = [focusPolicy NotFocusable, onMouseEntered (const [OutMsg ("B entered" :: String)])]
+    let attrsB = [focusPolicy NotFocusable, onMouseEntered (post ("B entered" :: String))]
 
     it "does not fire a sibling's mouse-entered event while another element holds capture" $ do
       result <- runInteractions testBounds seedCtx (both [] attrsB) []
@@ -291,8 +291,8 @@ spec = describe "Blink.Controls.Control.control" $ do
       resultMessages result `shouldBe` ["B entered"]
 
   describe "click-to-focus" $ do
-    let attrsA = [onFocusLost   (const [OutMsg ("A lost"   :: String)])]
-        attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
+    let attrsA = [onFocusLost   (post ("A lost"   :: String))]
+        attrsB = [onFocusGained (post ("B gained" :: String))]
         render = both attrsA attrsB
 
     it "does not take effect on the mouse-down's own frame" $ do
@@ -305,29 +305,29 @@ spec = describe "Blink.Controls.Control.control" $ do
 
   describe "focusTargetOnClick" $ do
     it "does not redirect on the mouse-down's own frame" $ do
-      let taggedB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
+      let taggedB = [onFocusGained (post ("B gained" :: String))]
       result <- runInteractions testBounds seedCtx (renderRedirect ElemA [] ElemB taggedB) [] [MouseDown onA]
       resultMessages result `shouldBe` []
 
     it "does not redirect on mouse-down alone, even a frame later -- only a full click" $ do
-      let taggedB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
+      let taggedB = [onFocusGained (post ("B gained" :: String))]
       result <- runInteractions testBounds seedCtx (renderRedirect ElemA [] ElemB taggedB) [] [MouseDown onA, Wait 1]
       resultMessages result `shouldBe` []
 
     it "redirects focus to the named element one frame after a full click" $ do
-      let taggedB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
+      let taggedB = [onFocusGained (post ("B gained" :: String))]
       result <- runInteractions testBounds seedCtx (renderRedirect ElemA [] ElemB taggedB) [] [ClickAt onA, Wait 1]
       resultMessages result `shouldBe` ["B gained"]
 
     it "does not redirect focus onto a disabled element" $ do
-      let taggedB = [isEnabled False, onFocusGained (const [OutMsg ("B gained" :: String)])]
+      let taggedB = [isEnabled False, onFocusGained (post ("B gained" :: String))]
       result <- runInteractions testBounds seedCtx (renderRedirect ElemA [] ElemB taggedB) [] [ClickAt onA, Wait 1]
       resultMessages result `shouldBe` []
       contextFocus (resultContext result) `shouldBe` Nothing
 
   describe "keyboard navigation" $ do
-    let attrsA = [onFocusLost   (const [OutMsg ("A lost"   :: String)])]
-        attrsB = [onFocusGained (const [OutMsg ("B gained" :: String)])]
+    let attrsA = [onFocusLost   (post ("A lost"   :: String))]
+        attrsB = [onFocusGained (post ("B gained" :: String))]
         render = both attrsA attrsB
 
     it "Tab gives up focus immediately, letting the next control auto-claim in the same frame" $ do
@@ -343,22 +343,22 @@ spec = describe "Blink.Controls.Control.control" $ do
       resultMessages result `shouldBe` ["A lost", "B gained"]
 
     it "does not report Tab as a key event to the control it moves focus away from" $ do
-      let keyAttrs = [onKeyPressed (\k -> [OutMsg (show k)])]
+      let keyAttrs = [onKeyPressed (postWith (\k -> (show k)))]
       result <- runInteractions testBounds seedCtx (both keyAttrs []) [Wait 1] [Tab]
       resultMessages result `shouldBe` []
 
     it "does not report Shift-Tab as a key event to the control it moves focus away from" $ do
-      let keyAttrs = [onKeyPressed (\k -> [OutMsg (show k)])]
+      let keyAttrs = [onKeyPressed (postWith (\k -> (show k)))]
       result <- runInteractions testBounds seedCtx (both keyAttrs []) [Wait 1] [ShiftTab]
       resultMessages result `shouldBe` []
 
     it "reports an ordinary key press with its triggering KeyEvent" $ do
-      let keyAttrs = [onKeyPressed (\k -> [OutMsg (show k)])]
+      let keyAttrs = [onKeyPressed (postWith (\k -> (show k)))]
       result <- runInteractions testBounds seedCtx (renderControl keyAttrs) [Wait 1] [PressKey KeyReturn []]
       resultMessages result `shouldBe` [show (KeyEvent KeyReturn [] False)]
 
     describe "Shift-Tab past a disabled control" $ do
-      let tagged e = [onFocusGained (const [OutMsg (show e ++ " gained")]), onFocusLost (const [OutMsg (show e ++ " lost")])]
+      let tagged e = [onFocusGained (post (show e ++ " gained")), onFocusLost (post (show e ++ " lost"))]
           renderWithDisabledMiddle = three (tagged ElemA) (isEnabled False : tagged ElemB) (tagged ElemC)
 
       it "Tab from the first control skips the disabled middle one" $ do
@@ -370,7 +370,7 @@ spec = describe "Blink.Controls.Control.control" $ do
         resultMessages result `shouldBe` ["ElemA gained", "ElemC lost"]
 
     describe "Shift-Tab past a control disabled via an ambient disableWhen" $ do
-      let tagged e = [onFocusGained (const [OutMsg (show e ++ " gained")]), onFocusLost (const [OutMsg (show e ++ " lost")])]
+      let tagged e = [onFocusGained (post (show e ++ " gained")), onFocusLost (post (show e ++ " lost"))]
           renderWithAmbientlyDisabledMiddle = do
             withBounds rectA (renderAt ElemA (tagged ElemA))
             disableWhen True (withBounds rectB (renderAt ElemB (tagged ElemB)))
