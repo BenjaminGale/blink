@@ -4,14 +4,15 @@ module Blink.Controls.ButtonSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Button (ButtonConfig, button)
+import Blink.Controls.Button (ButtonActivation (..), ButtonConfig, activation, button, onActivated)
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec, defaultButtonBehaviourConfig)
-import Blink.Controls.Control (Attribute)
+import Blink.Controls.Control (Attribute, post)
 import Blink.Controls.Label (text)
 import qualified Data.Text as T
 
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
+import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
@@ -85,6 +86,22 @@ spec = describe "Blink.Controls.Button" $ do
   it "draws its text in the resolved style" $ do
     ctx <- start [text "OK"]
     getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "OK" testColour AlignCenter]
+
+  describe "activation ActivateOnPress" $ do
+    -- 'buttonBehaviourSpec' above only covers the default 'ActivateOnClick'
+    -- activation -- these check that 'button' itself, not just
+    -- 'Blink.Controls.RepeatButton.repeatButton', honours the
+    -- 'ActivateOnPress' override 'activation' exposes.
+    let insidePoint = Point 50 50
+        taggedActivated = [activation ActivateOnPress, onActivated (post "Activated")]
+
+    it "fires onActivated immediately on press, not on release" $ do
+      result <- runInteractions testBounds seedCtx (fullSize taggedActivated) [] [MouseDown insidePoint]
+      resultMessages result `shouldBe` ["Activated"]
+
+    it "does not fire onActivated again on release" $ do
+      result <- runInteractions testBounds seedCtx (fullSize taggedActivated) [MouseDown insidePoint] [MouseUp insidePoint]
+      resultMessages result `shouldBe` []
 
   describe "FitContent sizing" $ do
     -- Spec scenario: a button with 'width fitContent' (here, both axes, via
