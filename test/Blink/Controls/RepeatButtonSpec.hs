@@ -69,7 +69,7 @@ insidePoint = Point 50 50
 type Attribute' = Attribute (RepeatButtonConfig TestElement String)
 
 seedCtx :: ViewContext TestElement String
-seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext testBounds noInput testTheme
 
 -- | The behaviour contracts below are about interaction, not sizing --
 -- they're written against a control that fills its given bounds entirely,

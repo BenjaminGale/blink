@@ -66,7 +66,7 @@ hitRect = insetRect (uniform 10) testBounds
 type Attribute' = Attribute (LabelConfig TestElement String)
 
 seedCtx :: ViewContext TestElement String
-seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext testBounds noInput testTheme
 
 -- | The behaviour contracts below are about interaction, not sizing --
 -- they're written against a label that fills its given bounds entirely, as

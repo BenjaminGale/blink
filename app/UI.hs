@@ -74,6 +74,11 @@ data AppState = AppState
   , fileSizeTreeSelection :: SingleSelection Text
   , fileSizeTreeSort      :: Maybe (Int, SortDirection)
   , backgroundStatus :: BackgroundStatus
+  , imageFitWidthEnabled  :: Bool
+  , imageFitWidth          :: Double
+  , imageFitHeightEnabled :: Bool
+  , imageFitHeight         :: Double
+  , imagePreserveRatio    :: Bool
   }
 
 -- | Where a 'BackgroundPage' fetch stands: not yet started, in flight (a
@@ -113,6 +118,11 @@ data Msg
   | StartFetch
   | FetchFinished Text
   | JumpToLongListEnd
+  | SetImageFitWidthEnabled Bool
+  | SetImageFitWidth Double
+  | SetImageFitHeightEnabled Bool
+  | SetImageFitHeight Double
+  | SetImagePreserveRatio Bool
 
 demoApp :: App ControlId Msg AppState
 demoApp = App
@@ -146,6 +156,11 @@ demoApp = App
       , fileSizeTreeSelection = selectFirst (visibleFileSizeTreeItems Nothing defaultFileTreeExpanded)
       , fileSizeTreeSort      = Nothing
       , backgroundStatus = NotStarted
+      , imageFitWidthEnabled  = False
+      , imageFitWidth          = 0.3
+      , imageFitHeightEnabled = False
+      , imageFitHeight         = 0.3
+      , imagePreserveRatio    = True
       }
   , theme   = \s -> if darkMode s then darkTheme else lightTheme
   , view    = demoView
@@ -217,6 +232,11 @@ updateApp msg = case msg of
     cmd fetchDemoFile
   FetchFinished contents -> modify $ \s -> s { backgroundStatus = Fetched contents }
   JumpToLongListEnd -> requestScrollTo (LongList (ListScrollBar ScrollBar)) 1
+  SetImageFitWidthEnabled v  -> modify $ \s -> s { imageFitWidthEnabled = v }
+  SetImageFitWidth v          -> modify $ \s -> s { imageFitWidth = v }
+  SetImageFitHeightEnabled v -> modify $ \s -> s { imageFitHeightEnabled = v }
+  SetImageFitHeight v         -> modify $ \s -> s { imageFitHeight = v }
+  SetImagePreserveRatio v    -> modify $ \s -> s { imagePreserveRatio = v }
 
 -- | Stands in for an async IO operation (fetching a file, calling an API):
 -- waits somewhere between 3 and 5 seconds -- the delay seeded from the
@@ -544,6 +564,7 @@ pages =
   , (TablePage,       "Table")
   , (TreeTablePage,   "Tree table")
   , (BackgroundPage,  "Background")
+  , (ImagePage,       "Image")
   ]
 
 -- | A toggle button group of one item per 'Page' -- selecting a page is
@@ -580,6 +601,7 @@ pageContent s = case currentPage s of
   TablePage      -> tablePage s
   TreeTablePage  -> treeTablePage s
   BackgroundPage -> backgroundPage s
+  ImagePage      -> imagePage s
 
 -- | 'continueGroup's own natural height (its own margin plus one row of
 -- content, at 'rowHeight') -- same reasoning as 'containedGroupHeight'.
@@ -1138,6 +1160,75 @@ backgroundPage s =
       "\"Fetch file\" requests a Cmd -- an IO action run off the frame \
       \thread. Its result reaches `update` as an ordinary message once it \
       \completes, whenever that turns out to be."
+
+-- | The demo's sample image, a tiny (17x12) public-domain SVG -- small
+-- enough that its natural size is barely visible, which is exactly what
+-- makes the fit-width\/fit-height sliders below worth having: without
+-- them, there'd be nothing to see change.
+demoImagePath :: Text
+demoImagePath = "assets/images/haskell-logo.svg"
+
+-- | Maps a 'Slider.value' fraction (@[0, 1]@) to a fit dimension in
+-- pixels, over a range wide enough to visibly grow the image from its
+-- barely-there natural size.
+fitSliderPixels :: Double -> Double
+fitSliderPixels frac = 10 + frac * 300
+
+-- | Demonstrates 'image': the sample renders at its natural size until
+-- 'fitWidth'\/'fitHeight' is enabled below, at which point it scales
+-- (preserving aspect ratio unless that's unchecked too) -- toggling the
+-- checkboxes and dragging the sliders shows the effect immediately.
+imagePage :: AppState -> DemoUI ()
+imagePage s =
+  runElement $ vBox
+    [ spacing 12, margin 12
+    , children
+        [ caption "Image" [width fill, height (exactly 24), align TopLeft]
+        , caption description [width fill, height (exactly 56), align TopLeft]
+        , fitRow ImageFitWidthCheckbox "Fit width" (imageFitWidthEnabled s) SetImageFitWidthEnabled
+            ImageFitWidthSlider (imageFitWidth s) SetImageFitWidth
+        , fitRow ImageFitHeightCheckbox "Fit height" (imageFitHeightEnabled s) SetImageFitHeightEnabled
+            ImageFitHeightSlider (imageFitHeight s) SetImageFitHeight
+        , checkbox ImagePreserveRatioCheckbox
+            ( rowLayout ++
+              [ text "Preserve ratio", isSelected (imagePreserveRatio s)
+              , onSelectedChanged (postWith SetImagePreserveRatio)
+              ]
+            )
+        , image (imageAttrs ++ [align TopLeft])
+        ]
+    ]
+  where
+    imageAttrs =
+      source demoImagePath : preserveRatio (imagePreserveRatio s)
+      : [fitWidth  (fitSliderPixels (imageFitWidth s))  | imageFitWidthEnabled s]
+      ++ [fitHeight (fitSliderPixels (imageFitHeight s)) | imageFitHeightEnabled s]
+    description =
+      "`image` draws a bitmap at its natural size by default, or scaled \
+      \via fitWidth\\/fitHeight below -- optionally preserving aspect \
+      \ratio. Toggle a checkbox and drag its slider to see the effect."
+    -- | One "checkbox to enable a fit dimension, slider to set it,
+    -- current pixel value" row -- shared shape for the width\/height
+    -- rows above, which differ only in which ids\/fields\/messages they
+    -- read and post.
+    fitRow checkboxId caption' enabled onEnabled sliderId frac onFrac =
+      hBox
+        ( rowLayout ++
+          [ spacing 8
+          , children
+              [ checkbox checkboxId
+                  [ text caption', isSelected enabled, onSelectedChanged (postWith onEnabled)
+                  , width (exactly 140), height fill
+                  ]
+              , slider sliderId
+                  [ Slider.value frac, onValueChanged (postWith onFrac)
+                  , isEnabled enabled, width fill, height fill
+                  ]
+              , caption (T.pack (show (round (fitSliderPixels frac) :: Int)) <> "px")
+                  [width (exactly 50), height fill, align MiddleLeft]
+              ]
+          ]
+        )
 
 -- Top-level view
 

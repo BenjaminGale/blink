@@ -48,7 +48,7 @@ testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 90
 
 seedCtx :: ViewContext TestElem String
-seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext testBounds noInput testTheme
 
 -- | A point at @(x, y)@ within the scene.
 at :: Double -> Double -> Point

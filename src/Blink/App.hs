@@ -94,11 +94,12 @@ view code uses, since 'Blink.Update.Update' shares their @HasUiEffect@
 typeclass -- as a reaction to a message instead of an input event. It takes
 effect from the next frame onward, the same way any other 'UiEffect' does.
 
-= Text measurement
+= Measurement
 
-'TextMeasurer' is provided at configure time for cursor positioning and layout.
-Construct one from your platform's font API and pass it to 'configureContinuous'
-or 'configureEventDriven'.
+'Measurers' bundles the measurement services provided at configure time
+for cursor positioning, layout, and image sizing. Construct one from your
+platform's font/image APIs and pass it to 'configureContinuous' or
+'configureEventDriven'.
 -}
 module Blink.App
   ( -- * Application
@@ -113,8 +114,10 @@ module Blink.App
   , FrameResult (..)
     -- * Commands
   , MsgQueue (..)
-    -- * Text measurement
+    -- * Measurement
   , TextMeasurer (..)
+  , ImageMeasurer (..)
+  , Measurers (..)
   ) where
 
 import Control.Concurrent (forkIO, threadDelay)
@@ -128,13 +131,13 @@ import Blink.Cmd (Cmd, runCmd)
 import Blink.Geometry (Point (..), Rectangle, Size (..), rectFromSize)
 import Blink.Input (KeyEvent, InputState (..), advanceButton)
 import Blink.View.Context (ctxMouse)
-import Blink.Rendering (DrawCommand, TextMeasurer (..))
+import Blink.Rendering (DrawCommand, TextMeasurer (..), ImageMeasurer (..), Measurers (..))
 import Blink.Style (Theme)
 import Blink.View
   ( ViewContext
   , AnimationState (animElapsed)
   , mkAnimationState
-  , emptyViewContext, nextFrameContext, rerenderContext
+  , emptyViewContext, withMeasurers, nextFrameContext, rerenderContext
   , runView, getDrawCommands, getMessages, hasPendingUiEffects
   , UiEffect, queueUiEffects
   , contextAnimation, contextRequiresAnimation
@@ -181,24 +184,24 @@ data MsgQueue msg = MsgQueue
 
 -- | Produces a 'BlinkHandle' for a continuous render backend. The draw list
 -- from the first render pass is submitted immediately each frame.
-configureContinuous :: Ord e => App e msg s -> MsgQueue msg -> TextMeasurer -> IO (BlinkHandle s)
-configureContinuous app queue measurer = do
-  refs <- mkAppRefs app measurer
+configureContinuous :: Ord e => App e msg s -> MsgQueue msg -> Measurers -> IO (BlinkHandle s)
+configureContinuous app queue measurers = do
+  refs <- mkAppRefs app measurers
   pure BlinkHandle { stepFrame = doStepContinuous app refs queue }
 
 -- | Produces a 'BlinkHandle' for an event-driven backend. The 'IO ()'
 -- callback is called when the animation ticker fires, or when a 'Cmd'
 -- completes, so the backend can unblock its event wait.
-configureEventDriven :: Ord e => App e msg s -> MsgQueue msg -> IO () -> TextMeasurer -> IO (BlinkHandle s)
-configureEventDriven app queue notify measurer = do
-  refs <- mkAppRefs app measurer
+configureEventDriven :: Ord e => App e msg s -> MsgQueue msg -> IO () -> Measurers -> IO (BlinkHandle s)
+configureEventDriven app queue notify measurers = do
+  refs <- mkAppRefs app measurers
   pure BlinkHandle { stepFrame = doStepEventDriven app refs queue notify }
 
-mkAppRefs :: Ord e => App e msg s -> TextMeasurer -> IO (AppRefs e msg s)
-mkAppRefs app measurer = do
+mkAppRefs :: Ord e => App e msg s -> Measurers -> IO (AppRefs e msg s)
+mkAppRefs app measurers = do
   s <- startUp app
   AppRefs
-    <$> newIORef (emptyViewContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) measurer)
+    <$> newIORef (withMeasurers measurers (emptyViewContext (rectFromSize (Size 0 0)) emptyInputState (theme app s)))
     <*> newIORef s
     <*> newIORef False
     <*> newIORef Nothing

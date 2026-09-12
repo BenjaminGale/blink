@@ -37,12 +37,17 @@ main :: IO ()
 main = do
   SDL.initializeAll
   Font.initialize
+  -- Without this, SDL defaults to nearest-neighbor sampling, so any
+  -- stretched texture (an image scaled above its natural size, in
+  -- particular) comes out blocky rather than smooth.
+  _ <- SDL.setHintWithPriority SDL.OverridePriority SDL.HintRenderScaleQuality SDL.ScaleLinear
   window   <- SDL.createWindow "blink" SDL.defaultWindow { SDL.windowResizable = True }
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
   font     <- Font.load demoFontPath 14
   SDL.Raw.startTextInput
 
   texCache  <- newTextureCache
+  imgCache  <- newImageCache
   mAnimEvent <- SDL.registerEvent
                   (\_ _ -> pure (Just ()))
                   (\_ -> pure (SDL.RegisteredEventData Nothing 0 nullPtr nullPtr))
@@ -54,20 +59,23 @@ main = do
                        Nothing -> \_ -> pure False
                        Just et -> \evs -> or <$> mapM (fmap isJust . SDL.getRegisteredEvent et) evs
   measurer <- mkTextMeasurer font
+  let imageMeasurer = mkImageMeasurer renderer imgCache
   msgQueue <- newBoundedMsgQueue 256
 
   let renderFrame calls = do
         SDL.rendererDrawColor renderer $= SDL.V4 229 229 234 255
         SDL.clear renderer
         clipRef <- newIORef ([] :: [SDL.Rectangle CInt])
-        mapM_ (submitDrawCommand renderer font texCache clipRef) calls
+        mapM_ (submitDrawCommand renderer font texCache imgCache clipRef) calls
         SDL.present renderer
 
-  handle <- configureEventDriven demoApp msgQueue notify measurer
+  handle <- configureEventDriven demoApp msgQueue notify
+              (Measurers { msrText = measurer, msrImage = imageMeasurer })
 
   loop handle False renderFrame window checkAnimTick
 
   freeTextureCache texCache
+  freeImageCache imgCache
   Font.free font
   SDL.destroyRenderer renderer
   SDL.destroyWindow window

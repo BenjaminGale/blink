@@ -199,7 +199,9 @@ pixel size. Controls that must — placing a cursor, computing where a click
 landed, sizing a box to fit its label — go through the backend's
 'TextMeasurer' instead, via 'charOffset', 'charAtOffset', and 'measureText'.
 These wrap the raw 'TextMeasurer' functions so callers never touch
-@ctxTextMeasure@ directly.
+@ctxMeasurers@ directly. 'Blink.View.Drawing.drawImage' has the same
+relationship to 'ImageMeasurer' and 'measureImage', for controls that must
+know an image's natural pixel size before drawing it.
 
 = Disabled state
 
@@ -249,11 +251,15 @@ module Blink.View
   , runView
   , ViewContext
     -- * Re-export for convenience
-    -- | From "Blink.Rendering"; re-exported since 'emptyViewContext' takes a
-    -- 'TextMeasurer' and 'noOpTextMeasurer' is the usual choice outside a
-    -- real backend (tests, headless rendering).
+    -- | From "Blink.Rendering"; re-exported since 'emptyViewContext'
+    -- defaults to 'noOpMeasurers', and 'withMeasurers' overrides it with a
+    -- real backend's own 'Measurers'.
   , TextMeasurer (..)
   , noOpTextMeasurer
+  , ImageMeasurer (..)
+  , noOpImageMeasurer
+  , Measurers (..)
+  , noOpMeasurers
     -- * The render loop
   , emptyViewContext
   , nextFrameContext
@@ -390,6 +396,9 @@ module Blink.View
   , charOffset
   , charAtOffset
   , measureText
+    -- * Image measurement
+  , measureImage
+  , withMeasurers
     -- * Disabled state
   , isDisabled
   , disableWhen
@@ -407,7 +416,8 @@ module Blink.View
   , contextAnimation
   ) where
 
-import Blink.Rendering (TextMeasurer (..), noOpTextMeasurer)
+import Blink.Rendering
+  (TextMeasurer (..), noOpTextMeasurer, ImageMeasurer (..), noOpImageMeasurer, Measurers (..), noOpMeasurers)
 import Blink.Input (MouseCapture (..))
 import Blink.View.Context
 import Blink.View.Mouse

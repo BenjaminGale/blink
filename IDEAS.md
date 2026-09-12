@@ -129,12 +129,13 @@ Two extensions come up:
   bordered container that reserves space for a header label mid-border (a
   titled group box).
 
-### Standard glyph set
-Some controls draw special characters for their marks — a checkbox's tick,
-a radio button's dot — chosen ad hoc wherever that control is implemented.
-The library could instead provide a standard, overridable set of glyphs for
-this kind of thing, so every control drawing this style of mark draws from
-the same consistent set rather than each picking its own.
+### Shared, overridable icon set
+Controls that draw an icon for their marks — a checkbox's tick, a radio
+button's dot, a tree's chevron — each hardcode their own icon path chosen
+ad hoc wherever that control is implemented. The library could instead
+provide a standard, overridable set of icon paths for this kind of thing,
+so every control drawing this style of mark draws from the same
+consistent, swappable set rather than each picking its own.
 
 ### Generic control content
 Controls that show text (buttons, checkboxes, labels, ...) can currently

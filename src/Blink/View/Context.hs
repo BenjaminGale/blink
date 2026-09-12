@@ -72,6 +72,9 @@ module Blink.View.Context
   , charOffset
   , charAtOffset
   , measureText
+    -- * Image measurement
+  , measureImage
+  , withMeasurers
     -- * Disabled state
   , isDisabled
   , disableWhen
@@ -131,7 +134,7 @@ import Data.List (foldl')
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Blink.Rendering (DrawCommand, TextMeasurer (..))
+import Blink.Rendering (DrawCommand, Measurers (..), noOpMeasurers, TextMeasurer (..), ImageMeasurer (..), ImagePath)
 import Blink.Geometry (Rectangle, Size)
 import Blink.Input
   ( Key (..), KeyEvent (..), Modifier (..), InputState (..)
@@ -672,9 +675,10 @@ data ViewContext e msg = ViewContext
   , ctxAnimation       :: AnimationState
     -- ^ Per-frame animation state: wall-clock delta and tick flag. Set by
     -- "Blink.App" at the start of each frame.
-  , ctxTextMeasure     :: TextMeasurer
-    -- ^ Text measurement service supplied at configure time. Controls call
-    -- 'charOffset' and 'charAtOffset' rather than accessing this directly.
+  , ctxMeasurers       :: Measurers
+    -- ^ Measurement services supplied at configure time. Controls call
+    -- 'charOffset', 'charAtOffset', 'measureText', and 'measureImage'
+    -- rather than accessing this directly.
   , ctxFocus           :: FocusTracker e
     -- ^ Keyboard-focus targeting state. See 'FocusTracker'.
   , ctxNavigationKeys  :: NavigationKeys
@@ -739,9 +743,12 @@ emptyFrameOutputs = FrameOutputs
   , outRequiresAnimation  = False
   }
 
--- | Constructs the initial 'ViewContext' for the first frame.
-emptyViewContext :: Rectangle -> InputState -> Theme e -> TextMeasurer -> ViewContext e msg
-emptyViewContext bounds input thm measurer = ViewContext
+-- | Constructs the initial 'ViewContext' for the first frame, with
+-- 'noOpMeasurers' -- the common case, since most tests and headless
+-- rendering don't care about measurement. A real backend (or a test that
+-- does care) overrides that via 'withMeasurers'.
+emptyViewContext :: Rectangle -> InputState -> Theme e -> ViewContext e msg
+emptyViewContext bounds input thm = ViewContext
   { ctxBounds          = bounds
   , ctxWindowBounds    = bounds
   , ctxInput           = input
@@ -749,7 +756,7 @@ emptyViewContext bounds input thm measurer = ViewContext
   , ctxDisabled        = False
   , ctxInteractionClip = Nothing
   , ctxAnimation       = mkAnimationState 0 0 False
-  , ctxTextMeasure     = measurer
+  , ctxMeasurers       = noOpMeasurers
   , ctxFocus           = emptyFocusTracker
   , ctxNavigationKeys  = defaultNavigationKeys
   , ctxCurrentScope    = Nothing
@@ -1155,18 +1162,30 @@ setFocusChange scopeId newFocus ctx = ctx { ctxFocus = updateScope (ctxFocus ctx
 -- @text@, using the backend's text measurer.
 charOffset :: Text -> Int -> View e msg Float
 charOffset text n = View $ \ctx -> do
-  v <- tmCharOffset (ctxTextMeasure ctx) text n
+  v <- tmCharOffset (msrText (ctxMeasurers ctx)) text n
   pure (v, ctx)
 
 -- | Returns the character index closest to x offset @x@ in @text@, using the
 -- backend's text measurer.
 charAtOffset :: Text -> Float -> View e msg Int
 charAtOffset text x = View $ \ctx -> do
-  v <- tmCharAtOffset (ctxTextMeasure ctx) text x
+  v <- tmCharAtOffset (msrText (ctxMeasurers ctx)) text x
   pure (v, ctx)
 
 -- | Returns the pixel dimensions of @text@ as rendered by the current font.
 measureText :: Text -> View e msg Size
 measureText text = View $ \ctx -> do
-  v <- tmTextSize (ctxTextMeasure ctx) text
+  v <- tmTextSize (msrText (ctxMeasurers ctx)) text
   pure (v, ctx)
+
+-- | Returns the natural pixel dimensions of the image at @path@, using the
+-- backend's image measurer.
+measureImage :: ImagePath -> View e msg Size
+measureImage path = View $ \ctx -> do
+  v <- imNaturalSize (msrImage (ctxMeasurers ctx)) path
+  pure (v, ctx)
+
+-- | Overrides a context's measurement services -- a real backend supplies
+-- its own via this, on top of 'emptyViewContext's default 'noOpMeasurers'.
+withMeasurers :: Measurers -> ViewContext e msg -> ViewContext e msg
+withMeasurers measurers ctx = ctx { ctxMeasurers = measurers }

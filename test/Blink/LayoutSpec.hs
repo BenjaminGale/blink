@@ -60,7 +60,7 @@ paint = fillRect testColour
 
 runLayout :: Rectangle -> View () () () -> IO [Rectangle]
 runLayout bounds ui = do
-  let ctx = emptyViewContext bounds noInput emptyTheme noOpTextMeasurer
+  let ctx = emptyViewContext bounds noInput emptyTheme
   (_, ctx') <- runView ui ctx
   pure [r | FillRect r _ <- getDrawCommands ctx']
 

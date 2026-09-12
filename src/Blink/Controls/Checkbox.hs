@@ -10,8 +10,8 @@ module Blink.Controls.Checkbox
   , checkboxStyleKey
   ) where
 
-import Control.Monad (void, when)
-import Data.Text (Text)
+import Control.Monad (void)
+import qualified Data.Set as Set
 
 import Blink.Controls.Button (ButtonConfig (..))
 import Blink.Controls.Control
@@ -19,34 +19,36 @@ import Blink.Controls.Label (lcText)
 import Blink.Controls.ToggleButton
   (ToggleConfig (..), defaultGlyphToggleConfig, glyphCaptionContent, glyphCaptionElement, toggleBase)
 import Blink.Controls.Checkbox.Style (checkboxStyleKey)
-import Blink.Geometry (Rectangle (..), uniformBorder)
-import Blink.Rendering (TextAlign (..))
-import Blink.Style (Style (..))
-import Blink.View (currentStyle, getBounds, withBounds)
-import Blink.View.Drawing (drawText, strokeRect)
+import Blink.Controls.Style (iconStyleKey)
+import Blink.Geometry (Rectangle (..))
+import Blink.Rendering (ImagePath)
+import Blink.Style (Style (..), VisualState (..), resolveStyle)
+import Blink.View (getBounds, getStyleSet, isDisabled, isRegionHit, withBounds)
+import Blink.View.Drawing (drawImage)
 import Blink.Element (Element (..))
 
 -- | The fixed width reserved for the glyph, on the left of the caption.
 glyphWidth :: Double
-glyphWidth = 20
+glyphWidth = 28
 
 -- | The gap between the glyph and the caption beside it.
 labelGap :: Double
 labelGap = 6
 
--- | The margin left between the glyph column's edges and the drawn box, so
--- the stroked box doesn't touch the caption or the control's own bounds.
+-- | The margin left between the glyph column's edges and the drawn box
+-- icon, so it doesn't touch the caption or the control's own bounds.
 boxInset :: Double
 boxInset = 2
 
--- | 'CHECK MARK' (U+2713) is near-universally supported, unlike the
--- 'BALLOT BOX WITH CHECK' glyph (U+2611) that would otherwise draw the
--- whole box-plus-tick in one character.
-checkTick :: Text
-checkTick = "\10003"
+-- | The whole box, drawn filled (with its own tick) while selected.
+checkBoxIcon :: ImagePath
+checkBoxIcon = "assets/icons/check_box.svg"
 
--- | A checkbox: a small box drawn with 'strokeRect', a tick inside it while
--- selected (see 'Blink.Controls.ToggleButton.isSelected'), beside a caption set via 'Blink.Controls.Label.text', toggled
+-- | The whole box, drawn empty while not selected.
+checkBoxOutlineIcon :: ImagePath
+checkBoxOutlineIcon = "assets/icons/check_box_outline_blank.svg"
+
+-- | A checkbox: a box-plus-tick icon (see 'Blink.Controls.ToggleButton.isSelected'), beside a caption set via 'Blink.Controls.Label.text', toggled
 -- together as one control -- clicking either the box or the caption
 -- activates it, the same as 'Blink.Controls.ToggleButton.toggleButton'. Flips
 -- every time it's activated; see 'Blink.Controls.ToggleButton.onSelectedChanged' for reacting to it.
@@ -63,11 +65,19 @@ checkbox eid attrs = Element
     cfg      = resolve (defaultGlyphToggleConfig checkboxStyleKey) attrs
     btn      = tgcButton cfg
     selected = tgcSelected cfg
-    -- | The box, drawn with 'strokeRect' and (while selected) a tick inside
-    -- it, centred within the glyph column's own bounds.
+    -- | The box-plus-tick icon, centred within the glyph column's own
+    -- bounds, matching whichever state 'selected' is in. Tinted from
+    -- 'Blink.Controls.Style.iconStyleKey' -- a separate 'StyleKey' from
+    -- the row's own ('checkboxStyleKey'), resolved here against whether
+    -- the cursor is over the /icon's own rectangle specifically/
+    -- (checked via 'isRegionHit' only after narrowing to 'boxRect') --
+    -- so hovering the caption beside it, still within the control's
+    -- larger hit area, leaves the icon (and the caption's own colour,
+    -- which never reads from 'iconStyleKey') alone.
     drawBox = do
-      s      <- currentStyle
-      bounds <- getBounds
+      (_, iconStyleSet) <- getStyleSet iconStyleKey
+      disabled          <- isDisabled
+      bounds            <- getBounds
       let boxSize = max 0 (min glyphWidth (rectHeight bounds) - boxInset)
           boxRect = Rectangle
             { rectX      = rectX bounds + (glyphWidth - boxSize) / 2
@@ -75,9 +85,15 @@ checkbox eid attrs = Element
             , rectWidth  = boxSize
             , rectHeight = boxSize
             }
+          icon = if selected then checkBoxIcon else checkBoxOutlineIcon
       withBounds boxRect $ do
-        strokeRect (styleTextColour s) (uniformBorder 1)
-        when selected $ drawText (styleTextColour s) AlignCenter checkTick
+        hovered <- isRegionHit
+        let iconState
+              | disabled  = CommonDisabled
+              | hovered   = CommonMouseOver
+              | otherwise = CommonNormal
+            colour = styleTextColour (resolveStyle iconStyleSet (Set.singleton iconState))
+        drawImage colour icon
     glyphContent = glyphCaptionContent glyphWidth labelGap drawBox (bcLabelled btn)
     ctrl = (bcControl btn) { ccContent = const glyphContent }
     cfg' = cfg

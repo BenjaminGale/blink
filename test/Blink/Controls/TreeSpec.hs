@@ -14,13 +14,14 @@ import Blink.Controls.List
 import Blink.Controls.List.Style (listStyleKey)
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Controls.Tree
+import Blink.Controls.Tree.Style (treeChevronStyleKey)
 import Blink.Element (Element (..), runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonMouseOver))
 import Blink.View
 
 -- * flattenVisible
@@ -90,6 +91,23 @@ testTheme = Theme
       , metricsBorderEdges = noBorder
       }
 
+-- | Distinct from the chevron's resting colour, so a test can tell
+-- whether it actually resolved 'Blink.Controls.Tree.Style.treeChevronStyleKey'\'s
+-- own hover override.
+chevronHoverColour :: Colour
+chevronHoverColour = RGBA 0 0 1 1
+
+-- | 'testTheme', but with a hover override registered for the chevron's
+-- own style, so a test can assert it recolours on hover.
+chevronHoverTheme :: Theme TestElem
+chevronHoverTheme = testTheme
+  { themeElementStyles = Map.singleton treeChevronStyleKey
+      (fst (themeDefaultStyle testTheme), StyleSet
+        { styleBase      = styleBase (snd (themeDefaultStyle testTheme))
+        , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleTextColour = chevronHoverColour })
+        })
+  }
+
 -- | 'testTheme', but with real padding on the list's own chrome -- a
 -- regression case for the bug where a Right\/Left-driven scroll read the
 -- list's outer, pre-chrome bounds instead of the padded interior
@@ -108,7 +126,7 @@ noInput :: InputState
 noInput = InputState (Point 200 200) False [] [] 0
 
 seedCtx :: ViewContext TestElem String
-seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext testBounds noInput testTheme
 
 -- | A point at x-offset @x@ within row @n@'s own 20px-tall row (1-indexed).
 atRow :: Int -> Double -> Point
@@ -185,6 +203,28 @@ widgetSpec = describe "tree" $ do
       [MoveTo (atRow 2 24)]
       [ClickAt (atRow 2 24)]
     resultMessages result `shouldBe` []
+
+  it "draws an expanded node's chevron as expand_more.svg and a collapsed one as chevron_right.svg" $ do
+    result <- runInteractions testBounds seedCtx
+      (renderSilentTree [expanded (Set.singleton "src"), selection (unselected items)])
+      [] [Wait 1]
+    let restColour = RGBA 0 0 0 1
+    -- Row 1 ("src", depth 0): expanded, has children.
+    resultDraws result `shouldContain`
+      [DrawImage (Rectangle 0 0 16 20) "assets/icons/expand_more.svg" restColour]
+    -- Row 3 ("src/Controls", depth 1): collapsed (not in the expanded
+    -- set), has children -- chevron column starts after its indent.
+    resultDraws result `shouldContain`
+      [DrawImage (Rectangle 16 40 16 20) "assets/icons/chevron_right.svg" restColour]
+
+  it "tints a chevron a different colour while the cursor is over it" $ do
+    -- Row 1's chevron cell is its own 16px-wide column (x: 0-16, y: 0-20).
+    result <- runInteractions testBounds (emptyViewContext testBounds noInput chevronHoverTheme)
+      (renderSilentTree [expanded (Set.singleton "src"), selection (unselected items)])
+      [MoveTo (atRow 1 8)]
+      [Wait 1]
+    resultDraws result `shouldContain`
+      [DrawImage (Rectangle 0 0 16 20) "assets/icons/expand_more.svg" chevronHoverColour]
 
 expandedMsg :: Set.Set String -> String
 expandedMsg s = "Expanded:" ++ show (Set.toList s)
@@ -386,7 +426,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
     contextScrollState treeScrollEid (resultContext result) `shouldBe` 1
 
 chromeSeedCtx :: ViewContext TestElem String
-chromeSeedCtx = emptyViewContext scrollTestBounds noInput chromeTheme noOpTextMeasurer
+chromeSeedCtx = emptyViewContext scrollTestBounds noInput chromeTheme
 
 chromeSpec :: Spec
 chromeSpec = describe "tree keyboard scrolling with list chrome" $

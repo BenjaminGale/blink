@@ -52,7 +52,10 @@ import qualified Data.Map.Strict as Map
 
 import Blink.Rendering (TextAlign (..))
 import Blink.Style
-import Blink.Controls.Style (buttonStyle, containerStyle, controlMetrics, flatRowStyle, sliderStyle, toggleGroupStyle)
+import Blink.Controls.Style
+  (buttonStyle, containerStyle, controlMetrics, flatRowStyle, iconStyle, iconStyleKey, sliderStyle
+  , toggleGroupMetrics, toggleGroupStyle
+  )
 import Blink.Controls.Divider.Style (dividerStyle)
 import Blink.Controls.Label.Style (labelStyle)
 import Blink.Controls.ProgressBar.Style (progressBarStyle)
@@ -60,6 +63,7 @@ import Blink.Controls.ProgressBar.Style (progressBarStyle)
 import qualified Blink.Controls.Button.Style as Button
 import qualified Blink.Controls.Checkbox.Style as Checkbox
 import qualified Blink.Controls.Divider.Style as Divider
+import qualified Blink.Controls.Image.Style as Image
 import qualified Blink.Controls.Label.Style as Label
 import qualified Blink.Controls.List.Style as List
 import qualified Blink.Controls.ProgressBar.Style as ProgressBar
@@ -88,12 +92,14 @@ defaultTheme p = Theme
       , ProgressBar.defaultStyleEntries p
       , Slider.defaultStyleEntries p
       , Divider.defaultStyleEntries p
+      , Image.defaultStyleEntries p
       , Label.defaultStyleEntries p
       , ToggleGroup.defaultStyleEntries p
       , ScrollBar.defaultStyleEntries p
       , List.defaultStyleEntries p
       , Tree.defaultStyleEntries p
       , Table.defaultStyleEntries p
+      , [ (iconStyleKey, (toggleGroupMetrics, iconStyle p)) ]
       ])
   , themeDefaultStyle = (controlMetrics, buttonStyle AlignCenter p)
   }

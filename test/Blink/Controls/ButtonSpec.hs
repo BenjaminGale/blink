@@ -64,7 +64,7 @@ hitRect = insetRect (uniform 10) testBounds
 type Attribute' = Attribute (ButtonConfig TestElement String)
 
 seedCtx :: ViewContext TestElement String
-seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext testBounds noInput testTheme
 
 -- | The behaviour contracts below (hover, click, focus, ...) are about
 -- interaction, not sizing -- they're written against a button that fills
@@ -107,6 +107,7 @@ spec = describe "Blink.Controls.Button" $ do
           -- themselves.
           expectedBg   = Rectangle 10 10 (expectedW - 20) (expectedH - 20)
           fitContentEl attrs = runElement (button Ok attrs) { elLayout = Layout fitContent fitContent TopLeft }
-          fitCtx = emptyViewContext (Rectangle 0 0 500 500) noInput testTheme fixedWidthMeasurer
+          fitCtx = withMeasurers (noOpMeasurers { msrText = fixedWidthMeasurer })
+                     (emptyViewContext (Rectangle 0 0 500 500) noInput testTheme)
       ctx <- snd <$> runView (fitContentEl [text caption]) fitCtx
       getDrawCommands ctx `shouldContain` [FillRect expectedBg testColour]

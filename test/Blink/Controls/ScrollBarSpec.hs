@@ -7,12 +7,13 @@ import Test.Hspec
 import Blink.Controls.Control
   (Attribute, FocusPolicy (..), control, defaultControlConfig, elementId, focusPolicy, resolve)
 import Blink.Controls.ElementBehaviour (tagged)
-import Blink.Controls.ScrollBar (ScrollBarConfig, ScrollBarPart (..), scrollBar, scrollBarOrientation, step)
+import Blink.Controls.ScrollBar
+  (ScrollBarConfig, ScrollBarPart (..), scrollBar, scrollBarButtonStyleKey, scrollBarOrientation, step)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonMouseOver))
 import Blink.View
 import Blink.Element (runElement)
 
@@ -74,7 +75,27 @@ valueHalfPoint = Point 8 50
 valueOnePoint  = Point 8 74
 
 seedCtx :: ViewContext TestElement String
-seedCtx = emptyViewContext barBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext barBounds noInput testTheme
+
+-- | Distinct from 'testColour', so a test can tell whether an arrow
+-- button's icon actually resolved 'scrollBarButtonStyleKey'\'s own hover
+-- override.
+arrowHoverColour :: Colour
+arrowHoverColour = RGBA 0 0 1 1
+
+-- | 'testTheme', but with a hover override registered for the arrow
+-- buttons' own style, so a test can assert an arrow recolours on hover.
+arrowHoverTheme :: Theme TestElement
+arrowHoverTheme = testTheme
+  { themeElementStyles = Map.singleton scrollBarButtonStyleKey
+      (fst (themeDefaultStyle testTheme), StyleSet
+        { styleBase      = styleBase (snd (themeDefaultStyle testTheme))
+        , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleTextColour = arrowHoverColour })
+        })
+  }
+
+arrowHoverSeedCtx :: ViewContext TestElement String
+arrowHoverSeedCtx = emptyViewContext barBounds noInput arrowHoverTheme
 
 type Attribute' = Attribute (ScrollBarConfig TestElement String)
 
@@ -109,6 +130,30 @@ spec = describe "Blink.Controls.ScrollBar" $ do
     it "starts scrolled to the start when nothing has set a position" $ do
       result <- runInteractions barBounds seedCtx (render []) [] [Wait 1]
       contextScrollState scrollEid (resultContext result) `shouldBe` 0
+
+  describe "arrow icons" $ do
+    -- Each icon draws 2px past its 16px button on every side (see
+    -- 'Blink.Controls.ScrollBar.arrowButton'), so a 16x16 button's icon
+    -- rect is 20x20, inset by -2 on each edge.
+    it "draws up/down arrows for the default (vertical) orientation" $ do
+      result <- runInteractions barBounds seedCtx (render []) [] [Wait 1]
+      resultDraws result `shouldContain`
+        [DrawImage (Rectangle (-2) (-2) 20 20) "assets/icons/arrow_drop_up.svg" testColour]
+      resultDraws result `shouldContain`
+        [DrawImage (Rectangle (-2) 82 20 20) "assets/icons/arrow_drop_down.svg" testColour]
+
+    it "draws left/right arrows when set to Horizontal" $ do
+      let horizontalBounds = Rectangle 0 0 100 16
+      result <- runInteractions horizontalBounds seedCtx (render [scrollBarOrientation Horizontal]) [] [Wait 1]
+      resultDraws result `shouldContain`
+        [DrawImage (Rectangle (-2) (-2) 20 20) "assets/icons/arrow_left.svg" testColour]
+      resultDraws result `shouldContain`
+        [DrawImage (Rectangle 82 (-2) 20 20) "assets/icons/arrow_right.svg" testColour]
+
+    it "tints an arrow's icon a different colour while the cursor is over it" $ do
+      result <- runInteractions barBounds arrowHoverSeedCtx (render []) [MoveTo decrementPoint] [Wait 1]
+      resultDraws result `shouldContain`
+        [DrawImage (Rectangle (-2) (-2) 20 20) "assets/icons/arrow_drop_up.svg" arrowHoverColour]
 
   -- Every click\/drag below is preceded by a 'MoveTo' at the same point, as
   -- setup -- see 'Blink.Controls.ToggleGroupSpec' for why: without a

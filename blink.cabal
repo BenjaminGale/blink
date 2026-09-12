@@ -57,6 +57,7 @@ library
         Blink.Controls.Checkbox
         Blink.Controls.Control
         Blink.Controls.Divider
+        Blink.Controls.Image
         Blink.Controls.Label
         Blink.Controls.List
         Blink.Controls.ProgressBar
@@ -82,6 +83,7 @@ library
         Blink.Controls.Style
         Blink.Style.Defaults
         Blink.Controls.Divider.Style
+        Blink.Controls.Image.Style
         Blink.Controls.Label.Style
         Blink.Controls.List.Style
         Blink.Controls.ProgressBar.Style
@@ -106,6 +108,7 @@ executable demo
     build-depends:
         blink,
         sdl2 ^>=2.5.5,
+        sdl2-image ^>=2.1.0,
         sdl2-ttf ^>=2.1.3,
         stm ^>=2.5.1
     hs-source-dirs: app
@@ -129,6 +132,7 @@ test-suite blink-tests
         Blink.Controls.ControlBehaviour
         Blink.Controls.ControlSpec
         Blink.Controls.DividerSpec
+        Blink.Controls.ImageSpec
         Blink.Controls.ElementBehaviour
         Blink.Controls.FixedFocusBehaviour
         Blink.Controls.FocusScopeSpec

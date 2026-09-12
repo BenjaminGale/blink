@@ -289,7 +289,7 @@ noInput :: InputState
 noInput = InputState (Point 200 200) False [] [] 0
 
 seedCtx :: ViewContext TestElem String
-seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext testBounds noInput testTheme
 
 -- | A point inside item @n@'s own 20px-tall row (1-indexed).
 inRow :: Int -> Point

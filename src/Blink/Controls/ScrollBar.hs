@@ -1,8 +1,10 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | A scrollbar: a composite of two repeating arrow buttons (built on
--- 'Blink.Controls.RepeatButton.repeatButton') straddling a draggable
+-- | A scrollbar: a composite of two repeating arrow buttons (drawing an
+-- icon rather than a caption, so built directly over 'buttonBase'\/
+-- 'resolveHoldRepeats' rather than 'Blink.Controls.RepeatButton.repeatButton'
+-- itself -- see @arrowButton@) straddling a draggable
 -- track. Its position is control state, not application data -- 'scrollBar'
 -- reads and writes it itself via 'Blink.View.getScrollState'\/'Blink.View.requestScrollTo'\/
 -- 'Blink.View.requestScrollBy', keyed by its own element id, the same way
@@ -29,9 +31,9 @@
 -- the content it scrolls is.
 --
 -- @
--- control --> hBox\/vBox --> repeatButton (decrement)
+-- control --> hBox\/vBox --> arrowButton (decrement)
 --                        --> control (track)
---                        --> repeatButton (increment)
+--                        --> arrowButton (increment)
 -- @
 module Blink.Controls.ScrollBar
   ( ScrollBarConfig (..)
@@ -46,21 +48,20 @@ module Blink.Controls.ScrollBar
   , step
   ) where
 
-import Control.Monad (forM_, void, when)
+import Control.Monad (forM_, replicateM_, void, when)
 
-import Blink.Controls.Button (onActivated)
+import Blink.Controls.Button
+  (ButtonActivation (..), ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig, onActivated)
 import Blink.Controls.Control
-import Blink.Controls.Label (text)
-import Blink.Controls.RepeatButton (repeatButton)
 import Blink.Controls.ScrollBar.Style (scrollBarButtonStyleKey, scrollBarStyleKey, scrollBarTrackStyleKey)
-import Blink.Geometry (Alignment (TopLeft), Orientation (..), Point (..), Rectangle (..))
+import Blink.Geometry (Alignment (TopLeft), Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (Colour (..))
+import Blink.Rendering (Colour (..), ImagePath)
 import Blink.Style (Style (..))
 import Blink.View
-import Blink.View.Drawing (fillRect)
-import Blink.Element (Element (..), HasLayoutConfig (..), height, noIntrinsicSize, runElement, width)
+import Blink.View.Drawing (drawImage, fillRect)
+import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, height, noIntrinsicSize, runElement, width)
 
 -- | The thickness (cross-axis extent) of the whole control, and of each
 -- arrow button's extent along the main axis. Both fixed rather than
@@ -137,8 +138,7 @@ visibleFraction :: Double -> Attribute (ScrollBarConfig e msg)
 visibleFraction v = Attribute (\sc -> sc { sbVisibleFraction = v })
 
 -- | How much each arrow button moves the position by, once per activation
--- (including each repeat while held -- see 'Blink.Controls.RepeatButton.repeatButton').
--- Defaults to 0.05.
+-- (including each repeat while held -- see @arrowButton@). Defaults to 0.05.
 step :: Double -> Attribute (ScrollBarConfig e msg)
 step s = Attribute (\sc -> sc { sbStep = s })
 
@@ -237,6 +237,42 @@ arrowLayoutAttrs :: HasLayoutConfig cfg => Orientation -> [Attribute cfg]
 arrowLayoutAttrs Horizontal = [width (exactly scrollBarThickness), height fill]
 arrowLayoutAttrs Vertical   = [width fill, height (exactly scrollBarThickness)]
 
+-- | An arrow button: 'Blink.Controls.RepeatButton.repeatButton''s own
+-- press-then-hold-repeat behaviour, drawing @path@'s icon (tinted by the
+-- resolved style's text colour) instead of a caption.
+-- 'Blink.Controls.RepeatButton.repeatButton' always draws its own
+-- caption -- it rebuilds 'ccContent' unconditionally from
+-- 'Blink.Controls.Label.text', with no attribute a caller can set to
+-- override that -- so this is built directly over the same primitives it
+-- is ('buttonBase', 'resolveHoldRepeats'), rather than fighting that.
+-- 'Blink.Controls.RepeatButton.initialDelay'\/'Blink.Controls.RepeatButton.repeatInterval'
+-- aren't exposed here since a
+-- scrollbar's own arrows never customise them either.
+arrowButton :: Ord e => e -> ImagePath -> [Attribute (ButtonConfig e msg)] -> Element e msg
+arrowButton eid path attrs = Element
+  { elLayout  = bcLayout btn
+  , elMeasure = measureChrome (ccStyleKey (bcControl btn)) (elementWithLayout (bcLayout btn) (pure ()))
+  , elRun     = void run
+  }
+  where
+    btn  = (resolve defaultButtonConfig attrs) { bcActivation = ActivateOnPress }
+    ctrl = (bcControl btn) { ccContent = const drawArrow }
+
+    -- | Draws a couple of pixels past the button's own bounds on every
+    -- side -- with zero chrome inset of its own (see
+    -- 'Blink.Controls.Style.iconStyle', which 'scrollBarButtonStyleKey'
+    -- resolves to), the icon otherwise reads a little small against the
+    -- button's full, edge-to-edge box.
+    drawArrow = do
+      s      <- currentStyle
+      bounds <- getBounds
+      withBounds (insetRect (uniform (-2)) bounds) (drawImage (styleTextColour s) path)
+
+    run = do
+      r      <- buttonBase eid btn { bcControl = ctrl }
+      toFire <- resolveHoldRepeats eid (ciHeld (biControl r)) 0.4 0.08
+      when (toFire > 0) $ replicateM_ toFire (runHandlers (bcOnActivated btn) ())
+
 -- | A scrollbar (see the module header). Clicking the bare track jumps the
 -- thumb to (and centres it under) the pointer, the same way
 -- 'Blink.Controls.Slider.slider' does; grabbing the thumb itself drags it,
@@ -260,19 +296,21 @@ scrollBar tag attrs = Element
 
     box = (if o == Horizontal then hBox else vBox) [children [decrementBtn, trackEl, incrementBtn]]
 
-    decrementBtn = repeatButton (tag ScrollBarDecrement) $
-      [ text (if o == Horizontal then "\9664" else "\9650") -- ◀ / ▲
-      , style scrollBarButtonStyleKey
-      , focusPolicy NotFocusable
-      , onActivated (postScrollBy scrollEid (negate (sbStep cfg)))
-      ] ++ arrowLayoutAttrs o
+    decrementBtn = arrowButton (tag ScrollBarDecrement)
+      (if o == Horizontal then "assets/icons/arrow_left.svg" else "assets/icons/arrow_drop_up.svg")
+      ( [ style scrollBarButtonStyleKey
+        , focusPolicy NotFocusable
+        , onActivated (postScrollBy scrollEid (negate (sbStep cfg)))
+        ] ++ arrowLayoutAttrs o
+      )
 
-    incrementBtn = repeatButton (tag ScrollBarIncrement) $
-      [ text (if o == Horizontal then "\9654" else "\9660") -- ▶ / ▼
-      , style scrollBarButtonStyleKey
-      , focusPolicy NotFocusable
-      , onActivated (postScrollBy scrollEid (sbStep cfg))
-      ] ++ arrowLayoutAttrs o
+    incrementBtn = arrowButton (tag ScrollBarIncrement)
+      (if o == Horizontal then "assets/icons/arrow_right.svg" else "assets/icons/arrow_drop_down.svg")
+      ( [ style scrollBarButtonStyleKey
+        , focusPolicy NotFocusable
+        , onActivated (postScrollBy scrollEid (sbStep cfg))
+        ] ++ arrowLayoutAttrs o
+      )
 
     trackEl = Element
       { elLayout  = Layout fill fill TopLeft

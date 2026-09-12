@@ -8,6 +8,8 @@ import Test.Hspec
 import Blink.Controls.Button (buttonStyleKey)
 import Blink.Controls.Checkbox (checkboxStyleKey)
 import Blink.Controls.Divider (dividerStyleKey)
+import Blink.Controls.Style (iconStyleKey)
+import Blink.Controls.Image (imageStyleKey)
 import Blink.Controls.Label (labelStyleKey)
 import Blink.Controls.List.Style (listItemStyleKey, listStyleKey)
 import Blink.Controls.ProgressBar (progressBarStyleKey)
@@ -35,6 +37,8 @@ testPalette = Palette
   , paletteTextOnAccent    = RGBA 1 1 1 1
   , paletteBorder          = RGBA 0.4 0.4 0.4 1
   , paletteBorderHover     = RGBA 0.6 0.6 0.6 1
+  , paletteIcon            = RGBA 0.8 0.8 0.8 1
+  , paletteIconHover       = RGBA 0.7 0.7 1.0 1
   }
 
 resolvedAt :: StyleKey () -> Set.Set VisualState -> Style
@@ -52,12 +56,13 @@ spec = describe "Blink.Style.Defaults" $ do
       Map.keys (themeElementStyles (defaultTheme testPalette :: Theme ()))
         `shouldMatchList`
           [ buttonStyleKey, toggleButtonStyleKey, checkboxStyleKey, radioButtonStyleKey, textInputStyleKey
-          , progressBarStyleKey, sliderStyleKey, dividerStyleKey, labelStyleKey
+          , progressBarStyleKey, sliderStyleKey, dividerStyleKey, imageStyleKey, labelStyleKey
           , toggleButtonGroupStyleKey, radioButtonGroupStyleKey
           , scrollBarStyleKey, scrollBarButtonStyleKey, scrollBarTrackStyleKey
           , listStyleKey, listItemStyleKey
           , treeChevronStyleKey
           , tableHeaderStyleKey, tableColumnDividerStyleKey
+          , iconStyleKey
           ]
 
     it "gives a button the surface colour at rest" $ do

@@ -110,12 +110,12 @@ three attrsA attrsB attrsC = do
   withBounds rectC (renderAt ElemC attrsC)
 
 seedCtx :: ViewContext TestElement String
-seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext testBounds noInput testTheme
   where
     noInput = InputState (Point 200 200) False [] [] 0
 
 pressedSeedCtx :: ViewContext TestElement String
-pressedSeedCtx = emptyViewContext testBounds noInput pressedTestTheme noOpTextMeasurer
+pressedSeedCtx = emptyViewContext testBounds noInput pressedTestTheme
   where
     noInput = InputState (Point 200 200) False [] [] 0
 

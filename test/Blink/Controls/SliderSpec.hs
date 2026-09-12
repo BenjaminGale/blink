@@ -116,13 +116,13 @@ ringAt = StrokeBorder contentRect testColour (uniformBorder 1)
 type Attribute' = Attribute (SliderConfig TestElement String)
 
 seedCtx :: ViewContext TestElement String
-seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext testBounds noInput testTheme
 
 run :: [Attribute'] -> IO (ViewContext TestElement String)
 run attrs = snd <$> runView (runElement (slider Handle attrs)) seedCtx
 
 runWithGroove :: [Attribute'] -> IO (ViewContext TestElement String)
-runWithGroove attrs = snd <$> runView (runElement (slider Handle attrs)) (emptyViewContext testBounds noInput withGrooveColour noOpTextMeasurer)
+runWithGroove attrs = snd <$> runView (runElement (slider Handle attrs)) (emptyViewContext testBounds noInput withGrooveColour)
 
 spec :: Spec
 spec = describe "Blink.Controls.Slider" $ do
