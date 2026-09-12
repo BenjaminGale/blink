@@ -13,6 +13,7 @@ module Blink.Controls.TextInput
   , textInputStyleKey
   , textInput
   , value
+  , placeholder
   , inputFilter
   , displayFilter
   , onInput
@@ -38,11 +39,12 @@ import Blink.View.Selection (selectionHasExtent, selectionLow, selectionHigh, cu
 import Blink.Element (Element (..), HasLayoutConfig (..))
 
 -- | Every capability 'textInput' resolves: the wrapped 'ControlConfig',
--- its current value, 'inputFilter'\/'displayFilter', and its
--- 'onInput'\/'onSubmit' reactions.
+-- its current value, 'placeholder', 'inputFilter'\/'displayFilter', and
+-- its 'onInput'\/'onSubmit' reactions.
 data TextInputConfig e msg = TextInputConfig
   { ticControl       :: ControlConfig e msg
   , ticValue         :: Text
+  , ticPlaceholder   :: Text
   , ticInputFilter   :: Text -> Text
   , ticDisplayFilter :: Text -> Text
   , ticOnInput       :: [Text -> [Effect e msg]]
@@ -51,12 +53,13 @@ data TextInputConfig e msg = TextInputConfig
   }
 
 -- | 'defaultControlConfig' (styled via 'textInputStyleKey'), an empty
--- value, identity filters, no 'onInput'\/'onSubmit' reactions, and
--- @Layout fill fitContent TopLeft@ (see 'textInput').
+-- value and placeholder, identity filters, no 'onInput'\/'onSubmit'
+-- reactions, and @Layout fill fitContent TopLeft@ (see 'textInput').
 defaultTextInputConfig :: TextInputConfig e msg
 defaultTextInputConfig = TextInputConfig
   { ticControl       = defaultControlConfig { ccStyleKey = textInputStyleKey }
   , ticValue         = ""
+  , ticPlaceholder   = ""
   , ticInputFilter   = id
   , ticDisplayFilter = id
   , ticOnInput       = []
@@ -73,6 +76,13 @@ instance HasLayoutConfig (TextInputConfig e msg) where
 -- | Sets the field's current value. Defaults to @\"\"@ when not given.
 value :: Text -> Attribute (TextInputConfig e msg)
 value t = Attribute (\tc -> tc { ticValue = t })
+
+-- | Text shown, lightened, in place of the value whenever that value is
+-- empty -- drawn directly, never passed through 'inputFilter' or
+-- 'displayFilter' since it isn't user data. Defaults to @\"\"@, which
+-- shows nothing.
+placeholder :: Text -> Attribute (TextInputConfig e msg)
+placeholder t = Attribute (\tc -> tc { ticPlaceholder = t })
 
 -- | Applied to newly typed text before it's inserted, letting callers
 -- restrict which keystrokes are accepted (e.g. @T.filter isDigit@ for a
@@ -263,11 +273,22 @@ scrollFraction maxPx px
 scrollPixels :: Double -> Double -> Double
 scrollPixels maxPx frac = frac * maxPx
 
+-- | Mixes @c@'s RGB 60% of the way toward white, leaving alpha alone --
+-- how the placeholder is lightened against whatever text colour the
+-- current style resolves to, without needing a dedicated theme colour
+-- for it. RGB rather than alpha, since text is rasterized to a texture
+-- that may not alpha-blend on copy -- see 'Blink.Controls.Slider.shade'
+-- for the same trick run the other way, toward black.
+lighten :: Colour -> Colour
+lighten (RGBA r g b a) = RGBA (mix r) (mix g) (mix b) a
+  where mix c = c + (1 - c) * 0.6
+
 -- | Draws the selection highlight and the cursor (both focused and
 -- enabled), and the text itself, all offset by the current horizontal
--- scroll.
-drawTextInputContent :: Ord e => Style -> Rectangle -> Text -> Bool -> Double -> Selection -> View e msg ()
-drawTextInputContent s bounds displayValue canEdit ox sel@(Selection _ active) = do
+-- scroll -- the placeholder, lightened, in place of the value when that
+-- value is empty.
+drawTextInputContent :: Ord e => Style -> Rectangle -> Text -> Text -> Bool -> Double -> Selection -> View e msg ()
+drawTextInputContent s bounds displayValue placeholderText canEdit ox sel@(Selection _ active) = do
   when (canEdit && drawLo < drawHi) $ do
     loX <- charOffset displayValue drawLo
     hiX <- charOffset displayValue drawHi
@@ -279,7 +300,9 @@ drawTextInputContent s bounds displayValue canEdit ox sel@(Selection _ active) =
     withBounds selRect $ fillRect (RGBA 0.3 0.5 1.0 0.4)
 
   let textBounds = bounds { rectX = rectX bounds - ox }
-  withBounds textBounds $ drawText (styleTextColour s) AlignLeft displayValue
+  if T.null displayValue && not (T.null placeholderText)
+    then withBounds textBounds $ drawText (lighten (styleTextColour s)) AlignLeft placeholderText
+    else withBounds textBounds $ drawText (styleTextColour s) AlignLeft displayValue
 
   when canEdit $ do
     curX <- charOffset displayValue active
@@ -364,4 +387,4 @@ textInput eid attrs = Element
             pure newScrollX
           else pure scrollX
 
-      drawTextInputContent s bounds displayValue canEdit effectiveScrollX selFinal
+      drawTextInputContent s bounds displayValue (ticPlaceholder cfg) canEdit effectiveScrollX selFinal

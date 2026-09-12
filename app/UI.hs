@@ -354,13 +354,16 @@ rowRadio s =
 rowTextInput :: AppState -> Element ControlId Msg
 rowTextInput s =
   field rowLayout (editingEnabled s) TextInputCtl "Text input"
-    (textInput TextInputCtl [value (inputText s), onInput (postWith SetInputText), isEnabled (editingEnabled s), height fill])
+    (textInput TextInputCtl
+        [ value (inputText s), placeholder "Type something", onInput (postWith SetInputText)
+        , isEnabled (editingEnabled s), height fill
+        ])
 
 rowPasswordInput :: AppState -> Element ControlId Msg
 rowPasswordInput s =
   field rowLayout (editingEnabled s) PasswordInputCtl "Password input"
     (textInput PasswordInputCtl
-        [ value (passwordText s), displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)
+        [ value (passwordText s), placeholder "Password", displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)
         , isEnabled (editingEnabled s), height fill
         ])
 

@@ -72,6 +72,7 @@ module Blink.Controls
     -- * TextInput
   , textInput
   , value
+  , placeholder
   , inputFilter
   , displayFilter
   , onInput
@@ -103,7 +104,7 @@ import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.RepeatButton (initialDelay, repeatButton, repeatInterval)
 import Blink.Controls.ScrollBar (scrollBar, scrollBarOrientation, visibleFraction)
 import Blink.Controls.Slider (onValueChanged, slider, thumbColourFor)
-import Blink.Controls.TextInput (displayFilter, inputFilter, onInput, onSubmit, textInput, value)
+import Blink.Controls.TextInput (displayFilter, inputFilter, onInput, onSubmit, placeholder, textInput, value)
 import Blink.Controls.ToggleButton (isSelected, onSelectedChanged, toggleButton)
 import Blink.Controls.ToggleGroup
   ( allowDeselect, groupOrientation, itemSpacing, items, onSelectionChanged, radioButtonGroup
