@@ -124,6 +124,11 @@ pressedSeedCtx = emptyViewContext testBounds noInput pressedTestTheme
 hitRect :: Rectangle
 hitRect = insetRect (uniform 10) testBounds
 
+-- | The draw command for a control's chrome fill, inset by the 10px margin
+-- every test style here uses.
+chromeFill :: Colour -> Rectangle -> DrawCommand
+chromeFill colour rect = FillRect (insetRect (uniform 10) rect) colour
+
 spec :: Spec
 spec = describe "Blink.Controls.Control.control" $ do
   controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx ElemA (Point 5 5) hitRect (Point 200 200) renderControl
@@ -131,11 +136,11 @@ spec = describe "Blink.Controls.Control.control" $ do
   describe "chrome" $ do
     it "draws background via renderStyled, inset by margin" $ do
       ctx <- snd <$> runView (renderControl []) seedCtx
-      getDrawCommands ctx `shouldContain` [FillRect (insetRect (uniform 10) testBounds) testColour]
+      getDrawCommands ctx `shouldContain` [chromeFill testColour testBounds]
 
     it "draws in its pressed style while the mouse is held down over it" $ do
       result <- runInteractions testBounds pressedSeedCtx (renderControl []) [] [MouseDown (Point 50 50)]
-      getDrawCommands (resultContext result) `shouldContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
+      getDrawCommands (resultContext result) `shouldContain` [chromeFill pressedColour testBounds]
 
     describe "with a nested child control" $ do
       let rectChild = Rectangle 20 20 40 40
@@ -146,15 +151,15 @@ spec = describe "Blink.Controls.Control.control" $ do
 
       it "draws the child in its pressed style when the mouse is held down over it" $ do
         result <- runInteractions testBounds pressedSeedCtx containerWithChild [MoveTo (Point 40 40)] [MouseDown (Point 40 40)]
-        getDrawCommands (resultContext result) `shouldContain` [FillRect (insetRect (uniform 10) rectChild) pressedColour]
+        getDrawCommands (resultContext result) `shouldContain` [chromeFill pressedColour rectChild]
 
       it "does not draw the container in its pressed style when the mouse is held down over the child instead" $ do
         result <- runInteractions testBounds pressedSeedCtx containerWithChild [MoveTo (Point 40 40)] [MouseDown (Point 40 40)]
-        getDrawCommands (resultContext result) `shouldNotContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
+        getDrawCommands (resultContext result) `shouldNotContain` [chromeFill pressedColour testBounds]
 
       it "still draws the container in its pressed style when the mouse is held down over empty space inside it, away from the child" $ do
         result <- runInteractions testBounds pressedSeedCtx containerWithChild [MoveTo (Point 70 70)] [MouseDown (Point 70 70)]
-        getDrawCommands (resultContext result) `shouldContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
+        getDrawCommands (resultContext result) `shouldContain` [chromeFill pressedColour testBounds]
 
     describe "with isEnabled False on the container and a nested child control" $ do
       let rectChild = Rectangle 20 20 40 40
@@ -172,7 +177,7 @@ spec = describe "Blink.Controls.Control.control" $ do
 
       it "does not draw the child in its pressed style while the mouse is held over it" $ do
         result <- runInteractions testBounds pressedSeedCtx (containerDisabledWithChild []) [MoveTo childClickPoint] [MouseDown childClickPoint]
-        getDrawCommands (resultContext result) `shouldNotContain` [FillRect (insetRect (uniform 10) rectChild) pressedColour]
+        getDrawCommands (resultContext result) `shouldNotContain` [chromeFill pressedColour rectChild]
 
     describe "with a control nested two levels deep" $ do
       -- rectMid's hit area (30,30)-(50,50) contains rectInner's hit area
@@ -193,15 +198,15 @@ spec = describe "Blink.Controls.Control.control" $ do
 
       it "draws the innermost control in its pressed style" $ do
         result <- runInteractions testBounds pressedSeedCtx nested [MoveTo clickPoint] [MouseDown clickPoint]
-        getDrawCommands (resultContext result) `shouldContain` [FillRect (insetRect (uniform 10) rectInner) pressedColour]
+        getDrawCommands (resultContext result) `shouldContain` [chromeFill pressedColour rectInner]
 
       it "does not draw the middle control in its pressed style" $ do
         result <- runInteractions testBounds pressedSeedCtx nested [MoveTo clickPoint] [MouseDown clickPoint]
-        getDrawCommands (resultContext result) `shouldNotContain` [FillRect (insetRect (uniform 10) rectMid) pressedColour]
+        getDrawCommands (resultContext result) `shouldNotContain` [chromeFill pressedColour rectMid]
 
       it "does not draw the outermost control in its pressed style" $ do
         result <- runInteractions testBounds pressedSeedCtx nested [MoveTo clickPoint] [MouseDown clickPoint]
-        getDrawCommands (resultContext result) `shouldNotContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
+        getDrawCommands (resultContext result) `shouldNotContain` [chromeFill pressedColour testBounds]
 
     describe "with two overlapping sibling controls (not nested)" $ do
       -- Distinct rects, but overlapping around the shared click point --
@@ -218,11 +223,11 @@ spec = describe "Blink.Controls.Control.control" $ do
 
       it "draws the later (topmost) sibling in its pressed style" $ do
         result <- runInteractions testBounds pressedSeedCtx overlapping [MoveTo clickPoint] [MouseDown clickPoint]
-        getDrawCommands (resultContext result) `shouldContain` [FillRect (insetRect (uniform 10) rectFront) pressedColour]
+        getDrawCommands (resultContext result) `shouldContain` [chromeFill pressedColour rectFront]
 
       it "does not draw the earlier (bottommost) sibling in its pressed style" $ do
         result <- runInteractions testBounds pressedSeedCtx overlapping [MoveTo clickPoint] [MouseDown clickPoint]
-        getDrawCommands (resultContext result) `shouldNotContain` [FillRect (insetRect (uniform 10) rectBack) pressedColour]
+        getDrawCommands (resultContext result) `shouldNotContain` [chromeFill pressedColour rectBack]
 
   describe "no id" $ do
     -- No 'elementId' at all, unlike 'renderAt'/'renderControl'.
@@ -230,11 +235,11 @@ spec = describe "Blink.Controls.Control.control" $ do
 
     it "still draws chrome via renderStyled, inset by margin" $ do
       ctx <- snd <$> runView (renderNoId []) seedCtx
-      getDrawCommands ctx `shouldContain` [FillRect (insetRect (uniform 10) testBounds) testColour]
+      getDrawCommands ctx `shouldContain` [chromeFill testColour testBounds]
 
     it "never draws its pressed style, even with the mouse held down over it" $ do
       result <- runInteractions testBounds pressedSeedCtx (renderNoId []) [] [MouseDown (Point 50 50)]
-      getDrawCommands (resultContext result) `shouldNotContain` [FillRect (insetRect (uniform 10) testBounds) pressedColour]
+      getDrawCommands (resultContext result) `shouldNotContain` [chromeFill pressedColour testBounds]
 
     it "raises no focus gained event by rendering first, even though nothing else is focused" $ do
       let attrs = [onFocusGained (post ("gained" :: String))]
