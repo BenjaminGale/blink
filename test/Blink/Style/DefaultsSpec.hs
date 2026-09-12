@@ -8,6 +8,7 @@ import Test.Hspec
 import Blink.Controls.Button (buttonStyleKey)
 import Blink.Controls.Checkbox (checkboxStyleKey)
 import Blink.Controls.Divider (dividerStyleKey)
+import Blink.Controls.Image (imageStyleKey)
 import Blink.Controls.Label (labelStyleKey)
 import Blink.Controls.List.Style (listItemStyleKey, listStyleKey)
 import Blink.Controls.ProgressBar (progressBarStyleKey)
@@ -52,7 +53,7 @@ spec = describe "Blink.Style.Defaults" $ do
       Map.keys (themeElementStyles (defaultTheme testPalette :: Theme ()))
         `shouldMatchList`
           [ buttonStyleKey, toggleButtonStyleKey, checkboxStyleKey, radioButtonStyleKey, textInputStyleKey
-          , progressBarStyleKey, sliderStyleKey, dividerStyleKey, labelStyleKey
+          , progressBarStyleKey, sliderStyleKey, dividerStyleKey, imageStyleKey, labelStyleKey
           , toggleButtonGroupStyleKey, radioButtonGroupStyleKey
           , scrollBarStyleKey, scrollBarButtonStyleKey, scrollBarTrackStyleKey
           , listStyleKey, listItemStyleKey

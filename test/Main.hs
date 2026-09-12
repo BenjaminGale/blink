@@ -7,6 +7,7 @@ import qualified Blink.Controls.CheckboxSpec as Checkbox
 import qualified Blink.Controls.ControlSpec as Control
 import qualified Blink.Controls.DividerSpec as Divider
 import qualified Blink.Controls.FocusScopeSpec as FocusScope
+import qualified Blink.Controls.ImageSpec as Image
 import qualified Blink.Controls.LabelSpec as Label
 import qualified Blink.Controls.ListSpec as List
 import qualified Blink.Controls.ProgressBarSpec as ProgressBar
@@ -53,6 +54,7 @@ main = hspec $ do
   ScrollBar.spec
   Slider.spec
   Divider.spec
+  Image.spec
   TextInput.spec
   Interaction.spec
   StyleDefaults.spec

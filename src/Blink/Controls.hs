@@ -63,6 +63,12 @@ module Blink.Controls
   , divider
   , orientation
   , thickness
+    -- * Image
+  , image
+  , source
+  , fitWidth
+  , fitHeight
+  , preserveRatio
     -- * TextInput
   , textInput
   , value
@@ -89,6 +95,7 @@ module Blink.Controls
 import Blink.Controls.Button (activation, button, onActivated)
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Divider (divider, orientation, thickness)
+import Blink.Controls.Image (image, source, fitWidth, fitHeight, preserveRatio)
 import Blink.Controls.Label (label, target, text)
 import Blink.Controls.List (list, onItemActivated, renderItem, rowHeight, selection)
 import Blink.Controls.ProgressBar (bandSpeed, bandWidth, progress, progressBar)

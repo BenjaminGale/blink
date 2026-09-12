@@ -60,6 +60,7 @@ import Blink.Controls.ProgressBar.Style (progressBarStyle)
 import qualified Blink.Controls.Button.Style as Button
 import qualified Blink.Controls.Checkbox.Style as Checkbox
 import qualified Blink.Controls.Divider.Style as Divider
+import qualified Blink.Controls.Image.Style as Image
 import qualified Blink.Controls.Label.Style as Label
 import qualified Blink.Controls.List.Style as List
 import qualified Blink.Controls.ProgressBar.Style as ProgressBar
@@ -88,6 +89,7 @@ defaultTheme p = Theme
       , ProgressBar.defaultStyleEntries p
       , Slider.defaultStyleEntries p
       , Divider.defaultStyleEntries p
+      , Image.defaultStyleEntries p
       , Label.defaultStyleEntries p
       , ToggleGroup.defaultStyleEntries p
       , ScrollBar.defaultStyleEntries p

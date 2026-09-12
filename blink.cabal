@@ -57,6 +57,7 @@ library
         Blink.Controls.Checkbox
         Blink.Controls.Control
         Blink.Controls.Divider
+        Blink.Controls.Image
         Blink.Controls.Label
         Blink.Controls.List
         Blink.Controls.ProgressBar
@@ -82,6 +83,7 @@ library
         Blink.Controls.Style
         Blink.Style.Defaults
         Blink.Controls.Divider.Style
+        Blink.Controls.Image.Style
         Blink.Controls.Label.Style
         Blink.Controls.List.Style
         Blink.Controls.ProgressBar.Style
@@ -130,6 +132,7 @@ test-suite blink-tests
         Blink.Controls.ControlBehaviour
         Blink.Controls.ControlSpec
         Blink.Controls.DividerSpec
+        Blink.Controls.ImageSpec
         Blink.Controls.ElementBehaviour
         Blink.Controls.FixedFocusBehaviour
         Blink.Controls.FocusScopeSpec
