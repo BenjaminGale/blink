@@ -67,6 +67,14 @@ double pass; it is how Blink's animation ticker wakes a blocked backend
 when a control has called `requiresAnimation`, covered in
 [the guide on writing a backend](../../guides/writing-a-backend.md).
 
+The second pass only runs when it can change what's drawn: on an ordinary
+input frame that queued a message or `UiEffect`. A frame woken by the
+animation ticker skips it even then, because the ticker is about to fire
+again on the next iteration regardless — the one-tick lag a second pass
+would otherwise correct is as imperceptible as continuous mode's inherent
+one-frame lag. This keeps a running animation to a single view render per
+tick instead of two.
+
 ## Choosing between them
 
 Either way, the messages produced and the state they fold into are

@@ -334,7 +334,14 @@ doStepEventDriven :: Ord e => App e msg s -> AppRefs e msg s -> MsgQueue msg -> 
 doStepEventDriven app refs queue notify input = do
   (firstPassCtx, state1) <- runFrame app refs queue notify input
   (renderedCtx, state2) <-
-    if null (getMessages firstPassCtx) && not (hasPendingUiEffects firstPassCtx)
+    if isAnimationTick input
+      -- The ticker is about to fire again next frame regardless of what's
+      -- drawn now, so the one-tick lag a correcting pass exists to avoid is
+      -- as imperceptible here as continuous mode's inherent one-frame lag
+      -- (see 'doStepContinuous'). Skipping it halves render cost for the
+      -- whole time an animation is running.
+      then pure (firstPassCtx, state1)
+      else if null (getMessages firstPassCtx) && not (hasPendingUiEffects firstPassCtx)
       -- Nothing was queued, so nothing about the app or view state changed —
       -- a second pass would run the same view against the same state and
       -- input and produce byte-identical output. Reuse the first pass's

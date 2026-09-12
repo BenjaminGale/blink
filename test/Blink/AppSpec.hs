@@ -443,6 +443,12 @@ spec = do
         _      <- stepFrame handle normalInput
         readIORef ref `shouldReturn` 2
 
+      it "runs the view once on an animation tick even when it emits a message" $ do
+        ref    <- newIORef 0
+        handle <- configureEventDriven (viewCountApp True) nullMsgQueue (pure ()) (countingMeasurer ref)
+        _      <- stepFrame handle (mkInput False True)
+        readIORef ref `shouldReturn` 1
+
     describe "a real control driven through the actual frame loop" $ do
       it "clicking a real checkbox toggles the app's state and is reflected in that same click's draw commands" $ do
         handle <- configureEventDriven checkboxApp nullMsgQueue (pure ()) nullMeasurer
