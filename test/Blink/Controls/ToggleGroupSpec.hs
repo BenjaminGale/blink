@@ -67,7 +67,7 @@ groupBounds :: Rectangle
 groupBounds = Rectangle 0 0 300 100
 
 seedCtx :: ViewContext TestElement String
-seedCtx = emptyViewContext groupBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext groupBounds noInput testTheme
 
 type Attribute' = Attribute (ToggleGroupConfig TestElement Size String)
 

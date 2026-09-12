@@ -6,7 +6,7 @@ import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (forAll, choose)
 
-import Blink.Geometry (Point (..), Rectangle (..), uniform, noBorder, uniformBorder)
+import Blink.Geometry (Point (..), Rectangle (..), Size (..), uniform, noBorder, uniformBorder)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), StyleKey (..), VisualState (..), Theme (..))
@@ -74,13 +74,13 @@ testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
 run :: View () msg a -> IO (a, ViewContext () msg)
-run ui = runView ui (emptyViewContext testBounds noInput emptyTheme noOpTextMeasurer)
+run ui = runView ui (emptyViewContext testBounds noInput emptyTheme)
 
 runWith :: InputState -> View () msg a -> IO (a, ViewContext () msg)
-runWith input ui = runView ui (emptyViewContext testBounds input emptyTheme noOpTextMeasurer)
+runWith input ui = runView ui (emptyViewContext testBounds input emptyTheme)
 
 runTwoElem :: View TwoElems msg a -> IO (a, ViewContext TwoElems msg)
-runTwoElem ui = runView ui (emptyViewContext testBounds noInput twoElemTheme noOpTextMeasurer)
+runTwoElem ui = runView ui (emptyViewContext testBounds noInput twoElemTheme)
 
 freshCtx :: IO (ViewContext () Int)
 freshCtx = snd <$> run0 (pure ())
@@ -422,7 +422,7 @@ spec = describe "Blink.View" $ do
 
     it "isDragging is False when a different element holds capture" $ do
       (_, ctx) <- runView (acquireCapture ElemB)
-                    (emptyViewContext testBounds mouseOnCenterDown twoElemTheme noOpTextMeasurer)
+                    (emptyViewContext testBounds mouseOnCenterDown twoElemTheme)
       (dragging, _) <- runView (isDragging ElemA) ctx
       dragging `shouldBe` False
 
@@ -433,7 +433,7 @@ spec = describe "Blink.View" $ do
 
     it "does not acquire capture when another element already holds it" $ do
       (_, ctx') <- runView (acquireCapture ElemB >> acquireCapture ElemA)
-                     (emptyViewContext testBounds buttonDown twoElemTheme noOpTextMeasurer)
+                     (emptyViewContext testBounds buttonDown twoElemTheme)
       contextCaptured ctx' `shouldBe` MouseCapturedBy ElemB
 
     it "does nothing when the button is not down" $ do
@@ -562,7 +562,7 @@ spec = describe "Blink.View" $ do
       lostFrameAfter   `shouldBe` False
 
     it "a scoped focus request updates only that scope's FocusState, not root's" $ do
-      let ctx0' = emptyViewContext testBounds noInput scopeTheme noOpTextMeasurer :: ViewContext ScopeElems ()
+      let ctx0' = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()
       (_, ctx0) <- runView (requestFocus (Just Group) ItemB) ctx0'
       let ctx1 = settleEffects ctx0
       (insideGained, _) <- runView (withFocusScope Group AllowFreshClaim (hasGainedFocus ItemB)) ctx1
@@ -589,6 +589,13 @@ spec = describe "Blink.View" $ do
     it "drawImage emits a DrawImage command for the current bounds" $ do
       (_, ctx) <- run0 (drawImage "icons/check.svg")
       getDrawCommands ctx `shouldBe` [DrawImage testBounds "icons/check.svg"]
+
+    it "measureImage returns the size the ImageMeasurer reports for the path" $ do
+      let stubMeasurer = noOpImageMeasurer { imNaturalSize = \_ -> pure (Size 24 24) }
+          ctx0 = withMeasurers (noOpMeasurers { msrImage = stubMeasurer })
+                   (emptyViewContext testBounds noInput emptyTheme)
+      (size, _) <- runView (measureImage "icons/check.svg") ctx0
+      size `shouldBe` Size 24 24
 
     it "getDrawCommands returns commands in submission order" $ do
       let c1 = RGBA 1 0 0 1
@@ -724,7 +731,7 @@ spec = describe "Blink.View" $ do
           { themeElementStyles = Map.singleton (ElementId ()) (emptyMetrics, distinctStyles)
           , themeDefaultStyle  = (emptyMetrics, emptyStyleSet)
           }
-        runStyled ui = runView ui (emptyViewContext testBounds noInput styledTheme noOpTextMeasurer)
+        runStyled ui = runView ui (emptyViewContext testBounds noInput styledTheme)
 
     describe "getStyleSet" $ do
       it "returns the element-specific style when registered" $ do
@@ -749,7 +756,7 @@ spec = describe "Blink.View" $ do
     let animState isTick = mkAnimationState 0.016 1.5 isTick
         seedWith :: Bool -> ViewContext () Int
         seedWith isTick = nextFrameContext testBounds noInput emptyTheme (animState isTick)
-                            (emptyViewContext testBounds noInput emptyTheme noOpTextMeasurer)
+                            (emptyViewContext testBounds noInput emptyTheme)
         tickCtx    = seedWith True
         nonTickCtx = seedWith False
 

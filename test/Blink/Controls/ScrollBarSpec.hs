@@ -74,7 +74,7 @@ valueHalfPoint = Point 8 50
 valueOnePoint  = Point 8 74
 
 seedCtx :: ViewContext TestElement String
-seedCtx = emptyViewContext barBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext barBounds noInput testTheme
 
 type Attribute' = Attribute (ScrollBarConfig TestElement String)
 

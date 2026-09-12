@@ -21,6 +21,12 @@ module Blink.Rendering
     -- * Text measurement
   , TextMeasurer (..)
   , noOpTextMeasurer
+    -- * Image measurement
+  , ImageMeasurer (..)
+  , noOpImageMeasurer
+    -- * Measurers
+  , Measurers (..)
+  , noOpMeasurers
   ) where
 
 import Data.Text (Text)
@@ -64,6 +70,40 @@ data TextAlign = AlignLeft | AlignCenter | AlignRight
 -- | A path identifying an image asset (e.g. an SVG or PNG file), used as
 -- both the backend's load key and its texture cache key.
 type ImagePath = Text
+
+-- | Image measurement provided to the View for sizing elements to an
+-- image's natural pixel dimensions. Construct one from your platform's
+-- image-loading API and pass it to 'Blink.App.configureContinuous' or
+-- 'Blink.App.configureEventDriven'.
+newtype ImageMeasurer = ImageMeasurer
+  { imNaturalSize :: ImagePath -> IO Size
+    -- ^ Pixel dimensions of the image at the given path.
+  }
+
+-- | An 'ImageMeasurer' whose operation always returns a zero size. Use in
+-- tests or when no image backend is available.
+noOpImageMeasurer :: ImageMeasurer
+noOpImageMeasurer = ImageMeasurer
+  { imNaturalSize = \_ -> pure (Size 0 0)
+  }
+
+-- | Every measurement service the backend supplies at configure time,
+-- bundled so 'Blink.App.configureContinuous'\/'Blink.App.configureEventDriven'
+-- and 'Blink.View.emptyViewContext' take one value rather than a growing
+-- list of positional measurer arguments as new measurement kinds are added.
+data Measurers = Measurers
+  { msrText  :: TextMeasurer
+  , msrImage :: ImageMeasurer
+  }
+
+-- | 'noOpTextMeasurer' and 'noOpImageMeasurer' bundled together -- the
+-- usual starting point outside a real backend (tests, headless
+-- rendering); override individual fields via record update.
+noOpMeasurers :: Measurers
+noOpMeasurers = Measurers
+  { msrText  = noOpTextMeasurer
+  , msrImage = noOpImageMeasurer
+  }
 
 -- | A single draw instruction in the frame's command list, produced by
 -- the 'Blink.View' drawing primitives and consumed by the backend renderer.

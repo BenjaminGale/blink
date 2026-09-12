@@ -48,11 +48,6 @@ testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
 testTheme :: Theme TestElement
 testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
 
--- | Every character measures 0 wide, so any click lands on position 0 --
--- fine for tests that don't care about exact click-to-offset placement.
-noOpMeasurer :: TextMeasurer
-noOpMeasurer = noOpTextMeasurer
-
 -- | Every character is a fixed 20px wide, for tests that need real
 -- character-offset math (click placement, scrolling).
 fixedCharWidth :: TextMeasurer
@@ -89,7 +84,7 @@ cursorRectAt x = FillRect (Rectangle x 15 1 70) testColour
 type Attribute' = Attribute (TextInputConfig TestElement String)
 
 seedCtx :: ViewContext TestElement String
-seedCtx = emptyViewContext testBounds noInput testTheme noOpMeasurer
+seedCtx = emptyViewContext testBounds noInput testTheme
 
 -- | An un-rendered starting context using the given measurer -- needed for
 -- exact character-offset assertions, since a context that has already had
@@ -98,7 +93,8 @@ seedCtx = emptyViewContext testBounds noInput testTheme noOpMeasurer
 -- click ever happens, which is a real (and separately tested) behaviour but
 -- would shift the pixel math these tests are checking.
 seedWith :: TextMeasurer -> ViewContext TestElement String
-seedWith = emptyViewContext testBounds noInput testTheme
+seedWith measurer = withMeasurers (noOpMeasurers { msrText = measurer })
+                       (emptyViewContext testBounds noInput testTheme)
 
 -- | The behaviour \/ rendering contracts below are about interaction, not
 -- sizing -- they're written against a field that fills its given bounds

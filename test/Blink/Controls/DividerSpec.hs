@@ -88,13 +88,13 @@ contentRect = Rectangle 15 15 70 1
 type Attribute' = Attribute (DividerConfig TestElement String)
 
 seedCtx :: ViewContext TestElement String
-seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext testBounds noInput testTheme
 
 run :: [Attribute'] -> IO (ViewContext TestElement String)
 run attrs = snd <$> runView (runElement (divider attrs)) seedCtx
 
 runWith :: Theme TestElement -> [Attribute'] -> IO (ViewContext TestElement String)
-runWith theme attrs = snd <$> runView (runElement (divider attrs)) (emptyViewContext testBounds noInput theme noOpTextMeasurer)
+runWith theme attrs = snd <$> runView (runElement (divider attrs)) (emptyViewContext testBounds noInput theme)
 
 -- | 'divider' with 'elementId' 'Bar' set -- for the shared behaviour
 -- contracts below, which need a real identity to track hover\/click\/focus

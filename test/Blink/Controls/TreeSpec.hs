@@ -108,7 +108,7 @@ noInput :: InputState
 noInput = InputState (Point 200 200) False [] [] 0
 
 seedCtx :: ViewContext TestElem String
-seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext testBounds noInput testTheme
 
 -- | A point at x-offset @x@ within row @n@'s own 20px-tall row (1-indexed).
 atRow :: Int -> Double -> Point
@@ -386,7 +386,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
     contextScrollState treeScrollEid (resultContext result) `shouldBe` 1
 
 chromeSeedCtx :: ViewContext TestElem String
-chromeSeedCtx = emptyViewContext scrollTestBounds noInput chromeTheme noOpTextMeasurer
+chromeSeedCtx = emptyViewContext scrollTestBounds noInput chromeTheme
 
 chromeSpec :: Spec
 chromeSpec = describe "tree keyboard scrolling with list chrome" $

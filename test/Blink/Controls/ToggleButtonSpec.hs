@@ -71,7 +71,7 @@ hitRect = insetRect (uniform 10) testBounds
 type Attribute' = Attribute (ToggleConfig TestElement String)
 
 seedCtx :: ViewContext TestElement String
-seedCtx = emptyViewContext testBounds noInput toggleTestTheme noOpTextMeasurer
+seedCtx = emptyViewContext testBounds noInput toggleTestTheme
 
 -- | See 'Blink.Controls.ButtonSpec.fullSize' -- same reasoning, for
 -- 'toggleButton'.

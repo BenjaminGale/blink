@@ -67,7 +67,7 @@ contentRect = Rectangle 15 15 70 70
 type Attribute' = Attribute (ProgressBarConfig TestElement String)
 
 seedCtx :: ViewContext TestElement String
-seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
+seedCtx = emptyViewContext testBounds noInput testTheme
 
 run :: [Attribute'] -> IO (ViewContext TestElement String)
 run attrs = snd <$> runView (runElement (progressBar attrs)) seedCtx
@@ -93,7 +93,7 @@ wideBounds = Rectangle 0 0 1000 100
 
 wideElapsedCtx :: ViewContext TestElement String
 wideElapsedCtx =
-  let seed = emptyViewContext wideBounds noInput testTheme noOpTextMeasurer
+  let seed = emptyViewContext wideBounds noInput testTheme
   in nextFrameContext wideBounds noInput testTheme (mkAnimationState 0 1 False) seed
 
 spec :: Spec

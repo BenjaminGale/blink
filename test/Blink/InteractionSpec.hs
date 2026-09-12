@@ -35,7 +35,7 @@ testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
 seedAt :: Point -> ViewContext () msg
-seedAt p = emptyViewContext testBounds (InputState p False [] [] 0) testTheme noOpTextMeasurer
+seedAt p = emptyViewContext testBounds (InputState p False [] [] 0) testTheme
 
 seedAt0 :: ViewContext () msg
 seedAt0 = seedAt (Point 0 0)

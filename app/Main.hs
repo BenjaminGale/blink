@@ -63,7 +63,7 @@ main = do
         mapM_ (submitDrawCommand renderer font texCache clipRef) calls
         SDL.present renderer
 
-  handle <- configureEventDriven demoApp msgQueue notify measurer
+  handle <- configureEventDriven demoApp msgQueue notify (noOpMeasurers { msrText = measurer })
 
   loop handle False renderFrame window checkAnimTick
 
