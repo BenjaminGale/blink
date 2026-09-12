@@ -1123,7 +1123,7 @@ backgroundPage s =
             )
         , if fetching
             then progressBar (rowLayout ++ [progress Indeterminate, width (exactly 400)])
-            else progressBar (rowLayout ++ [progress (Progress 0), isEnabled False])
+            else progressBar (rowLayout ++ [progress (Progress 0), isEnabled False, width (exactly 400)])
         ]
     ]
   where
