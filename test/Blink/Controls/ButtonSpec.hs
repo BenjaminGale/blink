@@ -118,22 +118,28 @@ spec = describe "Blink.Controls.Button" $ do
     -- attribute for controls yet) sizes itself to its own chrome-wrapped
     -- caption. Verified against a manually computed 'Exactly' from the same
     -- style, to the pixel, per invariant 5 (chrome insets defined once).
+    let fixedWidthMeasurer :: TextMeasurer
+        fixedWidthMeasurer = noOpTextMeasurer
+          { tmTextSize = \t -> pure (Size (fromIntegral (T.length t) * 10) 12) }
+        chromeWidth  = 2 * (10 + 5)  -- margin + padding, both sides; no border
+        chromeHeight = 2 * (10 + 5)
+        fitContentEl attrs = runElement (button Ok attrs) { elLayout = Layout fitContent fitContent TopLeft }
+        fitCtx = withMeasurers (noOpMeasurers { msrText = fixedWidthMeasurer })
+                   (emptyViewContext (Rectangle 0 0 500 500) noInput testTheme)
+        -- The background rect 'renderStyled' fills is the outer bounds inset
+        -- by margin (10px each side) -- not the outer bounds themselves.
+        expectedBgFor caption =
+          let contentSize = Size (fromIntegral (T.length caption) * 10) 12
+              expectedW   = sizeWidth contentSize + chromeWidth
+              expectedH   = sizeHeight contentSize + chromeHeight
+          in Rectangle 10 10 (expectedW - 20) (expectedH - 20)
+
     it "sizes to its chrome-wrapped caption, matching a manual computation from the same style" $ do
-      let caption  = "OK"
-          fixedWidthMeasurer :: TextMeasurer
-          fixedWidthMeasurer = noOpTextMeasurer
-            { tmTextSize = \t -> pure (Size (fromIntegral (T.length t) * 10) 12) }
-          contentSize  = Size (fromIntegral (T.length caption) * 10) 12
-          chromeWidth  = 2 * (10 + 5)  -- margin + padding, both sides; no border
-          chromeHeight = 2 * (10 + 5)
-          expectedW    = sizeWidth contentSize + chromeWidth
-          expectedH    = sizeHeight contentSize + chromeHeight
-          -- The background rect 'renderStyled' fills is the outer bounds
-          -- inset by margin (10px each side) -- not the outer bounds
-          -- themselves.
-          expectedBg   = Rectangle 10 10 (expectedW - 20) (expectedH - 20)
-          fitContentEl attrs = runElement (button Ok attrs) { elLayout = Layout fitContent fitContent TopLeft }
-          fitCtx = withMeasurers (noOpMeasurers { msrText = fixedWidthMeasurer })
-                     (emptyViewContext (Rectangle 0 0 500 500) noInput testTheme)
+      let caption = "OK"
       ctx <- snd <$> runView (fitContentEl [text caption]) fitCtx
-      getDrawCommands ctx `shouldContain` [FillRect expectedBg testColour]
+      getDrawCommands ctx `shouldContain` [FillRect (expectedBgFor caption) testColour]
+
+    it "sizes to just its chrome when the caption is empty" $ do
+      let caption = ""
+      ctx <- snd <$> runView (fitContentEl [text caption]) fitCtx
+      getDrawCommands ctx `shouldContain` [FillRect (expectedBgFor caption) testColour]
