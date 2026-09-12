@@ -340,29 +340,7 @@ doStepEventDriven app refs queue notify input = do
       -- input and produce byte-identical output. Reuse the first pass's
       -- context and draws instead of paying for a pointless re-render.
       then pure (firstPassCtx, state1)
-      else do
-        let winRect     = rectFromSize (windowSize input)
-            inputState  = toInputState input
-            rerendered  = rerenderContext winRect (clearKeyEvents inputState)
-                            (theme app state1) (contextAnimation firstPassCtx) firstPassCtx
-            freshCtx    = suppressFreshButtonEdge inputState rerendered
-        (_, ctx2) <- runView (runElement (view app state1)) freshCtx
-        -- A deferred effect settling on this second pass (e.g. a focus
-        -- change taking effect) can itself emit messages that never appear
-        -- anywhere else -- fold them into state too rather than silently
-        -- dropping them. A third pass to re-render against the result is
-        -- deliberately not done: re-running an already-settled deferred
-        -- focus change through another 'rerenderContext' re-emits the same
-        -- gained/lost messages again (verified against a real click-to-focus
-        -- case), so looping here would re-deliver duplicates every further
-        -- pass instead of converging. The accepted trade-off is that this
-        -- one frame's draws (rendered against 'state1') can lag one frame
-        -- behind whatever folding these messages changes in state -- the
-        -- same one-frame staleness continuous mode already has, just
-        -- reached from the second pass instead of the first.
-        let (state2, cmds2, uiEffs2) = foldMsgs app state1 (getMessages ctx2)
-        dispatchCmds queue notify cmds2
-        pure (queueUiEffects uiEffs2 ctx2, state2)
+      else rerenderPass app queue notify input firstPassCtx state1
   writeIORef (refsCtx refs) renderedCtx
   writeIORef (refsState refs) state2
   wasActive <- readIORef (refsAnimActive refs)
@@ -371,6 +349,33 @@ doStepEventDriven app refs queue notify input = do
   when (not wasActive && nowActive) $
     forkAnimationTicker (refsAnimActive refs) notify
   pure $ toResult input (getDrawCommands renderedCtx) state2
+
+-- | Re-renders the view against @state1@ so the displayed frame reflects
+-- messages or 'UiEffect's the first pass queued, folding whatever this
+-- second pass itself queues into the state too.
+rerenderPass
+  :: Ord e
+  => App e msg s
+  -> MsgQueue msg
+  -> IO ()
+  -> FrameInput
+  -> ViewContext e msg
+  -> s
+  -> IO (ViewContext e msg, s)
+rerenderPass app queue notify input firstPassCtx state1 = do
+  let winRect     = rectFromSize (windowSize input)
+      inputState  = toInputState input
+      rerendered  = rerenderContext winRect (clearKeyEvents inputState)
+                      (theme app state1) (contextAnimation firstPassCtx) firstPassCtx
+      freshCtx    = suppressFreshButtonEdge inputState rerendered
+  (_, ctx2) <- runView (runElement (view app state1)) freshCtx
+  -- No third pass: re-running an already-settled focus change through
+  -- rerenderContext re-emits the same gained/lost messages, so looping
+  -- would never converge. This frame's draws can lag the fold by one
+  -- frame instead -- the same staleness continuous mode already has.
+  let (state2, cmds2, uiEffs2) = foldMsgs app state1 (getMessages ctx2)
+  dispatchCmds queue notify cmds2
+  pure (queueUiEffects uiEffs2 ctx2, state2)
 
 -- | Collapses a fresh button edge ('Blink.Input.ButtonDown', 'Blink.Input.ButtonReleased')
 -- into its continuing counterpart ('Blink.Input.ButtonHeld', 'Blink.Input.ButtonUp') as
