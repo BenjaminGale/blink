@@ -183,12 +183,7 @@ data MsgQueue msg = MsgQueue
 -- from the first render pass is submitted immediately each frame.
 configureContinuous :: Ord e => App e msg s -> MsgQueue msg -> TextMeasurer -> IO (BlinkHandle s)
 configureContinuous app queue measurer = do
-  s <- startUp app
-  refs <- AppRefs
-    <$> newIORef (emptyViewContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) measurer)
-    <*> newIORef s
-    <*> newIORef False
-    <*> newIORef Nothing
+  refs <- mkAppRefs app measurer
   pure BlinkHandle { stepFrame = doStepContinuous app refs queue }
 
 -- | Produces a 'BlinkHandle' for an event-driven backend. The 'IO ()'
@@ -196,13 +191,17 @@ configureContinuous app queue measurer = do
 -- completes, so the backend can unblock its event wait.
 configureEventDriven :: Ord e => App e msg s -> MsgQueue msg -> IO () -> TextMeasurer -> IO (BlinkHandle s)
 configureEventDriven app queue notify measurer = do
+  refs <- mkAppRefs app measurer
+  pure BlinkHandle { stepFrame = doStepEventDriven app refs queue notify }
+
+mkAppRefs :: Ord e => App e msg s -> TextMeasurer -> IO (AppRefs e msg s)
+mkAppRefs app measurer = do
   s <- startUp app
-  refs <- AppRefs
+  AppRefs
     <$> newIORef (emptyViewContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) measurer)
     <*> newIORef s
     <*> newIORef False
     <*> newIORef Nothing
-  pure BlinkHandle { stepFrame = doStepEventDriven app refs queue notify }
 
 -- | The interface the backend uses each frame. Obtain via 'configureContinuous'
 -- or 'configureEventDriven'.
