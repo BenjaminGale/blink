@@ -138,10 +138,11 @@ flatRowStyle p = StyleSet
 
 -- | A track/fill style: transparent background, 'paletteBorder' for the
 -- groove (drawn via 'styleBorderColour'), 'paletteAccent' for the filled
--- track and thumb (drawn via 'styleTextColour'). Used for a slider (which
--- is focusable by default, hence the focus ring below) and a scrollbar's
--- own track (which is 'Blink.Controls.Control.NotFocusable', so the
--- override just never triggers there).
+-- track and thumb (drawn via 'styleTextColour'). Used for a slider and a
+-- scrollbar's own track. No 'FocusFocused' override -- the focus ring is
+-- drawn separately, always in accent (see
+-- 'Blink.Controls.Slider.drawTrack'), so overriding 'styleBorderColour'
+-- here would only recolour the groove.
 sliderStyle :: Palette -> StyleSet
 sliderStyle p = StyleSet
   { styleBase = Style
@@ -151,9 +152,7 @@ sliderStyle p = StyleSet
       , styleBorderColour = Just (paletteBorder p)
       }
   , styleOverrides = Map.fromList
-      [ (CommonDisabled, \s -> s { styleTextColour = paletteTextMuted p })
-      , (FocusFocused,   \s -> s { styleBorderColour = Just (paletteFocusRing p) })
-      ]
+      [ (CommonDisabled, \s -> s { styleTextColour = paletteTextMuted p }) ]
   }
 
 -- | A plain, transparent, borderless style for a group's own container --

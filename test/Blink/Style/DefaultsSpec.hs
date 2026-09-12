@@ -91,10 +91,14 @@ spec = describe "Blink.Style.Defaults" $ do
     -- for the ones deliberately excluded, e.g. a scrollbar's own buttons and
     -- track, which are 'Blink.Controls.Control.NotFocusable'). Missing an
     -- entry here means a focused instance draws no focus ring at all.
+    -- 'sliderStyleKey' is excluded: a slider draws its focus ring directly
+    -- in accent rather than through 'styleBorderColour' (see
+    -- 'Blink.Controls.Slider.drawTrack'), so its resolved style never
+    -- changes on focus even though it does draw a ring.
     describe "focus ring coverage" $ do
       let focusableStyleKeys =
             [ buttonStyleKey, toggleButtonStyleKey, checkboxStyleKey, radioButtonStyleKey
-            , textInputStyleKey, sliderStyleKey
+            , textInputStyleKey
             ]
       forM_ focusableStyleKeys $ \key ->
         it ("gives " <> show key <> " a distinct look while focused") $ do
