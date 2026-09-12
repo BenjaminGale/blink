@@ -11,7 +11,7 @@ import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), StyleKey (..), VisualState (..), Theme (..))
 import Blink.View
-import Blink.View.Drawing (withClip, fillRect, strokeRect, drawText, withBackground, withBorder)
+import Blink.View.Drawing (withClip, fillRect, strokeRect, drawText, drawImage, withBackground, withBorder)
 import Blink.View.Selection (selectionLow, selectionHigh, selectionHasExtent, cursor, collapseToLow, collapseToHigh, collapseToActive, extendActive)
 import qualified Blink.View.Hold as Hold
 import Blink.Generators ()
@@ -585,6 +585,10 @@ spec = describe "Blink.View" $ do
       let colour = RGBA 0 0 1 1
       (_, ctx) <- run0 (drawText colour AlignCenter "hello")
       getDrawCommands ctx `shouldBe` [DrawText testBounds "hello" colour AlignCenter]
+
+    it "drawImage emits a DrawImage command for the current bounds" $ do
+      (_, ctx) <- run0 (drawImage "icons/check.svg")
+      getDrawCommands ctx `shouldBe` [DrawImage testBounds "icons/check.svg"]
 
     it "getDrawCommands returns commands in submission order" $ do
       let c1 = RGBA 1 0 0 1

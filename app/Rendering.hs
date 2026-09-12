@@ -125,6 +125,7 @@ submitDrawCommand renderer _ _ _        (FillRect r color)            = renderFi
 submitDrawCommand renderer _ _ _        (StrokeBorder r color edges)  = renderBorder renderer r color edges
 submitDrawCommand _ _ _ _               (DrawText _ txt _ _) | T.null txt = pure ()
 submitDrawCommand renderer font cache _ (DrawText r txt color textAlign) = renderText renderer font cache r txt color textAlign
+submitDrawCommand _ _ _ _               (DrawImage _ _)              = pure () -- loading/rendering lands in a later slice
 submitDrawCommand renderer _ _ clipRef  (PushClip r)                  = pushClip     renderer clipRef r
 submitDrawCommand renderer _ _ clipRef   PopClip                      = popClip      renderer clipRef
 

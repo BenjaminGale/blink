@@ -16,6 +16,7 @@ module Blink.Rendering
     -- * Text alignment
   , TextAlign (..)
     -- * Draw commands
+  , ImagePath
   , DrawCommand (..)
     -- * Text measurement
   , TextMeasurer (..)
@@ -60,6 +61,10 @@ isVisible (RGBA _ _ _ a) = a /= 0
 data TextAlign = AlignLeft | AlignCenter | AlignRight
   deriving (Eq, Show)
 
+-- | A path identifying an image asset (e.g. an SVG or PNG file), used as
+-- both the backend's load key and its texture cache key.
+type ImagePath = Text
+
 -- | A single draw instruction in the frame's command list, produced by
 -- the 'Blink.View' drawing primitives and consumed by the backend renderer.
 data DrawCommand
@@ -69,6 +74,8 @@ data DrawCommand
     -- ^ Stroke the border of the rectangle with the given colour and per-side widths in pixels.
   | DrawText Rectangle Text Colour TextAlign
     -- ^ Render text within the rectangle using the given colour and alignment.
+  | DrawImage Rectangle ImagePath
+    -- ^ Render the image at the given path, stretched to fill the rectangle.
   | PushClip Rectangle
     -- ^ Push a clip region onto the clip stack; subsequent draw commands
     -- are clipped to this rectangle intersected with any outer clip regions.

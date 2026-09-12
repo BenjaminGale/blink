@@ -4,7 +4,7 @@ Module: Blink.View.Drawing
 Drawing operations built on top of "Blink.View"'s minimal primitives
 ('Blink.View.draw', 'Blink.View.getBounds', 'Blink.View.getInteractionClip',
 'Blink.View.withInteractionClip'). Controls draw with 'fillRect',
-'strokeRect', and 'drawText' against the /current bounds/ (see
+'strokeRect', 'drawText', and 'drawImage' against the /current bounds/ (see
 'Blink.View.getBounds'); 'withClip' narrows both drawing and mouse
 hit-testing to a sub-tree's bounds.
 -}
@@ -12,6 +12,7 @@ module Blink.View.Drawing
   ( fillRect
   , strokeRect
   , drawText
+  , drawImage
   , withClip
   , withBackground
   , withBorder
@@ -21,7 +22,7 @@ import Control.Monad (when)
 import Data.Text (Text)
 import Blink.Geometry (Rectangle, BorderEdges, intersectRect)
 import Blink.View (View, draw, getBounds, getInteractionClip, withInteractionClip)
-import Blink.Rendering (Colour, TextAlign, DrawCommand (..), isVisible)
+import Blink.Rendering (Colour, TextAlign, ImagePath, DrawCommand (..), isVisible)
 
 -- | Builds a 'DrawCommand' from the current bounds and queues it.
 drawAt :: (Rectangle -> DrawCommand) -> View e msg ()
@@ -40,6 +41,10 @@ strokeRect colour edges = drawAt (\r -> StrokeBorder r colour edges)
 -- | Renders text within the current bounds using the given colour and alignment.
 drawText :: Colour -> TextAlign -> Text -> View e msg ()
 drawText colour align text = drawAt (\r -> DrawText r text colour align)
+
+-- | Renders the image at @path@ stretched to fill the current bounds.
+drawImage :: ImagePath -> View e msg ()
+drawImage path = drawAt (\r -> DrawImage r path)
 
 -- | Wraps a sub-tree in a clip region matching the current bounds. Draw
 -- commands produced by the sub-tree that fall outside the region are discarded,
