@@ -59,6 +59,13 @@ stubMeasurers = noOpMeasurers
 seedCtx :: ViewContext () String
 seedCtx = withMeasurers stubMeasurers (emptyViewContext testBounds noInput testTheme)
 
+-- | Reports a zero natural size, for testing the fallback that avoids
+-- dividing by zero when scaling to preserve an undefined aspect ratio.
+zeroSizeMeasurers :: Measurers
+zeroSizeMeasurers = noOpMeasurers
+  { msrImage = ImageMeasurer { imNaturalSize = \_ -> pure (Size 0 0) }
+  }
+
 run :: [Attribute (ImageConfig () String)] -> IO [DrawCommand]
 run attrs = getDrawCommands . snd <$> runView (runElement (image (source "test.svg" : attrs))) seedCtx
 
@@ -79,3 +86,17 @@ spec = describe "Blink.Controls.Image" $ do
   it "ignores aspect ratio when preserveRatio is False, using each fit dimension independently" $ do
     draws <- run [fitWidth 10, fitHeight 10, preserveRatio False]
     draws `shouldContain` [DrawImage (Rectangle 0 0 10 10) "test.svg" (RGBA 1 1 1 1)]
+
+  it "scales from whichever of fitWidth/fitHeight fits tighter, when both are set" $ do
+    -- Against the 100x50 stub, fitWidth 60 alone would scale by 0.6 (to
+    -- 60x30) and fitHeight 40 alone would scale by 0.8 (to 80x40) -- the
+    -- smaller scale factor is the tighter fit, so fitWidth's 0.6 should
+    -- win over fitHeight's 0.8.
+    draws <- run [fitWidth 60, fitHeight 40]
+    draws `shouldContain` [DrawImage (Rectangle 0 0 60 30) "test.svg" (RGBA 1 1 1 1)]
+
+  it "falls back to the fit dimensions directly when the natural size is zero" $ do
+    draws <- getDrawCommands . snd <$> runView
+      (runElement (image [source "test.svg", fitWidth 50, fitHeight 25]))
+      (withMeasurers zeroSizeMeasurers seedCtx)
+    draws `shouldContain` [DrawImage (Rectangle 0 0 50 25) "test.svg" (RGBA 1 1 1 1)]
