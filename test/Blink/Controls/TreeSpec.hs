@@ -14,13 +14,14 @@ import Blink.Controls.List
 import Blink.Controls.List.Style (listStyleKey)
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Controls.Tree
+import Blink.Controls.Tree.Style (treeChevronStyleKey)
 import Blink.Element (Element (..), runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonMouseOver))
 import Blink.View
 
 -- * flattenVisible
@@ -89,6 +90,23 @@ testTheme = Theme
       , metricsPadding     = uniform 0
       , metricsBorderEdges = noBorder
       }
+
+-- | Distinct from the chevron's resting colour, so a test can tell
+-- whether it actually resolved 'Blink.Controls.Tree.Style.treeChevronStyleKey'\'s
+-- own hover override.
+chevronHoverColour :: Colour
+chevronHoverColour = RGBA 0 0 1 1
+
+-- | 'testTheme', but with a hover override registered for the chevron's
+-- own style, so a test can assert it recolours on hover.
+chevronHoverTheme :: Theme TestElem
+chevronHoverTheme = testTheme
+  { themeElementStyles = Map.singleton treeChevronStyleKey
+      (fst (themeDefaultStyle testTheme), StyleSet
+        { styleBase      = styleBase (snd (themeDefaultStyle testTheme))
+        , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleTextColour = chevronHoverColour })
+        })
+  }
 
 -- | 'testTheme', but with real padding on the list's own chrome -- a
 -- regression case for the bug where a Right\/Left-driven scroll read the
@@ -198,6 +216,15 @@ widgetSpec = describe "tree" $ do
     -- set), has children -- chevron column starts after its indent.
     resultDraws result `shouldContain`
       [DrawImage (Rectangle 16 40 16 20) "assets/icons/chevron_right.svg" restColour]
+
+  it "tints a chevron a different colour while the cursor is over it" $ do
+    -- Row 1's chevron cell is its own 16px-wide column (x: 0-16, y: 0-20).
+    result <- runInteractions testBounds (emptyViewContext testBounds noInput chevronHoverTheme)
+      (renderSilentTree [expanded (Set.singleton "src"), selection (unselected items)])
+      [MoveTo (atRow 1 8)]
+      [Wait 1]
+    resultDraws result `shouldContain`
+      [DrawImage (Rectangle 0 0 16 20) "assets/icons/expand_more.svg" chevronHoverColour]
 
 expandedMsg :: Set.Set String -> String
 expandedMsg s = "Expanded:" ++ show (Set.toList s)

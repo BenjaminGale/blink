@@ -7,12 +7,13 @@ import Test.Hspec
 import Blink.Controls.Control
   (Attribute, FocusPolicy (..), control, defaultControlConfig, elementId, focusPolicy, resolve)
 import Blink.Controls.ElementBehaviour (tagged)
-import Blink.Controls.ScrollBar (ScrollBarConfig, ScrollBarPart (..), scrollBar, scrollBarOrientation, step)
+import Blink.Controls.ScrollBar
+  (ScrollBarConfig, ScrollBarPart (..), scrollBar, scrollBarButtonStyleKey, scrollBarOrientation, step)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonMouseOver))
 import Blink.View
 import Blink.Element (runElement)
 
@@ -76,6 +77,26 @@ valueOnePoint  = Point 8 74
 seedCtx :: ViewContext TestElement String
 seedCtx = emptyViewContext barBounds noInput testTheme
 
+-- | Distinct from 'testColour', so a test can tell whether an arrow
+-- button's icon actually resolved 'scrollBarButtonStyleKey'\'s own hover
+-- override.
+arrowHoverColour :: Colour
+arrowHoverColour = RGBA 0 0 1 1
+
+-- | 'testTheme', but with a hover override registered for the arrow
+-- buttons' own style, so a test can assert an arrow recolours on hover.
+arrowHoverTheme :: Theme TestElement
+arrowHoverTheme = testTheme
+  { themeElementStyles = Map.singleton scrollBarButtonStyleKey
+      (fst (themeDefaultStyle testTheme), StyleSet
+        { styleBase      = styleBase (snd (themeDefaultStyle testTheme))
+        , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleTextColour = arrowHoverColour })
+        })
+  }
+
+arrowHoverSeedCtx :: ViewContext TestElement String
+arrowHoverSeedCtx = emptyViewContext barBounds noInput arrowHoverTheme
+
 type Attribute' = Attribute (ScrollBarConfig TestElement String)
 
 render :: [Attribute'] -> View TestElement String ()
@@ -128,6 +149,11 @@ spec = describe "Blink.Controls.ScrollBar" $ do
         [DrawImage (Rectangle (-2) (-2) 20 20) "assets/icons/arrow_left.svg" testColour]
       resultDraws result `shouldContain`
         [DrawImage (Rectangle 82 (-2) 20 20) "assets/icons/arrow_right.svg" testColour]
+
+    it "tints an arrow's icon a different colour while the cursor is over it" $ do
+      result <- runInteractions barBounds arrowHoverSeedCtx (render []) [MoveTo decrementPoint] [Wait 1]
+      resultDraws result `shouldContain`
+        [DrawImage (Rectangle (-2) (-2) 20 20) "assets/icons/arrow_drop_up.svg" arrowHoverColour]
 
   -- Every click\/drag below is preceded by a 'MoveTo' at the same point, as
   -- setup -- see 'Blink.Controls.ToggleGroupSpec' for why: without a
