@@ -129,6 +129,17 @@ hitRect = insetRect (uniform 10) testBounds
 chromeFill :: Colour -> Rectangle -> DrawCommand
 chromeFill colour rect = FillRect (insetRect (uniform 10) rect) colour
 
+-- | Renders 'ElemA' and 'ElemB' via 'both', wired so A posts "A lost" when
+-- it loses focus and B posts "B gained" when it gains focus -- for tracking
+-- a focus handoff between them.
+focusHandoffRender :: View TestElement String ()
+focusHandoffRender = both [onFocusLost (post ("A lost" :: String))] [onFocusGained (post ("B gained" :: String))]
+
+-- | Attrs that post "<e> gained"/"<e> lost" via 'onFocusGained'/'onFocusLost',
+-- for tracking which element focus moves through.
+tagged :: TestElement -> [Attribute']
+tagged e = [onFocusGained (post (show e ++ " gained")), onFocusLost (post (show e ++ " lost"))]
+
 spec :: Spec
 spec = describe "Blink.Controls.Control.control" $ do
   controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx ElemA (Point 5 5) hitRect (Point 200 200) renderControl
@@ -296,16 +307,12 @@ spec = describe "Blink.Controls.Control.control" $ do
       resultMessages result `shouldBe` ["B entered"]
 
   describe "click-to-focus" $ do
-    let attrsA = [onFocusLost   (post ("A lost"   :: String))]
-        attrsB = [onFocusGained (post ("B gained" :: String))]
-        render = both attrsA attrsB
-
     it "does not take effect on the mouse-down's own frame" $ do
-      result <- runInteractions testBounds seedCtx render [] [MouseDown onB]
+      result <- runInteractions testBounds seedCtx focusHandoffRender [] [MouseDown onB]
       resultMessages result `shouldBe` []
 
     it "takes effect one frame after mouse-down, firing FocusLost/FocusGained for the right elements, without waiting for release" $ do
-      result <- runInteractions testBounds seedCtx render [] [MouseDown onB, Wait 1]
+      result <- runInteractions testBounds seedCtx focusHandoffRender [] [MouseDown onB, Wait 1]
       resultMessages result `shouldBe` ["A lost", "B gained"]
 
   describe "focusTargetOnClick" $ do
@@ -331,20 +338,16 @@ spec = describe "Blink.Controls.Control.control" $ do
       contextFocus (resultContext result) `shouldBe` Nothing
 
   describe "keyboard navigation" $ do
-    let attrsA = [onFocusLost   (post ("A lost"   :: String))]
-        attrsB = [onFocusGained (post ("B gained" :: String))]
-        render = both attrsA attrsB
-
     it "Tab gives up focus immediately, letting the next control auto-claim in the same frame" $ do
-      result <- runInteractions testBounds seedCtx render [Wait 1] [Tab]
+      result <- runInteractions testBounds seedCtx focusHandoffRender [Wait 1] [Tab]
       resultMessages result `shouldBe` ["A lost", "B gained"]
 
     it "does not hand focus to the previous tab stop on the Shift-Tab frame itself" $ do
-      result <- runInteractions testBounds seedCtx render [Wait 1] [ShiftTab]
+      result <- runInteractions testBounds seedCtx focusHandoffRender [Wait 1] [ShiftTab]
       resultMessages result `shouldBe` []
 
     it "hands focus to the previous tab stop one frame after Shift-Tab" $ do
-      result <- runInteractions testBounds seedCtx render [Wait 1] [ShiftTab, Wait 1]
+      result <- runInteractions testBounds seedCtx focusHandoffRender [Wait 1] [ShiftTab, Wait 1]
       resultMessages result `shouldBe` ["A lost", "B gained"]
 
     it "does not report Tab as a key event to the control it moves focus away from" $ do
@@ -363,8 +366,7 @@ spec = describe "Blink.Controls.Control.control" $ do
       resultMessages result `shouldBe` [show (KeyEvent KeyReturn [] False)]
 
     describe "Shift-Tab past a disabled control" $ do
-      let tagged e = [onFocusGained (post (show e ++ " gained")), onFocusLost (post (show e ++ " lost"))]
-          renderWithDisabledMiddle = three (tagged ElemA) (isEnabled False : tagged ElemB) (tagged ElemC)
+      let renderWithDisabledMiddle = three (tagged ElemA) (isEnabled False : tagged ElemB) (tagged ElemC)
 
       it "Tab from the first control skips the disabled middle one" $ do
         result <- runInteractions testBounds seedCtx renderWithDisabledMiddle [Wait 1] [Tab, Wait 1]
@@ -375,8 +377,7 @@ spec = describe "Blink.Controls.Control.control" $ do
         resultMessages result `shouldBe` ["ElemA gained", "ElemC lost"]
 
     describe "Shift-Tab past a control disabled via an ambient disableWhen" $ do
-      let tagged e = [onFocusGained (post (show e ++ " gained")), onFocusLost (post (show e ++ " lost"))]
-          renderWithAmbientlyDisabledMiddle = do
+      let renderWithAmbientlyDisabledMiddle = do
             withBounds rectA (renderAt ElemA (tagged ElemA))
             disableWhen True (withBounds rectB (renderAt ElemB (tagged ElemB)))
             withBounds rectC (renderAt ElemC (tagged ElemC))
