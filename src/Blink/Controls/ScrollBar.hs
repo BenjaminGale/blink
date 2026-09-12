@@ -7,10 +7,11 @@
 -- reads and writes it itself via 'Blink.View.getScrollState'\/'Blink.View.requestScrollTo'\/
 -- 'Blink.View.requestScrollBy', keyed by its own element id, the same way
 -- 'Blink.Controls.TextInput.textInput' owns its own scroll offset
--- rather than asking the caller to thread it through. Clicking or dragging
--- the track jumps\/follows the pointer the same way
--- 'Blink.Controls.Slider.slider''s thumb does; holding either arrow
--- steps it by 'step', repeating for as long as it's held.
+-- rather than asking the caller to thread it through. Clicking the track
+-- jumps the thumb there, centred under the click, the same way
+-- 'Blink.Controls.Slider.slider''s thumb does; grabbing the thumb drags
+-- it, tracking the pointer without recentring; holding either arrow steps
+-- it by 'step', repeating for as long as it's held.
 --
 -- A caller that needs to know the current position too -- to offset the
 -- content being scrolled, say -- reads it the same way, via
@@ -175,16 +176,34 @@ thumbLengthFor o bounds frac =
   let len = axisLength o bounds
   in min len (max minThumbLength (clamp01 frac * len))
 
--- | The @[0, 1]@ value that centres the thumb (of @thumbLen@) under pointer
--- position @p@ -- clamped so the thumb never travels past either end of the
--- track, and reading as @0@ when the track has no room for the thumb to
--- travel at all.
-fractionAt :: Orientation -> Rectangle -> Double -> Point -> Double
-fractionAt o bounds thumbLen p
+-- | The pixel offset along @o@ of the thumb's own leading edge (of length
+-- @thumbLen@) for scroll position @v@ within @bounds@ -- the near end of
+-- the track when @v@ is 0, the far end (minus the thumb's own length) when
+-- @v@ is 1.
+thumbOriginFor :: Orientation -> Rectangle -> Double -> Double -> Double
+thumbOriginFor o bounds thumbLen v = axisOrigin o bounds + clamp01 v * travel
+  where
+    travel = max 0 (axisLength o bounds - thumbLen)
+
+-- | The @[0, 1]@ scroll position whose thumb (of length @thumbLen@) would
+-- sit with its leading edge at pixel position @originMain@ along @o@ within
+-- @bounds@ -- the inverse of 'thumbOriginFor'. Reads as @0@ when the track
+-- has no room for the thumb to travel at all.
+fractionForOrigin :: Orientation -> Rectangle -> Double -> Double -> Double
+fractionForOrigin o bounds thumbLen originMain
   | travel <= 0 = 0
-  | otherwise   = clamp01 ((pointMain o p - axisOrigin o bounds - thumbLen / 2) / travel)
+  | otherwise   = clamp01 ((originMain - axisOrigin o bounds) / travel)
   where
     travel = axisLength o bounds - thumbLen
+
+-- | The pixel distance from the thumb's leading edge (@thumbOrigin0@, of
+-- length @thumbLen@) to @mouseMain@, if @mouseMain@ falls within the
+-- thumb; otherwise the thumb's own centre, so a track click still jumps
+-- the thumb to be centred under it.
+grabOffsetAt :: Double -> Double -> Double -> Double
+grabOffsetAt thumbOrigin0 thumbLen mouseMain
+  | mouseMain >= thumbOrigin0 && mouseMain <= thumbOrigin0 + thumbLen = mouseMain - thumbOrigin0
+  | otherwise = thumbLen / 2
 
 -- | Darkens @c@'s RGB toward black by @factor@ (in @[0, 1]@; 1 leaves it
 -- unchanged), leaving alpha alone -- see 'Blink.Controls.Slider.shade',
@@ -210,9 +229,7 @@ drawTrack o s bounds hovered dragging frac v = do
   where
     accent   = styleTextColour s
     thumbLen = thumbLengthFor o bounds frac
-    travel   = max 0 (axisLength o bounds - thumbLen)
-    origin   = axisOrigin o bounds + clamp01 v * travel
-    thumb    = mainRect o bounds origin thumbLen
+    thumb    = mainRect o bounds (thumbOriginFor o bounds thumbLen v) thumbLen
 
 -- | Each arrow button's fixed size along the main axis, filling the cross
 -- axis -- the same shape regardless of which arrow it is.
@@ -220,10 +237,11 @@ arrowLayoutAttrs :: HasLayoutConfig cfg => Orientation -> [Attribute cfg]
 arrowLayoutAttrs Horizontal = [width (exactly scrollBarThickness), height fill]
 arrowLayoutAttrs Vertical   = [width fill, height (exactly scrollBarThickness)]
 
--- | A scrollbar (see the module header). Clicking or dragging the track
--- moves the thumb to (and keeps it centred under) the pointer, the same way
--- 'Blink.Controls.Slider.slider' does; holding either arrow steps the
--- position by 'step', repeating for as long as it's held.
+-- | A scrollbar (see the module header). Clicking the bare track jumps the
+-- thumb to (and centres it under) the pointer, the same way
+-- 'Blink.Controls.Slider.slider' does; grabbing the thumb itself drags it,
+-- tracking the pointer without recentring under it; holding either arrow
+-- steps the position by 'step', repeating for as long as it's held.
 --
 -- @tag@ builds each part's element id from a 'ScrollBarPart' -- the caller
 -- never writes a per-part id by hand. @tag 'ScrollBar'@ doubles as the
@@ -267,10 +285,10 @@ scrollBar tag attrs = Element
       , ccStyleKey        = scrollBarTrackStyleKey
       , ccFocusPolicy     = NotFocusable
       , ccMouseActivation = CaptureActivated
-      , ccContent         = const trackBody
+      , ccContent         = trackBody
       }
 
-    trackBody = do
+    trackBody ci = do
       s         <- currentStyle
       bounds    <- getBounds
       disabled  <- isDisabled
@@ -280,7 +298,19 @@ scrollBar tag attrs = Element
       value0    <- getScrollState scrollEid
       let thumbLen = thumbLengthFor o bounds (sbVisibleFraction cfg)
       when (not disabled && capturing) $ do
-        newValue <- fractionAt o bounds thumbLen <$> getMousePos
+        mouseMain <- pointMain o <$> getMousePos
+        current   <- getExtentState trackId
+        -- 'requestExtentBy' accumulates, so the delta zeroes out whatever
+        -- the last drag on this track left behind before fixing this
+        -- drag's own offset.
+        grabOffset <-
+          if ciWasDragging ci
+            then pure current
+            else do
+              let offset = grabOffsetAt (thumbOriginFor o bounds thumbLen value0) thumbLen mouseMain
+              requestExtentBy trackId (offset - current)
+              pure offset
+        let newValue = fractionForOrigin o bounds thumbLen (mouseMain - grabOffset)
         when (newValue /= value0) $ requestScrollTo scrollEid newValue
       drawTrack o s bounds hovered capturing (sbVisibleFraction cfg) value0
 

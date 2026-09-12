@@ -138,6 +138,21 @@ spec = describe "Blink.Controls.ScrollBar" $ do
       result <- runInteractions barBounds ctx (disableWhen True (render [])) [MoveTo valueHalfPoint] [MouseDown valueHalfPoint]
       contextScrollState scrollEid (resultContext result) `shouldBe` 0
 
+    it "does not move when grabbed at a point inside the thumb, unlike a press on the bare track" $ do
+      ctx <- seededAt 0.5
+      let grabPoint = Point 8 45
+      result <- runInteractions barBounds ctx (render []) [MoveTo grabPoint] [MouseDown grabPoint]
+      contextScrollState scrollEid (resultContext result) `shouldBe` 0.5
+
+    it "keeps the grabbed point under the pointer while dragging, instead of recentring the thumb under it" $ do
+      ctx <- seededAt 0.5
+      let grabPoint = Point 8 45
+      result <- runInteractions barBounds ctx (render [])
+                  [MoveTo grabPoint]
+                  [MouseDown grabPoint, DragTo (Point 8 65)]
+      -- Thumb edge follows 5px behind the grab point: (65 - 5 - 16) / 48.
+      contextScrollState scrollEid (resultContext result) `shouldSatisfy` (\v -> abs (v - (44 / 48)) < 1e-9)
+
   describe "arrow buttons" $ do
     it "decreases the value by the step when the decrement arrow is pressed" $ do
       ctx <- seededAt 0.5
