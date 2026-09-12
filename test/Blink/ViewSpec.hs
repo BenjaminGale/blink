@@ -587,8 +587,9 @@ spec = describe "Blink.View" $ do
       getDrawCommands ctx `shouldBe` [DrawText testBounds "hello" colour AlignCenter]
 
     it "drawImage emits a DrawImage command for the current bounds" $ do
-      (_, ctx) <- run0 (drawImage "icons/check.svg")
-      getDrawCommands ctx `shouldBe` [DrawImage testBounds "icons/check.svg"]
+      let colour = RGBA 1 0 0 1
+      (_, ctx) <- run0 (drawImage colour "icons/check.svg")
+      getDrawCommands ctx `shouldBe` [DrawImage testBounds "icons/check.svg" colour]
 
     it "measureImage returns the size the ImageMeasurer reports for the path" $ do
       let stubMeasurer = noOpImageMeasurer { imNaturalSize = \_ -> pure (Size 24 24) }

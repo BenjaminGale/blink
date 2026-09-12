@@ -33,7 +33,7 @@ import Blink.Controls.Control
 import Blink.Controls.Image.Style (imageStyleKey)
 import Blink.Geometry (Alignment (TopLeft), Size (..))
 import Blink.Layout.Constraints (Layout (..), fitContent)
-import Blink.Rendering (ImagePath)
+import Blink.Rendering (Colour (..), ImagePath)
 import Blink.View (measureImage)
 import Blink.View.Drawing (drawImage)
 import Blink.Element (Element (..), HasLayoutConfig (..))
@@ -124,7 +124,7 @@ image attrs = Element
     cfg  = resolve defaultImageConfig attrs
     ctrl = (icControl cfg)
       { ccFocusPolicy = NotFocusable
-      , ccContent     = const (drawImage (icSource cfg))
+      , ccContent     = const (drawImage (RGBA 1 1 1 1) (icSource cfg))
       }
     intrinsicSize = const $ do
       natural <- measureImage (icSource cfg)

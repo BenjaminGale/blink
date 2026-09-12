@@ -97,6 +97,8 @@ lightPalette = Palette
   , paletteTextOnAccent    = RGBA 1.0   1.0   1.0   1  -- #FFFFFF
   , paletteBorder          = RGBA 0.824 0.827 0.839 1  -- #D2D3D6
   , paletteBorderHover     = RGBA 0.725 0.729 0.745 1  -- #B9BABE
+  , paletteIcon            = RGBA 0.400 0.400 0.427 1  -- #66666D, softer than paletteTextPrimary
+  , paletteIconHover       = RGBA 0.157 0.157 0.176 1  -- #28282D, darker on hover
   }
 
 -- | Colours sampled from a dark-mode reference screenshot (a control-states
@@ -113,6 +115,8 @@ darkPalette = Palette
   , paletteTextOnAccent    = RGBA 1.0   1.0   1.0   1  -- #FFFFFF
   , paletteBorder          = RGBA 0.200 0.231 0.302 1  -- #333B4D
   , paletteBorderHover     = RGBA 0.290 0.329 0.408 1  -- #4A5468
+  , paletteIcon            = RGBA 0.239 0.435 0.941 1  -- #3D6FF0, the accent colour, resting
+  , paletteIconHover       = RGBA 0.478 0.616 0.965 1  -- #7A9DF6, lighter on hover
   }
 
 statusBarMetrics :: Metrics

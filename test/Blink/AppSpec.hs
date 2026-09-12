@@ -97,6 +97,9 @@ resultDraws (Quit ds _)     = ds
 drawnTexts :: FrameResult s -> [Text]
 drawnTexts r = [t | DrawText _ t _ _ <- resultDraws r]
 
+drawnImages :: FrameResult s -> [Text]
+drawnImages r = [p | DrawImage _ p _ <- resultDraws r]
+
 isContinue :: FrameResult s -> Bool
 isContinue (Continue _ _) = True
 isContinue _              = False
@@ -455,7 +458,7 @@ spec = do
         _      <- stepFrame handle (pointerAt (Point 50 50) True)
         result <- stepFrame handle (pointerAt (Point 50 50) False)
         resultState result `shouldBe` True
-        drawnTexts result `shouldContain` ["\10003"]
+        drawnImages result `shouldContain` ["assets/icons/check_box.svg"]
 
       it "dragging a real slider updates the app's state through the real update fold" $ do
         handle <- configureEventDriven sliderApp nullMsgQueue (pure ()) nullMeasurers

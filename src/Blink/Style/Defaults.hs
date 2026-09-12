@@ -52,7 +52,10 @@ import qualified Data.Map.Strict as Map
 
 import Blink.Rendering (TextAlign (..))
 import Blink.Style
-import Blink.Controls.Style (buttonStyle, containerStyle, controlMetrics, flatRowStyle, sliderStyle, toggleGroupStyle)
+import Blink.Controls.Style
+  (buttonStyle, containerStyle, controlMetrics, flatRowStyle, iconStyle, iconStyleKey, sliderStyle
+  , toggleGroupMetrics, toggleGroupStyle
+  )
 import Blink.Controls.Divider.Style (dividerStyle)
 import Blink.Controls.Label.Style (labelStyle)
 import Blink.Controls.ProgressBar.Style (progressBarStyle)
@@ -96,6 +99,7 @@ defaultTheme p = Theme
       , List.defaultStyleEntries p
       , Tree.defaultStyleEntries p
       , Table.defaultStyleEntries p
+      , [ (iconStyleKey, (toggleGroupMetrics, iconStyle p)) ]
       ])
   , themeDefaultStyle = (controlMetrics, buttonStyle AlignCenter p)
   }

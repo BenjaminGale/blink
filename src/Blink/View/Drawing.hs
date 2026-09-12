@@ -42,9 +42,12 @@ strokeRect colour edges = drawAt (\r -> StrokeBorder r colour edges)
 drawText :: Colour -> TextAlign -> Text -> View e msg ()
 drawText colour align text = drawAt (\r -> DrawText r text colour align)
 
--- | Renders the image at @path@ stretched to fill the current bounds.
-drawImage :: ImagePath -> View e msg ()
-drawImage path = drawAt (\r -> DrawImage r path)
+-- | Renders the image at @path@ stretched to fill the current bounds,
+-- tinted by @colour@ -- see 'DrawImage' for what tinting does and does
+-- not affect. Pass an opaque white ('Blink.Rendering.RGBA' @1 1 1 1@) to
+-- draw the image's own colours unaltered.
+drawImage :: Colour -> ImagePath -> View e msg ()
+drawImage colour path = drawAt (\r -> DrawImage r path colour)
 
 -- | Wraps a sub-tree in a clip region matching the current bounds. Draw
 -- commands produced by the sub-tree that fall outside the region are discarded,

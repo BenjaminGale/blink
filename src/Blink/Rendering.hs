@@ -114,8 +114,13 @@ data DrawCommand
     -- ^ Stroke the border of the rectangle with the given colour and per-side widths in pixels.
   | DrawText Rectangle Text Colour TextAlign
     -- ^ Render text within the rectangle using the given colour and alignment.
-  | DrawImage Rectangle ImagePath
-    -- ^ Render the image at the given path, stretched to fill the rectangle.
+  | DrawImage Rectangle ImagePath Colour
+    -- ^ Render the image at the given path, stretched to fill the
+    -- rectangle, tinted by the given colour -- a fully-opaque white
+    -- ('RGBA 1 1 1 1') draws the image's own colours unaltered; any
+    -- other colour multiplies over it, so tinting only has a visible
+    -- effect on an image whose own pixels are white or greyscale (as
+    -- Blink's own bundled icons are).
   | PushClip Rectangle
     -- ^ Push a clip region onto the clip stack; subsequent draw commands
     -- are clipped to this rectangle intersected with any outer clip regions.

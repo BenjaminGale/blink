@@ -97,14 +97,21 @@ stripAttr attr t = case T.breakOn (attr <> "=") t of
 -- | Overrides an SVG document's declared width\/height so SDL2_image
 -- rasterizes it at exactly @(w, h)@ pixels, rather than whatever the
 -- source itself declares (most often its @viewBox@, which can be far
--- smaller than any size it's actually displayed at).
+-- smaller than any size it's actually displayed at); also forces its
+-- root @fill@ to white, so a source whose paths don't set their own
+-- @fill@ (as Blink's own bundled icons don't) renders as a plain white
+-- silhouette rather than the SVG-default black -- see 'renderImage' for
+-- why that's what makes tinting via 'SDL.textureColorMod' possible at
+-- all. A source with its own explicit per-path @fill@ (a multi-colour
+-- illustration, say) is unaffected, since an explicit @fill@ always
+-- wins over one merely inherited from the root.
 sizedSvgSource :: CInt -> CInt -> Text -> Text
-sizedSvgSource w h = insertSize . stripAttr "height" . stripAttr "width"
+sizedSvgSource w h = insertAttrs . stripAttr "fill" . stripAttr "height" . stripAttr "width"
   where
-    insertSize t = case T.breakOn "<svg" t of
+    insertAttrs t = case T.breakOn "<svg" t of
       (before, rest) | not (T.null rest) ->
-        before <> "<svg width=\"" <> T.pack (show w) <> "\" height=\"" <> T.pack (show h) <> "\""
-          <> T.drop 4 rest
+        before <> "<svg width=\"" <> T.pack (show w) <> "\" height=\"" <> T.pack (show h)
+          <> "\" fill=\"white\"" <> T.drop 4 rest
       _ -> t
 
 -- | Re-rasterizes the @.svg@ at @path@ at exactly @(w, h)@ pixels and
@@ -131,6 +138,9 @@ toWord8 c = round (c * 255)
 
 toSDLColor :: Colour -> SDL.V4 Word8
 toSDLColor (RGBA r g b _) = SDL.V4 (toWord8 r) (toWord8 g) (toWord8 b) 255
+
+toSDLColor3 :: Colour -> SDL.V3 Word8
+toSDLColor3 (RGBA r g b _) = SDL.V3 (toWord8 r) (toWord8 g) (toWord8 b)
 
 toSDLRect :: Rectangle -> SDL.Rectangle CInt
 toSDLRect r =
@@ -199,11 +209,21 @@ renderText renderer font cache r txt color textAlign = do
       pure (tex, w, h)
   SDL.copy renderer texture Nothing (Just (alignedTextRect r textAlign (fromIntegral tw) (fromIntegral th)))
 
-renderImage :: SDL.Renderer -> ImageCache -> Rectangle -> ImagePath -> IO ()
-renderImage renderer cache r path = do
+-- | Tints the image at @path@ by @colour@ -- see 'DrawImage' for what
+-- that does and does not affect, and 'sizedSvgSource' for how an
+-- @.svg@'s own paths end up white (and so tintable) in the first place.
+-- Sets the texture's colour\/alpha mod immediately before every draw
+-- (rather than once at load time), since the same cached texture is
+-- reused across draws that may want different tints -- e.g. a checkbox
+-- icon drawn once at rest and once, elsewhere on screen, while hovered.
+renderImage :: SDL.Renderer -> ImageCache -> Rectangle -> ImagePath -> Colour -> IO ()
+renderImage renderer cache r path colour = do
   let sdlRect = toSDLRect r
       SDL.Rectangle _ (SDL.V2 w h) = sdlRect
+      RGBA _ _ _ a = colour
   texture <- loadSizedImageTexture renderer cache path (w, h)
+  SDL.textureColorMod texture $= toSDLColor3 colour
+  SDL.textureAlphaMod texture $= toWord8 a
   SDL.copy renderer texture Nothing (Just sdlRect)
 
 pushClip :: SDL.Renderer -> IORef [SDL.Rectangle CInt] -> Rectangle -> IO ()
@@ -230,7 +250,7 @@ submitDrawCommand renderer _ _ _ _          (FillRect r color)            = rend
 submitDrawCommand renderer _ _ _ _          (StrokeBorder r color edges)  = renderBorder renderer r color edges
 submitDrawCommand _ _ _ _ _                 (DrawText _ txt _ _) | T.null txt = pure ()
 submitDrawCommand renderer font cache _ _   (DrawText r txt color textAlign) = renderText renderer font cache r txt color textAlign
-submitDrawCommand renderer _ _ imgCache _   (DrawImage r path)            = renderImage  renderer imgCache r path
+submitDrawCommand renderer _ _ imgCache _   (DrawImage r path colour)     = renderImage  renderer imgCache r path colour
 submitDrawCommand renderer _ _ _ clipRef    (PushClip r)                  = pushClip     renderer clipRef r
 submitDrawCommand renderer _ _ _ clipRef     PopClip                      = popClip      renderer clipRef
 

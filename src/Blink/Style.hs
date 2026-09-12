@@ -48,6 +48,8 @@ palette = Palette
   , paletteTextOnAccent     = RGBA 1 1 1 1
   , paletteBorder           = RGBA 0.4 0.4 0.4 1
   , paletteBorderHover      = RGBA 0.6 0.6 0.6 1
+  , paletteIcon             = RGBA 1 1 1 1
+  , paletteIconHover        = RGBA 0.4 0.6 1.0 1
   }
 
 baseStyle :: Style
@@ -149,6 +151,8 @@ data Palette = Palette
   , paletteTextOnAccent :: Colour     -- ^ Text colour drawn over 'paletteAccent'.
   , paletteBorder :: Colour           -- ^ Default border colour.
   , paletteBorderHover :: Colour      -- ^ Border colour while hovered.
+  , paletteIcon :: Colour             -- ^ Default colour for a drawn icon (e.g. a checkbox's box).
+  , paletteIconHover :: Colour        -- ^ Icon colour while hovered.
   } deriving (Eq, Show)
 
 -- * Metrics

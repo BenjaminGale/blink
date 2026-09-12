@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {- |
 Module: Blink.Controls.Style
 
@@ -32,6 +33,8 @@ module Blink.Controls.Style
   , sliderStyle
   , toggleGroupStyle
   , containerStyle
+  , iconStyleKey
+  , iconStyle
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -195,5 +198,34 @@ containerStyle p = StyleSet
       [ (CommonMouseOver, \s -> s { styleBorderColour = Just (paletteBorderHover p) })
       , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
       , (FocusFocused,    \s -> s { styleBorderColour = Just (paletteFocusRing p) })
+      ]
+  }
+
+-- | The 'StyleKey' a control resolves an icon's own tint from --
+-- independently of whatever 'StyleKey' governs the row it sits in (e.g.
+-- 'Blink.Controls.Checkbox.Style.checkboxStyleKey'), so hovering the
+-- icon specifically can recolour it without also recolouring that row's
+-- caption text. A control resolves this itself (it isn't part of the
+-- usual per-control 'ccStyleKey'\/'currentStyle' path), against whatever
+-- 'Blink.Style.VisualState's are relevant to the icon alone -- see
+-- 'Blink.Controls.Checkbox.checkbox' for how.
+iconStyleKey :: StyleKey e
+iconStyleKey = Class "icon"
+
+-- | Carries only a themed colour, via 'styleTextColour' -- 'paletteIcon'
+-- at rest, 'paletteIconHover' while hovered, 'paletteTextMuted' while
+-- disabled. No background\/border of its own since nothing about a
+-- plain icon uses them.
+iconStyle :: Palette -> StyleSet
+iconStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = transparent
+      , styleTextColour   = paletteIcon p
+      , styleTextAlign    = AlignLeft
+      , styleBorderColour = Nothing
+      }
+  , styleOverrides = Map.fromList
+      [ (CommonMouseOver, \s -> s { styleTextColour = paletteIconHover p })
+      , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
       ]
   }

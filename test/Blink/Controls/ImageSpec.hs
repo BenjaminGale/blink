@@ -66,16 +66,16 @@ spec :: Spec
 spec = describe "Blink.Controls.Image" $ do
   it "sizes to the image's natural size when no fit dimension is set" $ do
     draws <- run []
-    draws `shouldContain` [DrawImage (Rectangle 0 0 100 50) "test.svg"]
+    draws `shouldContain` [DrawImage (Rectangle 0 0 100 50) "test.svg" (RGBA 1 1 1 1)]
 
   it "scales proportionally from fitWidth alone" $ do
     draws <- run [fitWidth 50]
-    draws `shouldContain` [DrawImage (Rectangle 0 0 50 25) "test.svg"]
+    draws `shouldContain` [DrawImage (Rectangle 0 0 50 25) "test.svg" (RGBA 1 1 1 1)]
 
   it "scales proportionally from fitHeight alone" $ do
     draws <- run [fitHeight 100]
-    draws `shouldContain` [DrawImage (Rectangle 0 0 200 100) "test.svg"]
+    draws `shouldContain` [DrawImage (Rectangle 0 0 200 100) "test.svg" (RGBA 1 1 1 1)]
 
   it "ignores aspect ratio when preserveRatio is False, using each fit dimension independently" $ do
     draws <- run [fitWidth 10, fitHeight 10, preserveRatio False]
-    draws `shouldContain` [DrawImage (Rectangle 0 0 10 10) "test.svg"]
+    draws `shouldContain` [DrawImage (Rectangle 0 0 10 10) "test.svg" (RGBA 1 1 1 1)]
