@@ -8,12 +8,27 @@ import SDL (($=))
 import qualified SDL
 import qualified SDL.Font as Font
 import qualified SDL.Raw
+import Control.Concurrent.STM (atomically, flushTBQueue, newTBQueueIO, writeTBQueue)
 import Control.Monad (foldM, void)
 import Data.IORef (newIORef)
 import Data.Maybe (isJust)
 import Foreign.Ptr (nullPtr)
 import Data.Text (Text)
 import Foreign.C.Types (CInt)
+
+-- | A bounded, STM-backed 'MsgQueue' -- Blink only defines the interface
+-- ('MsgQueue', 'Cmd'); the backend owns the actual data structure and its
+-- backpressure policy. 'writeTBQueue' blocks the completing 'Cmd''s own
+-- thread once @capacity@ results are already waiting to be drained, rather
+-- than dropping any; 'flushTBQueue' drains everything currently queued
+-- without blocking, which is exactly what 'stepFrame' needs each frame.
+newBoundedMsgQueue :: Int -> IO (MsgQueue msg)
+newBoundedMsgQueue capacity = do
+  queue <- newTBQueueIO (fromIntegral capacity)
+  pure MsgQueue
+    { enqueueMsg = atomically . writeTBQueue queue
+    , drainMsgs  = atomically (flushTBQueue queue)
+    }
 
 demoFontPath :: FilePath
 demoFontPath = "assets/fonts/Inter-Regular.ttf"
@@ -39,6 +54,7 @@ main = do
                        Nothing -> \_ -> pure False
                        Just et -> \evs -> or <$> mapM (fmap isJust . SDL.getRegisteredEvent et) evs
   measurer <- mkTextMeasurer font
+  msgQueue <- newBoundedMsgQueue 256
 
   let renderFrame calls = do
         SDL.rendererDrawColor renderer $= SDL.V4 229 229 234 255
@@ -47,7 +63,7 @@ main = do
         mapM_ (submitDrawCommand renderer font texCache clipRef) calls
         SDL.present renderer
 
-  handle <- configureEventDriven demoApp notify measurer
+  handle <- configureEventDriven demoApp msgQueue notify measurer
 
   loop handle False renderFrame window checkAnimTick
 

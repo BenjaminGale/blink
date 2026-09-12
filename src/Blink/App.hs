@@ -12,7 +12,7 @@ data App e msg s = App
   { startUp :: IO s
   , theme   :: s -> Theme e
   , view    :: s -> Element e msg
-  , update  :: msg -> Update s ()
+  , update  :: msg -> Update s msg ()
   }
 @
 
@@ -76,6 +76,16 @@ render the final frame before exiting.
 Set 'quitRequested' in 'FrameInput' when the platform detects a close signal
 (e.g. the window's close button). 'stepFrame' returns 'Quit' on the same frame.
 
+= Commands
+
+An 'Blink.Update.Update' handler can request a 'Cmd' -- an 'IO' action run
+off the frame thread, whose result is folded back into the state as an
+ordinary message on a later frame. Delivery goes through a 'MsgQueue': a
+completing 'Cmd' calls 'enqueueMsg', and 'stepFrame' calls 'drainMsgs' once
+per frame before folding messages into the state. Blink has no opinion on
+the queue's underlying data structure or backpressure policy -- the backend
+supplies one, typically built on "Control.Concurrent.STM"'s @TBQueue@.
+
 = Text measurement
 
 'TextMeasurer' is provided at configure time for cursor positioning and layout.
@@ -93,6 +103,8 @@ module Blink.App
     -- * Frame types
   , FrameInput (..)
   , FrameResult (..)
+    -- * Commands
+  , MsgQueue (..)
     -- * Text measurement
   , TextMeasurer (..)
   ) where
@@ -100,11 +112,11 @@ module Blink.App
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Monad (when, void)
 import Data.IORef
-import Data.List (foldl')
 import Data.Text (Text)
 import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
 
+import Blink.Cmd (Cmd, runCmd)
 import Blink.Geometry (Point (..), Rectangle, Size (..), rectFromSize)
 import Blink.Input (KeyEvent, InputState (..), advanceButton)
 import Blink.View.Context (ctxMouse)
@@ -119,7 +131,7 @@ import Blink.View
   , contextAnimation, contextRequiresAnimation
   )
 import Blink.Element (Element, runElement)
-import Blink.Update (Update, runUpdate)
+import Blink.Update (Update, runUpdateCmds)
 
 -- | Describes a complete Blink application.
 --
@@ -136,35 +148,50 @@ data App e msg s = App
     -- ^ The view tree, given the application state as it was at the start of
     -- the frame. Queues messages with 'Blink.View.emit'; run once or twice per
     -- frame depending on the render mode.
-  , update :: msg -> Update s ()
+  , update :: msg -> Update s msg ()
     -- ^ Folds one message emitted by 'view' into the application state.
-    -- Every message queued during a frame is applied in emission order.
+    -- Every message queued during a frame is applied in emission order. May
+    -- request a 'Cmd' via 'Blink.Update.cmd' -- see \"Commands\" above.
+  }
+
+-- | Delivery mechanism for messages produced by a 'Cmd' completing off the
+-- frame thread. A completing 'Cmd' calls 'enqueueMsg'; 'stepFrame' calls
+-- 'drainMsgs' once per frame, non-blocking, before folding messages into the
+-- state. This is deliberately just an interface: Blink has no opinion on the
+-- underlying data structure or its backpressure policy, so the backend
+-- supplies one -- e.g. built on "Control.Concurrent.STM"'s @TBQueue@.
+data MsgQueue msg = MsgQueue
+  { enqueueMsg :: msg -> IO ()
+    -- ^ Called once, off the frame thread, when a 'Cmd' completes.
+  , drainMsgs :: IO [msg]
+    -- ^ Called once per frame, on the frame thread. Must not block --
+    -- return the messages available right now (empty if none).
   }
 
 -- | Produces a 'BlinkHandle' for a continuous render backend. The draw list
 -- from the first render pass is submitted immediately each frame.
-configureContinuous :: Ord e => App e msg s -> TextMeasurer -> IO (BlinkHandle s)
-configureContinuous app measurer = do
+configureContinuous :: Ord e => App e msg s -> MsgQueue msg -> TextMeasurer -> IO (BlinkHandle s)
+configureContinuous app queue measurer = do
   s <- startUp app
   refs <- AppRefs
     <$> newIORef (emptyViewContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) measurer)
     <*> newIORef s
     <*> newIORef False
     <*> newIORef Nothing
-  pure BlinkHandle { stepFrame = doStepContinuous app refs }
+  pure BlinkHandle { stepFrame = doStepContinuous app refs queue }
 
 -- | Produces a 'BlinkHandle' for an event-driven backend. The 'IO ()'
--- callback is called when the animation ticker fires so the backend can
--- unblock its event wait.
-configureEventDriven :: Ord e => App e msg s -> IO () -> TextMeasurer -> IO (BlinkHandle s)
-configureEventDriven app notify measurer = do
+-- callback is called when the animation ticker fires, or when a 'Cmd'
+-- completes, so the backend can unblock its event wait.
+configureEventDriven :: Ord e => App e msg s -> MsgQueue msg -> IO () -> TextMeasurer -> IO (BlinkHandle s)
+configureEventDriven app queue notify measurer = do
   s <- startUp app
   refs <- AppRefs
     <$> newIORef (emptyViewContext (rectFromSize (Size 0 0)) emptyInputState (theme app s) measurer)
     <*> newIORef s
     <*> newIORef False
     <*> newIORef Nothing
-  pure BlinkHandle { stepFrame = doStepEventDriven app refs notify }
+  pure BlinkHandle { stepFrame = doStepEventDriven app refs queue notify }
 
 -- | The interface the backend uses each frame. Obtain via 'configureContinuous'
 -- or 'configureEventDriven'.
@@ -232,13 +259,36 @@ buildCtx app winRect inputState delta isAnimTick state prevCtx =
       animState = mkAnimationState delta elapsed isAnimTick
   in nextFrameContext winRect inputState (theme app state) animState prevCtx
 
+-- | Folds a batch of messages into state via @update@, in order, collecting
+-- every 'Cmd' any of them requested along the way.
+foldMsgs :: App e msg s -> s -> [msg] -> (s, [Cmd msg])
+foldMsgs app = go []
+  where
+    go cs s []       = (s, cs)
+    go cs s (m : ms) =
+      let (s', cs') = runUpdateCmds (update app m) s
+      in go (cs ++ cs') s' ms
+
+-- | Forks each 'Cmd', posting its result to @queue@ and calling @notify@
+-- once it completes -- the same wake-up path 'forkAnimationTicker' already
+-- uses, so an event-driven backend blocked on its event wait unblocks as
+-- soon as a result is ready. @notify@ is a no-op in continuous mode, which
+-- will pick the result up on its own next frame regardless.
+dispatchCmds :: MsgQueue msg -> IO () -> [Cmd msg] -> IO ()
+dispatchCmds queue notify = mapM_ $ \c -> void $ forkIO $ do
+  m <- runCmd c
+  enqueueMsg queue m
+  notify
+
 runFrame
   :: Ord e
   => App e msg s
   -> AppRefs e msg s
+  -> MsgQueue msg
+  -> IO ()
   -> FrameInput
   -> IO (ViewContext e msg, s)
-runFrame app refs input = do
+runFrame app refs queue notify input = do
   let winRect    = rectFromSize (windowSize input)
       inputState = toInputState input
 
@@ -249,21 +299,25 @@ runFrame app refs input = do
   prevCtx <- readIORef (refsCtx refs)
   let ctx = buildCtx app winRect inputState delta (isAnimationTick input) state prevCtx
   ((), ctx') <- runView (runElement (view app state)) ctx
-  let state' = foldl' (\s msg -> runUpdate (update app msg) s) state (getMessages ctx')
+  -- Cmd results that completed since the last frame are treated as having
+  -- happened before this frame's own view emissions.
+  pending <- drainMsgs queue
+  let (state', cmds) = foldMsgs app state (pending ++ getMessages ctx')
 
+  dispatchCmds queue notify cmds
   writeIORef (refsState refs) state'
 
   pure (ctx', state')
 
-doStepContinuous :: Ord e => App e msg s -> AppRefs e msg s -> FrameInput -> IO (FrameResult s)
-doStepContinuous app refs input = do
-  (ctx', state') <- runFrame app refs input
+doStepContinuous :: Ord e => App e msg s -> AppRefs e msg s -> MsgQueue msg -> FrameInput -> IO (FrameResult s)
+doStepContinuous app refs queue input = do
+  (ctx', state') <- runFrame app refs queue (pure ()) input
   writeIORef (refsCtx refs) ctx'
   pure $ toResult input (getDrawCommands ctx') state'
 
-doStepEventDriven :: Ord e => App e msg s -> AppRefs e msg s -> IO () -> FrameInput -> IO (FrameResult s)
-doStepEventDriven app refs notify input = do
-  (firstPassCtx, state1) <- runFrame app refs input
+doStepEventDriven :: Ord e => App e msg s -> AppRefs e msg s -> MsgQueue msg -> IO () -> FrameInput -> IO (FrameResult s)
+doStepEventDriven app refs queue notify input = do
+  (firstPassCtx, state1) <- runFrame app refs queue notify input
   (renderedCtx, state2) <-
     if null (getMessages firstPassCtx) && not (hasPendingUiEffects firstPassCtx)
       -- Nothing was queued, so nothing about the app or view state changed —
@@ -291,7 +345,8 @@ doStepEventDriven app refs notify input = do
         -- behind whatever folding these messages changes in state -- the
         -- same one-frame staleness continuous mode already has, just
         -- reached from the second pass instead of the first.
-        let state2 = foldl' (\s msg -> runUpdate (update app msg) s) state1 (getMessages ctx2)
+        let (state2, cmds2) = foldMsgs app state1 (getMessages ctx2)
+        dispatchCmds queue notify cmds2
         pure (ctx2, state2)
   writeIORef (refsCtx refs) renderedCtx
   writeIORef (refsState refs) state2

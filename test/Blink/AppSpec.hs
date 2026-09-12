@@ -1,13 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.AppSpec (spec) where
 
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Monad (void, when)
-import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
+import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
+import Blink.Cmd (Cmd (..))
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
 import Blink.Layout.Constraints (Layout (..), fill)
@@ -21,7 +23,7 @@ import Blink.Controls.Control (control, defaultControlConfig, elementId, onFocus
 import Blink.Controls.ToggleButton (isSelected, onSelectedChanged)
 import qualified Blink.Controls.Slider as Slider
 import qualified Blink.Controls.TextInput as TextInput
-import Blink.Update (modify)
+import Blink.Update (cmd, modify)
 
 -- | Every test app below fills the whole test bounds; only the body of the
 -- wrapped action varies per app.
@@ -47,6 +49,25 @@ normalInput = mkInput False False
 
 nullMeasurer :: TextMeasurer
 nullMeasurer = noOpTextMeasurer
+
+-- | A 'MsgQueue' that holds nothing -- fine for any test app that never
+-- requests a 'Cmd' via 'cmd'.
+nullMsgQueue :: MsgQueue msg
+nullMsgQueue = MsgQueue { enqueueMsg = \_ -> pure (), drainMsgs = pure [] }
+
+-- | A real, IORef-backed 'MsgQueue' for tests that do exercise 'Cmd'
+-- dispatch, paired with an 'MVar' that's filled each time a message is
+-- enqueued -- lets a test block until an asynchronously-dispatched 'Cmd'
+-- has actually completed, rather than racing it with a sleep.
+newTestMsgQueue :: IO (MsgQueue msg, IO ())
+newTestMsgQueue = do
+  ref  <- newIORef []
+  done <- newEmptyMVar
+  let queue = MsgQueue
+        { enqueueMsg = \m -> atomicModifyIORef' ref (\ms -> (ms ++ [m], ())) >> putMVar done ()
+        , drainMsgs  = atomicModifyIORef' ref (\ms -> ([], ms))
+        }
+  pure (queue, takeMVar done)
 
 testStyle :: Style
 testStyle = Style
@@ -281,51 +302,65 @@ viewCountApp emits = App
   , update         = \_ -> pure ()
   }
 
+data CmdMsg = Start | Done Text
+
+-- | Requests a 'Cmd' the first time it's rendered with empty state, and
+-- folds the message that 'Cmd' completes with into the state.
+cmdApp :: App () CmdMsg [Text]
+cmdApp = App
+  { startUp = pure []
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \s -> fullView (when (null s) (emit Start))
+  , update  = \m -> case m of
+      Start  -> cmd (Cmd (pure (Done "done")))
+      Done t -> modify (++ [t])
+  }
+
 spec :: Spec
 spec = do
   describe "App integration" $ do
     describe "configureContinuous" $ do
       it "a normal frame returns Continue" $ do
-        handle <- configureContinuous counterApp nullMeasurer
+        handle <- configureContinuous counterApp nullMsgQueue nullMeasurer
         result <- stepFrame handle normalInput
         isContinue result `shouldBe` True
 
       it "dispatched modifiers are applied to produce the frame state" $ do
-        handle <- configureContinuous counterApp nullMeasurer
+        handle <- configureContinuous counterApp nullMsgQueue nullMeasurer
         result <- stepFrame handle normalInput
         resultState result `shouldBe` 1
 
       it "returns Quit when quitRequested is True" $ do
-        handle <- configureContinuous counterApp nullMeasurer
+        handle <- configureContinuous counterApp nullMsgQueue nullMeasurer
         result <- stepFrame handle (mkInput True False)
         isQuit result `shouldBe` True
 
       it "draw commands from the view appear in the result" $ do
         let c = RGBA 1 0 0 1
-        handle <- configureContinuous (drawingApp c) nullMeasurer
+        handle <- configureContinuous (drawingApp c) nullMsgQueue nullMeasurer
         result <- stepFrame handle normalInput
         resultDraws result `shouldContain` [FillRect (Rectangle 0 0 100 100) c]
 
       it "state accumulates correctly across multiple frames" $ do
-        handle <- configureContinuous counterApp nullMeasurer
+        handle <- configureContinuous counterApp nullMsgQueue nullMeasurer
         _ <- stepFrame handle normalInput
         _ <- stepFrame handle normalInput
         r3 <- stepFrame handle normalInput
         resultState r3 `shouldBe` 3
 
       it "draw commands reflect the pre-dispatch app state" $ do
-        handle <- configureContinuous stateDrawApp nullMeasurer
+        handle <- configureContinuous stateDrawApp nullMsgQueue nullMeasurer
         result <- stepFrame handle normalInput
         drawnTexts result `shouldContain` ["0"]
 
       it "messages emitted in one frame are folded in emission order" $ do
-        handle <- configureContinuous multiEmitApp nullMeasurer
+        handle <- configureContinuous multiEmitApp nullMsgQueue nullMeasurer
         result <- stepFrame handle normalInput
         resultState result `shouldBe` "ab"
 
     describe "configureEventDriven" $ do
       it "a normal frame returns Continue" $ do
-        handle <- configureEventDriven counterApp (pure ()) nullMeasurer
+        handle <- configureEventDriven counterApp nullMsgQueue (pure ()) nullMeasurer
         result <- stepFrame handle normalInput
         isContinue result `shouldBe` True
 
@@ -333,47 +368,47 @@ spec = do
       -- mode renders twice whenever a message is pending, so this counts
       -- twice per input event.
       it "dispatched modifiers are applied to produce the frame state" $ do
-        handle <- configureEventDriven counterApp (pure ()) nullMeasurer
+        handle <- configureEventDriven counterApp nullMsgQueue (pure ()) nullMeasurer
         result <- stepFrame handle normalInput
         resultState result `shouldBe` 2
 
       it "returns Quit when quitRequested is True" $ do
-        handle <- configureEventDriven counterApp (pure ()) nullMeasurer
+        handle <- configureEventDriven counterApp nullMsgQueue (pure ()) nullMeasurer
         result <- stepFrame handle (mkInput True False)
         isQuit result `shouldBe` True
 
       it "draw commands reflect the post-dispatch app state" $ do
-        handle <- configureEventDriven stateDrawApp (pure ()) nullMeasurer
+        handle <- configureEventDriven stateDrawApp nullMsgQueue (pure ()) nullMeasurer
         result <- stepFrame handle normalInput
         drawnTexts result `shouldContain` ["1"]
 
       it "key events are not replayed in the second render pass" $ do
-        handle <- configureEventDriven keyCountApp (pure ()) nullMeasurer
+        handle <- configureEventDriven keyCountApp nullMsgQueue (pure ()) nullMeasurer
         let oneKey = normalInput { keyEvents = [KeyEvent KeyReturn [] False] }
         result <- stepFrame handle oneKey
         resultState result `shouldBe` 1
 
     describe "frame context progression" $ do
       it "view state written in frame N is readable in frame N+1" $ do
-        handle <- configureContinuous uiStateApp nullMeasurer
+        handle <- configureContinuous uiStateApp nullMsgQueue nullMeasurer
         r1 <- stepFrame handle normalInput
         r2 <- stepFrame handle normalInput
         (resultState r1, resultState r2) `shouldBe` (0, 1)
 
       it "animation delta is 0 on non-tick frames" $ do
-        handle <- configureContinuous deltaApp nullMeasurer
+        handle <- configureContinuous deltaApp nullMsgQueue nullMeasurer
         result <- stepFrame handle normalInput
         resultState result `shouldBe` 0.0
 
     describe "capture across the render passes" $ do
       it "continuous mode's single pass still shows capture on the release frame" $ do
-        handle <- configureContinuous captureApp nullMeasurer
+        handle <- configureContinuous captureApp nullMsgQueue nullMeasurer
         _      <- stepFrame handle (mouseInput True)
         result <- stepFrame handle (mouseInput False)
         drawnTexts result `shouldContain` ["dragging"]
 
       it "event-driven mode's second pass still shows capture on the release frame" $ do
-        handle <- configureEventDriven captureApp (pure ()) nullMeasurer
+        handle <- configureEventDriven captureApp nullMsgQueue (pure ()) nullMeasurer
         _      <- stepFrame handle (mouseInput True)
         result <- stepFrame handle (mouseInput False)
         drawnTexts result `shouldContain` ["dragging"]
@@ -381,37 +416,37 @@ spec = do
     describe "second pass is skipped when nothing was queued" $ do
       it "runs the view once when a frame emits nothing" $ do
         ref    <- newIORef 0
-        handle <- configureEventDriven (viewCountApp False) (pure ()) (countingMeasurer ref)
+        handle <- configureEventDriven (viewCountApp False) nullMsgQueue (pure ()) (countingMeasurer ref)
         _      <- stepFrame handle normalInput
         readIORef ref `shouldReturn` 1
 
       it "runs the view twice when a frame emits a message" $ do
         ref    <- newIORef 0
-        handle <- configureEventDriven (viewCountApp True) (pure ()) (countingMeasurer ref)
+        handle <- configureEventDriven (viewCountApp True) nullMsgQueue (pure ()) (countingMeasurer ref)
         _      <- stepFrame handle normalInput
         readIORef ref `shouldReturn` 2
 
     describe "a real control driven through the actual frame loop" $ do
       it "clicking a real checkbox toggles the app's state and is reflected in that same click's draw commands" $ do
-        handle <- configureEventDriven checkboxApp (pure ()) nullMeasurer
+        handle <- configureEventDriven checkboxApp nullMsgQueue (pure ()) nullMeasurer
         _      <- stepFrame handle (pointerAt (Point 50 50) True)
         result <- stepFrame handle (pointerAt (Point 50 50) False)
         resultState result `shouldBe` True
         drawnTexts result `shouldContain` ["\10003"]
 
       it "dragging a real slider updates the app's state through the real update fold" $ do
-        handle <- configureEventDriven sliderApp (pure ()) nullMeasurer
+        handle <- configureEventDriven sliderApp nullMsgQueue (pure ()) nullMeasurer
         result <- stepFrame handle (pointerAt (Point 50 50) True)
         resultState result `shouldBe` 0.5
 
       it "typing into a real text field updates the app's state through the real update fold" $ do
-        handle <- configureEventDriven textInputApp (pure ()) nullMeasurer
+        handle <- configureEventDriven textInputApp nullMsgQueue (pure ()) nullMeasurer
         _      <- stepFrame handle normalInput -- claims focus, selects the (empty) value
         result <- stepFrame handle (typedInput "hi")
         resultState result `shouldBe` "hi"
 
       it "tabbing focus between two real controls updates the app's state through the real update fold" $ do
-        handle <- configureEventDriven focusApp (pure ()) nullMeasurer
+        handle <- configureEventDriven focusApp nullMsgQueue (pure ()) nullMeasurer
         _      <- stepFrame handle normalInput -- FocusA auto-claims
         result <- stepFrame handle tabInput
         resultState result `shouldBe` ["A gained", "A lost", "B gained"]
@@ -419,7 +454,17 @@ spec = do
       -- Clicking B queues its focus change as a UiEffect that settles
       -- during the second render pass within this same stepFrame call.
       it "clicking to focus a real control still reaches update when it settles on the second pass" $ do
-        handle <- configureEventDriven focusApp (pure ()) nullMeasurer
+        handle <- configureEventDriven focusApp nullMsgQueue (pure ()) nullMeasurer
         _      <- stepFrame handle normalInput -- FocusA auto-claims
         result <- stepFrame handle (pointerAt (Point 75 50) True)
         resultState result `shouldBe` ["A gained", "A lost", "B gained"]
+
+    describe "Cmd dispatch" $ do
+      it "a Cmd's result is folded into state on a later frame, via the MsgQueue" $ do
+        (queue, waitForResult) <- newTestMsgQueue
+        handle <- configureContinuous cmdApp queue nullMeasurer
+        r1     <- stepFrame handle normalInput -- requests the Cmd; too soon to see its result
+        waitForResult                          -- block until the forked Cmd has enqueued it
+        r2     <- stepFrame handle normalInput -- drains and folds it
+        resultState r1 `shouldBe` []
+        resultState r2 `shouldBe` ["done"]

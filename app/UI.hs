@@ -2,6 +2,7 @@
 module UI (ControlId, AppState (..), demoApp) where
 
 import Blink.App hiding (Continue)
+import Blink.Cmd (Cmd (..))
 import Blink.Controls hiding (rowHeight)
 import Blink.Controls.Control
   (ChildNavigation (..), ContainedNavigation (..), ControlConfig (..), EntryPolicy (..), FocusPolicy (..)
@@ -29,7 +30,9 @@ import Blink.View.Drawing (drawText, fillRect, withClip)
 import Blink.Element (Attribute, Element (..), elementWithLayout, noIntrinsicSize, runElement)
 import Blink.Update
 import Theme (ControlId (..), Page (..), containerStyleKey, lightTheme, darkTheme)
+import Control.Concurrent (threadDelay)
 import Control.Monad (forM_, void, when)
+import GHC.Clock (getMonotonicTimeNSec)
 import Data.List (sortOn)
 import Data.Maybe (listToMaybe)
 import Data.Ord (Down (..))
@@ -70,7 +73,13 @@ data AppState = AppState
   , fileSizeTreeExpanded  :: Set Text
   , fileSizeTreeSelection :: SingleSelection Text
   , fileSizeTreeSort      :: Maybe (Int, SortDirection)
+  , backgroundStatus :: BackgroundStatus
   }
+
+-- | Where a 'BackgroundPage' fetch stands: not yet started, in flight (a
+-- 'Blink.Cmd.Cmd' is currently running), or finished with the file's
+-- (simulated) contents.
+data BackgroundStatus = NotStarted | Fetching | Fetched Text
 
 data Msg
   = SetDarkMode Bool
@@ -101,6 +110,8 @@ data Msg
   | FileSizeTreeExpansionChanged (Set Text)
   | FileSizeTreeSelectionChanged (SingleSelection Text)
   | FileSizeTreeSortRequested (Int, SortDirection)
+  | StartFetch
+  | FetchFinished Text
 
 demoApp :: App ControlId Msg AppState
 demoApp = App
@@ -133,13 +144,14 @@ demoApp = App
       , fileSizeTreeExpanded  = defaultFileTreeExpanded
       , fileSizeTreeSelection = selectFirst (visibleFileSizeTreeItems Nothing defaultFileTreeExpanded)
       , fileSizeTreeSort      = Nothing
+      , backgroundStatus = NotStarted
       }
   , theme   = \s -> if darkMode s then darkTheme else lightTheme
   , view    = demoView
   , update  = updateApp
   }
 
-updateApp :: Msg -> Update AppState ()
+updateApp :: Msg -> Update AppState Msg ()
 updateApp msg = case msg of
   SetDarkMode v       -> modify $ \s -> s { darkMode = v }
   SetEditingEnabled v -> modify $ \s -> s { editingEnabled = v }
@@ -199,6 +211,22 @@ updateApp msg = case msg of
         (visibleFileSizeTreeItems (Just req) (fileSizeTreeExpanded s))
         (listToMaybe (selectedItems (fileSizeTreeSelection s)))
     }
+  StartFetch -> do
+    modify $ \s -> s { backgroundStatus = Fetching }
+    cmd (Cmd fetchDemoFile)
+  FetchFinished contents -> modify $ \s -> s { backgroundStatus = Fetched contents }
+
+-- | Stands in for an async IO operation (fetching a file, calling an API):
+-- waits somewhere between 3 and 5 seconds -- the delay seeded from the
+-- clock rather than a proper RNG, since it only needs to look
+-- unpredictable, not be reproducible or statistically sound -- then
+-- "returns" fixed file contents.
+fetchDemoFile :: IO Msg
+fetchDemoFile = do
+  now <- getMonotonicTimeNSec
+  let seconds = 3 + fromIntegral (now `mod` 2000) / 1000 :: Double
+  threadDelay (round (seconds * 1000000))
+  pure (FetchFinished ("config.json loaded after " <> T.pack (show (round seconds :: Int)) <> "s"))
 
 type DemoUI = View ControlId Msg
 
@@ -511,6 +539,7 @@ pages =
   , (TreePage,        "Tree")
   , (TablePage,       "Table")
   , (TreeTablePage,   "Tree table")
+  , (BackgroundPage,  "Background")
   ]
 
 -- | A toggle button group of one item per 'Page' -- selecting a page is
@@ -546,6 +575,7 @@ pageContent s = case currentPage s of
   TreePage       -> treePage s
   TablePage      -> tablePage s
   TreeTablePage  -> treeTablePage s
+  BackgroundPage -> backgroundPage s
 
 -- | 'continueGroup's own natural height (its own margin plus one row of
 -- content, at 'rowHeight') -- same reasoning as 'containedGroupHeight'.
@@ -1055,6 +1085,47 @@ treeTablePage s =
     detailText = case selectedItems (fileSizeTreeSelection s) of
       [x] -> "Selected: " <> x
       _   -> "Selected: none"
+
+-- | Demonstrates 'Blink.Cmd.Cmd': clicking "Fetch file" starts an async
+-- operation, shown as an indeterminate 'progressBar' while it's in flight,
+-- then replaced by its result once the 'Cmd' completes and its message
+-- reaches 'updateApp' on a later frame.
+backgroundPage :: AppState -> DemoUI ()
+backgroundPage s =
+  runElement $ vBox
+    [ spacing 12, margin 12
+    , children
+        [ caption "Background" [width fill, height (exactly 24), align TopLeft]
+        , caption description [width fill, height (exactly 40), align TopLeft]
+        , hBox
+            ( rowLayout ++
+              [ spacing 8
+              , children
+                  [ button BackgroundStartButton
+                      [ text "Fetch file", onActivated (post StartFetch)
+                      , isEnabled (editingEnabled s && not fetching), width (exactly 120), height fill
+                      ]
+                  , caption statusText [width fill, height fill, align MiddleLeft]
+                  ]
+              ]
+            )
+        , if fetching
+            then progressBar (rowLayout ++ [progress Indeterminate])
+            else progressBar (rowLayout ++ [progress (Progress 0), isEnabled False])
+        ]
+    ]
+  where
+    fetching = case backgroundStatus s of
+      Fetching -> True
+      _        -> False
+    statusText = case backgroundStatus s of
+      NotStarted     -> "Idle"
+      Fetching       -> "Fetching…"
+      Fetched result -> result
+    description =
+      "\"Fetch file\" requests a Cmd -- an IO action run off the frame \
+      \thread. Its result reaches `update` as an ordinary message once it \
+      \completes, whenever that turns out to be."
 
 -- Top-level view
 

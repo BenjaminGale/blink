@@ -65,7 +65,8 @@ instead.
                         named @Element@, import that module qualified
                         alongside this one instead.
   * "Blink.Update"     — The Update monad: turns a message emitted by the view
-                        into an updated application state.
+                        into an updated application state, optionally
+                        requesting a "Blink.Cmd" along the way.
   * "Blink.Controls"   — Every ready-made widget's constructor and
                         attribute functions, re-exported here; see
                         "Blink.Controls.Control" for the shared control
@@ -80,6 +81,7 @@ instead.
 -}
 module Blink
   ( module Blink.App
+  , module Blink.Cmd
   , module Blink.Geometry
   , module Blink.Input
   , module Blink.Controls
@@ -92,6 +94,7 @@ module Blink
   ) where
 
 import Blink.App
+import Blink.Cmd
 import Blink.Geometry
 import Blink.Input
 import Blink.Controls
