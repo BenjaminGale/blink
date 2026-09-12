@@ -54,6 +54,7 @@ module Blink.Controls
   , progressBar
   , progress
   , bandSpeed
+  , bandWidth
     -- * Slider
   , slider
   , onValueChanged
@@ -90,7 +91,7 @@ import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Divider (divider, orientation, thickness)
 import Blink.Controls.Label (label, target, text)
 import Blink.Controls.List (list, onItemActivated, renderItem, rowHeight, selection)
-import Blink.Controls.ProgressBar (bandSpeed, progress, progressBar)
+import Blink.Controls.ProgressBar (bandSpeed, bandWidth, progress, progressBar)
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.RepeatButton (initialDelay, repeatButton, repeatInterval)
 import Blink.Controls.ScrollBar (scrollBar, scrollBarOrientation, visibleFraction)

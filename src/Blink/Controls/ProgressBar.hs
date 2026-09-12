@@ -13,6 +13,7 @@ module Blink.Controls.ProgressBar
   , progressBar
   , progress
   , bandSpeed
+  , bandWidth
   ) where
 
 import Control.Monad (void, when)
@@ -40,16 +41,19 @@ data ProgressBarConfig e msg = ProgressBarConfig
   { pbControl   :: ControlConfig e msg
   , pbValue     :: ProgressValue
   , pbBandSpeed :: Double
+  , pbBandWidth :: Double
   , pbLayout    :: Layout
   }
 
 -- | 'defaultControlConfig' (styled via 'progressBarStyleKey'), @'Progress' 0@,
--- a band speed of 0.5, and @Layout fill fill TopLeft@ (see 'progressBar').
+-- a band speed of 0.75 sweeps\/s (one lap every ~1.3s), a band width of
+-- 120px, and @Layout fill fill TopLeft@ (see 'progressBar').
 defaultProgressBarConfig :: ProgressBarConfig e msg
 defaultProgressBarConfig = ProgressBarConfig
   { pbControl   = defaultControlConfig { ccStyleKey = progressBarStyleKey }
   , pbValue     = Progress 0
-  , pbBandSpeed = 0.5
+  , pbBandSpeed = 0.75
+  , pbBandWidth = 120
   , pbLayout    = Layout fill fill TopLeft
   }
 
@@ -64,10 +68,22 @@ instance HasLayoutConfig (ProgressBarConfig e msg) where
 progress :: ProgressValue -> Attribute (ProgressBarConfig e msg)
 progress v = Attribute (\pc -> pc { pbValue = v })
 
--- | How fast the band sweeps across an 'Indeterminate' bar, in bar-widths
--- per second. Defaults to 0.5.
+-- | How many full sweeps the band makes across an 'Indeterminate' bar per
+-- second -- the same fixed-duration-lap convention most toolkits use for
+-- an indeterminate/busy indicator (e.g. Material's ~2s linear
+-- indeterminate cycle). A lap always takes the same time regardless of
+-- the bar's width; the band's raw pixel speed is what adapts, covering
+-- more distance per lap in a wider bar. Defaults to 0.75 (one lap every
+-- ~1.3s).
 bandSpeed :: Double -> Attribute (ProgressBarConfig e msg)
 bandSpeed v = Attribute (\pc -> pc { pbBandSpeed = v })
+
+-- | Width, in pixels, of the moving band on an 'Indeterminate' bar. Fixed
+-- rather than proportional to the bar's own width, so the band doesn't
+-- visibly resize as the bar (or its containing window) is resized.
+-- Defaults to 120. Clamped to the bar's width if narrower.
+bandWidth :: Double -> Attribute (ProgressBarConfig e msg)
+bandWidth v = Attribute (\pc -> pc { pbBandWidth = v })
 
 -- | A progress indicator, set via 'progress' to 'Progress' for a
 -- determinate bar or 'Indeterminate' for a continuously animating band.
@@ -102,9 +118,8 @@ progressBar attrs = Element
         Indeterminate -> do
           when (not (ciDisabled ci)) requiresAnimation
           elapsed <- getAnimElapsed
-          let speed = pbBandSpeed cfg
-              t     = realToFrac elapsed * speed
-              phase = t - fromIntegral (floor t :: Int)
-              bandW = rectWidth r * 0.3
-              left  = rectX r - bandW + (rectWidth r + bandW) * phase
+          let bandW  = min (pbBandWidth cfg) (rectWidth r)
+              cycles = realToFrac elapsed * pbBandSpeed cfg
+              phase  = cycles - fromIntegral (floor cycles :: Int)
+              left   = rectX r - bandW + (rectWidth r + bandW) * phase
           withBounds (r { rectX = left, rectWidth = bandW }) $ fillRect (styleTextColour s)

@@ -304,7 +304,7 @@ runFrame app refs queue notify input = do
 
   state <- readIORef (refsState refs)
 
-  delta <- sampleDelta (refsLastFrame refs) (isAnimationTick input)
+  delta <- sampleDelta (refsLastFrame refs)
 
   prevCtx <- readIORef (refsCtx refs)
   let ctx = buildCtx app winRect inputState delta (isAnimationTick input) state prevCtx
@@ -432,9 +432,14 @@ toInputState fi = InputState
 clearKeyEvents :: InputState -> InputState
 clearKeyEvents is = is { inputKeyEvents = [], inputTypedText = [], inputWheelDelta = 0 }
 
-sampleDelta :: IORef (Maybe Word64) -> Bool -> IO Float
-sampleDelta _ False = pure 0
-sampleDelta lastFrameRef True = do
+-- | Wall-clock seconds since the previous frame, of either kind -- sampled
+-- on every frame (not just animation ticks) so a run of input-only frames
+-- (e.g. a live window resize) doesn't freeze 'animElapsed' and then jump it
+-- forward all at once on the next tick. Capped at 0.1s so a long pause
+-- between frames (app backgrounded, a slow Cmd) can't produce a huge single
+-- step.
+sampleDelta :: IORef (Maybe Word64) -> IO Float
+sampleDelta lastFrameRef = do
   now   <- getMonotonicTimeNSec
   mLast <- readIORef lastFrameRef
   writeIORef lastFrameRef (Just now)

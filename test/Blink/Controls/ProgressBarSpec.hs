@@ -11,7 +11,7 @@ import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, progress, progressBar)
+import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, bandWidth, progress, progressBar)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.View
@@ -85,6 +85,17 @@ renderWithId attrs = runElement (progressBar (elementId Bar : attrs))
 elapsedCtx :: ViewContext TestElement String
 elapsedCtx = nextFrameContext testBounds noInput testTheme (mkAnimationState 0 1 False) seedCtx
 
+-- | Ten times 'testBounds' wide -- pairs with 'wideElapsedCtx' to check that
+-- the sweep's rhythm (when it starts a new loop) doesn't depend on the
+-- bar's own width.
+wideBounds :: Rectangle
+wideBounds = Rectangle 0 0 1000 100
+
+wideElapsedCtx :: ViewContext TestElement String
+wideElapsedCtx =
+  let seed = emptyViewContext wideBounds noInput testTheme noOpTextMeasurer
+  in nextFrameContext wideBounds noInput testTheme (mkAnimationState 0 1 False) seed
+
 spec :: Spec
 spec = describe "Blink.Controls.ProgressBar" $ do
   controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
@@ -125,13 +136,31 @@ spec = describe "Blink.Controls.ProgressBar" $ do
       getDrawCommands ctx `shouldContain` [FillRect (Rectangle 15 15 0 70) testColour]
 
   describe "Indeterminate" $ do
-    it "sweeps the band using the default band speed (0.5)" $ do
+    it "sweeps the band using the default band speed (0.75 sweeps/s)" $ do
       ctx <- snd <$> runView (runElement (progressBar [progress Indeterminate])) elapsedCtx
-      getDrawCommands ctx `shouldContain` [FillRect (Rectangle 39.5 15 21 70) testColour]
+      getDrawCommands ctx `shouldContain` [FillRect (Rectangle 50 15 70 70) testColour]
 
-    it "sweeps faster when a custom speed is given" $ do
-      ctx <- snd <$> runView (runElement (progressBar [progress Indeterminate, bandSpeed 1.0])) elapsedCtx
-      getDrawCommands ctx `shouldContain` [FillRect (Rectangle (-6) 15 21 70) testColour]
+    it "sweeps slower when a custom speed is given" $ do
+      ctx <- snd <$> runView (runElement (progressBar [progress Indeterminate, bandSpeed 0.25])) elapsedCtx
+      getDrawCommands ctx `shouldContain` [FillRect (Rectangle (-20) 15 70 70) testColour]
+
+    it "wraps back around after more than one full loop" $ do
+      ctx <- snd <$> runView (runElement (progressBar [progress Indeterminate, bandSpeed 2.25])) elapsedCtx
+      getDrawCommands ctx `shouldContain` [FillRect (Rectangle (-20) 15 70 70) testColour]
+
+    it "uses a fixed band width regardless of the bar's own width" $ do
+      ctx <- snd <$> runView (runElement (progressBar [progress Indeterminate, bandWidth 10])) elapsedCtx
+      getDrawCommands ctx `shouldContain` [FillRect (Rectangle 65 15 10 70) testColour]
+
+    it "clamps the band width to the bar's width when narrower" $ do
+      ctx <- snd <$> runView (runElement (progressBar [progress Indeterminate, bandWidth 500])) elapsedCtx
+      getDrawCommands ctx `shouldContain` [FillRect (Rectangle 50 15 70 70) testColour]
+
+    it "keeps the same lap rhythm regardless of the bar's own width" $ do
+      narrowCtx <- snd <$> runView (runElement (progressBar [progress Indeterminate])) elapsedCtx
+      wideCtx   <- snd <$> runView (runElement (progressBar [progress Indeterminate])) wideElapsedCtx
+      getDrawCommands narrowCtx `shouldContain` [FillRect (Rectangle 50 15 70 70) testColour]
+      getDrawCommands wideCtx   `shouldContain` [FillRect (Rectangle 712.5 15 120 70) testColour]
 
     it "keeps the animation ticker alive" $ do
       ctx <- snd <$> runView (runElement (progressBar [progress Indeterminate])) elapsedCtx

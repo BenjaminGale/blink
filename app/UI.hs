@@ -352,8 +352,10 @@ rowAnimate s =
 rowProgress :: AppState -> Element ControlId Msg
 rowProgress s =
   if animating s
-    then progressBar (rowLayout ++ [progress Indeterminate, isEnabled (editingEnabled s)])
-    else progressBar (rowLayout ++ [progress (Progress (fromIntegral (clickCount s) / 50)), isEnabled (editingEnabled s)])
+    then progressBar (rowLayout ++ [progress Indeterminate, isEnabled (editingEnabled s), width (exactly 400)])
+    else progressBar
+           (rowLayout ++
+             [progress (Progress (fromIntegral (clickCount s) / 50)), isEnabled (editingEnabled s), width (exactly 400)])
 
 rowSlider :: AppState -> Element ControlId Msg
 rowSlider s =
@@ -1120,7 +1122,7 @@ backgroundPage s =
               ]
             )
         , if fetching
-            then progressBar (rowLayout ++ [progress Indeterminate])
+            then progressBar (rowLayout ++ [progress Indeterminate, width (exactly 400)])
             else progressBar (rowLayout ++ [progress (Progress 0), isEnabled False])
         ]
     ]
