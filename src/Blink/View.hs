@@ -240,6 +240,7 @@ module Blink.View
   , requestScrollTo
   , requestScrollBy
   , postScrollBy
+  , setScrollStateNow
     -- * Extent state
     -- | 'ExtentState' lives in "Blink.View.Extent"; re-exported here
     -- since it's threaded through 'ViewContext' the same way

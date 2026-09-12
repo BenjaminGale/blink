@@ -36,8 +36,7 @@ Pass an 'App' to 'configureContinuous' or 'configureEventDriven' to obtain a
     the frame's emitted messages into the state, a second render pass runs on
     the updated state so the displayed frame always reflects the latest
     state. The 'IO ()' callback is invoked when the animation ticker fires,
-    or when that second pass leaves a fresh effect unsettled, allowing the
-    backend to unblock its event wait (e.g. @glfwPostEmptyEvent@).
+    allowing the backend to unblock its event wait (e.g. @glfwPostEmptyEvent@).
 
 >  Continuous:                          Event-driven:
 >
@@ -298,11 +297,6 @@ doStepEventDriven app refs notify input = do
   writeIORef (refsAnimActive refs) nowActive
   when (not wasActive && nowActive) $
     forkAnimationTicker (refsAnimActive refs) notify
-  -- The second pass can itself discover a fresh effect with nothing left
-  -- to settle it -- nudge the backend the same way 'notify' already does
-  -- for the animation ticker, instead of leaving it stuck until the next
-  -- platform event.
-  when (hasPendingUiEffects renderedCtx) notify
   pure $ toResult input (getDrawCommands renderedCtx) state2
 
 -- | Collapses a fresh button edge ('Blink.Input.ButtonDown', 'Blink.Input.ButtonReleased')

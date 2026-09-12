@@ -14,6 +14,7 @@ module Blink.View.Scroll
   , requestScrollTo
   , requestScrollBy
   , postScrollBy
+  , setScrollStateNow
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -47,3 +48,15 @@ requestScrollBy eid dv = emitUi (ScrollBy eid dv)
 -- event's own data.
 postScrollBy :: e -> Double -> a -> [Out e msg]
 postScrollBy eid dv = const [OutUi (ScrollBy eid dv)]
+
+-- | Sets the given element's scroll position, clamped to @[0, 1]@,
+-- immediately -- visible to a later 'getScrollState' read in this same
+-- frame, unlike 'requestScrollTo'/'requestScrollBy', which only take
+-- effect from the next frame onward. For a control correcting its own
+-- scroll position as a direct, same-frame consequence of what it's about
+-- to render (e.g. 'Blink.Controls.List.scrollRowIntoView' keeping a moved
+-- selection in view) -- not for reacting to a user gesture like a drag or
+-- a wheel event, which should stay deferred so a frame's own reads of
+-- "current scroll" stay stable throughout its rendering.
+setScrollStateNow :: Ord e => e -> Double -> View e msg ()
+setScrollStateNow eid v = modify (writeScrollState eid v)

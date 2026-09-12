@@ -122,7 +122,7 @@ import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
 import Blink.Style (StyleSet (..))
 import Blink.View
-  (Out, View, getBounds, getCursorIndex, getScrollState, getStyleSet, requestScrollTo, setCursorIndex, withBounds)
+  (Out, View, getBounds, getCursorIndex, getScrollState, getStyleSet, setCursorIndex, setScrollStateNow, withBounds)
 import Blink.View.Drawing (withClip)
 
 -- * Selection models
@@ -879,15 +879,25 @@ listFrom mkId cfg = Element
   , elRun     = void (listBase mkId cfg)
   }
 
--- | Requests just enough scroll to bring row @idx@ (0-based, into a flat
--- list of @itemCount@ rows at @cfg@'s own 'lcRowHeight') into a
--- @viewportHeight@-tall viewport -- top-aligned if it currently falls
--- above, bottom-aligned if below. A no-op when the content already fits
--- without scrolling, or the row is already fully in view. 'listBase'
--- itself uses this for both a keyboard-moved cursor and a click landing
--- on a row not yet fully in view; exported so a control built on top
--- (e.g. 'Blink.Controls.Tree.tree', for its own Left\/Right-driven
--- cursor moves) can keep its own moves in view the same way.
+-- | Brings row @idx@ (0-based, into a flat list of @itemCount@ rows at
+-- @cfg@'s own 'lcRowHeight') into a @viewportHeight@-tall viewport --
+-- top-aligned if it currently falls above, bottom-aligned if below. A
+-- no-op when the content already fits without scrolling, or the row is
+-- already fully in view. Takes effect immediately, via
+-- 'Blink.View.setScrollStateNow' -- this frame's own rendering (whichever
+-- of 'listBase's callers runs after this one in the same pass) sees the
+-- corrected position, rather than needing a further frame to catch up, as
+-- a deferred 'Blink.View.requestScrollTo' would. That's correct here
+-- because scrolling a row into view is never itself carrying user intent
+-- forward the way e.g. a focus change is -- it's a pure function of this
+-- frame's own item order, cursor position, and viewport, recomputed fresh
+-- every time regardless of what the persisted scroll position happened to
+-- be a moment ago.
+--
+-- 'listBase' itself uses this for both a keyboard-moved cursor and a
+-- click landing on a row not yet fully in view; exported so a control
+-- built on top (e.g. 'Blink.Controls.Tree.tree', for its own Left\/Right-
+-- driven cursor moves) can keep its own moves in view the same way.
 --
 -- @viewportHeight@ is always the caller's own current bounds height
 -- ('Blink.View.getBounds' read at the right point), never fetched here
@@ -905,7 +915,7 @@ scrollRowIntoView mkId cfg itemCount viewportHeight idx = when (maxOffset > 0) $
         | rowTop < offsetY                    = Just (rowTop / maxOffset)
         | rowBottom > offsetY + viewportHeight = Just ((rowBottom - viewportHeight) / maxOffset)
         | otherwise                            = Nothing
-  mapM_ (requestScrollTo listScrollEid) newFrac
+  mapM_ (setScrollStateNow listScrollEid) newFrac
   where
     listScrollEid = mkId (ListScrollBar ScrollBar)
     contentHeight = fromIntegral itemCount * lcRowHeight cfg

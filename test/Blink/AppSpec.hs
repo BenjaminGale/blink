@@ -95,20 +95,6 @@ counterApp = App
   , update         = modify
   }
 
--- Bumps its own counter every frame, and once that counter is positive
--- (visible only from the second, post-update pass onward) also queues a
--- scroll -- a fresh effect the first pass has no way to see.
-scrollOnSecondPassApp :: App () (Int -> Int) Int
-scrollOnSecondPassApp = App
-  { startUp        = pure 0
-
-  , theme          = const (emptyTheme (testMetrics, testStyleSet))
-  , view           = \n -> fullView $ do
-      when (n > 0) (requestScrollTo () 1)
-      emit (+1)
-  , update         = modify
-  }
-
 -- Emits a FillRect covering the full window bounds each frame.
 drawingApp :: Colour -> App () () ()
 drawingApp c = App
@@ -403,19 +389,6 @@ spec = do
         handle <- configureEventDriven (viewCountApp True) (pure ()) (countingMeasurer ref)
         _      <- stepFrame handle normalInput
         readIORef ref `shouldReturn` 2
-
-    describe "notifying the backend when the second pass leaves an effect pending" $ do
-      it "notifies once a fresh effect is only discovered on the second pass" $ do
-        notified <- newIORef (0 :: Int)
-        handle   <- configureEventDriven scrollOnSecondPassApp (modifyIORef' notified (+1)) nullMeasurer
-        _        <- stepFrame handle normalInput
-        readIORef notified `shouldReturn` 1
-
-      it "does not notify when nothing is left pending after the second pass" $ do
-        notified <- newIORef (0 :: Int)
-        handle   <- configureEventDriven counterApp (modifyIORef' notified (+1)) nullMeasurer
-        _        <- stepFrame handle normalInput
-        readIORef notified `shouldReturn` 0
 
     describe "a real control driven through the actual frame loop" $ do
       it "clicking a real checkbox toggles the app's state and is reflected in that same click's draw commands" $ do

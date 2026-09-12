@@ -95,6 +95,7 @@ module Blink.View.Context
     -- * Scroll (pure)
   , ScrollState (..)
   , clampScrollPos
+  , writeScrollState
     -- * Extent (pure)
   , ExtentState (..)
     -- * Cursor index (pure)
@@ -1006,10 +1007,19 @@ getUiEffects ctx = [eff | OutUi eff <- reverse (outEvents (ctxOutputs ctx))]
 contextRequiresAnimation :: ViewContext e msg -> Bool
 contextRequiresAnimation = outRequiresAnimation . ctxOutputs
 
--- Internal: writes a scroll position directly into the context, bypassing
--- the deferred-effect queue. Clamps to @[0, 1]@ so this is the single point
--- that enforces the 'ScrollState' invariant regardless of which 'UiEffect'
--- reaches it. Used only by @applyUiEffects@.
+-- | Writes a scroll position directly into the context, bypassing the
+-- deferred-effect queue -- visible to any 'Blink.View.Scroll.getScrollState'
+-- read later in this same frame, unlike 'Blink.View.Scroll.requestScrollTo', which only
+-- takes effect from the next frame onward. Clamps to @[0, 1]@ so this is
+-- the single point that enforces the 'ScrollState' invariant regardless of
+-- which caller reaches it, @applyUiEffects@ included. See
+-- 'Blink.View.Scroll.setScrollStateNow', the monadic wrapper built on top
+-- of it for a control correcting its own scroll position as a direct,
+-- same-frame consequence of what it's about to render (e.g.
+-- 'Blink.Controls.List.scrollRowIntoView'), as opposed to reacting to a
+-- user gesture like a drag, which should stay on the deferred queue so a
+-- frame's own read of "current scroll" stays stable throughout its
+-- rendering.
 writeScrollState :: Ord e => e -> Double -> ViewContext e msg -> ViewContext e msg
 writeScrollState eid v ctx = ctx { ctxElements = (ctxElements ctx)
   { elmScrollStates = Map.insert eid (ScrollState (clampScrollPos v)) (elmScrollStates (ctxElements ctx)) } }
