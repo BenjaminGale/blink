@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Rendering
   ( TextureCache
   , newTextureCache
@@ -21,6 +22,8 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
+import qualified Data.Text.IO as TIO
 import Data.Word (Word8)
 import Foreign.C.Types (CInt)
 
@@ -33,9 +36,19 @@ freeTextureCache :: TextureCache -> IO ()
 freeTextureCache cache =
   readIORef cache >>= mapM_ (\(t, _, _) -> SDL.destroyTexture t) . Map.elems
 
--- | Keyed by 'ImagePath' alone, unlike 'TextureCache' -- an image's pixels
--- don't depend on a colour the way rendered text glyphs do.
-type ImageCache = IORef (Map ImagePath (SDL.Texture, CInt, CInt))
+-- | 'NaturalImage' is keyed by path alone -- the image loaded at whatever
+-- size its own source declares, used for 'mkImageMeasurer' and for
+-- drawing any non-@.svg@ source (already a fixed-resolution raster, so
+-- there's no different "size" to rasterize it at). 'SizedImage' is an
+-- @.svg@ source re-rasterized at a specific pixel size (see
+-- 'loadSizedImageTexture'), so it stays crisp when displayed above its
+-- own natural size instead of stretching one small raster.
+data ImageCacheKey
+  = NaturalImage ImagePath
+  | SizedImage ImagePath CInt CInt
+  deriving (Eq, Ord)
+
+type ImageCache = IORef (Map ImageCacheKey (SDL.Texture, CInt, CInt))
 
 newImageCache :: IO ImageCache
 newImageCache = newIORef Map.empty
@@ -44,20 +57,74 @@ freeImageCache :: ImageCache -> IO ()
 freeImageCache cache =
   readIORef cache >>= mapM_ (\(t, _, _) -> SDL.destroyTexture t) . Map.elems
 
--- | Loads the image at @path@ into a texture and caches it, or returns the
--- cached texture from an earlier call -- shared by 'renderImage' (drawing)
--- and 'mkImageMeasurer' (natural size), so an image already on screen
--- costs nothing extra to measure and vice versa.
+-- | Loads the image at @path@ into a texture at its own natural size and
+-- caches it, or returns the cached texture from an earlier call -- used
+-- by 'mkImageMeasurer' (which only wants the size) and as the draw-time
+-- texture for any source 'loadSizedImageTexture' doesn't specialize.
 loadImageTexture :: SDL.Renderer -> ImageCache -> ImagePath -> IO (SDL.Texture, CInt, CInt)
 loadImageTexture renderer cache path = do
   m <- readIORef cache
-  case Map.lookup path m of
+  let cacheKey = NaturalImage path
+  case Map.lookup cacheKey m of
     Just hit -> pure hit
     Nothing  -> do
       tex <- Image.loadTexture renderer (T.unpack path)
       (SDL.TextureInfo _ _ w h) <- SDL.queryTexture tex
-      writeIORef cache (Map.insert path (tex, w, h) m)
+      writeIORef cache (Map.insert cacheKey (tex, w, h) m)
       pure (tex, w, h)
+
+-- | 'True' for a path whose extension is @.svg@ (case-insensitive).
+isSvgPath :: ImagePath -> Bool
+isSvgPath path = T.toLower (T.takeWhileEnd (/= '.') path) == "svg"
+
+-- | Removes any existing @attr="..."@ (or @attr='...'@) occurrence, so a
+-- fresh value can be inserted without leaving a stale duplicate attribute
+-- behind. Leaves @t@ unchanged if @attr=@ isn't followed by a quoted
+-- value at all (a malformed document isn't this function's problem to
+-- solve).
+stripAttr :: Text -> Text -> Text
+stripAttr attr t = case T.breakOn (attr <> "=") t of
+  (_, rest) | T.null rest -> t
+  (before, rest) ->
+    let afterEq = T.drop (T.length attr + 1) rest
+    in case T.uncons afterEq of
+      Nothing -> t
+      Just (quoteChar, afterOpen) ->
+        case T.breakOn (T.singleton quoteChar) afterOpen of
+          (_, closing) | T.null closing -> t
+          (_, closing) -> before <> T.drop 1 closing
+
+-- | Overrides an SVG document's declared width\/height so SDL2_image
+-- rasterizes it at exactly @(w, h)@ pixels, rather than whatever the
+-- source itself declares (most often its @viewBox@, which can be far
+-- smaller than any size it's actually displayed at).
+sizedSvgSource :: CInt -> CInt -> Text -> Text
+sizedSvgSource w h = insertSize . stripAttr "height" . stripAttr "width"
+  where
+    insertSize t = case T.breakOn "<svg" t of
+      (before, rest) | not (T.null rest) ->
+        before <> "<svg width=\"" <> T.pack (show w) <> "\" height=\"" <> T.pack (show h) <> "\""
+          <> T.drop 4 rest
+      _ -> t
+
+-- | Re-rasterizes the @.svg@ at @path@ at exactly @(w, h)@ pixels and
+-- caches it, or returns the cached texture from an earlier call at the
+-- same size. Falls back to 'loadImageTexture' (the source's own natural
+-- size) for any non-@.svg@ path, since re-decoding a fixed-resolution
+-- raster format at a different size wouldn't change its pixels.
+loadSizedImageTexture :: SDL.Renderer -> ImageCache -> ImagePath -> (CInt, CInt) -> IO SDL.Texture
+loadSizedImageTexture renderer cache path (w, h)
+  | not (isSvgPath path) = (\(tex, _, _) -> tex) <$> loadImageTexture renderer cache path
+  | otherwise = do
+      m <- readIORef cache
+      let cacheKey = SizedImage path w h
+      case Map.lookup cacheKey m of
+        Just (tex, _, _) -> pure tex
+        Nothing -> do
+          src <- TIO.readFile (T.unpack path)
+          tex <- Image.decodeTexture renderer (TE.encodeUtf8 (sizedSvgSource w h src))
+          writeIORef cache (Map.insert cacheKey (tex, w, h) m)
+          pure tex
 
 toWord8 :: Double -> Word8
 toWord8 c = round (c * 255)
@@ -134,8 +201,10 @@ renderText renderer font cache r txt color textAlign = do
 
 renderImage :: SDL.Renderer -> ImageCache -> Rectangle -> ImagePath -> IO ()
 renderImage renderer cache r path = do
-  (texture, _, _) <- loadImageTexture renderer cache path
-  SDL.copy renderer texture Nothing (Just (toSDLRect r))
+  let sdlRect = toSDLRect r
+      SDL.Rectangle _ (SDL.V2 w h) = sdlRect
+  texture <- loadSizedImageTexture renderer cache path (w, h)
+  SDL.copy renderer texture Nothing (Just sdlRect)
 
 pushClip :: SDL.Renderer -> IORef [SDL.Rectangle CInt] -> Rectangle -> IO ()
 pushClip renderer clipRef r = do

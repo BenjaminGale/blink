@@ -37,6 +37,10 @@ main :: IO ()
 main = do
   SDL.initializeAll
   Font.initialize
+  -- Without this, SDL defaults to nearest-neighbor sampling, so any
+  -- stretched texture (an image scaled above its natural size, in
+  -- particular) comes out blocky rather than smooth.
+  _ <- SDL.setHintWithPriority SDL.OverridePriority SDL.HintRenderScaleQuality SDL.ScaleLinear
   window   <- SDL.createWindow "blink" SDL.defaultWindow { SDL.windowResizable = True }
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
   font     <- Font.load demoFontPath 14
