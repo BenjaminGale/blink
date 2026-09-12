@@ -50,7 +50,7 @@ testTheme = Theme
       }
 
 noInput :: InputState
-noInput = InputState (Point 200 200) False [] []
+noInput = InputState (Point 200 200) False [] [] 0
 
 -- | A vertical scrollbar (the default orientation) 16px wide, 100px tall:
 -- the decrement arrow occupies y 0-16, the track y 16-84, the increment

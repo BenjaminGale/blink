@@ -51,7 +51,7 @@ testTheme = Theme
       }
 
 noInput :: InputState
-noInput = InputState (Point 200 200) False [] []
+noInput = InputState (Point 200 200) False [] [] 0
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 90

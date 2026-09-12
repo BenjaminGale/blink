@@ -86,6 +86,7 @@ loop handle btnDown renderFrame window checkAnimTick = do
                    , mouseButtonDown = btn'
                    , keyEvents       = toKeyEvents event
                    , typedText       = toTypedText event
+                   , wheelDelta      = toWheelDelta event
                    , windowSize      = winSize
                    , quitRequested   = SDL.eventPayload event == SDL.QuitEvent
                    , isAnimationTick = isAnimTick
@@ -132,6 +133,21 @@ toTypedText :: SDL.Event -> [Text]
 toTypedText e = case SDL.eventPayload e of
   SDL.TextInputEvent d -> [SDL.textInputEventText d]
   _                    -> []
+
+-- | Vertical wheel movement for this event, or 0 if it isn't a wheel event
+-- -- see 'Blink.Input.inputWheelDelta' for the sign convention. SDL reports
+-- @y@ positive "away from the user" (scrolling up/back) unless the
+-- platform's natural-scrolling setting flips it, so both cases are negated
+-- to land on "positive scrolls down/forward".
+toWheelDelta :: SDL.Event -> Double
+toWheelDelta e = case SDL.eventPayload e of
+  SDL.MouseWheelEvent d ->
+    let SDL.V2 _ y = SDL.mouseWheelEventPos d
+        flipSign = case SDL.mouseWheelEventDirection d of
+          SDL.ScrollNormal  -> 1
+          SDL.ScrollFlipped -> -1
+    in negate (fromIntegral y * flipSign)
+  _ -> 0
 
 sdlPoint :: SDL.Point SDL.V2 CInt -> Point
 sdlPoint (SDL.P (SDL.V2 x y)) = Point (fromIntegral x) (fromIntegral y)

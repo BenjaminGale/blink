@@ -25,6 +25,7 @@ noInput = InputState
   , inputLeftButtonDown = False
   , inputKeyEvents      = [] :: [KeyEvent]
   , inputTypedText      = []
+  , inputWheelDelta     = 0
   }
 
 emptyStyle :: Style

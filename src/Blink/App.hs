@@ -186,6 +186,9 @@ data FrameInput = FrameInput
     -- ^ Keyboard events for this frame.
   , typedText     :: [Text]
     -- ^ Text input events for this frame, in the order they were received.
+  , wheelDelta    :: Double
+    -- ^ Vertical mouse wheel movement for this frame -- see
+    -- 'Blink.Input.inputWheelDelta'.
   , windowSize    :: Size
     -- ^ Current dimensions of the window's drawing area.
   , quitRequested   :: Bool
@@ -328,6 +331,7 @@ emptyInputState = InputState
   , inputLeftButtonDown = False
   , inputKeyEvents      = []
   , inputTypedText      = []
+  , inputWheelDelta     = 0
   }
 
 toInputState :: FrameInput -> InputState
@@ -336,11 +340,15 @@ toInputState fi = InputState
   , inputLeftButtonDown = mouseButtonDown fi
   , inputKeyEvents      = keyEvents fi
   , inputTypedText      = typedText fi
+  , inputWheelDelta     = wheelDelta fi
   }
 
--- Clears keyboard and text events for the second render pass in event-driven mode.
+-- Clears keyboard, text, and wheel events for the second render pass in
+-- event-driven mode -- each is a discrete, one-frame occurrence (like a key
+-- press) rather than level state (like a button held down), so re-running
+-- the same input a second time must not re-apply it.
 clearKeyEvents :: InputState -> InputState
-clearKeyEvents is = is { inputKeyEvents = [], inputTypedText = [] }
+clearKeyEvents is = is { inputKeyEvents = [], inputTypedText = [], inputWheelDelta = 0 }
 
 sampleDelta :: IORef (Maybe Word64) -> Bool -> IO Float
 sampleDelta _ False = pure 0

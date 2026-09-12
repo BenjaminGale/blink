@@ -101,6 +101,13 @@ data InputState = InputState
     -- ^ Unicode text input events for this frame, in order received.
     -- Distinct from 'inputKeyEvents': text input handles IME, key repeat,
     -- and composed characters; use this for text entry fields.
+  , inputWheelDelta    :: Double
+    -- ^ Vertical mouse wheel movement for this frame, in notches (or the
+    -- platform's fractional equivalent for a trackpad/high-resolution
+    -- wheel). Positive scrolls down/forward (the content should move up,
+    -- revealing what's below); negative scrolls up/back. Zero when the
+    -- wheel didn't move this frame. Already corrects for the platform's
+    -- "natural"/flipped scrolling setting, so a consumer never has to.
   } deriving (Eq, Show)
 
 -- | Which element, if any, holds mouse capture during a drag. A control

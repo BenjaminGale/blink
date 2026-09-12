@@ -36,6 +36,7 @@ mkInput quit animTick = FrameInput
   , mouseButtonDown = False
   , keyEvents       = []
   , typedText       = []
+  , wheelDelta      = 0
   , windowSize      = Size 100 100
   , quitRequested   = quit
   , isAnimationTick = animTick

@@ -285,7 +285,7 @@ testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 60
 
 noInput :: InputState
-noInput = InputState (Point 200 200) False [] []
+noInput = InputState (Point 200 200) False [] [] 0
 
 seedCtx :: ViewContext TestElem String
 seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
@@ -505,6 +505,22 @@ scrollingSpec = describe "list scrolling" $ do
     seededAtEnd <- resultContext <$> runInteractions testBounds seedCtx (requestScrollTo listScrollEid 1) [] []
     atBottom <- clickTrack seededAtEnd
     contextScrollState listScrollEid (resultContext atBottom) `shouldBe` 0.25
+
+  it "scrolls when the wheel moves while the pointer is over the list" $ do
+    result <- runInteractions testBounds seedCtx
+      (renderScrollList [selection start])
+      [MoveTo (Point 50 10)]
+      [Wheel 1]
+    -- 3 rows (60px) per notch against 40px of scrollable range clamps
+    -- straight to the bottom.
+    contextScrollState listScrollEid (resultContext result) `shouldBe` 1
+
+  it "does not scroll when the wheel moves while the pointer is elsewhere" $ do
+    result <- runInteractions testBounds seedCtx
+      (renderScrollList [selection start])
+      [MoveTo (Point 500 500)]
+      [Wheel 1]
+    contextScrollState listScrollEid (resultContext result) `shouldBe` 0
 
   it "does not move the scroll position while the keyboard cursor stays within the viewport" $ do
     result <- runInteractions testBounds seedCtx

@@ -60,6 +60,7 @@ noInput = InputState
   , inputLeftButtonDown = False
   , inputKeyEvents      = []
   , inputTypedText      = []
+  , inputWheelDelta     = 0
   }
 
 -- | The margin-inset hit area for a control rendered at 'testBounds' with

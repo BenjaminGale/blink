@@ -59,7 +59,7 @@ testTheme = Theme
       }
 
 noInput :: InputState
-noInput = InputState (Point 200 200) False [] []
+noInput = InputState (Point 200 200) False [] [] 0
 
 -- | Three equal 100px-wide slots, filling 'groupBounds' with no gaps: Small
 -- at x 0-100, Medium at 100-200, Large at 200-300.

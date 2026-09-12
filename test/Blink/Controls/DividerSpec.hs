@@ -65,6 +65,7 @@ noInput = InputState
   , inputLeftButtonDown = False
   , inputKeyEvents      = []
   , inputTypedText      = []
+  , inputWheelDelta     = 0
   }
 
 -- | A horizontal divider's own resolved bounds at 'testBounds' with the

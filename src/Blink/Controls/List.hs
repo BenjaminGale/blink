@@ -122,7 +122,9 @@ import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
 import Blink.Style (StyleSet (..))
 import Blink.View
-  (Effect, View, getBounds, getCursorIndex, getScrollState, getStyleSet, setCursorIndex, setScrollStateNow, withBounds)
+  ( Effect, View, getBounds, getCursorIndex, getScrollState, getStyleSet, getWheelDelta, isRegionHit
+  , requestScrollBy, setCursorIndex, setScrollStateNow, withBounds
+  )
 import Blink.View.Drawing (withClip)
 
 -- * Selection models
@@ -543,6 +545,11 @@ instance HasListConfig sel e msg a (ListConfig sel e msg a) where
 defaultRowHeight :: Double
 defaultRowHeight = 32
 
+-- | How many rows a single mouse-wheel notch scrolls -- see @applyWheel@
+-- in 'virtualizedRows'.
+wheelRowsPerNotch :: Double
+wheelRowsPerNotch = 3
+
 -- | 'defaultControlConfig' (styled via @Class \"list\"@), filling its
 -- parent's width and sizing its height to its own rows, no per-row render
 -- (draws nothing), a 32px row height, and no reactions, starting from the
@@ -671,11 +678,28 @@ virtualizedRows scrollBarTag itemCount rh renderRows = do
     -- same ordering 'Blink.Layout.Box.hBox'\/'vBox' use for their own
     -- children.
     clippedRows viewportHeight = do
+      applyWheel viewportHeight
       bounds     <- getBounds
       scrollFrac <- getScrollState listScrollEid
       let offsetY    = scrollFrac * (contentHeight - viewportHeight)
           rowsBounds = bounds { rectY = rectY bounds - offsetY, rectHeight = contentHeight }
       withClip $ withBounds rowsBounds (runElement (visibleRows offsetY viewportHeight))
+
+    -- Mouse-wheel scrolling: moves the position by a fixed number of rows
+    -- per wheel notch while the pointer is over the (unscrolled) viewport
+    -- -- 'isRegionHit' is checked against 'getBounds' as it stands here,
+    -- before 'clippedRows' offsets it for the content. Deferred via
+    -- 'requestScrollBy', like every other user gesture (see
+    -- 'Blink.View.Scroll.setScrollStateNow' for why this isn't applied
+    -- immediately the way a keyboard/click-driven scroll correction is).
+    applyWheel viewportHeight = do
+      wheel <- getWheelDelta
+      let maxOffset = contentHeight - viewportHeight
+      when (wheel /= 0 && maxOffset > 0) $ do
+        over <- isRegionHit
+        when over $ requestScrollBy listScrollEid (wheel * wheelStepPx / maxOffset)
+
+    wheelStepPx = rh * wheelRowsPerNotch
 
     visibleRows offsetY viewportHeight =
       vBox [children (spacer topSkipped : renderRows viewportHeight loIdx hiIdx ++ [spacer bottomSkipped])]

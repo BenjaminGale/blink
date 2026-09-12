@@ -112,12 +112,12 @@ three attrsA attrsB attrsC = do
 seedCtx :: ViewContext TestElement String
 seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
   where
-    noInput = InputState (Point 200 200) False [] []
+    noInput = InputState (Point 200 200) False [] [] 0
 
 pressedSeedCtx :: ViewContext TestElement String
 pressedSeedCtx = emptyViewContext testBounds noInput pressedTestTheme noOpTextMeasurer
   where
-    noInput = InputState (Point 200 200) False [] []
+    noInput = InputState (Point 200 200) False [] [] 0
 
 -- | The margin-inset hit area for a control rendered at 'testBounds' with
 -- the 10px margin every test style here uses.

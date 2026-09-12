@@ -8,6 +8,7 @@ overview; import that instead of this module directly.
 -}
 module Blink.View.Mouse
   ( getMousePos
+  , getWheelDelta
   , isRegionHit
   , acquireCapture
   , registerMouseOver
@@ -32,7 +33,7 @@ import Blink.Geometry (Point, containsPoint)
 import Blink.Input
   ( MouseCapture (..), ButtonState (..), captureOf
   , HoverState (..), wasHit, nextHoverState
-  , Mouse (..), HitRect (..), inputMousePosition
+  , Mouse (..), HitRect (..), inputMousePosition, inputWheelDelta
   )
 import Blink.View.Context
 
@@ -53,6 +54,14 @@ modifyMouse f = modify $ \ctx -> ctx { ctxMouse = f (ctxMouse ctx) }
 -- | The current mouse cursor position in window coordinates.
 getMousePos :: View e msg Point
 getMousePos = inputMousePosition <$> getInput
+
+-- | This frame's vertical mouse wheel movement -- see
+-- 'Blink.Input.inputWheelDelta'. Element-agnostic, like 'getMousePos': a
+-- control that only wants to react while the pointer is over it should pair
+-- this with 'isRegionHit' (or its own hit test), the same way hover
+-- and capture are built from 'getMousePos'.
+getWheelDelta :: View e msg Double
+getWheelDelta = inputWheelDelta <$> getInput
 
 -- | 'True' when the mouse cursor is within the current bounds and within the
 -- active interaction clip region (set by 'Blink.View.Drawing.withClip').

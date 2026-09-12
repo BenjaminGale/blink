@@ -105,7 +105,7 @@ chromeTheme = testTheme
       }
 
 noInput :: InputState
-noInput = InputState (Point 200 200) False [] []
+noInput = InputState (Point 200 200) False [] [] 0
 
 seedCtx :: ViewContext TestElem String
 seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer

@@ -72,6 +72,10 @@ data Interaction
     -- press, never a platform auto-repeat), mouse\/button unchanged.
   | TypeText Text
     -- ^ One frame: the given text delivered as typed input, mouse\/button unchanged.
+  | Wheel Double
+    -- ^ One frame: the given vertical wheel delta (see
+    -- 'Blink.Input.inputWheelDelta' for the sign convention), mouse\/button
+    -- unchanged.
   | Tab
     -- ^ 'PressKey' 'KeyTab' with no modifiers.
   | ShiftTab
@@ -189,8 +193,9 @@ expand cur ix = case ix of
   DragTo p     -> [bare { inputMousePosition = p, inputLeftButtonDown = True }]
   PressKey k m -> [bare { inputKeyEvents = [KeyEvent k m False] }]
   TypeText t   -> [bare { inputTypedText = [t] }]
+  Wheel d      -> [bare { inputWheelDelta = d }]
   Tab          -> expand cur (PressKey KeyTab [])
   ShiftTab     -> expand cur (PressKey KeyTab [Shift])
   Wait n       -> replicate (max 1 n) bare
   where
-    bare = cur { inputKeyEvents = [], inputTypedText = [] }
+    bare = cur { inputKeyEvents = [], inputTypedText = [], inputWheelDelta = 0 }

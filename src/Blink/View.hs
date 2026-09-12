@@ -325,6 +325,7 @@ module Blink.View
   , getInput
   , contextInput
   , getMousePos
+  , getWheelDelta
   , isRegionHit
   , acquireCapture
   , registerMouseOver

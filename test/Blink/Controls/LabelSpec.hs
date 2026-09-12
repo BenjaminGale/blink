@@ -52,6 +52,7 @@ noInput = InputState
   , inputLeftButtonDown = False
   , inputKeyEvents      = []
   , inputTypedText      = []
+  , inputWheelDelta     = 0
   }
 
 onCaption :: Point

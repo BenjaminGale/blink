@@ -55,7 +55,7 @@ testTheme = Theme
   }
 
 noInput :: InputState
-noInput = InputState (Point 500 500) False [] []
+noInput = InputState (Point 500 500) False [] [] 0
 
 seedCtx :: ViewContext TestElement String
 seedCtx = emptyViewContext testBounds noInput testTheme noOpTextMeasurer
