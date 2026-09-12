@@ -87,6 +87,15 @@ spec = describe "Blink.Controls.Button" $ do
     ctx <- start [text "OK"]
     getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "OK" testColour AlignCenter]
 
+  it "defaults to filling the given width and fitting its own content height" $ do
+    -- Every other test in this file overrides 'elLayout' ('fullSize' to
+    -- 'Layout fill fill TopLeft', or 'fitContentEl' below); this is the
+    -- only check of the actual default a caller gets without overriding it.
+    let layout = elLayout (button Ok [text "OK"])
+    layoutWidth layout `shouldBe` fill
+    layoutHeight layout `shouldBe` fitContent
+    layoutAlignment layout `shouldBe` TopLeft
+
   describe "activation ActivateOnPress" $ do
     -- 'buttonBehaviourSpec' above only covers the default 'ActivateOnClick'
     -- activation -- these check that 'button' itself, not just
