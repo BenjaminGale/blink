@@ -139,10 +139,12 @@ resolveMouseSelection eid bounds gesture displayValue scrollX sel = do
       then Selection 0 (T.length displayValue)
       else sel
 
--- | Shift+Left\/Right extend the selection; plain Left\/Right collapse an
--- existing selection to its near end, or step by one otherwise.
+-- | Ctrl+A selects the entire value; Shift+Left\/Right extend the
+-- selection; plain Left\/Right collapse an existing selection to its near
+-- end, or step by one otherwise.
 resolveKeyboardSelection :: Bool -> [KeyEvent] -> Int -> Selection -> Selection
 resolveKeyboardSelection canEdit keyEvts len sel@(Selection _ active)
+  | selectAll  = Selection 0 len
   | shiftLeft  = extendActive (\a -> max 0   (a - 1)) sel
   | shiftRight = extendActive (\a -> min len (a + 1)) sel
   | plainLeft  = cursor (if hasSel then selLo else max 0   (active - 1))
@@ -157,34 +159,38 @@ resolveKeyboardSelection canEdit keyEvts len sel@(Selection _ active)
     shiftRight = pressed KeyRight True
     plainLeft  = pressed KeyLeft  False
     plainRight = pressed KeyRight False
+    selectAll  = canEdit && any (\e -> key e == KeyA && Ctrl `elem` modifiers e) keyEvts
 
--- | Backspace and typed text edit the value, selection-aware; returns the
--- new selection alongside the new value when it actually changed.
--- 'inputFilter' is applied to the newly typed text before insertion,
--- letting callers reject or transform keystrokes (e.g. digits only).
--- Assumes the caller has already checked the control is focused and
--- enabled. Pure -- the caller decides how (or whether) to report the
--- change.
+-- | Backspace, Delete, and typed text edit the value, selection-aware;
+-- returns the new selection alongside the new value when it actually
+-- changed. Each removes the whole selection when there is one; with
+-- none, Backspace removes the character before the cursor and Delete
+-- the one after it. 'inputFilter' is applied to newly typed text before
+-- insertion. Assumes the caller has already checked the control is
+-- focused and enabled.
 applyEdit :: (Text -> Text) -> Text -> InputState -> Selection -> (Selection, Maybe Text)
 applyEdit inputFilterFn currentValue input sel@(Selection _ active)
-  | backspace || hasTyped =
+  | backspace || delete || hasTyped =
       (cursor newCursor, if newText /= currentValue then Just newText else Nothing)
   | otherwise = (sel, Nothing)
   where
     keyEvts   = inputKeyEvents input
     backspace = any (\e -> key e == KeyBackspace) keyEvts
+    delete    = any (\e -> key e == KeyDelete) keyEvts
     typed     = inputFilterFn (foldl (<>) T.empty (inputTypedText input))
     hasTyped  = not (T.null typed)
     hasSel    = selectionHasExtent sel
     selLo     = selectionLow sel
     selHi     = selectionHigh sel
     (newText, newCursor)
-      | hasSel && backspace =
+      | hasSel && (backspace || delete) =
           (T.take selLo currentValue <> T.drop selHi currentValue, selLo)
       | hasSel =
           (T.take selLo currentValue <> typed <> T.drop selHi currentValue, selLo + T.length typed)
       | backspace && active > 0 =
           (T.take (active - 1) currentValue <> T.drop active currentValue, active - 1)
+      | delete && active < T.length currentValue =
+          (T.take active currentValue <> T.drop (active + 1) currentValue, active)
       | hasTyped =
           (T.take active currentValue <> typed <> T.drop active currentValue, active + T.length typed)
       | otherwise = (currentValue, active)

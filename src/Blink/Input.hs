@@ -50,8 +50,13 @@ data Key
     -- ^ Return \/ Enter key.
   | KeyBackspace
     -- ^ Backspace key.
+  | KeyDelete
+    -- ^ Forward Delete key.
   | KeySpace
     -- ^ Space bar.
+  | KeyA
+    -- ^ The @A@ key. With 'Ctrl' held, selects all in
+    -- "Blink.Controls.TextInput".
   | KeyLeft
     -- ^ Left arrow.
   | KeyRight

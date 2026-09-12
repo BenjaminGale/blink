@@ -141,6 +141,16 @@ spec = describe "Blink.Controls.TextInput" $ do
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], PressKey KeyBackspace []]
       resultMessages result `shouldBe` ["hell"]
 
+    it "removes the character after the cursor on delete" $ do
+      let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
+      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyLeft [], PressKey KeyDelete []]
+      resultMessages result `shouldBe` ["ello"]
+
+    it "does nothing on delete at the end of the value" $ do
+      let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
+      result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], PressKey KeyDelete []]
+      resultMessages result `shouldBe` []
+
     it "does not fire onInput when there is no input" $ do
       let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] []
@@ -251,6 +261,11 @@ spec = describe "Blink.Controls.TextInput" $ do
       result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyRight []]
       contextSelection Field (resultContext result) `shouldBe` Just (Selection 5 5)
 
+    it "selects the entire value on Ctrl+A" $ do
+      base   <- seeded 2 2
+      result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyA [Ctrl]]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 0 5)
+
   describe "selection editing" $ do
     -- See the "arrow navigation" 'seeded' above for why the field itself is
     -- rendered alongside the seeding 'requestSelectionAt'.
@@ -264,6 +279,12 @@ spec = describe "Blink.Controls.TextInput" $ do
       let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
       base   <- seeded 1 3 attrs
       result <- runInteractions testBounds base (fullSizeTextInput Field attrs) [] [PressKey KeyBackspace []]
+      resultMessages result `shouldBe` ["hlo"]
+
+    it "deletes the selected range on delete" $ do
+      let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
+      base   <- seeded 1 3 attrs
+      result <- runInteractions testBounds base (fullSizeTextInput Field attrs) [] [PressKey KeyDelete []]
       resultMessages result `shouldBe` ["hlo"]
 
     it "replaces the selected range with typed text" $ do

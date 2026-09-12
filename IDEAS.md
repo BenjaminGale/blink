@@ -37,8 +37,6 @@ design in particular.
 Add a placeholderText attribute which is displayed (grayed out) when the control
 has no input.
 
-Support delete key
-
 ### Icon element
 An `icon` control, built the same way `label` is, that draws a single glyph
 from an icon font (e.g. Material Symbols) instead of body text — a `name`
