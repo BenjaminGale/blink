@@ -18,23 +18,85 @@ import qualified SDL
 import qualified SDL.Font as Font
 import qualified SDL.Image as Image
 import Data.IORef
+import Data.List (sortOn)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
-import Data.Word (Word8)
+import Data.Word (Word8, Word64)
 import Foreign.C.Types (CInt)
 
-type TextureCache = IORef (Map (Text, SDL.V4 Word8) (SDL.Texture, CInt, CInt))
+-- | Entries a 'BoundedCache' holds before it evicts its
+-- least-recently-used ones -- caches keyed by arbitrary rendered text
+-- (glyph textures, glyph offsets) would otherwise grow without bound as
+-- an app displays new strings (timestamps, counters, live data) over its
+-- lifetime.
+maxCacheEntries :: Int
+maxCacheEntries = 512
+
+-- | Entries evicted at once when a 'BoundedCache' exceeds
+-- 'maxCacheEntries'. Evicting a batch rather than exactly one entry per
+-- insert means the eviction sort below runs rarely rather than on every
+-- insert once the cache is full.
+evictBatchSize :: Int
+evictBatchSize = maxCacheEntries `div` 4
+
+-- | A size-bounded, least-recently-used cache: a plain 'Map' paired with
+-- a monotonic tick, each entry stamped with the tick it was last looked
+-- up or created at. Untouched below 'maxCacheEntries', so a hit stays a
+-- map lookup plus a stamp update -- see 'cacheGetOrCreate'.
+type BoundedCache k v = IORef (Map k (v, Word64), Word64)
+
+newBoundedCache :: IO (BoundedCache k v)
+newBoundedCache = newIORef (Map.empty, 0)
+
+-- | Runs @onDestroy@ (e.g. 'SDL.destroyTexture') on every value still
+-- held, for use at app shutdown.
+freeBoundedCache :: BoundedCache k v -> (v -> IO ()) -> IO ()
+freeBoundedCache cache onDestroy = do
+  (m, _) <- readIORef cache
+  mapM_ (onDestroy . fst) (Map.elems m)
+
+-- | Returns the cached value at @key@, bumping its recency, or runs
+-- @create@ to make one on a miss. Once the cache exceeds
+-- 'maxCacheEntries', evicts the 'evictBatchSize' least-recently-used
+-- entries (running @onEvict@ on each, e.g. to destroy its texture).
+cacheGetOrCreate :: Ord k => BoundedCache k v -> (v -> IO ()) -> k -> IO v -> IO v
+cacheGetOrCreate cache onEvict cacheKey create = do
+  (m, tick) <- readIORef cache
+  case Map.lookup cacheKey m of
+    Just (v, _) -> do
+      writeIORef cache (Map.insert cacheKey (v, tick) m, tick + 1)
+      pure v
+    Nothing -> do
+      v <- create
+      let m' = Map.insert cacheKey (v, tick) m
+      m'' <- if Map.size m' > maxCacheEntries
+        then evictLRU onEvict m'
+        else pure m'
+      writeIORef cache (m'', tick + 1)
+      pure v
+
+-- | Drops the 'evictBatchSize' entries with the oldest recency stamp,
+-- running @onEvict@ on each of their values first.
+evictLRU :: Ord k => (v -> IO ()) -> Map k (v, Word64) -> IO (Map k (v, Word64))
+evictLRU onEvict m = do
+  let (toEvict, toKeep) = splitAt evictBatchSize (sortOn (snd . snd) (Map.toList m))
+  mapM_ (onEvict . fst . snd) toEvict
+  pure (Map.fromList toKeep)
+
+type TextureCache = BoundedCache (Text, SDL.V4 Word8) (SDL.Texture, CInt, CInt)
+
+destroyTextureEntry :: (SDL.Texture, CInt, CInt) -> IO ()
+destroyTextureEntry (t, _, _) = SDL.destroyTexture t
 
 newTextureCache :: IO TextureCache
-newTextureCache = newIORef Map.empty
+newTextureCache = newBoundedCache
 
 freeTextureCache :: TextureCache -> IO ()
-freeTextureCache cache =
-  readIORef cache >>= mapM_ (\(t, _, _) -> SDL.destroyTexture t) . Map.elems
+freeTextureCache cache = freeBoundedCache cache destroyTextureEntry
 
 -- | 'NaturalImage' is keyed by path alone -- the image loaded at whatever
 -- size its own source declares, used for 'mkImageMeasurer' and for
@@ -48,30 +110,24 @@ data ImageCacheKey
   | SizedImage ImagePath CInt CInt
   deriving (Eq, Ord)
 
-type ImageCache = IORef (Map ImageCacheKey (SDL.Texture, CInt, CInt))
+type ImageCache = BoundedCache ImageCacheKey (SDL.Texture, CInt, CInt)
 
 newImageCache :: IO ImageCache
-newImageCache = newIORef Map.empty
+newImageCache = newBoundedCache
 
 freeImageCache :: ImageCache -> IO ()
-freeImageCache cache =
-  readIORef cache >>= mapM_ (\(t, _, _) -> SDL.destroyTexture t) . Map.elems
+freeImageCache cache = freeBoundedCache cache destroyTextureEntry
 
 -- | Loads the image at @path@ into a texture at its own natural size and
 -- caches it, or returns the cached texture from an earlier call -- used
 -- by 'mkImageMeasurer' (which only wants the size) and as the draw-time
 -- texture for any source 'loadSizedImageTexture' doesn't specialize.
 loadImageTexture :: SDL.Renderer -> ImageCache -> ImagePath -> IO (SDL.Texture, CInt, CInt)
-loadImageTexture renderer cache path = do
-  m <- readIORef cache
-  let cacheKey = NaturalImage path
-  case Map.lookup cacheKey m of
-    Just hit -> pure hit
-    Nothing  -> do
-      tex <- Image.loadTexture renderer (T.unpack path)
-      (SDL.TextureInfo _ _ w h) <- SDL.queryTexture tex
-      writeIORef cache (Map.insert cacheKey (tex, w, h) m)
-      pure (tex, w, h)
+loadImageTexture renderer cache path =
+  cacheGetOrCreate cache destroyTextureEntry (NaturalImage path) $ do
+    tex <- Image.loadTexture renderer (T.unpack path)
+    (SDL.TextureInfo _ _ w h) <- SDL.queryTexture tex
+    pure (tex, w, h)
 
 -- | 'True' for a path whose extension is @.svg@ (case-insensitive).
 isSvgPath :: ImagePath -> Bool
@@ -123,15 +179,11 @@ loadSizedImageTexture :: SDL.Renderer -> ImageCache -> ImagePath -> (CInt, CInt)
 loadSizedImageTexture renderer cache path (w, h)
   | not (isSvgPath path) = (\(tex, _, _) -> tex) <$> loadImageTexture renderer cache path
   | otherwise = do
-      m <- readIORef cache
-      let cacheKey = SizedImage path w h
-      case Map.lookup cacheKey m of
-        Just (tex, _, _) -> pure tex
-        Nothing -> do
-          src <- TIO.readFile (T.unpack path)
-          tex <- Image.decodeTexture renderer (TE.encodeUtf8 (sizedSvgSource w h src))
-          writeIORef cache (Map.insert cacheKey (tex, w, h) m)
-          pure tex
+      (tex, _, _) <- cacheGetOrCreate cache destroyTextureEntry (SizedImage path w h) $ do
+        src <- TIO.readFile (T.unpack path)
+        tex <- Image.decodeTexture renderer (TE.encodeUtf8 (sizedSvgSource w h src))
+        pure (tex, w, h)
+      pure tex
 
 toWord8 :: Double -> Word8
 toWord8 c = round (c * 255)
@@ -196,17 +248,12 @@ renderBorder renderer r color edges = do
 renderText :: SDL.Renderer -> Font.Font -> TextureCache -> Rectangle -> Text -> Colour -> TextAlign -> IO ()
 renderText renderer font cache r txt color textAlign = do
   let sdlColor = toSDLColor color
-      cacheKey = (txt, sdlColor)
-  m <- readIORef cache
-  (texture, tw, th) <- case Map.lookup cacheKey m of
-    Just hit -> pure hit
-    Nothing  -> do
-      surface <- Font.blended font sdlColor txt
-      tex     <- SDL.createTextureFromSurface renderer surface
-      SDL.freeSurface surface
-      (SDL.TextureInfo _ _ w h) <- SDL.queryTexture tex
-      writeIORef cache (Map.insert cacheKey (tex, w, h) m)
-      pure (tex, w, h)
+  (texture, tw, th) <- cacheGetOrCreate cache destroyTextureEntry (txt, sdlColor) $ do
+    surface <- Font.blended font sdlColor txt
+    tex     <- SDL.createTextureFromSurface renderer surface
+    SDL.freeSurface surface
+    (SDL.TextureInfo _ _ w h) <- SDL.queryTexture tex
+    pure (tex, w, h)
   SDL.copy renderer texture Nothing (Just (alignedTextRect r textAlign (fromIntegral tw) (fromIntegral th)))
 
 -- | Tints the image at @path@ by @colour@ -- see 'DrawImage' for what
@@ -256,7 +303,7 @@ submitDrawCommand renderer _ _ _ clipRef     PopClip                      = popC
 
 mkTextMeasurer :: Font.Font -> IO TextMeasurer
 mkTextMeasurer font = do
-  offsetCache <- newIORef (Map.empty :: Map Text [Float])
+  offsetCache <- newBoundedCache :: IO (BoundedCache Text [Float])
   pure TextMeasurer
     { tmCharOffset   = \t i -> do
         offsets <- getOffsets offsetCache font t
@@ -281,15 +328,8 @@ mkImageMeasurer renderer cache = ImageMeasurer
       pure (Size (fromIntegral w) (fromIntegral h))
   }
 
-getOffsets :: IORef (Map Text [Float]) -> Font.Font -> Text -> IO [Float]
-getOffsets cacheRef font t = do
-  cache <- readIORef cacheRef
-  case Map.lookup t cache of
-    Just offsets -> pure offsets
-    Nothing -> do
-      offsets <- buildOffsets font t
-      writeIORef cacheRef (Map.insert t offsets cache)
-      pure offsets
+getOffsets :: BoundedCache Text [Float] -> Font.Font -> Text -> IO [Float]
+getOffsets cache font t = cacheGetOrCreate cache (const (pure ())) t (buildOffsets font t)
 
 buildOffsets :: Font.Font -> Text -> IO [Float]
 buildOffsets font t = do
