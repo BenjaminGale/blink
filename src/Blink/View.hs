@@ -40,6 +40,43 @@ by queuing a @msg@ value with 'emit' rather than mutating anything. The host
 reads the queued messages back with 'getMessages' once the frame completes
 and folds them into its own state via "Blink.Update".
 
+= Effects and settling
+
+A control queues two kinds of thing during a frame, both riding in the
+same 'Out' queue: a @msg@ via 'emit', for the application, and a
+'UiEffect' via 'emitUi', for Blink's own presentation state, never seen by
+the application. A handler returning @['Out' e msg]@ (see
+'Blink.Controls.Table.onColumnSortRequested' for an example) can queue
+both from the same reaction: the message that tells the application what
+happened, and an effect reacting to it on the presentation side.
+
+'emitUi' only appends a 'UiEffect' to the queue; it does not change the
+running 'ViewContext'. 'nextFrameContext' (or, mid-frame,
+'rerenderContext') applies every queued effect via @applyUiEffects@ before
+the next render starts — this is "settling". A control reading its own
+state back ('getScrollState', 'getFocus', 'getSelection') always sees the last settled value,
+never a write some other control queued moments earlier in the same
+frame. 'settleEffects' and 'settleAndClearEffects' expose the same
+operation directly, for a caller that needs a queued effect applied
+without advancing every other part of the frame the way a real render
+does.
+
+Queue an effect only as a direct reaction to something happening this
+frame — a click, a key press, a drag — carrying that decision forward as
+state other code can read back as settled and stable. A focus change
+requested via 'requestFocus' is this kind of thing, and so is a
+scrollbar's position while it is being dragged: both persist until
+something later decides otherwise.
+
+Not every write belongs on that queue. Something fully determined by this
+frame's own inputs — the current item order, the current selection, the
+current viewport — carries no decision worth deferring, because
+recomputing it from scratch always gives the same answer.
+'Blink.Controls.List.scrollRowIntoView' is this kind of thing: it corrects
+the scroll position immediately with 'setScrollStateNow' rather than
+queuing it, because keeping the selection visible is arithmetic on the
+current frame, not a decision anything else needs to read back.
+
 = Focus, scroll, hold, and selection
 
 Some controls carry presentation state that is no business of the

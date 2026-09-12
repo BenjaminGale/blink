@@ -190,9 +190,10 @@ applyEdit inputFilterFn currentValue input sel@(Selection _ active)
       | otherwise = (currentValue, active)
 
 -- | Resolves the frame's selection changes (mouse, then keyboard) and any
--- resulting edit, firing 'onSubmit'\/'onInput' reactions and writing the
--- new selection back via 'requestSelectionAt'. Returns the final selection for
--- the caller to draw and auto-scroll against.
+-- resulting edit, firing 'onSubmit'\/'onInput' reactions and, when the
+-- selection actually moved, writing it back via 'requestSelectionAt'.
+-- Returns the final selection for the caller to draw and auto-scroll
+-- against.
 resolveSelectionAndEdit
   :: Ord e
   => TextInputConfig e msg
@@ -223,7 +224,7 @@ resolveSelectionAndEdit cfg eid bounds canEdit gesture currentValue displayValue
   when submitted $ runHandlers (ticOnSubmit cfg) ()
   forM_ edited $ \t -> runHandlers (ticOnInput cfg) t
 
-  when canEdit $ requestSelectionAt eid selFinal
+  when (canEdit && selFinal /= selInit) $ requestSelectionAt eid selFinal
 
   pure selFinal
 
