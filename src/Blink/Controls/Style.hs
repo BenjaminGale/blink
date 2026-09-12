@@ -206,8 +206,8 @@ containerStyle p = StyleSet
 -- 'Blink.Controls.Checkbox.Style.checkboxStyleKey'), so hovering the
 -- icon specifically can recolour it without also recolouring that row's
 -- caption text. A control resolves this itself (it isn't part of the
--- usual per-control 'ccStyleKey'\/'currentStyle' path), against whatever
--- 'Blink.Style.VisualState's are relevant to the icon alone -- see
+-- usual per-control 'Blink.Controls.Control.ccStyleKey'\/'Blink.View.currentStyle'
+-- path), against whatever 'Blink.Style.VisualState's are relevant to the icon alone -- see
 -- 'Blink.Controls.Checkbox.checkbox' for how.
 iconStyleKey :: StyleKey e
 iconStyleKey = Class "icon"

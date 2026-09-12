@@ -19,7 +19,7 @@ import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..
 import Blink.Input (InputState (..), Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (Colour (..), TextAlign (..))
+import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.View
 
@@ -185,6 +185,19 @@ widgetSpec = describe "tree" $ do
       [MoveTo (atRow 2 24)]
       [ClickAt (atRow 2 24)]
     resultMessages result `shouldBe` []
+
+  it "draws an expanded node's chevron as expand_more.svg and a collapsed one as chevron_right.svg" $ do
+    result <- runInteractions testBounds seedCtx
+      (renderSilentTree [expanded (Set.singleton "src"), selection (unselected items)])
+      [] [Wait 1]
+    let restColour = RGBA 0 0 0 1
+    -- Row 1 ("src", depth 0): expanded, has children.
+    resultDraws result `shouldContain`
+      [DrawImage (Rectangle 0 0 16 20) "assets/icons/expand_more.svg" restColour]
+    -- Row 3 ("src/Controls", depth 1): collapsed (not in the expanded
+    -- set), has children -- chevron column starts after its indent.
+    resultDraws result `shouldContain`
+      [DrawImage (Rectangle 16 40 16 20) "assets/icons/chevron_right.svg" restColour]
 
 expandedMsg :: Set.Set String -> String
 expandedMsg s = "Expanded:" ++ show (Set.toList s)

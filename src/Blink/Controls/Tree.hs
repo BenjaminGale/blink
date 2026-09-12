@@ -38,7 +38,6 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (listToMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Text (Text)
 import Data.Tree (Forest, Tree (..))
 
 import Blink.Controls.Control
@@ -49,10 +48,10 @@ import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (TextAlign (AlignCenter))
+import Blink.Rendering (ImagePath)
 import Blink.Style (Style (..))
 import Blink.View (Effect, View, currentStyle)
-import Blink.View.Drawing (drawText)
+import Blink.View.Drawing (drawImage)
 
 -- | Every currently visible row of @forest@, in document order, paired
 -- with its depth (0 for a root). A node's children are only ever visited
@@ -153,15 +152,13 @@ onExpansionChanged h = Attribute (\c -> c { tcOnExpansionChanged = tcOnExpansion
 treeStepWidth :: Double
 treeStepWidth = 16
 
--- | The same 'BLACK DOWN\/RIGHT-POINTING TRIANGLE' glyphs (U+25BC\/U+25B6)
--- 'Blink.Controls.ScrollBar.scrollBar's own arrows already use -- these
--- render fine; it was their small-triangle cousins (U+25BE\/U+25B8) that
--- are missing from the demo's font. Drawn directly the same way
--- 'Blink.Controls.Checkbox.checkbox' draws its own tick glyph, rather
--- than composing a full 'Blink.Controls.Button.button' underneath, which
--- has chrome a chevron doesn't want.
-chevronGlyph :: Bool -> Text
-chevronGlyph isExpanded = if isExpanded then "\9660" else "\9654"
+-- | The expanded state's chevron, pointing down.
+chevronExpandedIcon :: ImagePath
+chevronExpandedIcon = "assets/icons/expand_more.svg"
+
+-- | The collapsed state's chevron, pointing right.
+chevronCollapsedIcon :: ImagePath
+chevronCollapsedIcon = "assets/icons/chevron_right.svg"
 
 -- | A tree built on 'listBase' (see the module header). @mkId@ builds
 -- every part's element id from a 'TreePart', the same relationship
@@ -221,7 +218,8 @@ indentAndChevron mkChevronId onExpansionChanged0 expanded0 depth hasChildren x =
               , ccContent     = \ci -> do
                   when (ciClicked ci) (runHandlers onExpansionChanged0 (toggleMembership x))
                   s <- currentStyle
-                  drawText (styleTextColour s) AlignCenter (chevronGlyph (Set.member x expanded0))
+                  let icon = if Set.member x expanded0 then chevronExpandedIcon else chevronCollapsedIcon
+                  drawImage (styleTextColour s) icon
               }
           }
 

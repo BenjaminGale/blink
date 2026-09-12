@@ -37,18 +37,23 @@ treeChevronMetrics = Metrics
   , metricsBorderEdges = noBorder
   }
 
--- | A plain, transparent, centred glyph with no border -- the same
--- shape 'Blink.Controls.Label.Style.labelStyle' has, just with no
--- padding of its own.
+-- | A plain, transparent, centred icon with no border -- the same shape
+-- 'Blink.Controls.Label.Style.labelStyle' has, just with no padding of
+-- its own. Uses 'paletteIcon'\/'paletteIconHover' (the same colours
+-- 'Blink.Controls.Checkbox.checkbox'\/'Blink.Controls.RadioButton.radioButton'
+-- tint their own icons with), since the chevron is nothing but an icon.
 treeChevronStyle :: Palette -> StyleSet
 treeChevronStyle p = StyleSet
   { styleBase = Style
       { styleBackground   = transparent
-      , styleTextColour   = paletteTextPrimary p
+      , styleTextColour   = paletteIcon p
       , styleTextAlign    = AlignCenter
       , styleBorderColour = Nothing
       }
-  , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
+  , styleOverrides = Map.fromList
+      [ (CommonMouseOver, \s -> s { styleTextColour = paletteIconHover p })
+      , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
+      ]
   }
 
 -- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
