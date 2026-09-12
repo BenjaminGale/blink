@@ -10,6 +10,12 @@ module Blink.Controls.Table
   ( TablePart (..)
   , ColumnWidth (..)
   , ColumnConfig (..)
+  , defaultColumnConfig
+  , column
+  , header
+  , cellWidth
+  , cell
+  , sortable
   , SortDirection (..)
   , TableConfig (..)
   , defaultTableConfig
@@ -34,7 +40,7 @@ import Data.Maybe (isJust)
 import Blink.Controls.Control
 import Blink.Controls.List
 import Blink.Controls.Table.Style (tableColumnDividerStyleKey, tableHeaderStyleKey)
-import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, noIntrinsicSize, runElement)
+import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, noIntrinsicSize, runElement)
 import Blink.Geometry (Alignment (TopLeft), Point (pointX), Rectangle (..))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), Length, exactly, fill)
@@ -71,6 +77,39 @@ data ColumnConfig e msg a = ColumnConfig
   , colCell     :: ItemState a -> Element e msg
   , colSortable :: Bool
   }
+
+-- | An empty header, a fill width, an empty cell, unsortable -- the
+-- starting point 'column' resolves its attributes against.
+defaultColumnConfig :: ColumnConfig e msg a
+defaultColumnConfig = ColumnConfig
+  { colHeader   = emptyElement
+  , colWidth    = ColumnFill
+  , colCell     = const emptyElement
+  , colSortable = False
+  }
+
+-- | Builds one 'ColumnConfig' from attributes, the same list syntax
+-- 'table' and 'Blink.Controls.TreeTable.treeTable' themselves take --
+-- see 'header', 'cellWidth', 'cell', 'sortable'.
+column :: [Attribute (ColumnConfig e msg a)] -> ColumnConfig e msg a
+column = resolve defaultColumnConfig
+
+-- | The column's header content.
+header :: Element e msg -> Attribute (ColumnConfig e msg a)
+header e = Attribute (\c -> c { colHeader = e })
+
+-- | The column's own width -- see 'ColumnWidth'.
+cellWidth :: ColumnWidth -> Attribute (ColumnConfig e msg a)
+cellWidth w = Attribute (\c -> c { colWidth = w })
+
+-- | How a row draws its cell in this column.
+cell :: (ItemState a -> Element e msg) -> Attribute (ColumnConfig e msg a)
+cell f = Attribute (\c -> c { colCell = f })
+
+-- | Whether clicking this column's header requests a sort -- see
+-- 'onColumnSortRequested'.
+sortable :: Bool -> Attribute (ColumnConfig e msg a)
+sortable s = Attribute (\c -> c { colSortable = s })
 
 -- | Which way a sorted column's own header click requests next -- see
 -- 'onColumnSortRequested'.

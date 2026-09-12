@@ -9,7 +9,7 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, postWith)
 import Blink.Controls.List
   (Direction (..), ItemState, SingleSelection, isItem, moveCursor, onSelectionChanged, rowHeight, selectItem, selection, unselected)
-import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..))
+import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..), cell, cellWidth, column, sortable)
 import Blink.Controls.TreeTable
 import Blink.Element (Element (..), emptyElement, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
@@ -83,14 +83,14 @@ qtyCell st = marker ("Qty:" ++ isItem st)
 -- header alignment is 'table''s own concern, not this row-focused test.
 testColumns :: [ColumnConfig TestElem String String]
 testColumns =
-  [ ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 60, colCell = nameCell, colSortable = True }
-  , ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 40, colCell = qtyCell, colSortable = True }
+  [ column [cellWidth (ColumnFixed 60), cell nameCell, sortable True]
+  , column [cellWidth (ColumnFixed 40), cell qtyCell, sortable True]
   ]
 
 silentColumns :: [ColumnConfig TestElem String String]
 silentColumns =
-  [ ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 60, colCell = const emptyElement, colSortable = True }
-  , ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 40, colCell = const emptyElement, colSortable = True }
+  [ column [cellWidth (ColumnFixed 60), sortable True]
+  , column [cellWidth (ColumnFixed 40), sortable True]
   ]
 
 items :: [String]

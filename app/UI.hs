@@ -14,7 +14,8 @@ import qualified Blink.Controls.List as List (isItem, onSelectionChanged)
 import Blink.Controls.ProgressBar (ProgressValue (..))
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)
 import qualified Blink.Controls.Slider as Slider (value)
-import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..), SortDirection (..), onColumnSortRequested, sortedBy)
+import Blink.Controls.Table
+  (ColumnConfig (..), ColumnWidth (..), SortDirection (..), cell, cellWidth, column, header, onColumnSortRequested, sortable, sortedBy)
 import Blink.Controls.Tree (TreeItemState (..), flattenVisible)
 import Blink.Controls.TreeTable (treeTable)
 import qualified Blink.Controls.TreeTable as TreeTable
@@ -932,18 +933,13 @@ sortedGroceryItems (Just (_, Descending)) = sortOn (Down . snd) groceryTableItem
 
 groceryTableColumns :: [ColumnConfig ControlId Msg Text]
 groceryTableColumns =
-  [ ColumnConfig
-      { colHeader   = listCaption "Item"
-      , colWidth    = ColumnFill
-      , colCell     = listCaption . List.isItem
-      , colSortable = True
-      }
-  , ColumnConfig
-      { colHeader   = listCaption "Qty"
-      , colWidth    = ColumnFixed 60
-      , colCell     = \st -> listCaption (maybe "" (T.pack . show) (lookup (List.isItem st) groceryTableItems))
-      , colSortable = True
-      }
+  [ column [header (listCaption "Item"), cellWidth ColumnFill, cell (listCaption . List.isItem), sortable True]
+  , column
+      [ header (listCaption "Qty")
+      , cellWidth (ColumnFixed 60)
+      , cell (\st -> listCaption (maybe "" (T.pack . show) (lookup (List.isItem st) groceryTableItems)))
+      , sortable True
+      ]
   ]
 
 groceryTableElem :: AppState -> Element ControlId Msg
@@ -1017,18 +1013,13 @@ visibleFileSizeTreeItems sortReq e = map fst (flattenVisible (sortedFileForest s
 
 fileSizeTreeColumns :: [ColumnConfig ControlId Msg Text]
 fileSizeTreeColumns =
-  [ ColumnConfig
-      { colHeader   = listCaption "Name"
-      , colWidth    = ColumnFill
-      , colCell     = listCaption . List.isItem
-      , colSortable = True
-      }
-  , ColumnConfig
-      { colHeader   = listCaption "Size (KB)"
-      , colWidth    = ColumnFixed 80
-      , colCell     = listCaption . fileSizeLabel . List.isItem
-      , colSortable = True
-      }
+  [ column [header (listCaption "Name"), cellWidth ColumnFill, cell (listCaption . List.isItem), sortable True]
+  , column
+      [ header (listCaption "Size (KB)")
+      , cellWidth (ColumnFixed 80)
+      , cell (listCaption . fileSizeLabel . List.isItem)
+      , sortable True
+      ]
   ]
 
 fileSizeTreeTableElem :: AppState -> Element ControlId Msg

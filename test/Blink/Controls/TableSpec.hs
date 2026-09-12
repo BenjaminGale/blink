@@ -73,8 +73,8 @@ items = [1, 2, 3]
 
 testColumns :: [ColumnConfig TestElem String Int]
 testColumns =
-  [ ColumnConfig { colHeader = marker "H-Name", colWidth = ColumnFixed 40, colCell = cellMarker "Name", colSortable = False }
-  , ColumnConfig { colHeader = marker "H-Age",  colWidth = ColumnFixed 60, colCell = cellMarker "Age", colSortable = False }
+  [ column [header (marker "H-Name"), cellWidth (ColumnFixed 40), cell (cellMarker "Name")]
+  , column [header (marker "H-Age"), cellWidth (ColumnFixed 60), cell (cellMarker "Age")]
   ]
 
 renderTable :: [Attribute (TableConfig SingleSelection TestElem String Int)] -> View TestElem String ()
@@ -87,14 +87,14 @@ renderTable attrs = runElement $ table Part
 
 silentColumns :: [ColumnConfig TestElem String Int]
 silentColumns =
-  [ ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 40, colCell = const emptyElement, colSortable = False }
-  , ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 60, colCell = const emptyElement, colSortable = False }
+  [ column [cellWidth (ColumnFixed 40)]
+  , column [cellWidth (ColumnFixed 60)]
   ]
 
 sortableColumns :: [ColumnConfig TestElem String Int]
 sortableColumns =
-  [ ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 40, colCell = const emptyElement, colSortable = True }
-  , ColumnConfig { colHeader = emptyElement, colWidth = ColumnFixed 60, colCell = const emptyElement, colSortable = True }
+  [ column [cellWidth (ColumnFixed 40), sortable True]
+  , column [cellWidth (ColumnFixed 60), sortable True]
   ]
 
 -- | Like 'renderSilentTable', but with both columns sortable -- for
@@ -271,7 +271,7 @@ columnCountEdgeSpec = describe "table column count edge cases" $ do
     resultMessages result `shouldBe` []
 
   it "renders a single column with no divider woven in" $ do
-    let oneColumn = [ ColumnConfig { colHeader = marker "H-Solo", colWidth = ColumnFixed 40, colCell = cellMarker "Solo", colSortable = False } ]
+    let oneColumn = [ column [header (marker "H-Solo"), cellWidth (ColumnFixed 40), cell (cellMarker "Solo")] ]
     result <- runInteractions testBounds seedCtx
       (runElement $ table Part [columns oneColumn, selection (unselected items), width (exactly 100), rowHeight 20])
       []
