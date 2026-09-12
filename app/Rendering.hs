@@ -2,8 +2,12 @@ module Rendering
   ( TextureCache
   , newTextureCache
   , freeTextureCache
+  , ImageCache
+  , newImageCache
+  , freeImageCache
   , submitDrawCommand
   , mkTextMeasurer
+  , mkImageMeasurer
   ) where
 
 import Blink
@@ -11,6 +15,7 @@ import Control.Monad (when)
 import SDL (($=))
 import qualified SDL
 import qualified SDL.Font as Font
+import qualified SDL.Image as Image
 import Data.IORef
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -27,6 +32,32 @@ newTextureCache = newIORef Map.empty
 freeTextureCache :: TextureCache -> IO ()
 freeTextureCache cache =
   readIORef cache >>= mapM_ (\(t, _, _) -> SDL.destroyTexture t) . Map.elems
+
+-- | Keyed by 'ImagePath' alone, unlike 'TextureCache' -- an image's pixels
+-- don't depend on a colour the way rendered text glyphs do.
+type ImageCache = IORef (Map ImagePath (SDL.Texture, CInt, CInt))
+
+newImageCache :: IO ImageCache
+newImageCache = newIORef Map.empty
+
+freeImageCache :: ImageCache -> IO ()
+freeImageCache cache =
+  readIORef cache >>= mapM_ (\(t, _, _) -> SDL.destroyTexture t) . Map.elems
+
+-- | Loads the image at @path@ into a texture and caches it, or returns the
+-- cached texture from an earlier call -- shared by 'renderImage' (drawing)
+-- and 'mkImageMeasurer' (natural size), so an image already on screen
+-- costs nothing extra to measure and vice versa.
+loadImageTexture :: SDL.Renderer -> ImageCache -> ImagePath -> IO (SDL.Texture, CInt, CInt)
+loadImageTexture renderer cache path = do
+  m <- readIORef cache
+  case Map.lookup path m of
+    Just hit -> pure hit
+    Nothing  -> do
+      tex <- Image.loadTexture renderer (T.unpack path)
+      (SDL.TextureInfo _ _ w h) <- SDL.queryTexture tex
+      writeIORef cache (Map.insert path (tex, w, h) m)
+      pure (tex, w, h)
 
 toWord8 :: Double -> Word8
 toWord8 c = round (c * 255)
@@ -101,6 +132,11 @@ renderText renderer font cache r txt color textAlign = do
       pure (tex, w, h)
   SDL.copy renderer texture Nothing (Just (alignedTextRect r textAlign (fromIntegral tw) (fromIntegral th)))
 
+renderImage :: SDL.Renderer -> ImageCache -> Rectangle -> ImagePath -> IO ()
+renderImage renderer cache r path = do
+  (texture, _, _) <- loadImageTexture renderer cache path
+  SDL.copy renderer texture Nothing (Just (toSDLRect r))
+
 pushClip :: SDL.Renderer -> IORef [SDL.Rectangle CInt] -> Rectangle -> IO ()
 pushClip renderer clipRef r = do
   stack <- readIORef clipRef
@@ -120,14 +156,14 @@ popClip renderer clipRef = do
     []            -> SDL.rendererClipRect renderer $= Nothing
     (topClip : _) -> SDL.rendererClipRect renderer $= Just topClip
 
-submitDrawCommand :: SDL.Renderer -> Font.Font -> TextureCache -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
-submitDrawCommand renderer _ _ _        (FillRect r color)            = renderFill   renderer r color
-submitDrawCommand renderer _ _ _        (StrokeBorder r color edges)  = renderBorder renderer r color edges
-submitDrawCommand _ _ _ _               (DrawText _ txt _ _) | T.null txt = pure ()
-submitDrawCommand renderer font cache _ (DrawText r txt color textAlign) = renderText renderer font cache r txt color textAlign
-submitDrawCommand _ _ _ _               (DrawImage _ _)              = pure () -- loading/rendering lands in a later slice
-submitDrawCommand renderer _ _ clipRef  (PushClip r)                  = pushClip     renderer clipRef r
-submitDrawCommand renderer _ _ clipRef   PopClip                      = popClip      renderer clipRef
+submitDrawCommand :: SDL.Renderer -> Font.Font -> TextureCache -> ImageCache -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
+submitDrawCommand renderer _ _ _ _          (FillRect r color)            = renderFill   renderer r color
+submitDrawCommand renderer _ _ _ _          (StrokeBorder r color edges)  = renderBorder renderer r color edges
+submitDrawCommand _ _ _ _ _                 (DrawText _ txt _ _) | T.null txt = pure ()
+submitDrawCommand renderer font cache _ _   (DrawText r txt color textAlign) = renderText renderer font cache r txt color textAlign
+submitDrawCommand renderer _ _ imgCache _   (DrawImage r path)            = renderImage  renderer imgCache r path
+submitDrawCommand renderer _ _ _ clipRef    (PushClip r)                  = pushClip     renderer clipRef r
+submitDrawCommand renderer _ _ _ clipRef     PopClip                      = popClip      renderer clipRef
 
 mkTextMeasurer :: Font.Font -> IO TextMeasurer
 mkTextMeasurer font = do
@@ -148,6 +184,13 @@ mkTextMeasurer font = do
           else do (w, h) <- Font.size font t
                   pure (Size (fromIntegral w) (fromIntegral h))
     }
+
+mkImageMeasurer :: SDL.Renderer -> ImageCache -> ImageMeasurer
+mkImageMeasurer renderer cache = ImageMeasurer
+  { imNaturalSize = \path -> do
+      (_, w, h) <- loadImageTexture renderer cache path
+      pure (Size (fromIntegral w) (fromIntegral h))
+  }
 
 getOffsets :: IORef (Map Text [Float]) -> Font.Font -> Text -> IO [Float]
 getOffsets cacheRef font t = do
