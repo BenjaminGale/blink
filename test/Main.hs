@@ -28,10 +28,13 @@ import qualified Blink.LayoutSpec as Layout
 import qualified Blink.Style.DefaultsSpec as StyleDefaults
 import qualified Blink.View.AnimationSpec as ViewAnimation
 import qualified Blink.View.ContextSpec as ViewContext
+import qualified Blink.View.CursorSpec as ViewCursor
 import qualified Blink.View.DrawingSpec as ViewDrawing
+import qualified Blink.View.ExtentSpec as ViewExtent
 import qualified Blink.View.FocusSpec as ViewFocus
 import qualified Blink.View.HoldSpec as ViewHold
 import qualified Blink.View.MouseSpec as ViewMouse
+import qualified Blink.View.NavigationSpec as ViewNavigation
 import qualified Blink.View.ScrollSpec as ViewScroll
 import qualified Blink.View.SelectionSpec as ViewSelection
 import qualified Blink.UpdateSpec as Update
@@ -41,10 +44,13 @@ main = hspec $ do
   App.spec
   ViewContext.spec
   ViewAnimation.spec
+  ViewCursor.spec
   ViewDrawing.spec
+  ViewExtent.spec
   ViewFocus.spec
   ViewHold.spec
   ViewMouse.spec
+  ViewNavigation.spec
   ViewScroll.spec
   ViewSelection.spec
   Update.spec

@@ -154,11 +154,14 @@ test-suite blink-tests
         Blink.Style.DefaultsSpec
         Blink.View.AnimationSpec
         Blink.View.ContextSpec
+        Blink.View.CursorSpec
         Blink.View.DrawingSpec
+        Blink.View.ExtentSpec
         Blink.View.Fixtures
         Blink.View.FocusSpec
         Blink.View.HoldSpec
         Blink.View.MouseSpec
+        Blink.View.NavigationSpec
         Blink.View.ScrollSpec
         Blink.View.SelectionSpec
     build-depends:
