@@ -11,7 +11,7 @@ import Blink.Controls.List
   (Direction (..), ItemState, SingleSelection, isItem, moveCursor, onSelectionChanged, rowHeight, selectItem, selection, unselected)
 import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..), cell, cellWidth, column, sortable)
 import Blink.Controls.TreeTable
-import Blink.Element (Element (..), emptyElement, runElement, width)
+import Blink.Element (Element (..), runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
 import Blink.Input (InputState (..), Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)

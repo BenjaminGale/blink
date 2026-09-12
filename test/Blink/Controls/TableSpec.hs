@@ -9,7 +9,7 @@ import Blink.Controls.List
   (ItemState, ListPart (..), SingleSelection, isItem, onSelectionChanged, rowHeight, selectAt, selectFirst, selection, unselected)
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Controls.Table
-import Blink.Element (Element (..), emptyElement, runElement, width)
+import Blink.Element (Element (..), runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)

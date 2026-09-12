@@ -3,6 +3,7 @@ module Blink.Controls.ListSpec (spec) where
 
 import qualified Data.Map.Strict as Map
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Maybe (fromJust)
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute, postWith, resolve)
@@ -105,7 +106,7 @@ requiredSpec = describe "RequiredSelection" $ do
 
   it "moveCursor at either end is a no-op" $ do
     let first = requireFirst (1 :| [2, 3 :: Int])
-        Just lastSel = requireAt 2 [1, 2, 3 :: Int]
+        lastSel = fromJust (requireAt 2 [1, 2, 3 :: Int])
     moveCursor Prev first `shouldBe` first
     moveCursor Next lastSel `shouldBe` lastSel
 
