@@ -9,7 +9,6 @@ import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
-import Blink.Cmd (Cmd (..))
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
 import Blink.Layout.Constraints (Layout (..), fill)
@@ -312,7 +311,7 @@ cmdApp = App
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
   , view    = \s -> fullView (when (null s) (emit Start))
   , update  = \m -> case m of
-      Start  -> cmd (Cmd (pure (Done "done")))
+      Start  -> cmd (pure (Done "done"))
       Done t -> modify (++ [t])
   }
 

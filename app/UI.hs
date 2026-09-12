@@ -2,7 +2,6 @@
 module UI (ControlId, AppState (..), demoApp) where
 
 import Blink.App hiding (Continue)
-import Blink.Cmd (Cmd (..))
 import Blink.Controls hiding (rowHeight)
 import Blink.Controls.Control
   (ChildNavigation (..), ContainedNavigation (..), ControlConfig (..), EntryPolicy (..), FocusPolicy (..)
@@ -215,7 +214,7 @@ updateApp msg = case msg of
     }
   StartFetch -> do
     modify $ \s -> s { backgroundStatus = Fetching }
-    cmd (Cmd fetchDemoFile)
+    cmd fetchDemoFile
   FetchFinished contents -> modify $ \s -> s { backgroundStatus = Fetched contents }
   JumpToLongListEnd -> requestScrollTo (LongList (ListScrollBar ScrollBar)) 1
 

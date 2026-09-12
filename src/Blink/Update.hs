@@ -47,7 +47,7 @@ the backend's 'Blink.App.MsgQueue' has it:
 update :: Msg -> Update AppState ElementId Msg ()
 update FetchClicked = do
   modify (\\s -> s { status = Loading })
-  cmd (Cmd (FileLoaded \<$\> Control.Exception.try (readFile path)))
+  cmd (FileLoaded \<$\> Control.Exception.try (readFile path))
 update (FileLoaded result) = modify (\\s -> s { status = Loaded result })
 @
 
@@ -79,7 +79,7 @@ module Blink.Update
   , cmd
   ) where
 
-import Blink.Cmd (Cmd)
+import Blink.Cmd (Cmd (..))
 import Blink.View.Context (HasUiEffect (..), UiEffect)
 
 -- | A pure, state-threading computation over the application state @s@,
@@ -125,11 +125,11 @@ gets f = Update $ \s -> (f s, s, [], [])
 modify :: (s -> s) -> Update s e msg ()
 modify f = Update $ \s -> ((), f s, [], [])
 
--- | Requests that a 'Cmd' be run. Its result is folded back into the state
--- as an ordinary message, on whichever later frame the backend's
--- 'Blink.App.MsgQueue' delivers it.
-cmd :: Cmd msg -> Update s e msg ()
-cmd c = Update $ \s -> ((), s, [c], [])
+-- | Requests that an 'IO' action be run as a 'Cmd'. Its result is folded
+-- back into the state as an ordinary message, on whichever later frame the
+-- backend's 'Blink.App.MsgQueue' delivers it.
+cmd :: IO msg -> Update s e msg ()
+cmd io = Update $ \s -> ((), s, [Cmd io], [])
 
 -- | Runs an 'Update' computation from a starting state, discarding its
 -- result and any requested 'Cmd's\/'UiEffect's, keeping only the final
