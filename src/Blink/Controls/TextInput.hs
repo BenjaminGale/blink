@@ -77,7 +77,7 @@ instance HasLayoutConfig (TextInputConfig e msg) where
 value :: Text -> Attribute (TextInputConfig e msg)
 value t = Attribute (\tc -> tc { ticValue = t })
 
--- | Text shown, lightened, in place of the value whenever that value is
+-- | Text shown, muted, in place of the value whenever that value is
 -- empty -- drawn directly, never passed through 'inputFilter' or
 -- 'displayFilter' since it isn't user data. Defaults to @\"\"@, which
 -- shows nothing.
@@ -273,19 +273,24 @@ scrollFraction maxPx px
 scrollPixels :: Double -> Double -> Double
 scrollPixels maxPx frac = frac * maxPx
 
--- | Mixes @c@'s RGB 60% of the way toward white, leaving alpha alone --
--- how the placeholder is lightened against whatever text colour the
--- current style resolves to, without needing a dedicated theme colour
--- for it. RGB rather than alpha, since text is rasterized to a texture
--- that may not alpha-blend on copy -- see 'Blink.Controls.Slider.shade'
--- for the same trick run the other way, toward black.
-lighten :: Colour -> Colour
-lighten (RGBA r g b a) = RGBA (mix r) (mix g) (mix b) a
-  where mix c = c + (1 - c) * 0.6
+-- | Mixes @text@'s RGB 60% of the way toward @bg@, leaving alpha alone --
+-- how the placeholder is muted against whatever text/background colours
+-- the current style resolves to, without needing a dedicated theme
+-- colour for it. Mixing toward the background rather than toward a
+-- fixed white keeps the placeholder muted in both a light theme (dark
+-- text faded toward a light background) and a dark one (light text
+-- faded toward a dark background), where mixing toward white would
+-- instead make it stand out more than the value text. RGB rather than
+-- alpha, since text is rasterized to a texture that may not
+-- alpha-blend on copy -- see 'Blink.Controls.Slider.shade' for the
+-- same trick run with a fixed factor instead of a target colour.
+muted :: Colour -> Colour -> Colour
+muted (RGBA tr tg tb a) (RGBA br bg bb _) = RGBA (mix tr br) (mix tg bg) (mix tb bb) a
+  where mix t b = t + (b - t) * 0.6
 
 -- | Draws the selection highlight and the cursor (both focused and
 -- enabled), and the text itself, all offset by the current horizontal
--- scroll -- the placeholder, lightened, in place of the value when that
+-- scroll -- the placeholder, muted, in place of the value when that
 -- value is empty.
 drawTextInputContent :: Ord e => Style -> Rectangle -> Text -> Text -> Bool -> Double -> Selection -> View e msg ()
 drawTextInputContent s bounds displayValue placeholderText canEdit ox sel@(Selection _ active) = do
@@ -301,7 +306,7 @@ drawTextInputContent s bounds displayValue placeholderText canEdit ox sel@(Selec
 
   let textBounds = bounds { rectX = rectX bounds - ox }
   if T.null displayValue && not (T.null placeholderText)
-    then withBounds textBounds $ drawText (lighten (styleTextColour s)) AlignLeft placeholderText
+    then withBounds textBounds $ drawText (muted (styleTextColour s) (styleBackground s)) AlignLeft placeholderText
     else withBounds textBounds $ drawText (styleTextColour s) AlignLeft displayValue
 
   when canEdit $ do

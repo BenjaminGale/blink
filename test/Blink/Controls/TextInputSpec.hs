@@ -27,9 +27,12 @@ testBounds = Rectangle 0 0 100 100
 testColour :: Colour
 testColour = RGBA 0 0 0 1
 
+testBackground :: Colour
+testBackground = RGBA 1 1 1 1
+
 testStyle :: Style
 testStyle = Style
-  { styleBackground   = testColour
+  { styleBackground   = testBackground
   , styleTextColour   = testColour
   , styleTextAlign    = AlignLeft
   , styleBorderColour = Nothing
@@ -126,7 +129,7 @@ spec = describe "Blink.Controls.TextInput" $ do
       resultDraws result `shouldContain` [cursorRectAt 15]
 
   describe "placeholder" $ do
-    it "shows the placeholder, lightened, when the value is empty" $ do
+    it "shows the placeholder, muted toward the background, when the value is empty" $ do
       result <- runInteractions testBounds seedCtx (unfocused [placeholder "hint"]) [] []
       resultDraws result `shouldContain` [DrawText contentRect "hint" (RGBA 0.6 0.6 0.6 1) AlignLeft]
 
