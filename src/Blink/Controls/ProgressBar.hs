@@ -115,8 +115,8 @@ progressBar attrs = Element
           let clamped   = max 0 (min 1 value)
               fillRect' = r { rectWidth = rectWidth r * clamped }
           withBounds fillRect' $ fillRect (styleTextColour s)
-        Indeterminate -> do
-          when (not (ciDisabled ci)) requiresAnimation
+        Indeterminate -> when (not (ciDisabled ci)) $ do
+          requiresAnimation
           elapsed <- getAnimElapsed
           let bandW  = min (pbBandWidth cfg) (rectWidth r)
               cycles = realToFrac elapsed * pbBandSpeed cfg

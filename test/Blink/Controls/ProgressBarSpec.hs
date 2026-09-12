@@ -174,7 +174,6 @@ spec = describe "Blink.Controls.ProgressBar" $ do
       ctx <- snd <$> runView (runElement (progressBar [progress Indeterminate, isEnabled False])) elapsedCtx
       contextRequiresAnimation ctx `shouldBe` False
 
-    it "still draws the band at the live clock's position while disabled, so re-enabling doesn't jump" $ do
-      enabledCtx  <- snd <$> runView (runElement (progressBar [progress Indeterminate])) elapsedCtx
-      disabledCtx <- snd <$> runView (runElement (progressBar [progress Indeterminate, isEnabled False])) elapsedCtx
-      getDrawCommands disabledCtx `shouldBe` getDrawCommands enabledCtx
+    it "draws no band while disabled, since a frozen sweep would look stuck" $ do
+      ctx <- snd <$> runView (runElement (progressBar [progress Indeterminate, isEnabled False])) elapsedCtx
+      getDrawCommands ctx `shouldNotContain` [FillRect (Rectangle 50 15 70 70) testColour]
