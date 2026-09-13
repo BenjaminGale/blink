@@ -69,12 +69,8 @@ module Blink.Controls.Control
   , style
   , StyleKey (..)
 
-    -- * Focus scope
+    -- * Focus
   , FocusPolicy (..)
-  , ChildNavigation (..)
-  , ContainedNavigation (..)
-  , WrapPolicy (..)
-  , EntryPolicy (..)
   , focusPolicy
 
     -- * Measurement
@@ -204,19 +200,15 @@ postWith f a = [EffectMsg (f a)]
 
 -- | 'True' when nothing else holds mouse capture, or this control itself
 -- does (a drag in progress on this control doesn't count as contention), or
--- the enclosing 'FocusScope' does. That last case matters for a click
--- landing on a 'FocusScope' composite's own background (not any child):
+-- the enclosing 'Blink.View.Focus.withFocusScope' scope does. That last case
+-- matters for a click landing on a scope's own background (not any child):
 -- the composite itself acquires capture first (its content hasn't rendered,
 -- and so hasn't had a chance to claim the point out from under it, until
 -- afterwards -- see 'Blink.View.Mouse.isOccludedFor'), and that capture is
 -- held for the whole press. Without this, every child's own auto-claim
 -- would read as contested by its own composite for that entire press, so
--- nothing could claim the scope's freshly-granted focus until release --
--- and a 'Blink.Controls.Control.FocusPolicy.WrapStop' scope, seeing
--- nothing claimed inside for a frame, would give up its own claim too (see
--- 'runFocusScope'), letting the claim be stolen by whatever else in the
--- surrounding order auto-claims next. Shared by 'control's own auto-claim
--- logic.
+-- nothing could claim the scope's freshly-granted focus until release.
+-- Shared by 'control's own auto-claim logic.
 isMouseFreeFor :: Eq e => e -> View e msg Bool
 isMouseFreeFor eid = do
   capturedByMe    <- isDragging eid
@@ -349,17 +341,26 @@ fireElementEvents cc ci = do
       , (ciFocusLost    ci, ccOnFocusLost    cc)
       ]
 
--- * Focus scope
+-- * Focus
 
--- | Whether, and how, a control's own identity participates in keyboard
--- focus. Attached via the @ccFocusPolicy@ field of 'ControlConfig'
--- (defaulting to 'Focusable', matching every control's existing
--- behavior). Unlike other 'ControlConfig' fields, a widget that needs a
--- fixed value (e.g. 'Blink.Controls.Label.label' always being
--- 'NotFocusable') sets it unconditionally after resolving attrs, the same
--- way it already pins other fixed behavior -- there is no separate,
--- narrower attribute for this; 'focusPolicy' is the only one, and any
--- widget is free to override whatever a caller passed through it.
+-- | Whether a control's own identity participates in keyboard focus.
+-- Attached via the @ccFocusPolicy@ field of 'ControlConfig' (defaulting to
+-- 'Focusable', matching every control's existing behavior). Unlike other
+-- 'ControlConfig' fields, a widget that needs a fixed value (e.g.
+-- 'Blink.Controls.Label.label' always being 'NotFocusable') sets it
+-- unconditionally after resolving attrs, the same way it already pins
+-- other fixed behavior -- there is no separate, narrower attribute for
+-- this; 'focusPolicy' is the only one, and any widget is free to override
+-- whatever a caller passed through it.
+--
+-- A composite with its own distinctly-identified children (a list, a
+-- tree, an editable row) that needs to give Tab a different meaning while
+-- one of them is active calls 'Blink.View.Focus.withFocusScope' directly
+-- around that content, rather than declaring it here. It writes whatever
+-- entry, exit, and navigation behaviour it needs, typically a handful of
+-- 'Blink.View.Focus.setFocus'\/'Blink.View.Focus.requestFocus' calls
+-- reacting to its own key handling, as ordinary code, the same way it
+-- already manages any other per-instance state.
 data FocusPolicy
   = NotFocusable
     -- ^ This control's own id never becomes a focus target: no auto-claim
@@ -371,189 +372,7 @@ data FocusPolicy
     -- the way every focusable control already works: auto-claimed by
     -- rendering first while nothing else holds focus, given up on Tab,
     -- taken on click. The default.
-  | FocusScope ChildNavigation
-    -- ^ Also exactly one focus stop from outside; 'ChildNavigation'
-    -- decides what Tab does once focus is inside -- keep moving through
-    -- this control's own distinctly-identified children ('Continue'), or
-    -- stay contained within them using a separate key scheme
-    -- ('Contained').
   deriving (Eq, Show)
-
--- | What Tab does once focus is inside a 'FocusScope'.
-data ChildNavigation
-  = Continue
-    -- ^ Tab keeps moving through this control's own children and on into
-    -- the surrounding order at the ends, exactly as if this control
-    -- weren't there at all. No scope of its own is needed for this.
-  | Contained ContainedNavigation
-    -- ^ Tab never reaches the children at all -- it stays owned by this
-    -- control as a single stop, the same as 'Focusable'. Movement between
-    -- children uses its own separate key scheme instead.
-  deriving (Eq, Show)
-
--- | The key scheme and behaviour for 'Contained' navigation.
-data ContainedNavigation = ContainedNavigation
-  { navForward  :: (Key, [Modifier])
-    -- ^ Moves to the next child. Never Tab -- that stays owned by this
-    -- control as a whole.
-  , navBackward :: (Key, [Modifier])
-    -- ^ Moves to the previous child.
-  , navWrap     :: WrapPolicy
-  , navEntry    :: EntryPolicy
-  } deriving (Eq, Show)
-
--- | What happens when 'ContainedNavigation' runs off the first\/last
--- child.
-data WrapPolicy
-  = WrapCycle
-    -- ^ Wraps around to the opposite child.
-  | WrapStop
-    -- ^ Stops there -- the boundary child stays focused. Tab remains the
-    -- only way to leave a 'Contained' scope.
-  deriving (Eq, Show)
-
--- | Which child 'Contained' navigation targets when the scope gains focus
--- from outside (a Tab arriving at the boundary) with nothing already
--- focused inside.
-data EntryPolicy
-  = EnterRemembered
-    -- ^ Targets whichever child was focused last time the scope was live
-    -- (persisted indefinitely, independent of focus decay).
-  | EnterFirst
-    -- ^ Ignores history; whichever child is first eligible to auto-claim
-    -- during this render gets it, the same way focus already resolves
-    -- today.
-  deriving (Eq, Show)
-
--- | Wraps a control's own content per its resolved 'FocusPolicy'. Every
--- control (leaf or composite) runs its content through this, uniformly --
--- 'FocusPolicy' decides what, if anything, changes for whatever renders
--- inside.
---
--- 'NotFocusable' and 'Focusable' need no scope machinery at all: neither
--- changes whether this control's own id is a focus target for anything
--- beyond the ordinary claim\/give-up logic 'control' already does outside
--- this function (see @autoClaimsFocus@ and the click-to-focus\/Tab
--- handling in 'control' itself), and neither has any nested,
--- distinctly-identified children to act on. A real scope (established via
--- 'withFocusScope') is only needed for 'FocusScope', since that's the one
--- case where something inside -- a distinct child id -- needs Tab handed
--- to it, or hidden from it, differently than this control's own id. Also
--- why a real scope can't just be established unconditionally for every
--- control: a control's own content routinely reads its own focus\/key
--- state directly (e.g. 'Blink.Controls.TextInput.textInput' checking
--- 'isFocused' on its own id), and wrapping that in a scope keyed by the
--- same id would swap the ambient out from under those checks.
---
--- Both 'FocusScope' cases still need the caller ('control' itself) to
--- skip this control's own ordinary Tab\/Shift-Tab handling before @body@
--- runs -- run unconditionally there, it would see focus-within as "I'm
--- focused" and give up the instant Tab is pressed, before any child ever
--- gets a chance to react. 'runFocusScope' runs it itself instead, once
--- @body@ has already had its turn -- see there.
-applyFocusPolicy :: Ord e => e -> FocusPolicy -> View e msg a -> View e msg a
-applyFocusPolicy eid policy body = case policy of
-  NotFocusable            -> body
-  Focusable               -> body
-  FocusScope Continue     -> runFocusScope eid Nothing WrapStop body
-  FocusScope (Contained nav) ->
-    runFocusScope eid (Just (NavigationKeys [navForward nav] [navBackward nav], navEntry nav)) (navWrap nav) body
-
--- | Runs @body@ (a 'FocusScope' control's content) inside its own focus
--- scope, then this control's own reaction to whichever Tab\/Shift-Tab
--- keys are ambient *outside* it -- captured before anything below can
--- replace them, so it always means real Tab\/Shift-Tab regardless of
--- @keys@. @keys@, when given, replaces the pair @body@'s own descendants
--- see with the 'Contained' scheme's own. 'Nothing' ('Continue') leaves
--- the ambient keys alone, since children should behave exactly as if
--- this control weren't there.
---
--- 'EnterRemembered' needs no code here at all: 'withFocusScope' already
--- keeps this scope's own child claim alive for as long as this control
--- keeps rendering, live or not (see its own docs) -- so whichever child
--- was last selected is simply still there, the ordinary way, whenever
--- this control is freshly Tab-ed back onto. 'EnterFirst' is the one that
--- needs to actively do something: on the frame this control itself is
--- freshly given outer focus, it discards whatever's remembered so the
--- ordinary auto-claim mechanism picks whichever child is first eligible,
--- fresh, exactly as if nothing had ever been selected before.
---
--- 'BlockFreshClaim': this scope's id is always the same id 'control'
--- already claims (or doesn't) against the *enclosing* ambient via its own
--- ordinary self-claim, before this function ever runs. 'AllowFreshClaim'
--- would let the scope itself self-claim a second, uncontrolled time
--- whenever nothing else is focused, bypassing that ordinary claim
--- entirely.
---
--- 'WrapStop' also seeds the scope's own previous-tab-stop with this
--- scope's own id, ahead of @body@ -- a value no descendant's id can ever
--- equal, so 'advanceOrRetreat' reads it as "nothing to retreat to in
--- here" (the same idiom 'Blink.View.withFocusScope' itself uses for its
--- 'Blink.View.BlockFreshClaim' placeholder: when nothing else can honestly
--- stand for "unset", a value nothing inside can ever be does instead).
--- Without this, the scope's persisted previous-tab-stop is always
--- whichever child rendered last (every focusable child claims it as it
--- renders, unconditionally), so the *first* child to retreat would
--- otherwise wrap around to the last one -- the behaviour 'WrapCycle'
--- wants, but not 'WrapStop'. A child that does have a real predecessor
--- this frame (it isn't the first to render) overwrites this placeholder
--- with a real id before any retreat check can see it, so an ordinary
--- internal move (e.g. second child back to first) is untouched.
---
--- TODO: revisit -- this placeholder is a workaround for there being no
--- exported way to write a literal @Nothing@ into 'previousTabStop' (only
--- 'setPreviousTabStop', which always writes @Just@); a cleaner primitive
--- upstream could remove the need for it.
---
--- After @body@ runs, if nothing is claimed inside any more, @wrap@
--- decides what happens: 'WrapStop' gives up this control's own claim too
--- (letting the surrounding order pick up where it left off, the same way
--- an ordinary control already does on Tab); 'WrapCycle' does nothing --
--- the scope stays claimed but empty, so the ordinary auto-claim already
--- built into every control simply refills it with whichever child renders
--- first next time, the same mechanism that resolves 'EnterFirst'.
---
--- Finally, this control runs its own ordinary 'advanceOrRetreat' against
--- the ambient keys captured up front -- the *same* call for either
--- 'ChildNavigation', letting each produce the right outcome on its own
--- rather than branching on which one this is:
---
---   ['Contained']: descendants never see Tab\/Shift-Tab at all (@keys@
---   replaced them), so this call always finds the key exactly as it
---   arrived and reacts every time, regardless of which child (if any) is
---   selected inside -- Tab\/Shift-Tab always leaves the scope, as a
---   single ordinary stop.
---
---   ['Continue']: descendants see and react to real Tab\/Shift-Tab
---   directly. An advancing descendant always consumes it immediately
---   (whether or not it was the last one) -- the @wrap@\/@stillFocused@
---   check above, not this call, is what notices the boundary was reached
---   for that direction. A retreating descendant consumes it too, unless
---   it hit the placeholder above -- so this call only ever finds a live
---   retreat key at that same boundary, and is a no-op everywhere else.
-runFocusScope :: Ord e => e -> Maybe (NavigationKeys, EntryPolicy) -> WrapPolicy -> View e msg a -> View e msg a
-runFocusScope eid mKeysEntry wrap body = do
-  ambientKeys <- getNavigationKeys
-  justEntered <- hasGainedFocus eid
-  maybe id (withNavigationKeys . fst) mKeysEntry $ do
-    (a, stillFocused) <- withFocusScope eid BlockFreshClaim $ do
-      case mKeysEntry of
-        Just (_, EnterFirst) | justEntered -> clearFocus
-        _ -> pure ()
-      when (wrap == WrapStop) (setPreviousTabStop eid)
-      a <- body
-      case mKeysEntry of
-        Just _ | wrap == WrapStop -> do
-          mPrev      <- getPreviousTabStop
-          stillHasIt <- maybe (pure False) isFocused mPrev
-          when (not stillHasIt) (forM_ mPrev setFocus)
-        _ -> pure ()
-      focused <- not . isNothingFocused <$> getFocus
-      pure (a, focused)
-    when (wrap == WrapStop && not stillFocused) clearFocus
-    wasFocused <- isFocused eid
-    advanceOrRetreat wasFocused (navAdvance ambientKeys) (navRetreat ambientKeys)
-    pure a
 
 -- * Control
 
@@ -810,13 +629,10 @@ measureChrome k child ctx = do
     otherAxis Horizontal = Vertical
     otherAxis Vertical   = Horizontal
 
--- | Whether this control's own id is ever a focus target at all -- 'False'
--- only for 'NotFocusable'; both 'Focusable' and 'FocusScope' present as
--- exactly one stop from outside.
+-- | Whether this control's own id is ever a focus target at all.
 isFocusable :: FocusPolicy -> Bool
-isFocusable NotFocusable  = False
-isFocusable Focusable     = True
-isFocusable FocusScope {} = True
+isFocusable NotFocusable = False
+isFocusable Focusable    = True
 
 -- | Whether a control is eligible to claim focus purely by rendering first
 -- while nothing else holds it: opted into keyboard focus at all, via
@@ -843,11 +659,13 @@ canAutoClaim eid cc = do
 -- never react.
 --
 -- A retreat whose 'previousTabStop' equals the current scope's own id
--- (the placeholder 'runFocusScope' seeds for 'WrapStop' -- see there)
--- means there's no real predecessor to hand off to in this scope; that
--- case leaves the key un-consumed instead of swallowing it, so whatever
+-- means there's no real predecessor to hand off to in this scope. That
+-- case leaves the key unconsumed instead of swallowing it, so whatever
 -- encloses this scope gets a chance to react to it once this scope
--- closes.
+-- closes. A composite that wants Shift-Tab to stop at its own first
+-- child, rather than wrap to its last, seeds 'previousTabStop' with its
+-- own scope id before rendering that child, so no descendant's id can
+-- ever match it.
 advanceOrRetreat :: Eq e => Bool -> [(Key, [Modifier])] -> [(Key, [Modifier])] -> View e msg ()
 advanceOrRetreat wasFocused advanceKeys retreatKeys = do
   disabled <- isDisabled
@@ -881,11 +699,12 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
 -- reaffirmation -- @applySelfFocus@ already reaffirms an existing claim
 -- every frame, immediately. Re-requesting it anyway on every click would
 -- queue a real 'Blink.View.Focus.requestFocus' \/ redirect even when
--- nothing is actually moving, which a 'FocusScope' can't tell apart from a
--- genuine arrival from outside (see 'Blink.View.Focus.hasGainedFocus' and
--- the @justEntered@ check in @runFocusScope@) -- spuriously re-triggering
--- 'EnterFirst' reset-to-first-child behaviour on every click anywhere in
--- an already-focused scope, not just ones that actually enter it.
+-- nothing is actually moving, which a composite scope built on
+-- 'Blink.View.Focus.withFocusScope' can't tell apart from a genuine
+-- arrival from outside (see 'Blink.View.Focus.hasGainedFocus'), spuriously
+-- re-triggering any reset-on-entry behaviour it does itself on every click
+-- anywhere in an already-focused scope, not just ones that actually enter
+-- it.
 --
 -- Identified by @cc@'s own 'ccElementId' (see 'elementId'). With no id set,
 -- the control still renders, in its resting (undisabled, unfocused,
@@ -918,12 +737,7 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       wasFocused   <- isFocused eid
       currentScope <- getCurrentScope
       applySelfFocus eid wasFocused
-      -- A 'FocusScope' control owns no Tab\/Shift-Tab reaction of its own
-      -- here -- see 'runFocusScope'. Everything else reacts exactly as it
-      -- always has.
-      case ccFocusPolicy cc of
-        FocusScope {} -> pure ()
-        _             -> applyNavigationKeys wasFocused
+      applyNavigationKeys wasFocused
       nowFocused <- isFocused eid
       fireFocusChangeDirect cc (focusTransition wasFocused nowFocused)
       (m, styles) <- getStyleSet styleKey
@@ -933,7 +747,7 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       let active = intrinsicStates disabled raw `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
       let final = raw { ciStyle = s }
-      renderStyled m s (applyFocusPolicy eid (ccFocusPolicy cc) (ccContent cc final))
+      renderStyled m s (ccContent cc final)
       when (isFocusable (ccFocusPolicy cc) && not disabled) (setPreviousTabStop eid)
       pure final
 

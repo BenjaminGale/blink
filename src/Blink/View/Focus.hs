@@ -25,7 +25,6 @@ module Blink.View.Focus
   , disclaimFocus
   , requestFocus
   , requestClearFocus
-  , FreshClaim (..)
   , withFocusScope
   , getPreviousTabStop
   , setPreviousTabStop
@@ -156,44 +155,30 @@ requestClearFocus scopeId = queueEffect (ClearFocus scopeId)
 -- Whether descendants get to see — and update — this scope's own persisted
 -- state depends on whether the scope is /currently/ the live focus target:
 --
---   * It is (ambient's focused element is already this id), or nothing is
---     focused anywhere so it's free to become the target on this pass:
---     descendants run against this scope's own persisted 'FocusState' —
---     looked up from @ftScopes@, defaulting to @emptyFocusState@ the
---     first time — so they can auto-claim or resume exactly as if they were
---     standalone. Whatever they end up with is folded back into
---     @ftScopes@ under this id, and the enclosing scope's own
---     focused element is (re)affirmed as pointing at this id — every frame
---     it claims, even when nothing inside ends up focused, the same way a
---     plain focused control reaffirms itself every frame it renders.
---   * It isn't: descendants run against a /blocking/ ambient value instead —
---     not this scope's own persisted state, and not necessarily the literal
---     real ambient either (see @blockFreshClaim@ below) — so nothing reads
---     as an invitation to auto-claim. If nothing inside claims explicitly
---     despite that, the real ambient is restored unchanged and nothing is
---     written back: this is what stops a stale remembered child from being
---     handed a copy of old state, recognising itself in it, and
---     reaffirming — which would silently steal focus back on a frame where
+--   * It is (the ambient's focused element is already this id). Descendants
+--     run against this scope's own persisted 'FocusState', looked up from
+--     @ftScopes@ (defaulting to @emptyFocusState@ the first time), so they
+--     can auto-claim or resume exactly as if they were standalone. Whatever
+--     they end up with is folded back into @ftScopes@ under this id, and the
+--     enclosing scope's own focused element is (re)affirmed as pointing at
+--     this id, every frame it claims, even when nothing inside ends up
+--     focused, the same way a plain focused control reaffirms itself every
+--     frame it renders.
+--   * It isn't. Descendants run against a /blocking/ ambient value instead,
+--     never this scope's own persisted state and never the literal real
+--     ambient, so nothing reads as an invitation to auto-claim. A scope
+--     never opportunistically becomes the live target just because nothing
+--     is currently focused anywhere; it only becomes live by being
+--     explicitly focused into, by a click or a caller's own
+--     'requestFocus'\/'setFocus'. If nothing inside claims explicitly
+--     despite the block, the real ambient is restored unchanged and nothing
+--     is written back. This is what stops a stale remembered child from
+--     being handed a copy of old state, recognising itself in it, and
+--     reaffirming, which would silently steal focus back on a frame where
 --     this scope was never actually the target. If something inside /does/
 --     claim explicitly (an outright click, not an auto-claim) despite the
 --     block, that claim is honoured and folded back in as if this scope had
 --     been the live target all along.
---
--- 'BlockFreshClaim' overrides the "nothing is focused, free to claim" half
--- of the first case for one frame, and changes what "blocking" value gets
--- used in the second. It exists for a caller (see
--- 'Blink.Controls.compositeControl') that gives the composite's own id an
--- ordinary focus claim of its own, ahead of this call: if that claim was
--- just given up via Tab this very frame, real ambient reads empty for an
--- instant reason that has nothing to do with "nothing was ever focused" —
--- feeding descendants that real, empty value would read as an invitation to
--- auto-claim immediately, undoing the Tab press that was meant to move
--- focus off the composite entirely. So in that one case, descendants are
--- instead given this scope's own id as the blocking value (nothing they
--- recognise as themselves), the same placeholder the old chain-based model
--- used for exactly this. Standalone use (no such outer claim of its own)
--- always passes 'AllowFreshClaim', so the blocking value is always the
--- literal real ambient there.
 --
 -- Composes for arbitrary nesting: a composite inside another's
 -- 'withFocusScope' only ever swaps\/restores its own scope, and does the
@@ -211,11 +196,11 @@ requestClearFocus scopeId = queueEffect (ClearFocus scopeId)
 -- convention every caller (present or future) has to uphold on its own —
 -- see the integration coverage in "Blink.ControlsSpec" for the regression
 -- this guards against.
-withFocusScope :: Ord e => e -> FreshClaim -> View e msg a -> View e msg a
-withFocusScope scopeId freshClaim (View f) = View $ \ctx ->
+withFocusScope :: Ord e => e -> View e msg a -> View e msg a
+withFocusScope scopeId (View f) = View $ \ctx ->
   if ctxDisabled ctx
     then f ctx
-    else case scopeMode scopeId freshClaim (contextFocus ctx) of
+    else case scopeMode scopeId (contextFocus ctx) of
       Claim               -> runClaimed scopeId f ctx
       Blocked blockValue  -> runBlocked scopeId f ctx blockValue
 

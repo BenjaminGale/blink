@@ -6,7 +6,6 @@ import qualified Blink.Controls.ButtonSpec as Button
 import qualified Blink.Controls.CheckboxSpec as Checkbox
 import qualified Blink.Controls.ControlSpec as Control
 import qualified Blink.Controls.DividerSpec as Divider
-import qualified Blink.Controls.FocusScopeSpec as FocusScope
 import qualified Blink.Controls.ImageSpec as Image
 import qualified Blink.Controls.LabelSpec as Label
 import qualified Blink.Controls.ListSpec as List
@@ -58,7 +57,6 @@ main = hspec $ do
   Layout.spec
   Input.spec
   Control.spec
-  FocusScope.spec
   Label.spec
   Button.spec
   ToggleButton.spec

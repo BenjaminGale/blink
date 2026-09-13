@@ -4,10 +4,7 @@ module UI (ControlId, AppState (..), demoApp) where
 import Blink.App hiding (Continue)
 import Blink.Controls hiding (rowHeight)
 import Blink.Controls.Control
-  (ChildNavigation (..), ContainedNavigation (..), ControlConfig (..), EntryPolicy (..), FocusPolicy (..)
-  , WrapPolicy (..), control, defaultControlConfig, elementId, focusPolicy, isEnabled, measureChrome, post
-  , postWith, resolve, style
-  )
+  (ControlConfig (..), FocusPolicy (..), control, defaultControlConfig, isEnabled, measureChrome, post, postWith)
 import Blink.Controls.Label (LabelConfig)
 import Blink.Controls.List
   (ListPart (..), MultiSelection, SingleSelection, multiSelection, selectFirst, selectedItems, singleSelection)
@@ -29,7 +26,7 @@ import Blink.View
 import Blink.View.Drawing (drawText, fillRect, withClip)
 import Blink.Element (Attribute, Element (..), elementWithLayout, noIntrinsicSize, runElement)
 import Blink.Update
-import Theme (ControlId (..), Page (..), containerStyleKey, lightTheme, darkTheme)
+import Theme (ControlId (..), Page (..), lightTheme, darkTheme)
 import Control.Concurrent (threadDelay)
 import Control.Monad (forM_, void, when)
 import GHC.Clock (getMonotonicTimeNSec)
@@ -58,10 +55,6 @@ data AppState = AppState
   , lastInput      :: Text
   , lastInputCount :: Int
   , currentPage    :: Page
-  , lastContainedActivation :: Text
-  , containedWrap     :: WrapPolicy
-  , containedRemember :: Bool
-  , continueSearchText :: Text
   , fruitSelection     :: SingleSelection Text
   , fruitLastActivated :: Text
   , groceryList        :: MultiSelection Text
@@ -99,11 +92,6 @@ data Msg
   | SetSlider Double
   | FrameObserved Bool Text  -- ^ mouse-is-hovering, this frame's raw key/typed-text label
   | SetPage Page
-  | ContainedActivated Text
-  | SetContainedWrap WrapPolicy
-  | SetContainedRemember Bool
-  | SetContinueSearch Text
-  | ClearContinueSearch
   | FruitSelectionChanged (SingleSelection Text)
   | FruitActivated Text
   | GroceryListChanged (MultiSelection Text)
@@ -140,10 +128,6 @@ demoApp = App
       , lastInput      = ""
       , lastInputCount = 0
       , currentPage    = ControlsPage
-      , lastContainedActivation = ""
-      , containedWrap     = WrapCycle
-      , containedRemember = False
-      , continueSearchText = ""
       , fruitSelection     = selectFirst fruits
       , fruitLastActivated = ""
       , groceryList        = multiSelection groceries
@@ -187,11 +171,6 @@ updateApp msg = case msg of
                        else 1
     }
   SetPage p            -> modify $ \s -> s { currentPage = p }
-  ContainedActivated t -> modify $ \s -> s { lastContainedActivation = t }
-  SetContainedWrap w      -> modify $ \s -> s { containedWrap = w }
-  SetContainedRemember v  -> modify $ \s -> s { containedRemember = v }
-  SetContinueSearch t     -> modify $ \s -> s { continueSearchText = t }
-  ClearContinueSearch     -> modify $ \s -> s { continueSearchText = "" }
   FruitSelectionChanged v -> modify $ \s -> s { fruitSelection = v }
   FruitActivated t        -> modify $ \s -> s { fruitLastActivated = t }
   GroceryListChanged v    -> modify $ \s -> s { groceryList = v }
@@ -544,14 +523,7 @@ footer s = do
 --
 -- The screen has grown enough controls that it needed a way to switch
 -- between them: a fixed sidebar of page buttons on the left, the selected
--- page's content filling the rest. 'ContainedPage' is here specifically to
--- show off 'Blink.Controls.Control.FocusScope'\'s
--- 'Blink.Controls.Control.Contained' navigation -- a group of options
--- that Tab treats as a single stop, with Up\/Down moving the selection
--- between them, and its own radio\/checkbox controls to reconfigure the
--- group's 'WrapPolicy'\/'EntryPolicy' live. 'Continue' isn't demonstrated
--- separately since it isn't visibly different from how every other
--- composite on the controls page already behaves.
+-- page's content filling the rest.
 
 sidebarWidth :: Double
 sidebarWidth = 170
@@ -560,8 +532,6 @@ pages :: [(Page, Text)]
 pages =
   [ (ControlsPage,    "Controls")
   , (ScrollBarsPage,  "Scroll bars")
-  , (ContinuePage,    "Continue")
-  , (ContainedPage,   "Contained")
   , (ListPage,        "List")
   , (TreePage,        "Tree")
   , (TablePage,       "Table")
@@ -597,187 +567,12 @@ pageContent :: AppState -> DemoUI ()
 pageContent s = case currentPage s of
   ControlsPage   -> mainList s
   ScrollBarsPage -> scrollBarsPage s
-  ContinuePage   -> continuePage s
-  ContainedPage  -> containedPage s
   ListPage       -> listPage s
   TreePage       -> treePage s
   TablePage      -> tablePage s
   TreeTablePage  -> treeTablePage s
   BackgroundPage -> backgroundPage s
   ImagePage      -> imagePage s
-
--- | 'continueGroup's own natural height (its own margin plus one row of
--- content, at 'rowHeight') -- same reasoning as 'containedGroupHeight'.
-continueGroupHeight :: Double
-continueGroupHeight = containedMargin * 2 + 40
-
-continuePage :: AppState -> DemoUI ()
-continuePage s =
-  runElement $ vBox
-    [ spacing 12, margin 12
-    , children
-        [ caption "Continue navigation" [width fill, height (exactly 24), align TopLeft]
-        , caption description [width fill, height (exactly 40), align TopLeft]
-        , button ContinueBefore [text "Before", width fill, height (exactly 32)]
-        , continueGroup s
-        , button ContinueAfter [text "After", width fill, height (exactly 32)]
-        ]
-    ]
-  where
-    description =
-      "Tab moves through the search field and Clear button as if this \
-      \container weren't here at all -- but the container's own border \
-      \still shows it as focused whenever either one does."
-
--- | A 'Blink.Controls.Control.FocusScope' composite wrapping an
--- ordinary search field: a text input and a Clear button, Tab-reachable
--- individually exactly as if this container didn't exist, with no
--- traversal logic of its own -- 'FocusScope' 'Continue' needs none. The
--- container's own chrome (see its border once either child is focused)
--- is the one thing 'Continue' actually adds: reading as focused via
--- focus-within, for styling a "genuine container" this way rather than a
--- plain, invisible grouping.
-continueGroup :: AppState -> Element ControlId Msg
-continueGroup s = Element
-  { elLayout  = Layout fill fitContent TopLeft
-  , elMeasure = measureChrome (ccStyleKey cfg) (fixedSize 0 continueGroupHeight)
-  , elRun     = void (control cfg)
-  }
-  where
-    cfg = (resolve defaultControlConfig
-            [ elementId ContinueGroup
-            , focusPolicy (FocusScope Continue)
-            , style containerStyleKey
-            ])
-            { ccContent = const (runElement innerBox) }
-    innerBox = hBox
-      [ spacing 8, margin containedMargin
-      , children
-          [ textInput ContinueSearchInput
-              [value (continueSearchText s), onInput (postWith SetContinueSearch), width fill, height (exactly 40)]
-          , button ContinueClearButton
-              [text "Clear", onActivated (post ClearContinueSearch), width (exactly 80), height (exactly 40)]
-          ]
-      ]
-
-containedOptions :: [Text]
-containedOptions = ["Alpha", "Bravo", "Charlie", "Delta"]
-
-containedRowHeight, containedSpacing, containedMargin :: Double
-containedRowHeight = 32
-containedSpacing   = 4
-containedMargin    = 6
-
--- | A measurement-only element reporting a fixed natural size -- content
--- is rendered separately (via @ccContent@), never through this; it exists
--- purely for 'measureChrome' to inflate by the wrapping control's own
--- chrome, the same way e.g. 'Blink.Controls.ToggleButton.glyphCaptionElement'
--- stands in for a checkbox's actual content when measuring 'toggleBase'.
-fixedSize :: Double -> Double -> Element e msg
-fixedSize w h = Element
-  { elLayout  = Layout fill fitContent TopLeft
-  , elMeasure = const (pure (Size w h))
-  , elRun     = pure ()
-  }
-
--- | The option list's own natural height -- it never changes, so this is
--- a plain calculation rather than genuine measurement. Fed through
--- 'measureChrome' (see 'containedGroup') to additionally account for the
--- wrapping composite's own chrome, on top of this.
-containedGroupHeight :: Double
-containedGroupHeight =
-  containedMargin * 2 + containedRowHeight * n + containedSpacing * (n - 1)
-  where
-    n = fromIntegral (length containedOptions)
-
--- | The wrap policies offered by 'rowContainedWrap', paired with their
--- radio-row captions.
-wrapOptions :: [(WrapPolicy, Text)]
-wrapOptions =
-  [ (WrapCycle, "Cycle (wraps past either end)")
-  , (WrapStop,  "Stop (clamps at either end)")
-  ]
-
--- | A radio row choosing 'containedWrap', and a checkbox choosing
--- 'containedRemember' -- reconfiguring the live group below on the
--- 'ContainedPage' without needing a page each per combination.
-rowContainedWrap :: AppState -> Element ControlId Msg
-rowContainedWrap s =
-  hBox
-    ( rowLayout ++
-      [ spacing 16
-      , children
-          [ radioOption i wrap opt
-          | (i, (wrap, opt)) <- zip [0 ..] wrapOptions
-          ]
-      ]
-    )
-  where
-    radioOption i wrap opt =
-      radioButton (ContainedWrapRadio i)
-        [ text opt, isSelected (containedWrap s == wrap), onSelectedChanged (post (SetContainedWrap wrap))
-        , width (exactly 220), height fill, align MiddleLeft
-        ]
-
-rowContainedRemember :: AppState -> Element ControlId Msg
-rowContainedRemember s =
-  checkbox ContainedRememberCheckbox
-    ( rowLayout ++
-      [ text "Remember last selection when re-entering"
-      , isSelected (containedRemember s), onSelectedChanged (postWith SetContainedRemember)
-      ]
-    )
-
-containedPage :: AppState -> DemoUI ()
-containedPage s =
-  runElement $ vBox
-    [ spacing 12, margin 12
-    , children
-        [ caption "Contained navigation" [width fill, height (exactly 24), align TopLeft]
-        , caption description [width fill, height (exactly 40), align TopLeft]
-        , rowContainedWrap s
-        , rowContainedRemember s
-        , button ContainedBefore [text "Before", width fill, height (exactly 32)]
-        , containedGroup s
-        , button ContainedAfter [text "After", width fill, height (exactly 32)]
-        , caption ("Last activated: " <> lastText) [width fill, height (exactly 24), align TopLeft]
-        ]
-    ]
-  where
-    lastText = if T.null (lastContainedActivation s) then "none" else lastContainedActivation s
-    description =
-      "Tab moves between Before, the group, and After as three ordinary stops. \
-      \Up/Down move the selection between options, per the wrap mode below."
-
--- | A 'Blink.Controls.Control.FocusScope' composite: a single Tab stop
--- from outside, with 'containedOptions' as its own distinctly-identified
--- children navigated by Up\/Down instead, reconfigured live from
--- 'rowContainedWrap'\/'rowContainedRemember'.
-containedGroup :: AppState -> Element ControlId Msg
-containedGroup s = Element
-  { elLayout  = Layout fill fitContent TopLeft
-  , elMeasure = measureChrome (ccStyleKey cfg) (fixedSize 0 containedGroupHeight)
-  , elRun     = void (control cfg)
-  }
-  where
-    nav = ContainedNavigation
-      { navForward  = (KeyDown, [])
-      , navBackward = (KeyUp, [])
-      , navWrap     = containedWrap s
-      , navEntry    = if containedRemember s then EnterRemembered else EnterFirst
-      }
-    cfg = (resolve defaultControlConfig
-            [ elementId ContainedGroup
-            , focusPolicy (FocusScope (Contained nav))
-            , style containerStyleKey
-            ])
-            { ccContent = const (runElement optionsBox) }
-    optionsBox = vBox [spacing containedSpacing, margin containedMargin, children optionElements]
-    optionElements =
-      [ button (ContainedOption i)
-          [ text opt, onActivated (post (ContainedActivated opt)), width fill, height (exactly containedRowHeight) ]
-      | (i, opt) <- zip [0 :: Int ..] containedOptions
-      ]
 
 -- List page
 --

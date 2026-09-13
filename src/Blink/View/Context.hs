@@ -97,7 +97,6 @@ module Blink.View.Context
   , emptyFocusTracker
   , lookupScope
   , nextFocusTrackerFrame
-  , FreshClaim (..)
   , ScopeMode (..)
   , scopeMode
     -- * Scroll (pure)
@@ -350,25 +349,21 @@ nextFocusTrackerFrame ft = ft
   , ftScopes  = Map.map nextFocusFrame (ftScopes ft)
   }
 
--- | Whether a fresh (unclaimed) ambient may be read as an invitation for a
--- scope to auto-claim focus this frame — see 'Blink.View.Focus.withFocusScope'.
-data FreshClaim = AllowFreshClaim | BlockFreshClaim
-  deriving (Eq, Show)
-
 -- | Which of the two policies documented on 'Blink.View.Focus.withFocusScope'
--- applies this frame: 'Claim' if the scope is (or is free to become) the
--- live focus target, 'Blocked' with the ambient value descendants should see
--- otherwise.
+-- applies this frame: 'Claim' if the scope is already the live focus target,
+-- 'Blocked' with the ambient value descendants should see otherwise (so
+-- nothing inside reads emptiness as an invitation to auto-claim).
 data ScopeMode e = Claim | Blocked (Maybe e)
 
--- | Resolves which 'ScopeMode' applies to a scope this frame, given its id,
--- its 'FreshClaim' policy, and the ambient scope's currently focused element.
-scopeMode :: Eq e => e -> FreshClaim -> Maybe e -> ScopeMode e
-scopeMode scopeId freshClaim currentAmbient = case currentAmbient of
-  Just cid | cid == scopeId          -> Claim
-  Nothing  | freshClaim == AllowFreshClaim -> Claim
-  Nothing                            -> Blocked (Just scopeId)
-  real                               -> Blocked real
+-- | Resolves which 'ScopeMode' applies to a scope this frame: 'Claim' when
+-- the ambient scope's currently focused element is already this scope's own
+-- id, 'Blocked' otherwise. A scope only becomes live by being explicitly
+-- focused into, by a click or a 'Blink.View.Focus.requestFocus' call.
+scopeMode :: Eq e => e -> Maybe e -> ScopeMode e
+scopeMode scopeId currentAmbient = case currentAmbient of
+  Just cid | cid == scopeId -> Claim
+  Nothing                   -> Blocked (Just scopeId)
+  real                      -> Blocked real
 
 --------------------------------------------------------------------------------
 -- Scroll (pure)

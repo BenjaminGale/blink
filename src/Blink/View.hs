@@ -367,7 +367,6 @@ module Blink.View
   , disclaimFocus
   , requestFocus
   , requestClearFocus
-  , FreshClaim (..)
   , withFocusScope
   , consumeKey
   , withoutKeyEvents

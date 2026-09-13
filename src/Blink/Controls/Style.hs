@@ -10,9 +10,9 @@ group, a radio group, and a scrollbar's own container -- plus the
 'Metrics' each pairs with in 'Blink.Style.Defaults.defaultTheme'.
 Also 'containerStyle', not registered by 'Blink.Style.Defaults.defaultTheme'
 itself (no built-in control needs it) but exported the same way
-'buttonStyle' is, for an app to register against its own
-'Blink.Controls.Control.FocusScope' composites -- see
-"Theme"'s @withStatusBar@-style registration in the sample app.
+'buttonStyle' is, for an app to register against its own composites built
+on 'Blink.View.Focus.withFocusScope' -- see "Theme"'s @withStatusBar@-style
+registration in the sample app.
 
 A shape used by exactly one control lives in that control's own
 @Blink.Style.\<Control\>@ module instead (e.g.
@@ -180,7 +180,7 @@ toggleGroupStyle p = StyleSet
 -- that merely holds focusable children, rather than being one itself,
 -- should read (no fill tint, no press fill). Keeps 'CommonDisabled' and
 -- 'FocusFocused' too -- the latter is a state such a container does
--- reach: a 'Blink.Controls.Control.FocusScope' composite (unlike
+-- reach: a composite built on 'Blink.View.Focus.withFocusScope' (unlike
 -- 'toggleGroupStyle's wrappers above) reads as focused whenever any child
 -- inside it does, so its own border still needs to answer that. Paired
 -- with 'controlMetrics' (real border width, so both overrides have

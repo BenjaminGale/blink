@@ -10,7 +10,6 @@
 module Theme
   ( ControlId (..)
   , Page (..)
-  , containerStyleKey
   , lightTheme
   , darkTheme
   ) where
@@ -27,13 +26,12 @@ import Blink.Controls.Tree (TreePart)
 import Blink.Controls.TreeTable (TreeTablePart)
 import Blink.Rendering
 import Blink.Style
-import Blink.Style.Defaults (containerStyle, defaultTheme)
+import Blink.Style.Defaults (defaultTheme)
 import Blink.Controls.Divider.Style (dividerStyle)
-import Blink.Controls.Style (controlMetrics)
 
 -- | Which of the demo's sidebar-selected pages is showing.
 data Page
-  = ControlsPage | ScrollBarsPage | ContinuePage | ContainedPage | ListPage | TreePage | TablePage | TreeTablePage
+  = ControlsPage | ScrollBarsPage | ListPage | TreePage | TablePage | TreeTablePage
   | BackgroundPage | ImagePage
   deriving (Eq, Ord, Show)
 
@@ -54,17 +52,6 @@ data ControlId = Label
              | SliderCtl
              | VScrollCtl ScrollBarPart
              | HScrollCtl ScrollBarPart
-             | ContainedWrapRadio Int
-             | ContainedRememberCheckbox
-             | ContainedBefore
-             | ContainedGroup
-             | ContainedOption Int
-             | ContainedAfter
-             | ContinueBefore
-             | ContinueGroup
-             | ContinueSearchInput
-             | ContinueClearButton
-             | ContinueAfter
              | FruitList (ListPart Text)
              | GroceryList (ListPart Text)
              | LongList (ListPart Int)
@@ -135,21 +122,8 @@ withStatusBar :: Palette -> Theme ControlId -> Theme ControlId
 withStatusBar p thm = thm
   { themeElementStyles = Map.insert (ElementId StatusBar) (statusBarMetrics, dividerStyle p) (themeElementStyles thm) }
 
--- | The 'StyleKey' 'Continue'\/'Contained' resolve their own outer
--- container's chrome from (see 'UI.continueGroup'\/'UI.containedGroup')
--- -- a 'Class', not an 'ElementId', since both share this one look.
-containerStyleKey :: StyleKey ControlId
-containerStyleKey = Class "container"
-
--- | Inserts the 'FocusScope' container look -- 'containerStyle' paired
--- with 'controlMetrics' (same border width 'buttonStyle' uses, so
--- 'FocusFocused' has somewhere to draw its ring), under 'containerStyleKey'.
-withContainer :: Palette -> Theme ControlId -> Theme ControlId
-withContainer p thm = thm
-  { themeElementStyles = Map.insert containerStyleKey (controlMetrics, containerStyle p) (themeElementStyles thm) }
-
 lightTheme :: Theme ControlId
-lightTheme = withContainer lightPalette (withStatusBar lightPalette (defaultTheme lightPalette))
+lightTheme = withStatusBar lightPalette (defaultTheme lightPalette)
 
 darkTheme :: Theme ControlId
-darkTheme = withContainer darkPalette (withStatusBar darkPalette (defaultTheme darkPalette))
+darkTheme = withStatusBar darkPalette (defaultTheme darkPalette)

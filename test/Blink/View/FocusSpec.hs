@@ -8,7 +8,8 @@ import Blink.View.Fixtures
 
 -- | A scope id (@Group@) plus two elements nested inside it, for testing
 -- that a scoped focus change only affects that scope's own 'FocusState'.
-data ScopeElems = Group | ItemA | ItemB deriving (Eq, Ord, Show)
+-- 'Sibling' stands in for an unrelated element outside the scope.
+data ScopeElems = Group | ItemA | ItemB | Sibling deriving (Eq, Ord, Show)
 
 scopeTheme :: Theme ScopeElems
 scopeTheme = mkTheme
@@ -141,9 +142,68 @@ spec = describe "Blink.View.Focus" $ do
 
     it "a scoped focus request updates only that scope's FocusState, not root's" $ do
       let ctx0' = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()
-      (_, ctx0) <- runView (requestFocus (Just Group) ItemB) ctx0'
+      (_, ctx0a) <- runView (requestFocus Nothing Group) ctx0'
+      (_, ctx0)  <- runView (requestFocus (Just Group) ItemB) ctx0a
       let ctx1 = settleEffects ctx0
-      (insideGained, _) <- runView (withFocusScope Group AllowFreshClaim (hasGainedFocus ItemB)) ctx1
+      (insideGained, _) <- runView (withFocusScope Group (hasGainedFocus ItemB)) ctx1
       (rootGained, _)   <- runView (hasGainedFocus ItemB) ctx1
       insideGained `shouldBe` True
       rootGained   `shouldBe` False
+
+  describe "withFocusScope" $ do
+    it "lets a child claim focus once the scope is already the focused element" $ do
+      let ctx0' = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()
+      (_, ctx0) <- runView (requestFocus Nothing Group) ctx0'
+      let ctx1 = settleEffects ctx0
+      (inside, _) <- runView (withFocusScope Group (setFocus ItemA >> getFocus)) ctx1
+      inside `shouldBe` Just ItemA
+
+    it "blocks a child from claiming focus when nothing is focused anywhere" $ do
+      let ctx0 = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()
+      (inside, _) <- runView (withFocusScope Group (setFocus ItemA >> getFocus)) ctx0
+      inside `shouldNotBe` Just ItemA
+
+    it "blocks a child from claiming focus when a different element holds root focus" $ do
+      let ctx0' = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()
+      (_, ctx0)   <- runView (setFocus Sibling) ctx0'
+      (inside, _) <- runView (withFocusScope Group (setFocus ItemA >> getFocus)) ctx0
+      inside `shouldNotBe` Just ItemA
+
+    it "leaves root's own focus untouched by a blocked child's claim attempt" $ do
+      let ctx0' = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()
+      (_, ctx0) <- runView (setFocus Sibling) ctx0'
+      (_, ctx1) <- runView (withFocusScope Group (setFocus ItemA)) ctx0
+      (root, _) <- runView getFocus ctx1
+      root `shouldBe` Just Sibling
+
+    it "reads the scope's own id as focused once a child inside it is claimed" $ do
+      let ctx0' = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()
+      (_, ctx0) <- runView (requestFocus Nothing Group) ctx0'
+      let ctx1 = settleEffects ctx0
+      (_, ctx2) <- runView (withFocusScope Group (setFocus ItemA)) ctx1
+      (groupFocused, _) <- runView (isFocused Group) ctx2
+      groupFocused `shouldBe` True
+
+    it "does not claim or persist state while the surrounding context is disabled" $ do
+      let ctx0' = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()
+      (_, ctx0) <- runView (requestFocus Nothing Group) ctx0'
+      let ctx1 = settleEffects ctx0
+      (_, ctx2) <- runView (disableWhen True (withFocusScope Group (setFocus ItemA))) ctx1
+      (inside, _) <- runView (withFocusScope Group getFocus) ctx2
+      inside `shouldBe` Nothing
+
+    it "keeps a claim made while live after a later render where the scope is blocked" $ do
+      let ctx0' = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()
+      (_, ctxA0) <- runView (requestFocus Nothing Group) ctx0'
+      let ctxA = settleAndClearEffects ctxA0
+      (_, ctxB) <- runView (withFocusScope Group (setFocus ItemA)) ctxA
+      -- Root focus moves away from Group, so the scope is blocked on its
+      -- next render.
+      (_, ctxC0) <- runView (requestFocus Nothing Sibling) ctxB
+      let ctxC = settleAndClearEffects ctxC0
+      (_, ctxD) <- runView (withFocusScope Group (pure ())) ctxC
+      -- Root focus returns to Group, so the scope is live again.
+      (_, ctxE0) <- runView (requestFocus Nothing Group) ctxD
+      let ctxE = settleAndClearEffects ctxE0
+      (stillFocused, _) <- runView (withFocusScope Group (isFocused ItemA)) ctxE
+      stillFocused `shouldBe` True
