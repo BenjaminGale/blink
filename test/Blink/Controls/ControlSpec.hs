@@ -6,8 +6,8 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Control
-  ( Attribute, ControlConfig (..), FocusPolicy (..)
-  , control, defaultControlConfig, elementId, focusTargetOnClick, isEnabled, focusPolicy
+  ( Attribute, ControlConfig (..), FocusOptions (..), FocusPolicy (..)
+  , control, defaultControlConfig, defaultFocusOptions, elementId, focusTargetOnClick, isEnabled, focusPolicy
   , onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, post, postWith, resolve
   )
@@ -334,6 +334,57 @@ spec = describe "Blink.Controls.Control.control" $ do
     it "does not redirect focus onto a disabled element" $ do
       let taggedB = [isEnabled False, onFocusGained (post ("B gained" :: String))]
       result <- runInteractions testBounds seedCtx (renderRedirect ElemA [] ElemB taggedB) [] [ClickAt onA, Wait 1]
+      resultMessages result `shouldBe` []
+      contextFocus (resultContext result) `shouldBe` Nothing
+
+  describe "FocusOptions" $ do
+    let notATabStop     = Focusable defaultFocusOptions { focusIsTabStop = False }
+        notClickToFocus = Focusable defaultFocusOptions { focusIsClickToFocus = False }
+
+    describe "focusIsTabStop False" $ do
+      it "never auto-claims focus by rendering first, even with nothing else focused" $ do
+        result <- runInteractions testBounds seedCtx
+          (renderAt ElemA (focusPolicy notATabStop : tagged ElemA)) [] []
+        resultMessages result `shouldBe` []
+
+      it "is skipped by Tab, leaving it for a click-only-focusable sibling instead" $ do
+        let render = do
+              withBounds rectA (renderAt ElemA (focusPolicy notATabStop : tagged ElemA))
+              withBounds rectB (renderAt ElemB (tagged ElemB))
+        -- Setup clicks A into focus (click-to-focus is untouched) and
+        -- releases the mouse, so B's auto-claim isn't contested by A still
+        -- holding capture; the single Tab in the test phase then gives up
+        -- A's focus and B auto-claims, immediately, in that same frame.
+        result <- runInteractions testBounds seedCtx render [MouseDown onA, Wait 1, MouseUp onA, Wait 1] [Tab]
+        resultMessages result `shouldBe` ["ElemA lost", "ElemB gained"]
+
+      it "is never recorded as the previous tab stop, so Shift-Tab skips over it entirely" $ do
+        let render = three (tagged ElemA) (focusPolicy notATabStop : tagged ElemB) (tagged ElemC)
+        result <- runInteractions testBounds seedCtx render [Wait 1, Tab, Wait 1] [ShiftTab, Wait 1]
+        resultMessages result `shouldBe` ["ElemA gained", "ElemC lost"]
+
+      it "still takes focus via click, since focusIsClickToFocus is untouched" $ do
+        result <- runInteractions testBounds seedCtx
+          (renderAt ElemA (focusPolicy notATabStop : tagged ElemA)) [] [MouseDown onA, Wait 1]
+        resultMessages result `shouldBe` ["ElemA gained"]
+
+    describe "focusIsClickToFocus False" $ do
+      it "does not take focus on mouse-down" $ do
+        let render = both (tagged ElemA) (focusPolicy notClickToFocus : tagged ElemB)
+        -- A auto-claims focus during setup; clicking B in the test phase
+        -- must not move it, since B has opted out of click-to-focus.
+        result <- runInteractions testBounds seedCtx render [Wait 1] [MouseDown onB, Wait 1]
+        resultMessages result `shouldBe` []
+
+      it "still auto-claims focus by rendering first, since focusIsTabStop is untouched" $ do
+        result <- runInteractions testBounds seedCtx
+          (renderAt ElemA (focusPolicy notClickToFocus : tagged ElemA)) [] []
+        resultMessages result `shouldBe` ["ElemA gained"]
+
+    it "with both flags False, is never a Tab stop or click target, but is still reachable via setFocus" $ do
+      let bothFalse = Focusable defaultFocusOptions { focusIsTabStop = False, focusIsClickToFocus = False }
+      result <- runInteractions testBounds seedCtx
+        (renderAt ElemA (focusPolicy bothFalse : tagged ElemA)) [] [MouseDown onA, Wait 1, Tab, Wait 1]
       resultMessages result `shouldBe` []
       contextFocus (resultContext result) `shouldBe` Nothing
 

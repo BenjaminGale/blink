@@ -25,8 +25,9 @@
 -- matching handler from @cc@'s own handler fields for each, once, in one
 -- place, after every flag has been computed -- manages its own keyboard
 -- focus (claim on render while nothing else holds it, give up on Tab, hand
--- focus to the previous tab stop on Shift-Tab, take focus itself on a
--- mouse-down when 'Focusable'), and draws themed chrome (background,
+-- focus to the previous tab stop on Shift-Tab, and\/or take focus itself on
+-- a mouse-down, per its 'FocusPolicy' and 'FocusOptions'), and draws themed
+-- chrome (background,
 -- border, padding, resolved from a 'Blink.Style.StyleKey' and its own
 -- hover\/press\/focus state) around whatever content its 'ControlConfig'
 -- carries. Per "a layer fires only what it originates", 'control' never
@@ -71,6 +72,8 @@ module Blink.Controls.Control
 
     -- * Focus
   , FocusPolicy (..)
+  , FocusOptions (..)
+  , defaultFocusOptions
   , focusPolicy
 
     -- * Measurement
@@ -345,7 +348,8 @@ fireElementEvents cc ci = do
 
 -- | Whether a control's own identity participates in keyboard focus.
 -- Attached via the @ccFocusPolicy@ field of 'ControlConfig' (defaulting to
--- 'Focusable', matching every control's existing behavior). Unlike other
+-- @'Focusable' 'defaultFocusOptions'@, matching every control's original,
+-- single-flag behavior). Unlike other
 -- 'ControlConfig' fields, a widget that needs a fixed value (e.g.
 -- 'Blink.Controls.Label.label' always being 'NotFocusable') sets it
 -- unconditionally after resolving attrs, the same way it already pins
@@ -365,14 +369,40 @@ data FocusPolicy
   = NotFocusable
     -- ^ This control's own id never becomes a focus target: no auto-claim
     -- by rendering first, no Tab\/Shift-Tab landing on it, no click-to-
-    -- focus. For pure layout containers, and widgets like
-    -- 'Blink.Controls.Label.label' that are never themselves a stop.
-  | Focusable
-    -- ^ This control's own id is exactly one focus stop, entered and left
-    -- the way every focusable control already works: auto-claimed by
-    -- rendering first while nothing else holds focus, given up on Tab,
-    -- taken on click. The default.
+    -- focus, and it's never handed off to as the previous tab stop. For
+    -- pure layout containers, and widgets like 'Blink.Controls.Label.label'
+    -- that are never themselves a stop. Still reachable programmatically
+    -- (a direct 'Blink.View.Focus.setFocus'\/'Blink.View.Focus.requestFocus'
+    -- from a UI effect isn't gated by this at all).
+  | Focusable FocusOptions
+    -- ^ This control's own id is a focus target, with 'FocusOptions'
+    -- choosing which of the two ways it can be reached. Neither flag gates
+    -- programmatic focus -- both 'False' just means the only way in is a
+    -- direct 'Blink.View.Focus.setFocus'\/'Blink.View.Focus.requestFocus'.
   deriving (Eq, Show)
+
+-- | Which of the two ordinary ways a 'Focusable' control's own id can
+-- become the focus target. Both 'True' (via 'defaultFocusOptions')
+-- reproduces every focusable control's original, single-flag behavior.
+data FocusOptions = FocusOptions
+  { focusIsTabStop :: Bool
+    -- ^ Whether this control participates in keyboard tab order at all:
+    -- auto-claimed by rendering first while nothing else holds focus,
+    -- given up on Tab, landed on via Shift-Tab, and recorded as the
+    -- previous tab stop for its neighbours to hand off to. 'False' removes
+    -- it from Tab\/Shift-Tab traversal entirely, in both directions -- not
+    -- just from auto-claiming.
+  , focusIsClickToFocus :: Bool
+    -- ^ Whether a mouse-down on this control claims focus for it.
+  } deriving (Eq, Show)
+
+-- | Both flags 'True' -- every focusable control's original behavior:
+-- auto-claiming, full Tab\/Shift-Tab participation, and click-to-focus.
+defaultFocusOptions :: FocusOptions
+defaultFocusOptions = FocusOptions
+  { focusIsTabStop      = True
+  , focusIsClickToFocus = True
+  }
 
 -- * Control
 
@@ -411,7 +441,7 @@ data ControlConfig e msg = ControlConfig
 -- | No identity, every handler field empty, 'ClickActivated', enabled,
 -- styled via an arbitrary placeholder key (always overridden -- every real
 -- caller of 'control' supplies its own via 'style'), no extra active
--- states, rendering nothing, and 'Focusable'.
+-- states, rendering nothing, and @'Focusable' 'defaultFocusOptions'@.
 defaultControlConfig :: ControlConfig e msg
 defaultControlConfig = ControlConfig
   { ccElementId       = Nothing
@@ -428,7 +458,7 @@ defaultControlConfig = ControlConfig
   , ccStyleKey        = Class ""
   , ccActiveStates    = Set.empty
   , ccContent         = const (pure ())
-  , ccFocusPolicy     = Focusable
+  , ccFocusPolicy     = Focusable defaultFocusOptions
   }
 
 -- | What 'control' reports back: three steady interaction states
@@ -512,10 +542,11 @@ style :: HasControlConfig e msg cfg => StyleKey e -> Attribute cfg
 style k = overControl (Attribute (\cc -> cc { ccStyleKey = k }))
 
 -- | Whether, and how, this control's own identity participates in
--- keyboard focus -- see 'FocusPolicy'. Defaults to 'Focusable', matching
--- every control's existing behavior: Tab\/Shift-Tab cycling onto it, and
--- auto-claiming focus by rendering first while nothing else holds it.
--- There is no separate on\/off flag for this -- a widget that needs a
+-- keyboard focus -- see 'FocusPolicy'. Defaults to
+-- @'Focusable' 'defaultFocusOptions'@, matching every control's original
+-- behavior: Tab\/Shift-Tab cycling onto it, and auto-claiming focus by
+-- rendering first while nothing else holds it. There is no separate
+-- on\/off flag for this -- a widget that needs a
 -- fixed value (e.g. 'Blink.Controls.Label.label' always being
 -- 'NotFocusable') sets it unconditionally after resolving attrs, the same
 -- way it already pins other fixed behavior.
@@ -629,16 +660,22 @@ measureChrome k child ctx = do
     otherAxis Horizontal = Vertical
     otherAxis Vertical   = Horizontal
 
--- | Whether this control's own id is ever a focus target at all.
-isFocusable :: FocusPolicy -> Bool
-isFocusable NotFocusable = False
-isFocusable Focusable    = True
+-- | Whether this control participates in Tab\/Shift-Tab traversal at all
+-- (see 'focusIsTabStop').
+isTabStop :: FocusPolicy -> Bool
+isTabStop NotFocusable        = False
+isTabStop (Focusable options) = focusIsTabStop options
+
+-- | Whether a mouse-down on this control claims focus for it (see
+-- 'focusIsClickToFocus').
+isClickToFocus :: FocusPolicy -> Bool
+isClickToFocus NotFocusable        = False
+isClickToFocus (Focusable options) = focusIsClickToFocus options
 
 -- | Whether a control is eligible to claim focus purely by rendering first
--- while nothing else holds it: opted into keyboard focus at all, via
--- @ccFocusPolicy@.
+-- while nothing else holds it: a tab stop, via @ccFocusPolicy@.
 autoClaimsFocus :: ControlConfig e msg -> Bool
-autoClaimsFocus cc = isFocusable (ccFocusPolicy cc)
+autoClaimsFocus cc = isTabStop (ccFocusPolicy cc)
 
 -- | 'True' when this control should take focus with nothing having asked
 -- for it: opted into auto-claiming (per 'autoClaimsFocus'), nothing else is
@@ -691,7 +728,7 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
 --
 -- Per "a layer fires only what it originates", never dispatches a raw
 -- event itself: the self-focus-on-click effect it applies (when
--- @ccFocusPolicy@ makes it a focus target) is a direct 'UiEffect', read
+-- @ccFocusPolicy@'s 'focusIsClickToFocus' is set) is a direct 'UiEffect', read
 -- off its own 'ciMouseDown' -- so focus moves on press, before any drag or
 -- release decides whether the press itself counts as a click. Only fired
 -- while this control isn't already focused: it's a "give me focus" request
@@ -743,12 +780,12 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       (m, styles) <- getStyleSet styleKey
       hitBounds   <- marginInsetBounds m
       raw         <- withBounds hitBounds (watchInteraction eid disabled (styleBase styles))
-      when (ciMouseDown raw && isFocusable (ccFocusPolicy cc) && not nowFocused) (requestFocus currentScope eid)
+      when (ciMouseDown raw && isClickToFocus (ccFocusPolicy cc) && not nowFocused) (requestFocus currentScope eid)
       let active = intrinsicStates disabled raw `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
       let final = raw { ciStyle = s }
       renderStyled m s (ccContent cc final)
-      when (isFocusable (ccFocusPolicy cc) && not disabled) (setPreviousTabStop eid)
+      when (isTabStop (ccFocusPolicy cc) && not disabled) (setPreviousTabStop eid)
       pure final
 
     -- The raw hover\/mouse-button\/keyboard\/focus watching every
