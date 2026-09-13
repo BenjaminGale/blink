@@ -44,6 +44,7 @@ module Blink.Controls.ScrollBar
   , scrollBarTrackStyleKey
   , scrollBar
   , scrollBarOrientation
+  , scrollBarThickness
   , visibleFraction
   , step
   ) where

@@ -28,7 +28,9 @@ import Data.Tree (Forest)
 import Blink.Controls.Control
 import Blink.Controls.List
 import Blink.Controls.Table
-  (ColumnConfig (..), SortDirection (..), columnCell, columnHeaderRow, requestColumnSort, resolveColumnWidths, tableSpacer)
+  ( ColumnConfig (..), SortDirection (..), columnCell, columnHeaderRow, columnSpacer, requestColumnSort
+  , resolveColumnWidths, tableSpacer, weaveColumns
+  )
 import Blink.Controls.Tree (handleExpansionKey, indentAndChevron, visibleNodes)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, runElement)
 import Blink.Geometry (Alignment (TopLeft))
@@ -146,7 +148,8 @@ treeTable mkId attrs = Element
 
     -- Column 0 gets the indent\/chevron treatment 'tree' itself gives a
     -- whole row; every other column is a plain 'columnCell'.
-    renderRow widths st = hBox [children (zipWith cellFor [0 :: Int ..] (zip widths (ttColumns cfg)))]
+    renderRow widths st = hBox
+      [children (weaveColumns (const columnSpacer) (zipWith cellFor [0 :: Int ..] (zip widths (ttColumns cfg))))]
       where
         x                     = isItem st
         (depth, hasChildren) = Map.findWithDefault (0, False) x nodeInfo

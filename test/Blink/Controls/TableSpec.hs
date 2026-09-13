@@ -15,7 +15,8 @@ import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Metrics (..), Palette (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Style.Defaults (defaultTheme)
 import Blink.View
 
 newtype TestElem = Part (TablePart Int) deriving (Eq, Ord, Show)
@@ -130,12 +131,45 @@ widgetSpec = describe "table" $
       [ "H-Name@0.0,0.0+40.0"
       , "H-Age@45.0,0.0+60.0" -- +5 for the resize handle between header cells
       , "Name1@0.0,20.0+40.0"
-      , "Age1@40.0,20.0+60.0"
+      , "Age1@45.0,20.0+60.0" -- +5 for the matching 'columnSpacer' between row cells
       , "Name2@0.0,40.0+40.0"
-      , "Age2@40.0,40.0+60.0"
+      , "Age2@45.0,40.0+60.0"
       , "Name3@0.0,60.0+40.0"
-      , "Age3@40.0,60.0+60.0"
+      , "Age3@45.0,60.0+60.0"
       ]
+
+-- | 'testTheme' zeroes margin\/padding\/border on every 'StyleKey', so a
+-- mismatch between the chrome a header cell resolves and the chrome a
+-- row resolves (e.g. one padded per cell, the other padded once as a
+-- whole) can never show up in 'widgetSpec' or any other test in this
+-- file -- both always come out to zero regardless. A palette-driven
+-- 'defaultTheme' gives every 'StyleKey' real, independently-set chrome,
+-- so this is the only test here that would catch that kind of
+-- regression.
+chromePalette :: Palette
+chromePalette = Palette
+  { paletteAccent = RGBA 0 0 0 1, paletteFocusRing = RGBA 0 0 0 1
+  , paletteSurface = RGBA 0 0 0 1, paletteSurfaceHover = RGBA 0 0 0 1, paletteSurfaceDisabled = RGBA 0 0 0 1
+  , paletteTextPrimary = RGBA 0 0 0 1, paletteTextMuted = RGBA 0 0 0 1, paletteTextOnAccent = RGBA 0 0 0 1
+  , paletteBorder = RGBA 0 0 0 1, paletteBorderHover = RGBA 0 0 0 1
+  , paletteIcon = RGBA 0 0 0 1, paletteIconHover = RGBA 0 0 0 1
+  }
+
+chromeAlignmentSpec :: Spec
+chromeAlignmentSpec = describe "table header/row chrome" $
+  it "insets every column's cell content the same as its header cell, not just column 0's" $ do
+    result <- runInteractions testBounds (emptyViewContext testBounds noInput (defaultTheme chromePalette))
+      (renderTable [selection (unselected items)])
+      []
+      [Wait 1]
+    let msgs      = resultMessages result
+        stripY m  = let rest = drop 1 (dropWhile (/= '@') m)
+                        x    = takeWhile (/= ',') rest
+                        w    = drop 1 (dropWhile (/= '+') rest)
+                    in x ++ "+" ++ w
+        headerAge = head (filter (\m -> take 5 m == "H-Age") msgs)
+        rowAge1   = head (filter (\m -> take 4 m == "Age1") msgs)
+    stripY headerAge `shouldBe` stripY rowAge1
 
 scrollingSpec :: Spec
 scrollingSpec = describe "table header" $ do
@@ -186,11 +220,11 @@ resizingSpec = describe "table column resizing" $
       [ "H-Name@0.0,0.0+50.0"
       , "H-Age@55.0,0.0+50.0"
       , "Name1@0.0,20.0+50.0"
-      , "Age1@50.0,20.0+50.0"
+      , "Age1@55.0,20.0+50.0"
       , "Name2@0.0,40.0+50.0"
-      , "Age2@50.0,40.0+50.0"
+      , "Age2@55.0,40.0+50.0"
       , "Name3@0.0,60.0+50.0"
-      , "Age3@50.0,60.0+50.0"
+      , "Age3@55.0,60.0+50.0"
       ]
 
 sortingSpec :: Spec
@@ -286,6 +320,7 @@ columnCountEdgeSpec = describe "table column count edge cases" $ do
 spec :: Spec
 spec = describe "Blink.Controls.Table" $ do
   widgetSpec
+  chromeAlignmentSpec
   scrollingSpec
   resizingSpec
   sortingSpec

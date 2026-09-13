@@ -125,11 +125,11 @@ widgetSpec = describe "treeTable" $
       [Wait 1]
     resultMessages result `shouldBe`
       [ "src@16.0"
-      , "Qty:src@60.0"
+      , "Qty:src@65.0" -- +5 for the 'columnSpacer' between row cells, matching the header's resize handle
       , "src/List.hs@32.0"
-      , "Qty:src/List.hs@60.0"
+      , "Qty:src/List.hs@65.0"
       , "test@16.0"
-      , "Qty:test@60.0"
+      , "Qty:test@65.0"
       ]
 
 expansionSpec :: Spec
@@ -203,11 +203,11 @@ resizingSpec = describe "treeTable column resizing" $
 
     resultMessages result `shouldBe`
       [ "src@16.0"
-      , "Qty:src@50.0"
+      , "Qty:src@55.0"
       , "src/List.hs@32.0"
-      , "Qty:src/List.hs@50.0"
+      , "Qty:src/List.hs@55.0"
       , "test@16.0"
-      , "Qty:test@50.0"
+      , "Qty:test@55.0"
       ]
 
 sortingSpec :: Spec

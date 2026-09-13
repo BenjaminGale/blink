@@ -32,6 +32,8 @@ module Blink.Controls.Table
   , columnHeaderRow
   , requestColumnSort
   , tableSpacer
+  , weaveColumns
+  , columnSpacer
   ) where
 
 import Control.Monad (forM_, void, when)
@@ -39,14 +41,17 @@ import Data.Maybe (isJust)
 
 import Blink.Controls.Control
 import Blink.Controls.List
+import Blink.Controls.List.Style (listItemStyleKey)
 import Blink.Controls.Table.Style (tableColumnDividerStyleKey, tableHeaderStyleKey)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, noIntrinsicSize, runElement)
-import Blink.Geometry (Alignment (TopLeft), Point (pointX), Rectangle (..))
+import Blink.Geometry (Alignment (TopLeft), Insets (..), Point (pointX), Rectangle (..), insetRect)
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), Length, exactly, fill)
-import Blink.Style (Style (..))
+import Blink.Style (Style (..), StyleSet (..))
 import Blink.View
-  (Effect, View, currentStyle, getBounds, getExtentState, getMousePos, isDragging, requestExtentBy, withBounds)
+  ( Effect, View, currentStyle, getBounds, getExtentState, getMousePos, getStyleSet, isDragging, requestExtentBy
+  , withBounds
+  )
 import Blink.View.Drawing (fillRect)
 
 -- | Identifies one part of a 'table' for the purpose of building
@@ -200,7 +205,8 @@ table mkId attrs = Element
     run = do
       widths <- resolveColumnWidths (mkId . TableColumnDivider) (tbColumns cfg)
       let listCfg = (tbList cfg)
-            { lcRenderItem = \st -> hBox [children (zipWith (\w c -> columnCell w c st) widths (tbColumns cfg))]
+            { lcRenderItem = \st -> hBox
+                [children (weaveColumns (const columnSpacer) (zipWith (\w c -> columnCell w c st) widths (tbColumns cfg)))]
             , lcHeader     = if null (tbColumns cfg) then Nothing else
                 Just (columnHeaderRow (mkId . TableHeaderCell) (mkId . TableColumnDivider)
                         (requestColumnSort (tbSort cfg) (tbOnColumnSortRequested cfg)) widths (tbColumns cfg))
@@ -225,21 +231,52 @@ requestColumnSort currentSort handlers idx = runHandlers handlers (idx, nextDire
     flipDirection Ascending  = Descending
     flipDirection Descending = Ascending
 
+-- | Inserts @between i@ between every adjacent pair of @xs@, numbered by
+-- the index of the element just before it -- the header's own
+-- @resizeHandle@s, and (via 'columnSpacer') the inert gap a row's cells
+-- need at those same positions, so a column's boundary always lands at
+-- the same x whether it's under the header or a row. Shared by 'table'
+-- and 'Blink.Controls.TreeTable.treeTable'.
+weaveColumns :: (Int -> Element e msg) -> [Element e msg] -> [Element e msg]
+weaveColumns between = go 0
+  where
+    go _ []                 = []
+    go _ [x]                = [x]
+    go i (x : rest@(_ : _)) = x : between i : go (i + 1) rest
+
+-- | An inert gap the width of @resizeHandle@, dropped between a row's
+-- own cells (via 'weaveColumns') so each column lines up under its
+-- header cell despite the draggable handle woven into the header alone
+-- -- shared by 'table' and 'Blink.Controls.TreeTable.treeTable'.
+columnSpacer :: Element e msg
+columnSpacer = elementWithLayout (Layout (exactly handleWidth) fill TopLeft) (pure ())
+
 -- | A row of header cells at the given widths, with a draggable
 -- @resizeHandle@ (numbered the same as the cell just before it) woven in
 -- between each pair rather than a border. Clicking a sortable column's
--- header (see 'colSortable') calls @onSortClick@ with its index -- shared
--- by 'table' and 'Blink.Controls.TreeTable.treeTable'.
+-- header (see 'colSortable') calls @onSortClick@ with its index. The
+-- whole row is inset once by the same chrome a data row gets from its
+-- own control (@listItemStyleKey@) -- each header /cell/ carries none of
+-- its own (see 'tableHeaderStyleKey'), so every column's content starts
+-- at the same x under the header as it does in its row. Shared by
+-- 'table' and 'Blink.Controls.TreeTable.treeTable'.
 columnHeaderRow
   :: Ord e
   => (Int -> e) -> (Int -> e) -> (Int -> View e msg ()) -> [Length] -> [ColumnConfig e msg a] -> Element e msg
-columnHeaderRow mkHeaderId mkDividerId onSortClick widths cols = hBox [children (weave cells)]
+columnHeaderRow mkHeaderId mkDividerId onSortClick widths cols =
+  elementWithLayout (Layout fill fill TopLeft) $ do
+    insets <- rowChromeInset
+    bounds <- getBounds
+    -- Left\/right only: a row's own chrome shifts where its content
+    -- starts\/ends horizontally, but the header is exactly one
+    -- 'lcRowHeight' tall already -- insetting its top\/bottom too would
+    -- needlessly shrink every header cell's own height, and so its
+    -- hover\/selection highlight.
+    let horizontalInsets = insets { topInset = 0, bottomInset = 0 }
+    withBounds (insetRect horizontalInsets bounds) $
+      runElement $ hBox [children (weaveColumns (resizeHandle mkDividerId) cells)]
   where
     cells = [ headerCell idx w c | (idx, w, c) <- zip3 [0 :: Int ..] widths cols ]
-    weave = go 0
-    go _ []                 = []
-    go _ [x]                = [x]
-    go i (x : rest@(_ : _)) = x : resizeHandle mkDividerId i : go (i + 1) rest
 
     -- Its own, unfocusable, hoverable 'control' (see 'tableHeaderStyleKey').
     headerCell idx w c = Element
@@ -254,6 +291,17 @@ columnHeaderRow mkHeaderId mkDividerId onSortClick widths cols = hBox [children 
               runElement (colHeader c)
           }
       }
+
+-- | The chrome a data row insets its own content by, via its control's
+-- @listItemStyleKey@ -- always resolved from 'styleBase', the same
+-- interaction-state-independent convention 'Blink.Controls.Control.measureChrome'
+-- already uses, so this never shifts with hover\/selection. 'columnHeaderRow'
+-- applies this once around the whole header so its columns start at the
+-- same x a row's own do.
+rowChromeInset :: Ord e => View e msg Insets
+rowChromeInset = do
+  (m, styleSet) <- getStyleSet listItemStyleKey
+  pure (chromeInsets m (styleBase styleSet))
 
 -- | Resolves every column's current 'Layout' width: a 'ColumnFixed'
 -- column's own pixel value, adjusted by however far the dividers on

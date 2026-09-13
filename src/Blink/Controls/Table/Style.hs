@@ -21,7 +21,7 @@ import qualified Data.Map.Strict as Map
 import Blink.Geometry (uniform)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style
-import Blink.Controls.Style (flatRowMetrics, transparent)
+import Blink.Controls.Style (transparent)
 
 -- | The 'StyleKey' each of a 'Blink.Controls.Table.table''s header
 -- cells resolves its style from unless overridden via
@@ -38,9 +38,8 @@ tableHeaderStyleKey = Class "table-header"
 tableColumnDividerStyleKey :: StyleKey e
 tableColumnDividerStyleKey = Class "table-column-divider"
 
--- | A shaded strip, no border, tinted on hover -- reuses
--- 'flatRowMetrics' so its padding lines up with a row's own cells. A
--- resize handle (see 'tableColumnDividerStyleKey') between cells (see
+-- | A shaded strip, no border, tinted on hover. A resize handle (see
+-- 'tableColumnDividerStyleKey') between cells (see
 -- 'Blink.Controls.Table.table') separates them instead of a border.
 tableHeaderStyle :: Palette -> StyleSet
 tableHeaderStyle p = StyleSet
@@ -51,6 +50,18 @@ tableHeaderStyle p = StyleSet
       , styleBorderColour = Nothing
       }
   , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleBackground = paletteSurfaceHover p })
+  }
+
+-- | No margin\/padding of its own -- 'Blink.Controls.Table.columnHeaderRow'
+-- insets the whole header row once, by the same chrome a data row gets,
+-- rather than padding each header cell individually; padding here too
+-- would double up on that and push a header cell's content further right
+-- than the matching row cell's.
+tableHeaderMetrics :: Metrics
+tableHeaderMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = uniform 0
+  , metricsBorderEdges = noBorder
   }
 
 -- | No margin (unlike 'Blink.Controls.Divider.divider') -- the handle's
@@ -78,6 +89,6 @@ tableColumnDividerStyle p = StyleSet
 -- | This control's own entries in 'Blink.Style.Defaults.defaultTheme'.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
-  [ (tableHeaderStyleKey, (flatRowMetrics, tableHeaderStyle p))
+  [ (tableHeaderStyleKey, (tableHeaderMetrics, tableHeaderStyle p))
   , (tableColumnDividerStyleKey, (tableColumnDividerMetrics, tableColumnDividerStyle p))
   ]

@@ -114,7 +114,7 @@ import qualified Data.Set as Set
 
 import Blink.Controls.Control
 import Blink.Controls.List.Style (listCursor, listItemStyleKey, listNoCursor, listSelected, listStyleKey, listUnselected)
-import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBar, visibleFraction)
+import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBar, scrollBarThickness, visibleFraction)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, height, noIntrinsicSize, runElement)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..), insetRect)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Shift))
@@ -779,12 +779,29 @@ listBase mkId cfg = do
           mapM_ fireItemActivated activated
           case lcHeader cfg of
             Nothing       -> rowsArea finalModel
-            Just headerEl -> runElement $ vBox
-              [ children
-                  [ elementWithLayout (Layout fill (exactly (lcRowHeight cfg)) TopLeft) (runElement headerEl)
-                  , elementWithLayout (Layout fill fill TopLeft) (rowsArea finalModel)
-                  ]
-              ]
+            Just headerEl -> do
+              bounds <- getBounds
+              let rowsHeight = rectHeight bounds - lcRowHeight cfg
+                  rowsScroll = fromIntegral itemCount * lcRowHeight cfg > rowsHeight
+                  -- Rows reserve a 'scrollBarThickness' gutter on the right
+                  -- for the vertical scrollbar once they scroll (see
+                  -- 'virtualizedRows'); the header has no scrollbar of its
+                  -- own, so it must reserve the same gutter here or its
+                  -- columns drift out of alignment with the rows beneath it.
+                  headerRow
+                    | rowsScroll = hBox
+                        [ children
+                            [ elementWithLayout (Layout fill fill TopLeft) (runElement headerEl)
+                            , elementWithLayout (Layout (exactly scrollBarThickness) fill TopLeft) (pure ())
+                            ]
+                        ]
+                    | otherwise = headerEl
+              runElement $ vBox
+                [ children
+                    [ elementWithLayout (Layout fill (exactly (lcRowHeight cfg)) TopLeft) (runElement headerRow)
+                    , elementWithLayout (Layout fill fill TopLeft) (rowsArea finalModel)
+                    ]
+                ]
       }
 
     -- Keyboard-driven scroll adjustment plus the rows themselves --
