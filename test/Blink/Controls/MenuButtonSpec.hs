@@ -2,6 +2,7 @@
 module Blink.Controls.MenuButtonSpec (spec) where
 
 import Control.Monad (void, when)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import Test.Hspec
@@ -10,7 +11,7 @@ import Blink.App
 import Blink.Controls.Button (onActivated)
 import Blink.Controls.Control
   ( ControlInteraction (ciMouseDown)
-  , control, defaultControlConfig, elementId, isEnabled, onFocusGained, post, postWith, resolve
+  , control, defaultControlConfig, elementId, isEnabled, onFocusGained, onMouseEntered, post, postWith, resolve
   )
 import Blink.Controls.Label (text)
 import Blink.Controls.MenuButton (MenuButtonPart (..), isOpen, itemAttrs, items, menuButton, onOpenChanged)
@@ -19,7 +20,7 @@ import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..), uniform)
 import Blink.Input (Key (KeyDown, KeyEscape, KeyReturn, KeyUp), KeyEvent (..))
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), noOpMeasurers)
-import Blink.Style (Metrics (..), Palette (..), Style (..), StyleSet (..), emptyTheme, noBorder)
+import Blink.Style (Metrics (..), Palette (..), Style (..), StyleSet (..), VisualState (..), emptyTheme, noBorder)
 import Blink.Style.Defaults (defaultTheme)
 import Blink.Update (modify, put)
 import Blink.View (View, emit)
@@ -101,8 +102,9 @@ navApp = App
         , itemAttrs (\i ->
             [ text (T.pack (show i))
             , width (exactly 40), height (exactly 20)
-            , onFocusGained (post (Logged (T.pack (show i) <> " focused")))
-            , onActivated   (post (Logged (T.pack (show i) <> " activated")))
+            , onFocusGained  (post (Logged (T.pack (show i) <> " focused")))
+            , onActivated    (post (Logged (T.pack (show i) <> " activated")))
+            , onMouseEntered (post (Logged (T.pack (show i) <> " hovered")))
             ])
         ]) { elLayout = Layout (exactly 40) (exactly 20) TopLeft }
   , update  = \m -> modify $ \(open, log') -> case m of
@@ -151,6 +153,35 @@ clickThroughApp = App
 
 backgroundPoint :: Point
 backgroundPoint = Point 5 25
+
+-- | The colour drawn while an item is hovered, in 'hoverStyleSet' --
+-- distinct from 'testStyle's own resting background so a test can tell
+-- which one a draw used.
+hoverColour :: Colour
+hoverColour = RGBA 1 0 0 1
+
+-- | 'testStyleSet' plus a 'CommonMouseOver' override, so a hovered
+-- control's chrome-less background switches to 'hoverColour'.
+hoverStyleSet :: StyleSet
+hoverStyleSet = testStyleSet
+  { styleOverrides = Map.fromList [(CommonMouseOver, \s -> s { styleBackground = hoverColour })] }
+
+-- | Same geometry as 'navApp' (40x20 trigger, two 40x20 items below it),
+-- always open, with a hover-distinguishing style so a test can tell
+-- whether an item's hover style is actually being drawn.
+hoverApp :: App (MenuButtonPart Item) Bool Bool
+hoverApp = App
+  { startUp = pure False
+  , theme   = const (emptyTheme (testMetrics, hoverStyleSet))
+  , view    = \_ -> fullView $
+      runElement
+        ((menuButton id
+          [ text "File", isOpen True, onOpenChanged (const [])
+          , items [Open, Save]
+          , itemAttrs (\i -> [text (T.pack (show i)), width (exactly 40), height (exactly 20)])
+          ]) { elLayout = Layout (exactly 40) (exactly 20) TopLeft })
+  , update  = const (pure ())
+  }
 
 mkInput :: Point -> Bool -> FrameInput
 mkInput p down = FrameInput
@@ -291,6 +322,14 @@ spec = describe "Blink.Controls.MenuButton.menuButton" $ do
       _      <- stepFrame handle (mkInput navItemPoint True)
       result <- stepFrame handle (mkInput navItemPoint False)
       snd (resultState result) `shouldContain` ["Open activated"]
+
+  it "still draws an item's hover style once the popup's own panel is already registered" $ do
+    handle <- configureEventDriven hoverApp nullMsgQueue (pure ()) noOpMeasurers
+    _      <- stepFrame handle (mkInput navTriggerPoint True)
+    _      <- stepFrame handle (mkInput navTriggerPoint False) -- opens, focuses Open
+    _      <- stepFrame handle (mkInput navItemPoint False)    -- registers the panel's hit-rect
+    result <- stepFrame handle (mkInput navItemPoint False)    -- steady-state hover, panel already in prev
+    [c | FillRect _ c <- resultDraws result] `shouldContain` [hoverColour]
 
   describe "the open item list's own panel background" $
     it "does not let a click reach a control behind the popup, even off any item" $ do

@@ -181,19 +181,25 @@ markPopupFloor = modifyMouse $ \m -> m { mousePopupFloor = Map.size (mouseHitRec
 -- control, without disturbing the unconditional-hover behaviour ordinary
 -- overlapping controls rely on elsewhere (see 'Blink.Controls.Control.watchHover').
 --
--- Unlike 'isOccludedFor', @eid@ need not have been registered last frame
--- itself -- the popup-floor comparison doesn't need @eid@'s own index, so a
--- control freshly hit for the first time this frame can still correctly
--- report an open popup covering it.
+-- @eid@ need not have been registered last frame itself, so a control
+-- freshly hit for the first time this frame still correctly reports an
+-- open popup covering it. But when @eid@ /was/ registered last frame at or
+-- after the floor -- it's part of the popup's own content, e.g. one of its
+-- items -- only a rect registered after @eid@'s own counts, the same "idx
+-- > myIdx" test 'isOccludedFor' uses; otherwise a popup's own background
+-- panel, registered before its items, would occlude every item in it.
 isOccludedByPopupFor :: Ord e => e -> View e msg Bool
 isOccludedByPopupFor eid = do
   p     <- getMousePos
   mouse <- gets ctxMouse
-  let prev     = mouseHitRectsPrev mouse
-      floorIdx = mousePopupFloor mouse
-  pure $ any (occludesByPopup floorIdx p) (Map.toList (Map.delete eid prev))
+  let prev      = mouseHitRectsPrev mouse
+      floorIdx  = mousePopupFloor mouse
+      ownIdx    = case Map.lookup eid prev of
+        Just (HitRect _ i) | i >= floorIdx -> i
+        _                                  -> floorIdx - 1
+  pure $ any (occludesByPopup ownIdx p) (Map.toList (Map.delete eid prev))
   where
-    occludesByPopup floorIdx p (_, HitRect r idx) = idx >= floorIdx && containsPoint p r
+    occludesByPopup ownIdx p (_, HitRect r idx) = idx > ownIdx && containsPoint p r
 
 -- | 'True' when the left button is currently held, whether this is the
 -- first frame of the press or a later one -- callers that only care whether
