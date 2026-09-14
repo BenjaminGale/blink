@@ -7,6 +7,7 @@
 module Blink.Element
   ( Element (..)
   , runElement
+  , measureElement
   , noIntrinsicSize
   , spacer
   , emptyElement
@@ -25,7 +26,9 @@ import Data.List (foldl')
 
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Rectangle (..), Size (..))
 import Blink.Layout.Constraints
-  (Available (..), Layout (..), Length, MeasureCtx (..), exactly, fill, layoutWithConstraints, resolveLength)
+  ( Available (..), Layout (..), Length, MeasureCtx (..)
+  , exactly, fill, layoutWithConstraints, preferredSize, resolveLength
+  )
 import Blink.View (View, getBounds)
 
 -- | The layout-facing pairing of a component's size request, its measure,
@@ -58,12 +61,30 @@ data Element e msg = Element
 runElement :: Element e msg -> View e msg ()
 runElement el = do
   r <- getBounds
+  (w, h) <- resolveElementLengths r el
+  layoutWithConstraints (elLayout el) { layoutWidth = w, layoutHeight = h } (elRun el)
+
+-- | The element's resolved size were it given @available@ to lay out
+-- within -- the same resolve 'runElement' performs before calling
+-- 'layoutWithConstraints', stopped short of actually running the element.
+-- For a caller that needs to know an element's size before it has decided
+-- where to place it -- see 'Blink.Popup.popup'.
+measureElement :: Rectangle -> Element e msg -> View e msg Size
+measureElement available el = do
+  (w, h) <- resolveElementLengths available el
+  pure $ Size (preferredSize w (rectWidth available)) (preferredSize h (rectHeight available))
+
+-- | Resolves both axes' 'Length' against @available@ -- the two
+-- 'resolveLength' calls 'runElement' and 'measureElement' both need before
+-- they can do anything further with an element's size.
+resolveElementLengths :: Rectangle -> Element e msg -> View e msg (Length, Length)
+resolveElementLengths available el = do
   let avail = \o -> case o of
-        Horizontal -> Bounded (rectWidth r)
-        Vertical   -> Bounded (rectHeight r)
+        Horizontal -> Bounded (rectWidth available)
+        Vertical   -> Bounded (rectHeight available)
   w <- resolveLength Horizontal (layoutWidth  (elLayout el)) (avail Horizontal) (avail Vertical)   (elMeasure el)
   h <- resolveLength Vertical   (layoutHeight (elLayout el)) (avail Vertical)   (avail Horizontal) (elMeasure el)
-  layoutWithConstraints (elLayout el) { layoutWidth = w, layoutHeight = h } (elRun el)
+  pure (w, h)
 
 -- | For elements with no intrinsic size: whatever the parent can spare
 -- along the axis being measured, or zero when the parent is itself sizing

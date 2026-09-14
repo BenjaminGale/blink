@@ -128,7 +128,7 @@ import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
 
 import Blink.Cmd (Cmd, runCmd)
-import Blink.Geometry (Point (..), Rectangle, Size (..), rectFromSize)
+import Blink.Geometry (Point (..), Rectangle, Size (..), placePopup, rectFromSize)
 import Blink.Input (KeyEvent, InputState (..), advanceButton)
 import Blink.View.Context (ctxMouse)
 import Blink.Rendering (DrawCommand, CursorShape, TextMeasurer (..), ImageMeasurer (..), Measurers (..))
@@ -141,8 +141,9 @@ import Blink.View
   , runView, getDrawCommands, getCursorShape, getMessages, hasPendingUiEffects
   , UiEffect, queueUiEffects
   , contextAnimation, contextRequiresAnimation
-  , PendingPopup (popupAnchor, popupRun), getPendingPopups, clearPendingPopups
-  , withBounds
+  , PendingPopup (popupAnchor, popupSize, popupPlacement, popupOffset, popupRun)
+  , getPendingPopups, clearPendingPopups
+  , getWindowSize, withBounds
   )
 import Blink.Element (Element, runElement)
 import Blink.Update (Update, runUpdateEffects)
@@ -293,7 +294,11 @@ runViewAndPopups el ctx = do
 drainPopups :: ViewContext e msg -> IO (ViewContext e msg)
 drainPopups ctx0 = clearPendingPopups <$> foldM runOne ctx0 (getPendingPopups ctx0)
   where
-    runOne ctx p = snd <$> runView (withBounds (popupAnchor p) (popupRun p)) ctx
+    runOne ctx p = snd <$> runView (place p) ctx
+    place p = do
+      window <- getWindowSize
+      let rect = placePopup (popupAnchor p) window (popupSize p) (popupPlacement p) (popupOffset p)
+      withBounds rect (popupRun p)
 
 -- | Folds a batch of messages into state via @update@, in order, collecting
 -- every 'Cmd' and 'UiEffect' any of them requested along the way.

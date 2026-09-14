@@ -139,7 +139,7 @@ import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Blink.Rendering (DrawCommand, CursorShape (..), Measurers (..), noOpMeasurers, TextMeasurer (..), ImageMeasurer (..), ImagePath)
-import Blink.Geometry (Rectangle, Size)
+import Blink.Geometry (Edge, Rectangle, Side, Size)
 import Blink.Input
   ( Key (..), KeyEvent (..), Modifier (..), InputState (..)
   , Mouse (..), emptyMouse, advanceButton, advanceHover
@@ -658,13 +658,22 @@ data FrameOutputs e msg = FrameOutputs
 -- its draw commands and hit-rects are appended last and land on top of
 -- everything else rendered this frame.
 data PendingPopup e msg = PendingPopup
-  { popupId     :: e
-    -- ^ The id passed to 'Blink.View.Popup.popup'.
-  , popupAnchor :: Rectangle
+  { popupId        :: e
+    -- ^ The id passed to 'Blink.Popup.popup'.
+  , popupAnchor    :: Rectangle
     -- ^ The anchor rect placement is computed against -- either the calling
     -- control's own bounds, or a zero-size rect at an explicit point (see
-    -- 'Blink.View.Popup.at').
-  , popupRun    :: View e msg ()
+    -- 'Blink.Popup.at').
+  , popupSize      :: Size
+    -- ^ The content's own measured size, resolved at queue time via
+    -- 'Blink.Element.measureElement' -- see 'Blink.Popup.popup'.
+  , popupPlacement :: (Side, Edge)
+    -- ^ Where the popup sits relative to 'popupAnchor' -- see
+    -- 'Blink.Popup.placement'.
+  , popupOffset    :: Double
+    -- ^ The gap between 'popupAnchor' and the popup -- see
+    -- 'Blink.Popup.offset'.
+  , popupRun       :: View e msg ()
     -- ^ The popup content's own frame action, extracted at queue time.
   }
 

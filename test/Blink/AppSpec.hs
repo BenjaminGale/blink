@@ -11,7 +11,7 @@ import Test.Hspec
 import Blink.App
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
-import Blink.Layout.Constraints (Layout (..), fill)
+import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Popup (content, popup)
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
@@ -130,26 +130,47 @@ drawingApp c = App
   , update         = \_ -> pure ()
   }
 
--- Draws a FillRect for the main tree, then queues a popup that draws a
--- different-coloured FillRect -- proves the popup's draw lands after the
--- main tree's in the same frame's draw command list.
+-- | The popup content's fixed size and anchor for 'popupDrawOrderApp' and
+-- 'popupOcclusionApp' -- small and away from every window edge, so the
+-- default placement (below, left-aligned) never has to flip. Placement
+-- itself (including flipping) has its own dedicated tests in
+-- "Blink.PopupSpec"; these two apps are only about draw order and
+-- occlusion, so they deliberately sidestep it.
+popupAnchorRect :: Rectangle
+popupAnchorRect = Rectangle 10 10 20 20
+
+popupContentLayout :: Layout
+popupContentLayout = Layout (exactly 10) (exactly 10) TopLeft
+
+-- | Where 'popupAnchorRect' and 'popupContentLayout' place a popup with the
+-- default placement -- below the anchor, left-aligned.
+popupPlacedRect :: Rectangle
+popupPlacedRect = Rectangle 10 30 10 10
+
+-- Draws a FillRect for the main tree, then queues a popup anchored well away
+-- from the window edges that draws a different-coloured FillRect -- proves
+-- the popup's draw lands after the main tree's in the same frame's draw
+-- command list.
 popupDrawOrderApp :: (Colour, Colour) -> App () () ()
 popupDrawOrderApp (mainColour, popupColour) = App
   { startUp        = pure ()
   , theme          = const (emptyTheme (testMetrics, testStyleSet))
   , view           = \_ -> fullView $ do
       fillRect mainColour
-      popup () [content (elementWithLayout (Layout fill fill TopLeft) (fillRect popupColour))]
+      withBounds popupAnchorRect $
+        popup () [content (elementWithLayout popupContentLayout (fillRect popupColour))]
   , update         = \_ -> pure ()
   }
 
 data PopupElem = MainCtl | PopupCtl deriving (Eq, Ord, Show)
 
--- | Registers a hit-rect for both an ordinary control and a popup, each
--- reporting whether it's occluded (per last frame's registered rects) as
--- app state -- proves the popup's hit-rect is registered with a higher
--- index than the main tree's, so a frame later it occludes the ordinary
--- control but is never itself occluded.
+-- | Registers a hit-rect for both an ordinary control (covering the whole
+-- window, standing in for the rest of the app) and a popup anchored well
+-- away from the window edges, each reporting whether it's occluded (per
+-- last frame's registered rects) as app state -- proves the popup's
+-- hit-rect is registered with a higher index than the main tree's, so a
+-- frame later it occludes the ordinary control at a point under the popup,
+-- but is never itself occluded.
 popupOcclusionApp :: App PopupElem (PopupElem, Bool) (Bool, Bool)
 popupOcclusionApp = App
   { startUp = pure (False, False)
@@ -158,16 +179,21 @@ popupOcclusionApp = App
       registerHitRect MainCtl
       mainOccluded <- isOccludedFor MainCtl
       emit (MainCtl, mainOccluded)
-      popup PopupCtl [content popupHitRectElement]
+      withBounds popupAnchorRect $ popup PopupCtl [content popupHitRectElement]
   , update  = \(eid, occluded) -> modify $ \(m, p) ->
       if eid == MainCtl then (occluded, p) else (m, occluded)
   }
   where
     popupHitRectElement :: Element PopupElem (PopupElem, Bool)
-    popupHitRectElement = elementWithLayout (Layout fill fill TopLeft) $ do
+    popupHitRectElement = elementWithLayout popupContentLayout $ do
       registerHitRect PopupCtl
       popupOccluded <- isOccludedFor PopupCtl
       emit (PopupCtl, popupOccluded)
+
+-- | Falls within 'popupPlacedRect' (and, being anywhere in the window, also
+-- within the ordinary control's full-window bounds in 'popupOcclusionApp').
+underPopupInput :: FrameInput
+underPopupInput = normalInput { mousePosition = Point 15 35 }
 
 -- Dispatches (+1) and also draws the current app state as text.
 -- The drawn value differs between continuous (pre-dispatch) and
@@ -426,13 +452,13 @@ spec = do
         result <- stepFrame handle normalInput
         resultDraws result `shouldBe`
           [ FillRect (Rectangle 0 0 100 100) mainColour
-          , FillRect (Rectangle 0 0 100 100) popupColour
+          , FillRect popupPlacedRect popupColour
           ]
 
       it "a popup's hit-rect occludes the ordinary control a frame later, but is never occluded itself" $ do
         handle <- configureContinuous popupOcclusionApp nullMsgQueue nullMeasurers
-        _      <- stepFrame handle normalInput -- registers both hit-rects for the first time
-        result <- stepFrame handle normalInput
+        _      <- stepFrame handle underPopupInput -- registers both hit-rects for the first time
+        result <- stepFrame handle underPopupInput
         resultState result `shouldBe` (True, False)
 
     describe "configureEventDriven" $ do
