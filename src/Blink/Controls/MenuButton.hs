@@ -154,13 +154,14 @@ runMenuButton :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e
 runMenuButton tag cfg = do
   enclosingScope <- getCurrentScope
   r <- toggleBase triggerId (mbToggle cfg) { tgcButton = btn { bcControl = ctrl } }
+  onTrigger <- isRegionHit
   let wasOpen    = tgcSelected (mbToggle cfg)
       justOpened = tgiSelected r && not wasOpen
       close      = do
         runHandlers (tgcOnSelectedChanged (mbToggle cfg)) False
         requestFocus enclosingScope triggerId
   when justOpened $ requestFocus enclosingScope (tag MenuButtonList)
-  when (tgiSelected r) $ popup triggerId [content (itemsElement tag cfg close)]
+  when (tgiSelected r) $ popup triggerId [content (itemsElement tag cfg close onTrigger)]
   pure r
   where
     triggerId = tag MenuButtonTrigger
@@ -180,10 +181,14 @@ arrowNavigationKeys = NavigationKeys { navAdvance = [(KeyDown, [])], navRetreat 
 -- content on both axes so the popup measures a natural size from it rather
 -- than stretching to fill the window. Runs in its own focus scope
 -- ('MenuButtonList'), with Up\/Down remapped to move between items (see
--- 'arrowNavigationKeys'); an item's own activation, or Escape pressed while
--- this scope holds focus, both run @close@.
-itemsElement :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg () -> Element e msg
-itemsElement tag cfg close = box { elRun = scopedRun }
+-- 'arrowNavigationKeys'); an item's own activation, Escape pressed while
+-- this scope holds focus, or a click completing outside both the trigger
+-- and this list, all run @close@. @onTrigger@ is whether the trigger's own
+-- bounds were hit this frame, captured by 'runMenuButton' before this list
+-- (a separate 'Element', run later, at a different ambient bounds) is even
+-- queued.
+itemsElement :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg () -> Bool -> Element e msg
+itemsElement tag cfg close onTrigger = box { elRun = scopedRun }
   where
     box = vBox [ width fitContent, height fitContent, children (map toItemElement (mbItems cfg)) ]
 
@@ -198,6 +203,7 @@ itemsElement tag cfg close = box { elRun = scopedRun }
     scopedRun = withFocusScope (tag MenuButtonList) $ do
       setPreviousTabStop (tag MenuButtonList)
       handleEscape
+      handleOutsideClick
       withNavigationKeys arrowNavigationKeys (elRun box)
 
     -- Closes on Escape whenever the list is open, regardless of which item
@@ -208,6 +214,17 @@ itemsElement tag cfg close = box { elRun = scopedRun }
       case find ((== KeyEscape) . key) evs of
         Just e  -> consumeKey (key e) >> close
         Nothing -> pure ()
+
+    -- Closes on a completed click (mirroring 'ActivateOnClick's own
+    -- release-based timing, the only discrete click edge the public API
+    -- exposes) that lands neither on the trigger nor anywhere in this list
+    -- -- an item click is itself within this list's own bounds, so it never
+    -- reads as "outside" here; it closes via its own activation instead
+    -- (see 'toItemElement').
+    handleOutsideClick = do
+      released <- isButtonReleased
+      onList   <- isRegionHit
+      when (released && not onTrigger && not onList) close
 
     toItemElement item = Element
       { elLayout  = bcLayout itemCfg

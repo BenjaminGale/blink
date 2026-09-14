@@ -10,10 +10,10 @@ import Blink.Controls.Button (onActivated)
 import Blink.Controls.Control (onFocusGained, post, postWith)
 import Blink.Controls.Label (text)
 import Blink.Controls.MenuButton (MenuButtonPart (..), isOpen, itemAttrs, items, menuButton, onOpenChanged)
-import Blink.Element (elLayout)
+import Blink.Element (elLayout, height, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..), uniform)
 import Blink.Input (Key (KeyDown, KeyEscape, KeyReturn, KeyUp), KeyEvent (..))
-import Blink.Layout.Constraints (Layout (..), fill)
+import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), noOpMeasurers)
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
 import Blink.Update (modify, put)
@@ -63,6 +63,9 @@ data NavEvent = SetOpen Bool | Logged Text
 -- (trigger and items alike) appends a tagged entry to a log, so a test can
 -- observe keyboard navigation and closing behaviour precisely -- the same
 -- log-of-tags approach 'Blink.AppSpec.focusApp' uses for the same reason.
+-- Unlike 'menuApp', the trigger and each item have real, fixed sizes (not
+-- fill-the-window) so a click can land unambiguously on one of them, or on
+-- neither -- see 'navTriggerPoint', 'navItemPoint', and 'navOutsidePoint'.
 navApp :: App (MenuButtonPart Item) NavEvent (Bool, [Text])
 navApp = App
   { startUp = pure (False, [])
@@ -76,10 +79,11 @@ navApp = App
         , items [Open, Save]
         , itemAttrs (\i ->
             [ text (T.pack (show i))
+            , width (exactly 40), height (exactly 20)
             , onFocusGained (post (Logged (T.pack (show i) <> " focused")))
             , onActivated   (post (Logged (T.pack (show i) <> " activated")))
             ])
-        ]) { elLayout = Layout fill fill TopLeft }
+        ]) { elLayout = Layout (exactly 40) (exactly 20) TopLeft }
   , update  = \m -> modify $ \(open, log') -> case m of
       SetOpen b -> (b, log' ++ ["Open=" <> T.pack (show b)])
       Logged t  -> (open, log' ++ [t])
@@ -114,6 +118,14 @@ drawnTexts r = [t | DrawText _ t _ _ <- resultDraws r]
 triggerPoint :: Point
 triggerPoint = Point 50 50
 
+-- | 'navApp'-only points: its trigger sits at (0,0)-(40,20); the item list,
+-- placed below it by default, spans (0,20)-(40,60) (two 40x20 items
+-- stacked); 'navOutsidePoint' falls outside both.
+navTriggerPoint, navItemPoint, navOutsidePoint :: Point
+navTriggerPoint = Point 20 10
+navItemPoint     = Point 20 30 -- within the first item's own (0,20)-(40,40)
+navOutsidePoint  = Point 80 80
+
 -- | A single key press, with the mouse left resting on the trigger (not
 -- pressed) so it never spuriously reclicks anything.
 keyInput :: Key -> FrameInput
@@ -143,36 +155,36 @@ spec = describe "Blink.Controls.MenuButton.menuButton" $ do
   describe "keyboard navigation while open" $ do
     it "opening the menu focuses the first item" $ do
       handle <- configureEventDriven navApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- stepFrame handle (mkInput triggerPoint True)
-      result <- stepFrame handle (mkInput triggerPoint False)
+      _      <- stepFrame handle (mkInput navTriggerPoint True)
+      result <- stepFrame handle (mkInput navTriggerPoint False)
       snd (resultState result) `shouldContain` ["Open focused"]
 
     it "Down moves the highlight to the next item" $ do
       handle <- configureEventDriven navApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- stepFrame handle (mkInput triggerPoint True)
-      _      <- stepFrame handle (mkInput triggerPoint False) -- opens, focuses Open
+      _      <- stepFrame handle (mkInput navTriggerPoint True)
+      _      <- stepFrame handle (mkInput navTriggerPoint False) -- opens, focuses Open
       result <- stepFrame handle (keyInput KeyDown)
       last (snd (resultState result)) `shouldBe` "Save focused"
 
     it "Down on the last item does not wrap back to the first" $ do
       handle <- configureEventDriven navApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- stepFrame handle (mkInput triggerPoint True)
-      _      <- stepFrame handle (mkInput triggerPoint False) -- opens, focuses Open
+      _      <- stepFrame handle (mkInput navTriggerPoint True)
+      _      <- stepFrame handle (mkInput navTriggerPoint False) -- opens, focuses Open
       atSave <- stepFrame handle (keyInput KeyDown)            -- Open -> Save
       atEnd  <- stepFrame handle (keyInput KeyDown)            -- Save -> nowhere
       snd (resultState atEnd) `shouldBe` snd (resultState atSave)
 
     it "Up on the first item does not wrap to the last" $ do
       handle <- configureEventDriven navApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- stepFrame handle (mkInput triggerPoint True)
-      atOpen <- stepFrame handle (mkInput triggerPoint False) -- opens, focuses Open
+      _      <- stepFrame handle (mkInput navTriggerPoint True)
+      atOpen <- stepFrame handle (mkInput navTriggerPoint False) -- opens, focuses Open
       result <- stepFrame handle (keyInput KeyUp)
       snd (resultState result) `shouldBe` snd (resultState atOpen)
 
     it "Enter on the highlighted item activates it, closes the menu, and returns focus to the trigger" $ do
       handle <- configureEventDriven navApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- stepFrame handle (mkInput triggerPoint True)
-      _      <- stepFrame handle (mkInput triggerPoint False) -- opens, focuses Open
+      _      <- stepFrame handle (mkInput navTriggerPoint True)
+      _      <- stepFrame handle (mkInput navTriggerPoint False) -- opens, focuses Open
       _      <- stepFrame handle (keyInput KeyDown)            -- focuses Save
       result <- stepFrame handle (keyInput KeyReturn)
       let (open, log') = resultState result
@@ -182,10 +194,30 @@ spec = describe "Blink.Controls.MenuButton.menuButton" $ do
 
     it "Escape closes the menu without activating anything, and returns focus to the trigger" $ do
       handle <- configureEventDriven navApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- stepFrame handle (mkInput triggerPoint True)
-      _      <- stepFrame handle (mkInput triggerPoint False) -- opens, focuses Open
+      _      <- stepFrame handle (mkInput navTriggerPoint True)
+      _      <- stepFrame handle (mkInput navTriggerPoint False) -- opens, focuses Open
       result <- stepFrame handle (keyInput KeyEscape)
       let (open, log') = resultState result
       open `shouldBe` False
       log' `shouldNotContain` ["Open activated", "Save activated"]
       last log' `shouldBe` "Trigger focused"
+
+  describe "outside-click dismissal" $ do
+    it "closes without activating anything when a click completes outside the trigger and the item list" $ do
+      handle <- configureEventDriven navApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- stepFrame handle (mkInput navTriggerPoint True)
+      _      <- stepFrame handle (mkInput navTriggerPoint False) -- opens, focuses Open
+      _      <- stepFrame handle (mkInput navOutsidePoint True)
+      result <- stepFrame handle (mkInput navOutsidePoint False)
+      let (open, log') = resultState result
+      open `shouldBe` False
+      log' `shouldNotContain` ["Open activated", "Save activated"]
+      last log' `shouldBe` "Trigger focused"
+
+    it "still activates an item when the click lands on it, rather than being treated as outside" $ do
+      handle <- configureEventDriven navApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- stepFrame handle (mkInput navTriggerPoint True)
+      _      <- stepFrame handle (mkInput navTriggerPoint False) -- opens, focuses Open
+      _      <- stepFrame handle (mkInput navItemPoint True)
+      result <- stepFrame handle (mkInput navItemPoint False)
+      snd (resultState result) `shouldContain` ["Open activated"]
