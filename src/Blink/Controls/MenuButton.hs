@@ -1,0 +1,153 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE OverloadedStrings #-}
+-- | A button that opens a dropdown list of items when activated: the first
+-- control built on "Blink.Popup"'s deferred overlay layer. Its own open\/
+-- closed state is external, caller-owned state (see 'isOpen'), the same as
+-- every other stateful control in "Blink.Controls" -- e.g.
+-- 'Blink.Controls.ToggleButton.isSelected' -- rather than something
+-- 'menuButton' tracks internally.
+--
+-- @
+-- control --> buttonBase --> toggleBase --> menuButton
+-- @
+--
+-- This slice covers only opening, closing, and rendering the item list
+-- through 'Blink.Popup.popup'. Keyboard navigation between items and
+-- closing on activation or an outside click are later additions -- see the
+-- popup-support plan.
+module Blink.Controls.MenuButton
+  ( MenuButtonConfig
+  , MenuButtonPart (..)
+  , defaultMenuButtonConfig
+  , menuButton
+  , items
+  , itemAttrs
+  , isOpen
+  , onOpenChanged
+  ) where
+
+import Control.Monad (void, when)
+
+import Blink.Controls.Button (ButtonConfig (..), button)
+import Blink.Controls.Control
+import Blink.Controls.Label
+  (HasLabelledConfig (..), LabelledConfig (..), captionElement, lcText, renderLabelledContent)
+import Blink.Controls.ToggleButton
+  (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleBase)
+import Blink.Layout.Box (children, vBox)
+import Blink.Layout.Constraints (fitContent)
+import Blink.Popup (content, popup)
+import Blink.View (Effect, View)
+import Blink.Element (Element (..), HasLayoutConfig (..), height, width)
+
+-- | Identifies one part of a 'menuButton': the trigger button itself
+-- ('MenuButtonTrigger'), or one of its items, tagged by the item's own data
+-- value rather than its position in the list -- the same rationale as
+-- 'Blink.Controls.ToggleGroup.ToggleGroupPart'.
+data MenuButtonPart a
+  = MenuButtonTrigger
+  | MenuButtonItem a
+  deriving (Eq, Ord, Show)
+
+-- | Every capability 'menuButton' resolves: the trigger button's own
+-- config (wrapped as a 'ToggleConfig' -- see 'isOpen'), the data to build
+-- each item from, and how to configure each item's own button.
+data MenuButtonConfig e a msg = MenuButtonConfig
+  { mbToggle    :: ToggleConfig e msg
+  , mbItems     :: [a]
+  , mbItemAttrs :: a -> [Attribute (ButtonConfig e msg)]
+  }
+
+-- | 'defaultToggleButtonConfig' (so a closed 'menuButton' looks like an
+-- ordinary button, and an open one reads with the theme's toggle-checked
+-- look -- a reasonable stand-in for "open" until a menu button gets its own
+-- chrome), no items, and no per-item attrs.
+defaultMenuButtonConfig :: MenuButtonConfig e a msg
+defaultMenuButtonConfig = MenuButtonConfig
+  { mbToggle    = defaultToggleButtonConfig
+  , mbItems     = []
+  , mbItemAttrs = const []
+  }
+
+instance HasControlConfig e msg (MenuButtonConfig e a msg) where
+  overControl attr = Attribute (\c -> c { mbToggle = runAttribute (overControl attr) (mbToggle c) })
+
+instance HasLabelledConfig e msg (MenuButtonConfig e a msg) where
+  overLabelled attr = Attribute (\c -> c { mbToggle = runAttribute (overLabelled attr) (mbToggle c) })
+
+instance HasLayoutConfig (MenuButtonConfig e a msg) where
+  overLayout attr = Attribute (\c -> c { mbToggle = runAttribute (overLayout attr) (mbToggle c) })
+
+-- | The data to build one item from, in order. Defaults to @[]@; a later
+-- 'items' attribute replaces an earlier one rather than adding to it. Named
+-- the same as 'Blink.Controls.ToggleGroup.items' -- import
+-- "Blink.Controls.MenuButton" qualified if using both in the same module.
+items :: [a] -> Attribute (MenuButtonConfig e a msg)
+items xs = Attribute (\c -> c { mbItems = xs })
+
+-- | Attributes for the button built from one item (e.g.
+-- 'Blink.Controls.Label.text', 'Blink.Controls.Button.onActivated'),
+-- computed once per item rather than written out by hand for each -- the
+-- same shape as 'Blink.Controls.ToggleGroup.toggleAttributes'.
+itemAttrs :: (a -> [Attribute (ButtonConfig e msg)]) -> Attribute (MenuButtonConfig e a msg)
+itemAttrs f = Attribute (\c -> c { mbItemAttrs = f })
+
+-- | Whether the item list is currently open. External state the caller
+-- owns and re-supplies every frame, the same as
+-- 'Blink.Controls.ToggleButton.isSelected' for a plain toggle button.
+-- Defaults to 'False'.
+isOpen :: Bool -> Attribute (MenuButtonConfig e a msg)
+isOpen b = Attribute (\c -> c { mbToggle = (mbToggle c) { tgcSelected = b } })
+
+-- | Reacts when activating the trigger (a click, or Enter while focused)
+-- would open or close the list, with the value it changed to. It's up to
+-- the reaction to actually store the new value and pass it back in via
+-- 'isOpen' next frame -- the same contract as
+-- 'Blink.Controls.ToggleButton.onSelectedChanged'.
+onOpenChanged :: (Bool -> [Effect e msg]) -> Attribute (MenuButtonConfig e a msg)
+onOpenChanged f = Attribute (\c -> c
+  { mbToggle = (mbToggle c) { tgcOnSelectedChanged = tgcOnSelectedChanged (mbToggle c) ++ [f] } })
+
+-- | A button labelled via 'Blink.Controls.Label.text' that opens a dropdown
+-- list of items, built from 'items', when activated -- the same activation
+-- rule as 'Blink.Controls.Button.button' (a click, or Enter while focused).
+-- While open, the list renders through 'Blink.Popup.popup', anchored to the
+-- trigger's own bounds, below and left-aligned with it by default. Defaults
+-- to filling the width it's given and sizing its height to its own
+-- chrome-wrapped caption, the same as 'Blink.Controls.Button.button';
+-- override with 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
+--
+-- @tag@ builds every part's element id from a 'MenuButtonPart': the
+-- trigger's own id from 'MenuButtonTrigger', and each item's id from
+-- 'MenuButtonItem' applied to the item's own data.
+menuButton :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> [Attribute (MenuButtonConfig e a msg)] -> Element e msg
+menuButton tag attrs = Element
+  { elLayout  = bcLayout btn
+  , elMeasure = measureChrome (ccStyleKey (bcControl btn)) (captionElement (lcText (bcLabelled btn)))
+  , elRun     = void (runMenuButton tag cfg)
+  }
+  where
+    cfg = resolve defaultMenuButtonConfig attrs
+    btn = tgcButton (mbToggle cfg)
+
+-- | Runs the trigger as 'toggleBase' (its "selected" state standing in for
+-- open\/closed), then, while open, queues the item list through
+-- 'Blink.Popup.popup' anchored to the trigger's own just-rendered bounds.
+runMenuButton :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg (ToggleInteraction e msg)
+runMenuButton tag cfg = do
+  r <- toggleBase triggerId (mbToggle cfg) { tgcButton = btn { bcControl = ctrl } }
+  when (tgiSelected r) $ popup triggerId [content (itemsElement tag cfg)]
+  pure r
+  where
+    triggerId = tag MenuButtonTrigger
+    btn       = tgcButton (mbToggle cfg)
+    ctrl      = (bcControl btn) { ccContent = const (renderLabelledContent (bcLabelled btn)) }
+
+-- | A top-to-bottom list of buttons, one per item, sized to fit its own
+-- content on both axes so the popup measures a natural size from it rather
+-- than stretching to fill the window.
+itemsElement :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> Element e msg
+itemsElement tag cfg = vBox [ width fitContent, height fitContent, children (map toItem (mbItems cfg)) ]
+  where
+    toItem item = button (tag (MenuButtonItem item)) (width fitContent : height fitContent : mbItemAttrs cfg item)
