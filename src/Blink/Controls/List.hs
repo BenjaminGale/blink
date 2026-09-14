@@ -781,32 +781,33 @@ listBase mkId cfg = do
           let (finalModel, activated) = keyboardResult (ciKeysPressed ci)
           fireSelectionChanged finalModel
           mapM_ fireItemActivated activated
-          case lcHeader cfg of
-            Nothing       -> rowsArea finalModel
-            Just headerEl -> do
-              bounds <- getBounds
-              let rowsHeight = rectHeight bounds - lcRowHeight cfg
-                  rowsScroll = fromIntegral itemCount * lcRowHeight cfg > rowsHeight
-                  -- Rows reserve a 'scrollBarThickness' gutter on the right
-                  -- for the vertical scrollbar once they scroll (see
-                  -- 'virtualizedRows'); the header has no scrollbar of its
-                  -- own, so it must reserve the same gutter here or its
-                  -- columns drift out of alignment with the rows beneath it.
-                  headerRow
-                    | rowsScroll = hBox
-                        [ children
-                            [ elementWithLayout (Layout fill fill TopLeft) (runElement headerEl)
-                            , elementWithLayout (Layout (exactly scrollBarThickness) fill TopLeft) (pure ())
-                            ]
-                        ]
-                    | otherwise = headerEl
-              runElement $ vBox
+          maybe (rowsArea finalModel) (`headerArea` finalModel) (lcHeader cfg)
+      }
+
+    -- The fixed header composited above the rows, reserving the same
+    -- 'scrollBarThickness' gutter on the right that the rows themselves
+    -- reserve for the vertical scrollbar once they scroll (see
+    -- 'virtualizedRows') -- the header has no scrollbar of its own, so it
+    -- must reserve the gutter here too or its columns drift out of
+    -- alignment with the rows beneath it.
+    headerArea headerEl finalModel = do
+      bounds <- getBounds
+      let rowsHeight = rectHeight bounds - lcRowHeight cfg
+          rowsScroll = totalRowsHeight (lcRowHeight cfg) itemCount > rowsHeight
+          headerRow
+            | rowsScroll = hBox
                 [ children
-                    [ elementWithLayout (Layout fill (exactly (lcRowHeight cfg)) TopLeft) (runElement headerRow)
-                    , elementWithLayout (Layout fill fill TopLeft) (rowsArea finalModel)
+                    [ elementWithLayout (Layout fill fill TopLeft) (runElement headerEl)
+                    , elementWithLayout (Layout (exactly scrollBarThickness) fill TopLeft) (pure ())
                     ]
                 ]
-      }
+            | otherwise = headerEl
+      runElement $ vBox
+        [ children
+            [ elementWithLayout (Layout fill (exactly (lcRowHeight cfg)) TopLeft) (runElement headerRow)
+            , elementWithLayout (Layout fill fill TopLeft) (rowsArea finalModel)
+            ]
+        ]
 
     -- Keyboard-driven scroll adjustment plus the rows themselves --
     -- composed via a real 'vBox' rather than manual bounds math when a
