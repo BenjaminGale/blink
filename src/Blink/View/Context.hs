@@ -27,6 +27,7 @@ module Blink.View.Context
   , PendingPopup (..)
   , queuePopup
   , getPendingPopups
+  , clearPendingPopups
   , gets
   , modify
   , withField
@@ -1048,6 +1049,10 @@ queuePopup p = modifyOut $ \out -> out { outPendingPopups = p : outPendingPopups
 -- | Extracts the popups queued during the frame, in call order.
 getPendingPopups :: ViewContext e msg -> [PendingPopup e msg]
 getPendingPopups = reverse . outPendingPopups . ctxOutputs
+
+-- | Clears the queued popups once they've been run -- see "Blink.App".
+clearPendingPopups :: ViewContext e msg -> ViewContext e msg
+clearPendingPopups ctx = ctx { ctxOutputs = (ctxOutputs ctx) { outPendingPopups = [] } }
 
 -- | The mouse cursor shape requested during the frame, for the backend to
 -- apply -- see 'Blink.View.CursorShape.requestCursor'. 'CursorArrow' when

@@ -273,6 +273,7 @@ module Blink.View
   , PendingPopup (..)
   , queuePopup
   , getPendingPopups
+  , clearPendingPopups
   , settleEffects
   , settleAndClearEffects
   , contextRequiresAnimation
