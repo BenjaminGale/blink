@@ -1,22 +1,28 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls.MenuButtonSpec (spec) where
 
+import Control.Monad (void, when)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
 import Blink.Controls.Button (onActivated)
-import Blink.Controls.Control (isEnabled, onFocusGained, post, postWith)
+import Blink.Controls.Control
+  ( ControlInteraction (ciMouseDown)
+  , control, defaultControlConfig, elementId, isEnabled, onFocusGained, post, postWith, resolve
+  )
 import Blink.Controls.Label (text)
 import Blink.Controls.MenuButton (MenuButtonPart (..), isOpen, itemAttrs, items, menuButton, onOpenChanged)
-import Blink.Element (elLayout, height, width)
+import Blink.Element (Element, elLayout, elementWithLayout, height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..), uniform)
 import Blink.Input (Key (KeyDown, KeyEscape, KeyReturn, KeyUp), KeyEvent (..))
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), noOpMeasurers)
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
+import Blink.Style (Metrics (..), Palette (..), Style (..), StyleSet (..), emptyTheme, noBorder)
+import Blink.Style.Defaults (defaultTheme)
 import Blink.Update (modify, put)
+import Blink.View (View, emit)
 
 data Item = Open | Save deriving (Eq, Ord, Show)
 
@@ -103,6 +109,48 @@ navApp = App
       SetOpen b -> (b, log' ++ ["Open=" <> T.pack (show b)])
       Logged t  -> (open, log' ++ [t])
   }
+
+-- | Every app below fills the whole test bounds; only the body varies.
+fullView :: View e msg a -> Element e msg
+fullView = elementWithLayout (Layout fill fill TopLeft) . void
+
+data ClickThroughElem = Background | Menu (MenuButtonPart Item) deriving (Eq, Ord, Show)
+
+-- | An arbitrary palette -- this app needs the library's real
+-- 'defaultTheme', not this file's usual chrome-less 'testStyleSet', so the
+-- popup's panel actually has the padding\/border\/margin
+-- 'menuButtonListStyleKey' resolves to in real use (see 'clickThroughApp').
+testPalette :: Palette
+testPalette = Palette
+  { paletteAccent = c, paletteFocusRing = c, paletteSurface = c, paletteSurfaceHover = c
+  , paletteSurfaceDisabled = c, paletteTextPrimary = c, paletteTextMuted = c, paletteTextOnAccent = c
+  , paletteBorder = c, paletteBorderHover = c, paletteIcon = c, paletteIconHover = c
+  }
+  where c = RGBA 0 0 0 1
+
+-- | A window-filling background control behind an always-open menu, whose
+-- item list is anchored at (0,20)-(60,80) (a 40x20 trigger, two 40x20
+-- items, and 'containerStyle's real chrome -- margin 3, border 1, padding
+-- 6, so 10px inset on every side): 'backgroundPoint' falls on the popup's
+-- own panel background, inside its chrome but outside both items.
+clickThroughApp :: App ClickThroughElem Bool Bool
+clickThroughApp = App
+  { startUp = pure False
+  , theme   = const (defaultTheme testPalette)
+  , view    = \_ -> fullView $ do
+      ci <- control (resolve defaultControlConfig [elementId Background])
+      when (ciMouseDown ci) (emit True)
+      runElement
+        ((menuButton Menu
+          [ text "File", isOpen True, onOpenChanged (const [])
+          , items [Open, Save]
+          , itemAttrs (\i -> [text (T.pack (show i)), width (exactly 40), height (exactly 20)])
+          ]) { elLayout = Layout (exactly 40) (exactly 20) TopLeft })
+  , update  = \down -> modify (|| down)
+  }
+
+backgroundPoint :: Point
+backgroundPoint = Point 5 25
 
 mkInput :: Point -> Bool -> FrameInput
 mkInput p down = FrameInput
@@ -239,6 +287,15 @@ spec = describe "Blink.Controls.MenuButton.menuButton" $ do
       handle <- configureEventDriven navApp nullMsgQueue (pure ()) noOpMeasurers
       _      <- stepFrame handle (mkInput navTriggerPoint True)
       _      <- stepFrame handle (mkInput navTriggerPoint False) -- opens, focuses Open
+      _      <- stepFrame handle (mkInput navItemPoint False) -- hovers the item first, as a real click would
       _      <- stepFrame handle (mkInput navItemPoint True)
       result <- stepFrame handle (mkInput navItemPoint False)
       snd (resultState result) `shouldContain` ["Open activated"]
+
+  describe "the open item list's own panel background" $
+    it "does not let a click reach a control behind the popup, even off any item" $ do
+      handle <- configureEventDriven clickThroughApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- stepFrame handle (mkInput backgroundPoint False) -- primes the panel's own hit-rect
+      _      <- stepFrame handle (mkInput backgroundPoint True)
+      result <- stepFrame handle (mkInput backgroundPoint False)
+      resultState result `shouldBe` False

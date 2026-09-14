@@ -19,7 +19,10 @@ import Blink.View
 import Blink.View.Drawing (fillRect, drawText)
 import Blink.Element (Element, elLayout, elementWithLayout)
 import Blink.Controls.Checkbox (checkbox)
-import Blink.Controls.Control (control, defaultControlConfig, elementId, onFocusGained, onFocusLost, post, postWith, resolve)
+import Blink.Controls.Control
+  ( ControlInteraction (ciClicked, ciMouseDown)
+  , control, defaultControlConfig, elementId, onFocusGained, onFocusLost, post, postWith, resolve
+  )
 import Blink.Controls.ToggleButton (isSelected, onSelectedChanged)
 import qualified Blink.Controls.Slider as Slider
 import qualified Blink.Controls.TextInput as TextInput
@@ -189,6 +192,47 @@ popupOcclusionApp = App
       registerHitRect PopupCtl
       popupOccluded <- isOccludedFor PopupCtl
       emit (PopupCtl, popupOccluded)
+
+-- | A real click (not just a hit-rect check) at a point under an open
+-- popup must not reach the ordinary control behind it -- the regression
+-- this app exists to catch: an earlier version of the popup-occlusion fix
+-- suppressed hover but left the ordinary control still clickable straight
+-- through the popup on top of it.
+popupClickThroughApp :: App PopupElem Bool Bool
+popupClickThroughApp = App
+  { startUp = pure False
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \_ -> fullView $ do
+      ci <- control (resolve defaultControlConfig [elementId MainCtl])
+      when (ciClicked ci) (emit True)
+      withBounds popupAnchorRect $ popup PopupCtl [content popupButtonElement]
+  , update  = \clicked -> modify (|| clicked)
+  }
+  where
+    popupButtonElement :: Element PopupElem Bool
+    popupButtonElement = elementWithLayout popupContentLayout
+      (void (control (resolve defaultControlConfig [elementId PopupCtl])))
+
+-- | Like 'popupClickThroughApp', but watches 'ciMouseDown' (what drives an
+-- ordinary control's own click-to-focus, and a 'Blink.Controls.Label.label's
+-- 'Blink.Controls.Label.target' redirect) rather than 'ciClicked' -- a
+-- fresh press was never gated by occlusion the way capture-driven clicks
+-- already were, so a mousedown landing on an open popup could still reach
+-- a control's own focus-claiming behind it.
+popupMouseDownThroughApp :: App PopupElem Bool Bool
+popupMouseDownThroughApp = App
+  { startUp = pure False
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \_ -> fullView $ do
+      ci <- control (resolve defaultControlConfig [elementId MainCtl])
+      when (ciMouseDown ci) (emit True)
+      withBounds popupAnchorRect $ popup PopupCtl [content popupButtonElement]
+  , update  = \down -> modify (|| down)
+  }
+  where
+    popupButtonElement :: Element PopupElem Bool
+    popupButtonElement = elementWithLayout popupContentLayout
+      (void (control (resolve defaultControlConfig [elementId PopupCtl])))
 
 -- | Falls within 'popupPlacedRect' (and, being anywhere in the window, also
 -- within the ordinary control's full-window bounds in 'popupOcclusionApp').
@@ -460,6 +504,27 @@ spec = do
         _      <- stepFrame handle underPopupInput -- registers both hit-rects for the first time
         result <- stepFrame handle underPopupInput
         resultState result `shouldBe` (True, False)
+
+      it "does not let a click reach an ordinary control through an open popup on top of it" $ do
+        handle <- configureContinuous popupClickThroughApp nullMsgQueue nullMeasurers
+        _      <- stepFrame handle underPopupInput -- primes both hit-rects at this position
+        _      <- stepFrame handle (underPopupInput { mouseButtonDown = True })
+        result <- stepFrame handle (underPopupInput { mouseButtonDown = False })
+        resultState result `shouldBe` False
+
+      it "still lets a click reach the ordinary control where the popup doesn't cover it" $ do
+        handle <- configureContinuous popupClickThroughApp nullMsgQueue nullMeasurers
+        let elsewhere = normalInput { mousePosition = Point 80 80 }
+        _      <- stepFrame handle elsewhere
+        _      <- stepFrame handle (elsewhere { mouseButtonDown = True })
+        result <- stepFrame handle (elsewhere { mouseButtonDown = False })
+        resultState result `shouldBe` True
+
+      it "does not let a mousedown reach an ordinary control's click-to-focus through an open popup" $ do
+        handle <- configureContinuous popupMouseDownThroughApp nullMsgQueue nullMeasurers
+        _      <- stepFrame handle underPopupInput -- primes both hit-rects at this position
+        result <- stepFrame handle (underPopupInput { mouseButtonDown = True })
+        resultState result `shouldBe` False
 
     describe "configureEventDriven" $ do
       it "a normal frame returns Continue" $ do

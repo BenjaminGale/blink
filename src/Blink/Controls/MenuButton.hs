@@ -202,8 +202,12 @@ itemsElement tag cfg close onTrigger = Element
   where
     box = vBox [ width fitContent, height fitContent, children (map toItemElement (mbItems cfg)) ]
 
+    -- ccElementId matters beyond styling: without one this never registers
+    -- a hit-rect, so a click on the panel background (not an item) would
+    -- reach straight through to whatever's behind the popup.
     panelCfg = defaultControlConfig
-      { ccStyleKey    = menuButtonListStyleKey
+      { ccElementId   = Just (tag MenuButtonList)
+      , ccStyleKey    = menuButtonListStyleKey
       , ccFocusPolicy = NotFocusable
       , ccContent     = const scopedRun
       }
