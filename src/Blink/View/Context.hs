@@ -24,6 +24,9 @@ module Blink.View.Context
   , ElementState (..)
   , SelectionSlot (..)
   , FrameOutputs (..)
+  , PendingPopup (..)
+  , queuePopup
+  , getPendingPopups
   , gets
   , modify
   , withField
@@ -632,8 +635,9 @@ data SelectionSlot e
 
 -- | Outputs accumulated during a single frame: draw commands, the queued
 -- 'Effect' events (messages and 'UiEffect's, in emit order), the animation
--- continuation flag, and the requested mouse cursor shape. Reset to empty
--- at the start of each frame by 'nextFrameContext'.
+-- continuation flag, the requested mouse cursor shape, and any popups
+-- queued via 'Blink.View.Popup.popup'. Reset to empty at the start of each
+-- frame by 'nextFrameContext'.
 data FrameOutputs e msg = FrameOutputs
   { outDrawCommands       :: [DrawCommand]
   , outEvents             :: [Effect e msg]
@@ -643,6 +647,24 @@ data FrameOutputs e msg = FrameOutputs
     -- since a control is visited in draw order, whatever's drawn on top
     -- requests last and so takes precedence, matching what's visually
     -- under the pointer.
+  , outPendingPopups      :: [PendingPopup e msg]
+    -- ^ Queued by 'Blink.View.Popup.popup' in call order -- see
+    -- 'PendingPopup'.
+  }
+
+-- | A popup queued by 'Blink.View.Popup.popup' during the main view tree
+-- walk. Run after the walk finishes (see "Blink.App") rather than inline, so
+-- its draw commands and hit-rects are appended last and land on top of
+-- everything else rendered this frame.
+data PendingPopup e msg = PendingPopup
+  { popupId     :: e
+    -- ^ The id passed to 'Blink.View.Popup.popup'.
+  , popupAnchor :: Rectangle
+    -- ^ The anchor rect placement is computed against -- either the calling
+    -- control's own bounds, or a zero-size rect at an explicit point (see
+    -- 'Blink.View.Popup.at').
+  , popupRun    :: View e msg ()
+    -- ^ The popup content's own frame action, extracted at queue time.
   }
 
 -- | The frame context threaded through every 'View' computation. Carries the
@@ -743,6 +765,7 @@ emptyFrameOutputs = FrameOutputs
   , outEvents             = []
   , outRequiresAnimation  = False
   , outCursorShape        = CursorArrow
+  , outPendingPopups      = []
   }
 
 -- | Constructs the initial 'ViewContext' for the first frame, with
@@ -1016,6 +1039,15 @@ instance HasUiEffect e (View e msg) where
 -- | Extracts the draw commands produced during the frame, in submission order.
 getDrawCommands :: ViewContext e msg -> [DrawCommand]
 getDrawCommands = reverse . outDrawCommands . ctxOutputs
+
+-- | Queues a popup to run once the main view tree finishes this frame,
+-- instead of inline -- see 'Blink.View.Popup.popup'.
+queuePopup :: PendingPopup e msg -> View e msg ()
+queuePopup p = modifyOut $ \out -> out { outPendingPopups = p : outPendingPopups out }
+
+-- | Extracts the popups queued during the frame, in call order.
+getPendingPopups :: ViewContext e msg -> [PendingPopup e msg]
+getPendingPopups = reverse . outPendingPopups . ctxOutputs
 
 -- | The mouse cursor shape requested during the frame, for the backend to
 -- apply -- see 'Blink.View.CursorShape.requestCursor'. 'CursorArrow' when

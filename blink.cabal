@@ -73,6 +73,7 @@ library
         Blink.Controls.Tree
         Blink.Controls.TreeTable
         Blink.Element
+        Blink.Popup
         Blink.Layout
         Blink.Layout.Border
         Blink.Layout.Box
@@ -126,6 +127,7 @@ test-suite blink-tests
         Blink.InputSpec
         Blink.Interaction
         Blink.InteractionSpec
+        Blink.PopupSpec
         Blink.UpdateSpec
         Blink.Controls.ButtonBehaviour
         Blink.Controls.ButtonSpec

@@ -73,6 +73,8 @@ instead.
                         primitive every one of them is built from -- focus,
                         chrome, and events.
   * "Blink.Layout"     — Box layout and constraint-based sizing.
+  * "Blink.Popup"      — The deferred overlay layer menus, tooltips, and
+                        comboboxes are built on.
   * "Blink.Style"      — Themes and per-state styles.
   * "Blink.Rendering"  — The draw command list produced each frame.
   * "Blink.Geometry"   — Primitive geometry types.
@@ -87,6 +89,7 @@ module Blink
   , module Blink.Controls
   , module Blink.Element
   , module Blink.Layout
+  , module Blink.Popup
   , module Blink.Rendering
   , module Blink.Style
   , module Blink.View
@@ -100,6 +103,7 @@ import Blink.Input
 import Blink.Controls
 import Blink.Element
 import Blink.Layout
+import Blink.Popup
 import Blink.Rendering
 import Blink.Style
 import Blink.View
