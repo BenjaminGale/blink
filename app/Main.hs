@@ -9,8 +9,8 @@ import qualified SDL
 import qualified SDL.Font as Font
 import qualified SDL.Raw
 import Control.Concurrent.STM (atomically, flushTBQueue, newTBQueueIO, writeTBQueue)
-import Control.Monad (foldM, void)
-import Data.IORef (newIORef)
+import Control.Monad (foldM, unless, void)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Maybe (isJust)
 import Foreign.Ptr (nullPtr)
 import Data.Text (Text)
@@ -72,8 +72,15 @@ main = do
   handle <- configureEventDriven demoApp msgQueue notify
               (Measurers { msrText = measurer, msrImage = imageMeasurer })
 
-  loop handle False renderFrame window checkAnimTick
+  arrowCursor    <- SDL.createSystemCursor SDL.SystemCursorArrow
+  resizeCursor   <- SDL.createSystemCursor SDL.SystemCursorSizeWE
+  lastCursorRef  <- newIORef CursorArrow
+  let applyCursor = setActiveCursor lastCursorRef arrowCursor resizeCursor
 
+  loop handle False applyCursor renderFrame window checkAnimTick
+
+  SDL.freeCursor arrowCursor
+  SDL.freeCursor resizeCursor
   freeTextureCache texCache
   freeImageCache imgCache
   Font.free font
@@ -82,14 +89,28 @@ main = do
   Font.quit
   SDL.quit
 
+-- | Applies the frame's requested 'CursorShape' to the platform pointer,
+-- skipping the call to SDL when it's unchanged from last frame -- setting
+-- the system cursor every single frame regardless is wasted work, since
+-- the pointer shape only ever needs to change on a hover/drag transition.
+setActiveCursor :: IORef CursorShape -> SDL.Cursor -> SDL.Cursor -> CursorShape -> IO ()
+setActiveCursor lastCursorRef arrowCursor resizeCursor shape = do
+  prev <- readIORef lastCursorRef
+  unless (prev == shape) $ do
+    SDL.activeCursor SDL.$= case shape of
+      CursorArrow             -> arrowCursor
+      CursorResizeHorizontal  -> resizeCursor
+    writeIORef lastCursorRef shape
+
 loop
   :: BlinkHandle s
   -> Bool
+  -> (CursorShape -> IO ())
   -> ([DrawCommand] -> IO ())
   -> SDL.Window
   -> ([SDL.Event] -> IO Bool)
   -> IO ()
-loop handle btnDown renderFrame window checkAnimTick = do
+loop handle btnDown applyCursor renderFrame window checkAnimTick = do
   first <- SDL.waitEvent
   rest  <- SDL.pollEvents
   mousePos         <- SDL.getAbsoluteMouseLocation
@@ -98,9 +119,12 @@ loop handle btnDown renderFrame window checkAnimTick = do
       winSize = Size (fromIntegral winW) (fromIntegral winH)
   (btnDown', result) <- foldM (stepEvent pos winSize) (btnDown, Nothing) (first : rest)
   case result of
-    Just (Continue draws _) -> renderFrame draws >> loop handle btnDown' renderFrame window checkAnimTick
-    Just (Quit     draws _) -> renderFrame draws
-    Nothing                 -> loop handle btnDown' renderFrame window checkAnimTick
+    Just (Continue draws cursor _) -> do
+      renderFrame draws
+      applyCursor cursor
+      loop handle btnDown' applyCursor renderFrame window checkAnimTick
+    Just (Quit draws cursor _) -> renderFrame draws >> applyCursor cursor
+    Nothing                    -> loop handle btnDown' applyCursor renderFrame window checkAnimTick
   where
     stepEvent pos winSize (btn, _) event = do
       isAnimTick <- checkAnimTick [event]

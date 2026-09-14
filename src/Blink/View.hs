@@ -270,6 +270,13 @@ module Blink.View
   , settleEffects
   , settleAndClearEffects
   , contextRequiresAnimation
+    -- * Cursor shape
+    -- | 'CursorShape' lives in "Blink.Rendering"; re-exported here since
+    -- it's threaded through 'ViewContext' the same way a draw command is.
+    -- 'requestCursor' lives in "Blink.View.CursorShape".
+  , CursorShape (..)
+  , getCursorShape
+  , requestCursor
     -- * Messages
   , Effect
   , UiEffect
@@ -416,7 +423,9 @@ module Blink.View
   ) where
 
 import Blink.Rendering
-  (TextMeasurer (..), noOpTextMeasurer, ImageMeasurer (..), noOpImageMeasurer, Measurers (..), noOpMeasurers)
+  ( TextMeasurer (..), noOpTextMeasurer, ImageMeasurer (..), noOpImageMeasurer, Measurers (..), noOpMeasurers
+  , CursorShape (..)
+  )
 import Blink.Input (MouseCapture (..))
 import Blink.View.Context
 import Blink.View.Mouse
@@ -424,6 +433,7 @@ import Blink.View.Focus
 import Blink.View.Scroll
 import Blink.View.Extent
 import Blink.View.Cursor
+import Blink.View.CursorShape
 import Blink.View.Selection
 import Blink.View.Hold
 import Blink.View.Animation

@@ -198,14 +198,15 @@ scrollingSpec = describe "table header" $ do
     resultMessages result `shouldBe` []
 
 resizingSpec :: Spec
-resizingSpec = describe "table column resizing" $
-  it "dragging the handle between two columns resizes them and leaves other columns' widths unchanged" $ do
-    -- The handle between "Name" (0-40) and "Age" (40-100) spans x 40-45,
-    -- centred at 42.5. Dragging its centre 10px right should grow "Name"
-    -- by 10 and shrink "Age" by 10, leaving their combined 100px (and
-    -- every row's) unchanged.
-    let handleCentre = at 42.5 10
+resizingSpec = describe "table column resizing" $ do
+  -- The handle between "Name" (0-40) and "Age" (40-100) spans x 40-45,
+  -- centred at 42.5.
+  let handleCentre = at 42.5 10
 
+  it "dragging the handle between two columns resizes them and leaves other columns' widths unchanged" $ do
+    -- Dragging its centre 10px right should grow "Name" by 10 and
+    -- shrink "Age" by 10, leaving their combined 100px (and every
+    -- row's) unchanged.
     dragged <- runInteractions testBounds seedCtx
       (renderSilentTable [selection (unselected items)])
       [MoveTo handleCentre]
@@ -226,6 +227,27 @@ resizingSpec = describe "table column resizing" $
       , "Name3@0.0,60.0+50.0"
       , "Age3@55.0,60.0+50.0"
       ]
+
+  it "shows a resize cursor while hovering the handle" $ do
+    result <- runInteractions testBounds seedCtx
+      (renderSilentTable [selection (unselected items)])
+      [MoveTo handleCentre]
+      [Wait 1]
+    getCursorShape (resultContext result) `shouldBe` CursorResizeHorizontal
+
+  it "shows a resize cursor while dragging the handle, even once the pointer leaves it" $ do
+    result <- runInteractions testBounds seedCtx
+      (renderSilentTable [selection (unselected items)])
+      [MoveTo handleCentre]
+      [MouseDown handleCentre, DragTo (at 90 10)]
+    getCursorShape (resultContext result) `shouldBe` CursorResizeHorizontal
+
+  it "leaves the default cursor when the pointer is away from the handle" $ do
+    result <- runInteractions testBounds seedCtx
+      (renderSilentTable [selection (unselected items)])
+      [MoveTo (at 10 10)]
+      [Wait 1]
+    getCursorShape (resultContext result) `shouldBe` CursorArrow
 
 sortingSpec :: Spec
 sortingSpec = describe "table column-click sorting" $

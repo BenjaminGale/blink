@@ -49,8 +49,8 @@ import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), Length, exactly, fill)
 import Blink.Style (Style (..), StyleSet (..))
 import Blink.View
-  ( Effect, View, currentStyle, getBounds, getExtentState, getMousePos, getStyleSet, isDragging, requestExtentBy
-  , withBounds
+  ( CursorShape (..), Effect, View, currentStyle, getBounds, getExtentState, getMousePos, getStyleSet, isDragging
+  , requestCursor, requestExtentBy, withBounds
   )
 import Blink.View.Drawing (fillRect)
 
@@ -340,14 +340,15 @@ resizeHandle mkDividerId idx = Element
       , ccStyleKey        = tableColumnDividerStyleKey
       , ccFocusPolicy     = NotFocusable
       , ccMouseActivation = CaptureActivated
-      , ccContent         = const body
+      , ccContent         = body
       }
   }
   where
     eid = mkDividerId idx
-    body = do
+    body ci = do
       dragging <- isDragging eid
       bounds   <- getBounds
+      when (dragging || ciHovered ci) $ requestCursor CursorResizeHorizontal
       when dragging $ do
         mouseX <- pointX <$> getMousePos
         requestExtentBy eid (mouseX - (rectX bounds + handleWidth / 2))

@@ -52,6 +52,7 @@ library
         Blink.View.Scroll
         Blink.View.Extent
         Blink.View.Cursor
+        Blink.View.CursorShape
         Blink.View.Selection
         Blink.Controls.Button
         Blink.Controls.Checkbox
@@ -154,6 +155,7 @@ test-suite blink-tests
         Blink.View.AnimationSpec
         Blink.View.ContextSpec
         Blink.View.CursorSpec
+        Blink.View.CursorShapeSpec
         Blink.View.DrawingSpec
         Blink.View.ExtentSpec
         Blink.View.Fixtures

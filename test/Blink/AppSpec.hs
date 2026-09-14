@@ -87,12 +87,12 @@ testStyleSet :: StyleSet
 testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = mempty }
 
 resultState :: FrameResult s -> s
-resultState (Continue _ s) = s
-resultState (Quit _ s)     = s
+resultState (Continue _ _ s) = s
+resultState (Quit _ _ s)     = s
 
 resultDraws :: FrameResult s -> [DrawCommand]
-resultDraws (Continue ds _) = ds
-resultDraws (Quit ds _)     = ds
+resultDraws (Continue ds _ _) = ds
+resultDraws (Quit ds _ _)     = ds
 
 drawnTexts :: FrameResult s -> [Text]
 drawnTexts r = [t | DrawText _ t _ _ <- resultDraws r]
@@ -101,12 +101,12 @@ drawnImages :: FrameResult s -> [Text]
 drawnImages r = [p | DrawImage _ p _ <- resultDraws r]
 
 isContinue :: FrameResult s -> Bool
-isContinue (Continue _ _) = True
-isContinue _              = False
+isContinue (Continue _ _ _) = True
+isContinue _                = False
 
 isQuit :: FrameResult s -> Bool
-isQuit (Quit _ _) = True
-isQuit _          = False
+isQuit (Quit _ _ _) = True
+isQuit _            = False
 
 -- Test apps
 

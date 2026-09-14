@@ -23,8 +23,8 @@ loop handle = do
   input  <- collectFrameInput       -- assemble FrameInput from platform events
   result <- stepFrame handle input
   case result of
-    Continue draws _ -> render draws >> loop handle
-    Quit     draws _ -> render draws
+    Continue draws cursor _ -> render draws >> applyCursor cursor >> loop handle
+    Quit     draws cursor _ -> render draws >> applyCursor cursor
 @
 
 = Type parameters

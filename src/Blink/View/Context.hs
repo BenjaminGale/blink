@@ -33,6 +33,7 @@ module Blink.View.Context
   , nextFrameContext
   , rerenderContext
   , getDrawCommands
+  , getCursorShape
   , getMessages
   , hasPendingUiEffects
   , settleEffects
@@ -133,7 +134,7 @@ import Data.List (foldl')
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Blink.Rendering (DrawCommand, Measurers (..), noOpMeasurers, TextMeasurer (..), ImageMeasurer (..), ImagePath)
+import Blink.Rendering (DrawCommand, CursorShape (..), Measurers (..), noOpMeasurers, TextMeasurer (..), ImageMeasurer (..), ImagePath)
 import Blink.Geometry (Rectangle, Size)
 import Blink.Input
   ( Key (..), KeyEvent (..), Modifier (..), InputState (..)
@@ -630,13 +631,18 @@ data SelectionSlot e
   | SelectionAt e Selection
 
 -- | Outputs accumulated during a single frame: draw commands, the queued
--- 'Effect' events (messages and 'UiEffect's, in emit order), and the animation
--- continuation flag. Reset to empty at the start of each frame by
--- 'nextFrameContext'.
+-- 'Effect' events (messages and 'UiEffect's, in emit order), the animation
+-- continuation flag, and the requested mouse cursor shape. Reset to empty
+-- at the start of each frame by 'nextFrameContext'.
 data FrameOutputs e msg = FrameOutputs
   { outDrawCommands       :: [DrawCommand]
   , outEvents             :: [Effect e msg]
   , outRequiresAnimation  :: Bool
+  , outCursorShape        :: CursorShape
+    -- ^ Set by 'Blink.View.CursorShape.requestCursor', last write wins --
+    -- since a control is visited in draw order, whatever's drawn on top
+    -- requests last and so takes precedence, matching what's visually
+    -- under the pointer.
   }
 
 -- | The frame context threaded through every 'View' computation. Carries the
@@ -736,6 +742,7 @@ emptyFrameOutputs = FrameOutputs
   { outDrawCommands       = []
   , outEvents             = []
   , outRequiresAnimation  = False
+  , outCursorShape        = CursorArrow
   }
 
 -- | Constructs the initial 'ViewContext' for the first frame, with
@@ -1009,6 +1016,12 @@ instance HasUiEffect e (View e msg) where
 -- | Extracts the draw commands produced during the frame, in submission order.
 getDrawCommands :: ViewContext e msg -> [DrawCommand]
 getDrawCommands = reverse . outDrawCommands . ctxOutputs
+
+-- | The mouse cursor shape requested during the frame, for the backend to
+-- apply -- see 'Blink.View.CursorShape.requestCursor'. 'CursorArrow' when
+-- nothing requested one.
+getCursorShape :: ViewContext e msg -> CursorShape
+getCursorShape = outCursorShape . ctxOutputs
 
 -- | Extracts the messages queued with 'emit' during the frame, in emit order.
 -- 'UiEffect's queued with 'emitUi' (or the focus\/scroll\/selection helpers

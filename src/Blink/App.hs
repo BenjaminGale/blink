@@ -64,8 +64,8 @@ loop handle = do
   input  <- collectFrameInput
   result <- stepFrame handle input
   case result of
-    Continue draws _ -> render draws >> loop handle
-    Quit     draws _ -> render draws
+    Continue draws cursor _ -> render draws >> applyCursor cursor >> loop handle
+    Quit     draws cursor _ -> render draws >> applyCursor cursor
 @
 
 Draw commands are included in both 'Continue' and 'Quit' so the backend can
@@ -131,14 +131,14 @@ import Blink.Cmd (Cmd, runCmd)
 import Blink.Geometry (Point (..), Rectangle, Size (..), rectFromSize)
 import Blink.Input (KeyEvent, InputState (..), advanceButton)
 import Blink.View.Context (ctxMouse)
-import Blink.Rendering (DrawCommand, TextMeasurer (..), ImageMeasurer (..), Measurers (..))
+import Blink.Rendering (DrawCommand, CursorShape, TextMeasurer (..), ImageMeasurer (..), Measurers (..))
 import Blink.Style (Theme)
 import Blink.View
   ( ViewContext
   , AnimationState (animElapsed)
   , mkAnimationState
   , emptyViewContext, withMeasurers, nextFrameContext, rerenderContext
-  , runView, getDrawCommands, getMessages, hasPendingUiEffects
+  , runView, getDrawCommands, getCursorShape, getMessages, hasPendingUiEffects
   , UiEffect, queueUiEffects
   , contextAnimation, contextRequiresAnimation
   )
@@ -243,9 +243,10 @@ data FrameInput = FrameInput
 
 -- | The result of processing a single frame.
 data FrameResult s
-  = Continue [DrawCommand] s
-    -- ^ Normal frame. Render the draw commands and loop with the new state.
-  | Quit [DrawCommand] s
+  = Continue [DrawCommand] CursorShape s
+    -- ^ Normal frame. Render the draw commands, apply the requested cursor
+    -- shape, and loop with the new state.
+  | Quit [DrawCommand] CursorShape s
     -- ^ The application has quit. Render the draw commands (the final frame)
     -- then exit the loop.
 
@@ -331,7 +332,7 @@ doStepContinuous :: Ord e => App e msg s -> AppRefs e msg s -> MsgQueue msg -> F
 doStepContinuous app refs queue input = do
   (ctx', state') <- runFrame app refs queue (pure ()) input
   writeIORef (refsCtx refs) ctx'
-  pure $ toResult input (getDrawCommands ctx') state'
+  pure $ toResult input (getDrawCommands ctx') (getCursorShape ctx') state'
 
 doStepEventDriven :: Ord e => App e msg s -> AppRefs e msg s -> MsgQueue msg -> IO () -> FrameInput -> IO (FrameResult s)
 doStepEventDriven app refs queue notify input = do
@@ -358,7 +359,7 @@ doStepEventDriven app refs queue notify input = do
   writeIORef (refsAnimActive refs) nowActive
   when (not wasActive && nowActive) $
     forkAnimationTicker (refsAnimActive refs) notify
-  pure $ toResult input (getDrawCommands renderedCtx) state2
+  pure $ toResult input (getDrawCommands renderedCtx) (getCursorShape renderedCtx) state2
 
 -- | Re-renders the view against @state1@ so the displayed frame reflects
 -- messages or 'UiEffect's the first pass queued, folding whatever this
@@ -405,10 +406,10 @@ suppressFreshButtonEdge input ctx =
   where
     isDown = inputLeftButtonDown input
 
-toResult :: FrameInput -> [DrawCommand] -> s -> FrameResult s
-toResult input draws state
-  | quitRequested input = Quit draws state
-  | otherwise           = Continue draws state
+toResult :: FrameInput -> [DrawCommand] -> CursorShape -> s -> FrameResult s
+toResult input draws cursor state
+  | quitRequested input = Quit draws cursor state
+  | otherwise           = Continue draws cursor state
 
 emptyInputState :: InputState
 emptyInputState = InputState

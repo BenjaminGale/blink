@@ -18,6 +18,8 @@ module Blink.Rendering
     -- * Draw commands
   , ImagePath
   , DrawCommand (..)
+    -- * Cursor shape
+  , CursorShape (..)
     -- * Text measurement
   , TextMeasurer (..)
   , noOpTextMeasurer
@@ -126,4 +128,16 @@ data DrawCommand
     -- are clipped to this rectangle intersected with any outer clip regions.
   | PopClip
     -- ^ Pop the most recently pushed clip region from the clip stack.
+  deriving (Eq, Show)
+
+-- | The mouse pointer shape the backend should display, as requested by the
+-- view for the current frame. 'Blink.View.getCursorShape' extracts the
+-- frame's final value for the backend to apply; see 'Blink.View.requestCursor'
+-- for how a control requests one.
+data CursorShape
+  = CursorArrow
+    -- ^ The platform's default pointer. What every frame starts at.
+  | CursorResizeHorizontal
+    -- ^ A left-right resize indicator, e.g. while hovering or dragging a
+    -- column divider.
   deriving (Eq, Show)
