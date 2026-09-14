@@ -124,6 +124,7 @@ test-suite blink-tests
     main-is: Main.hs
     other-modules:
         Blink.AppSpec
+        Blink.ElementSpec
         Blink.Generators
         Blink.GeometrySpec
         Blink.InputSpec

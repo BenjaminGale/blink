@@ -2,6 +2,7 @@ module Main (main) where
 
 import Test.Hspec
 import qualified Blink.AppSpec as App
+import qualified Blink.ElementSpec as Element
 import qualified Blink.Controls.ButtonSpec as Button
 import qualified Blink.Controls.CheckboxSpec as Checkbox
 import qualified Blink.Controls.ControlSpec as Control
@@ -57,6 +58,7 @@ main = hspec $ do
   ViewScroll.spec
   ViewSelection.spec
   Update.spec
+  Element.spec
   Geometry.spec
   Layout.spec
   Popup.spec
