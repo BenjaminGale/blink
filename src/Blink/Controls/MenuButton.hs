@@ -12,10 +12,12 @@
 -- control --> buttonBase --> toggleBase --> menuButton
 -- @
 --
--- This slice covers only opening, closing, and rendering the item list
--- through 'Blink.Popup.popup'. Keyboard navigation between items and
--- closing on activation or an outside click are later additions -- see the
--- popup-support plan.
+-- While open, arrow keys move the keyboard highlight between items (reusing
+-- ordinary Tab\/Shift-Tab focus traversal, remapped to Up\/Down within the
+-- item list's own focus scope -- see 'itemsElement'), Enter or a click on
+-- an item activates it and closes the menu, and Escape closes it without
+-- activating anything. Either way, focus returns to the trigger. Closing on
+-- an outside click is a later addition -- see the popup-support plan.
 module Blink.Controls.MenuButton
   ( MenuButtonConfig
   , MenuButtonPart (..)
@@ -28,25 +30,29 @@ module Blink.Controls.MenuButton
   ) where
 
 import Control.Monad (void, when)
+import Data.List (find)
 
-import Blink.Controls.Button (ButtonConfig (..), button)
+import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label
   (HasLabelledConfig (..), LabelledConfig (..), captionElement, lcText, renderLabelledContent)
 import Blink.Controls.ToggleButton
   (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleBase)
+import Blink.Input (InputState (inputKeyEvents), Key (KeyDown, KeyEscape, KeyUp), KeyEvent (key))
 import Blink.Layout.Box (children, vBox)
 import Blink.Layout.Constraints (fitContent)
 import Blink.Popup (content, popup)
-import Blink.View (Effect, View)
+import Blink.View
 import Blink.Element (Element (..), HasLayoutConfig (..), height, width)
 
 -- | Identifies one part of a 'menuButton': the trigger button itself
--- ('MenuButtonTrigger'), or one of its items, tagged by the item's own data
--- value rather than its position in the list -- the same rationale as
--- 'Blink.Controls.ToggleGroup.ToggleGroupPart'.
+-- ('MenuButtonTrigger'), the item list's own focus scope
+-- ('MenuButtonList' -- see 'itemsElement'), or one of its items, tagged by
+-- the item's own data value rather than its position in the list -- the
+-- same rationale as 'Blink.Controls.ToggleGroup.ToggleGroupPart'.
 data MenuButtonPart a
   = MenuButtonTrigger
+  | MenuButtonList
   | MenuButtonItem a
   deriving (Eq, Ord, Show)
 
@@ -89,7 +95,9 @@ items xs = Attribute (\c -> c { mbItems = xs })
 -- | Attributes for the button built from one item (e.g.
 -- 'Blink.Controls.Label.text', 'Blink.Controls.Button.onActivated'),
 -- computed once per item rather than written out by hand for each -- the
--- same shape as 'Blink.Controls.ToggleGroup.toggleAttributes'.
+-- same shape as 'Blink.Controls.ToggleGroup.toggleAttributes'. An item's
+-- own 'Blink.Controls.Button.onActivated' fires (if set) in addition to,
+-- not instead of, 'menuButton' closing the list on that same activation.
 itemAttrs :: (a -> [Attribute (ButtonConfig e msg)]) -> Attribute (MenuButtonConfig e a msg)
 itemAttrs f = Attribute (\c -> c { mbItemAttrs = f })
 
@@ -101,10 +109,11 @@ isOpen :: Bool -> Attribute (MenuButtonConfig e a msg)
 isOpen b = Attribute (\c -> c { mbToggle = (mbToggle c) { tgcSelected = b } })
 
 -- | Reacts when activating the trigger (a click, or Enter while focused)
--- would open or close the list, with the value it changed to. It's up to
--- the reaction to actually store the new value and pass it back in via
--- 'isOpen' next frame -- the same contract as
--- 'Blink.Controls.ToggleButton.onSelectedChanged'.
+-- would open or close the list, with the value it changed to. Also fires
+-- (with 'False') when an item is activated or Escape is pressed while the
+-- list is open, closing it the same way. It's up to the reaction to
+-- actually store the new value and pass it back in via 'isOpen' next frame
+-- -- the same contract as 'Blink.Controls.ToggleButton.onSelectedChanged'.
 onOpenChanged :: (Bool -> [Effect e msg]) -> Attribute (MenuButtonConfig e a msg)
 onOpenChanged f = Attribute (\c -> c
   { mbToggle = (mbToggle c) { tgcOnSelectedChanged = tgcOnSelectedChanged (mbToggle c) ++ [f] } })
@@ -113,14 +122,16 @@ onOpenChanged f = Attribute (\c -> c
 -- list of items, built from 'items', when activated -- the same activation
 -- rule as 'Blink.Controls.Button.button' (a click, or Enter while focused).
 -- While open, the list renders through 'Blink.Popup.popup', anchored to the
--- trigger's own bounds, below and left-aligned with it by default. Defaults
--- to filling the width it's given and sizing its height to its own
--- chrome-wrapped caption, the same as 'Blink.Controls.Button.button';
--- override with 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
+-- trigger's own bounds, below and left-aligned with it by default, and
+-- keyboard focus moves into it (see 'itemsElement'). Defaults to filling
+-- the width it's given and sizing its height to its own chrome-wrapped
+-- caption, the same as 'Blink.Controls.Button.button'; override with
+-- 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 --
 -- @tag@ builds every part's element id from a 'MenuButtonPart': the
--- trigger's own id from 'MenuButtonTrigger', and each item's id from
--- 'MenuButtonItem' applied to the item's own data.
+-- trigger's own id from 'MenuButtonTrigger', its item list's own focus
+-- scope id from 'MenuButtonList', and each item's id from 'MenuButtonItem'
+-- applied to the item's own data.
 menuButton :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> [Attribute (MenuButtonConfig e a msg)] -> Element e msg
 menuButton tag attrs = Element
   { elLayout  = bcLayout btn
@@ -132,22 +143,79 @@ menuButton tag attrs = Element
     btn = tgcButton (mbToggle cfg)
 
 -- | Runs the trigger as 'toggleBase' (its "selected" state standing in for
--- open\/closed), then, while open, queues the item list through
--- 'Blink.Popup.popup' anchored to the trigger's own just-rendered bounds.
+-- open\/closed). While open, queues the item list through
+-- 'Blink.Popup.popup', anchored to the trigger's own just-rendered bounds;
+-- the very frame it opens, moves focus into the item list's own scope (see
+-- 'itemsElement') within whatever scope the trigger itself belongs to, so a
+-- 'menuButton' nested inside another composite's focus scope still hands
+-- off correctly, exactly as a click redirecting focus elsewhere already
+-- does for any control.
 runMenuButton :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg (ToggleInteraction e msg)
 runMenuButton tag cfg = do
+  enclosingScope <- getCurrentScope
   r <- toggleBase triggerId (mbToggle cfg) { tgcButton = btn { bcControl = ctrl } }
-  when (tgiSelected r) $ popup triggerId [content (itemsElement tag cfg)]
+  let wasOpen    = tgcSelected (mbToggle cfg)
+      justOpened = tgiSelected r && not wasOpen
+      close      = do
+        runHandlers (tgcOnSelectedChanged (mbToggle cfg)) False
+        requestFocus enclosingScope triggerId
+  when justOpened $ requestFocus enclosingScope (tag MenuButtonList)
+  when (tgiSelected r) $ popup triggerId [content (itemsElement tag cfg close)]
   pure r
   where
     triggerId = tag MenuButtonTrigger
     btn       = tgcButton (mbToggle cfg)
     ctrl      = (bcControl btn) { ccContent = const (renderLabelledContent (bcLabelled btn)) }
 
+-- | The keys that move the keyboard highlight between items: Down behaves
+-- like Tab (give up focus, letting the next item auto-claim it), Up like
+-- Shift-Tab (return to the previous item) -- see
+-- 'Blink.View.Navigation.withNavigationKeys'. Pressing Up on the first item
+-- or Down on the last does nothing, the same as Tab\/Shift-Tab already do
+-- at either end of an ordinary tab order (see 'Blink.Controls.Control.advanceOrRetreat').
+arrowNavigationKeys :: NavigationKeys
+arrowNavigationKeys = NavigationKeys { navAdvance = [(KeyDown, [])], navRetreat = [(KeyUp, [])] }
+
 -- | A top-to-bottom list of buttons, one per item, sized to fit its own
 -- content on both axes so the popup measures a natural size from it rather
--- than stretching to fill the window.
-itemsElement :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> Element e msg
-itemsElement tag cfg = vBox [ width fitContent, height fitContent, children (map toItem (mbItems cfg)) ]
+-- than stretching to fill the window. Runs in its own focus scope
+-- ('MenuButtonList'), with Up\/Down remapped to move between items (see
+-- 'arrowNavigationKeys'); an item's own activation, or Escape pressed while
+-- this scope holds focus, both run @close@.
+itemsElement :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg () -> Element e msg
+itemsElement tag cfg close = box { elRun = scopedRun }
   where
-    toItem item = button (tag (MenuButtonItem item)) (width fitContent : height fitContent : mbItemAttrs cfg item)
+    box = vBox [ width fitContent, height fitContent, children (map toItemElement (mbItems cfg)) ]
+
+    -- Seeds 'previousTabStop' with the scope's own id before any item
+    -- renders, so Up on the first item finds no real predecessor and does
+    -- nothing, rather than retreating to whatever tab stop rendered last in
+    -- a *previous* frame (every item renders every frame regardless of
+    -- which one is focused, so without this the scope's own
+    -- 'previousTabStop' would otherwise always trail the last item
+    -- rendered, wrapping Up on the first item straight to the last) -- see
+    -- 'Blink.View.Focus.withFocusScope'.
+    scopedRun = withFocusScope (tag MenuButtonList) $ do
+      setPreviousTabStop (tag MenuButtonList)
+      handleEscape
+      withNavigationKeys arrowNavigationKeys (elRun box)
+
+    -- Closes on Escape whenever the list is open, regardless of which item
+    -- (if any) currently holds focus within it -- matching a native menu,
+    -- which closes on Escape without needing a specific item highlighted.
+    handleEscape = do
+      evs <- inputKeyEvents <$> getInput
+      case find ((== KeyEscape) . key) evs of
+        Just e  -> consumeKey (key e) >> close
+        Nothing -> pure ()
+
+    toItemElement item = Element
+      { elLayout  = bcLayout itemCfg
+      , elMeasure = measureChrome (ccStyleKey (bcControl itemCfg)) (captionElement (lcText (bcLabelled itemCfg)))
+      , elRun     = do
+          r <- buttonBase (tag (MenuButtonItem item)) itemCfg { bcControl = itemCtrl }
+          when (biActivated r) close
+      }
+      where
+        itemCfg  = resolve defaultButtonConfig (width fitContent : height fitContent : mbItemAttrs cfg item)
+        itemCtrl = (bcControl itemCfg) { ccContent = const (renderLabelledContent (bcLabelled itemCfg)) }

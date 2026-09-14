@@ -65,6 +65,8 @@ data Key
     -- ^ Up arrow.
   | KeyDown
     -- ^ Down arrow.
+  | KeyEscape
+    -- ^ Escape key.
   deriving (Eq, Show)
 
 -- | Keyboard modifier keys. Carried alongside a 'Key' in 'KeyEvent'.

@@ -179,6 +179,7 @@ toKeyEvents e = case SDL.eventPayload e of
            in [KeyEvent { key = KeyRight, modifiers = [Shift | shifted], keyRepeat = rep }]
          SDL.KeycodeUp        -> [KeyEvent { key = KeyUp,        modifiers = [], keyRepeat = rep }]
          SDL.KeycodeDown      -> [KeyEvent { key = KeyDown,      modifiers = [], keyRepeat = rep }]
+         SDL.KeycodeEscape    -> [KeyEvent { key = KeyEscape,    modifiers = [], keyRepeat = rep }]
          _ -> []
   _ -> []
 
