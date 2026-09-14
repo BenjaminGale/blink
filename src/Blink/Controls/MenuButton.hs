@@ -12,10 +12,9 @@
 -- control --> buttonBase --> toggleBase --> menuButton
 -- @
 --
--- While open, arrow keys move the keyboard highlight between items (reusing
--- ordinary Tab\/Shift-Tab focus traversal, remapped to Up\/Down within the
--- item list's own focus scope), Enter or a click on
--- an item activates it and closes the menu, Escape closes it without
+-- While open, Up\/Down move the keyboard highlight between items, wrapping
+-- from the last item back to the first (and back), Enter or a click on an
+-- item activates it and closes the menu, Escape closes it without
 -- activating anything, and a completed click outside both the trigger and
 -- the item list closes it too. Every closing path returns focus to the
 -- trigger.
@@ -30,7 +29,7 @@ module Blink.Controls.MenuButton
   , onOpenChanged
   ) where
 
-import Control.Monad (void, when)
+import Control.Monad (forM_, void, when)
 import Data.List (find)
 
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig)
@@ -171,15 +170,6 @@ runMenuButton tag cfg = do
     btn       = tgcButton (mbToggle cfg)
     ctrl      = (bcControl btn) { ccContent = const (renderLabelledContent (bcLabelled btn)) }
 
--- | The keys that move the keyboard highlight between items: Down behaves
--- like Tab (give up focus, letting the next item auto-claim it), Up like
--- Shift-Tab (return to the previous item) -- see
--- 'Blink.View.Navigation.withNavigationKeys'. Pressing Up on the first item
--- or Down on the last does nothing, the same as Tab\/Shift-Tab already do
--- at either end of an ordinary tab order (see 'Blink.Controls.Control.advanceOrRetreat').
-arrowNavigationKeys :: NavigationKeys
-arrowNavigationKeys = NavigationKeys { navAdvance = [(KeyDown, [])], navRetreat = [(KeyUp, [])] }
-
 -- | A top-to-bottom list of buttons, one per item, sized to fit its own
 -- content on both axes so the popup measures a natural size from it rather
 -- than stretching to fill the window, drawn on a panel background\/border
@@ -187,12 +177,13 @@ arrowNavigationKeys = NavigationKeys { navAdvance = [(KeyDown, [])], navRetreat 
 -- 'Blink.Controls.Control.control' wrapping it, purely for that chrome, the
 -- same way 'Blink.Controls.ToggleGroup.toggleGroup' wraps its own box of
 -- items. Runs in its own focus scope ('MenuButtonList'), with Up\/Down
--- remapped to move between items (see 'arrowNavigationKeys'); an item's own
--- activation, Escape pressed while this scope holds focus, or a click
--- completing outside both the trigger and this list, all run @close@.
--- @onTrigger@ is whether the trigger's own bounds were hit this frame,
--- captured by 'runMenuButton' before this list (a separate 'Element', run
--- later, at a different ambient bounds) is even queued.
+-- moving the highlight between items, wrapping at either end (see
+-- 'handleArrowKeys'); an item's own activation, Escape pressed while this
+-- scope holds focus, or a click completing outside both the trigger and
+-- this list, all run @close@. @onTrigger@ is whether the trigger's own
+-- bounds were hit this frame, captured by 'runMenuButton' before this list
+-- (a separate 'Element', run later, at a different ambient bounds) is even
+-- queued.
 itemsElement :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg () -> Bool -> Element e msg
 itemsElement tag cfg close onTrigger = Element
   { elLayout  = Layout fitContent fitContent TopLeft
@@ -212,19 +203,11 @@ itemsElement tag cfg close onTrigger = Element
       , ccContent     = const scopedRun
       }
 
-    -- Seeds 'previousTabStop' with the scope's own id before any item
-    -- renders, so Up on the first item finds no real predecessor and does
-    -- nothing, rather than retreating to whatever tab stop rendered last in
-    -- a *previous* frame (every item renders every frame regardless of
-    -- which one is focused, so without this the scope's own
-    -- 'previousTabStop' would otherwise always trail the last item
-    -- rendered, wrapping Up on the first item straight to the last) -- see
-    -- 'Blink.View.Focus.withFocusScope'.
     scopedRun = withFocusScope (tag MenuButtonList) $ do
-      setPreviousTabStop (tag MenuButtonList)
       handleEscape
       handleOutsideClick
-      withNavigationKeys arrowNavigationKeys (elRun box)
+      handleArrowKeys
+      elRun box
 
     -- Closes on Escape whenever the list is open, regardless of which item
     -- (if any) currently holds focus within it -- matching a native menu,
@@ -245,6 +228,34 @@ itemsElement tag cfg close onTrigger = Element
       released <- isButtonReleased
       onList   <- isRegionHit
       when (released && not onTrigger && not onList) close
+
+    -- Moves the highlight to the next/previous item on Down\/Up, wrapping
+    -- from the last item to the first (and back) in a single keypress --
+    -- unlike Tab\/Shift-Tab's own traversal, a menu's items are expected to
+    -- cycle, matching every native menu\/dropdown. Redirects focus
+    -- explicitly by position rather than reusing Tab\/Shift-Tab's own
+    -- give-up-and-let-the-neighbour-auto-claim mechanism, which has no
+    -- wraparound of its own.
+    handleArrowKeys = case mbItems cfg of
+      [] -> pure ()
+      menuItems -> do
+        evs <- inputKeyEvents <$> getInput
+        forM_ (find ((`elem` [KeyDown, KeyUp]) . key) evs) $ \e -> do
+          consumeKey (key e)
+          current <- getFocus
+          let count        = length menuItems
+              currentIndex = current >>= (`lookup` zip (map (tag . MenuButtonItem) menuItems) [0 ..])
+              nextIndex = case (key e, currentIndex) of
+                (KeyDown, Nothing) -> 0
+                (KeyDown, Just i)  -> (i + 1) `mod` count
+                (_,       Nothing) -> count - 1
+                (_,       Just i)  -> (i - 1) `mod` count
+          forM_ (itemAt menuItems nextIndex) $ \item ->
+            requestFocus (Just (tag MenuButtonList)) (tag (MenuButtonItem item))
+
+    itemAt xs idx = case drop idx xs of
+      (x : _) -> Just x
+      []      -> Nothing
 
     toItemElement item = Element
       { elLayout  = bcLayout itemCfg

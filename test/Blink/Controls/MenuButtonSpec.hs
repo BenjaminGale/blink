@@ -235,20 +235,20 @@ spec = describe "Blink.Controls.MenuButton.menuButton" $ do
       result <- stepFrame handle (keyInput KeyDown)
       last (snd (resultState result)) `shouldBe` "Save focused"
 
-    it "Down on the last item does not wrap back to the first" $ do
+    it "Down on the last item wraps to the first, in a single keypress" $ do
       handle <- configureEventDriven navApp nullMsgQueue (pure ()) noOpMeasurers
       _      <- stepFrame handle (mkInput navTriggerPoint True)
       _      <- stepFrame handle (mkInput navTriggerPoint False) -- opens, focuses Open
-      atSave <- stepFrame handle (keyInput KeyDown)            -- Open -> Save
-      atEnd  <- stepFrame handle (keyInput KeyDown)            -- Save -> nowhere
-      snd (resultState atEnd) `shouldBe` snd (resultState atSave)
+      _      <- stepFrame handle (keyInput KeyDown)            -- Open -> Save
+      result <- stepFrame handle (keyInput KeyDown)            -- Save -> Open
+      last (snd (resultState result)) `shouldBe` "Open focused"
 
-    it "Up on the first item does not wrap to the last" $ do
+    it "Up on the first item wraps to the last, in a single keypress" $ do
       handle <- configureEventDriven navApp nullMsgQueue (pure ()) noOpMeasurers
       _      <- stepFrame handle (mkInput navTriggerPoint True)
-      atOpen <- stepFrame handle (mkInput navTriggerPoint False) -- opens, focuses Open
-      result <- stepFrame handle (keyInput KeyUp)
-      snd (resultState result) `shouldBe` snd (resultState atOpen)
+      _      <- stepFrame handle (mkInput navTriggerPoint False) -- opens, focuses Open
+      result <- stepFrame handle (keyInput KeyUp)              -- Open -> Save
+      last (snd (resultState result)) `shouldBe` "Save focused"
 
     it "Enter on the highlighted item activates it, closes the menu, and returns focus to the trigger" $ do
       handle <- configureEventDriven navApp nullMsgQueue (pure ()) noOpMeasurers
