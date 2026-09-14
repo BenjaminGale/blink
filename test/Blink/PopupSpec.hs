@@ -6,7 +6,7 @@ import Blink.Element (Element, elementWithLayout)
 import Blink.Geometry
   (Alignment (TopLeft), Edge (..), Point (..), Rectangle (..), Side (..), Size (..), placePopup)
 import Blink.Layout.Constraints (Layout (..), exactly)
-import Blink.Popup (at, content, popup)
+import Blink.Popup (at, content, offset, placement, popup)
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.View
 import Blink.View.Drawing (fillRect)
@@ -34,6 +34,23 @@ spec = describe "Blink.Popup" $ do
     it "anchors to an explicit point when given 'at'" $ do
       (_, ctx) <- runTwoElem (popup ElemA [content (fillRectElement (RGBA 1 0 0 1)), at (Point 10 20)])
       map popupAnchor (getPendingPopups ctx) `shouldBe` [Rectangle 10 20 0 0]
+
+    it "defaults popupPlacement to (SideBottom, Start) and popupOffset to 0" $ do
+      (_, ctx) <- runTwoElem (popup ElemA [content (fillRectElement (RGBA 1 0 0 1))])
+      case getPendingPopups ctx of
+        [queued] -> do
+          popupPlacement queued `shouldBe` (SideBottom, Start)
+          popupOffset queued `shouldBe` 0
+        other -> expectationFailure ("expected exactly one pending popup, got " ++ show (length other))
+
+    it "sets popupPlacement/popupOffset from the placement/offset attributes" $ do
+      (_, ctx) <- runTwoElem
+        (popup ElemA [content (fillRectElement (RGBA 1 0 0 1)), placement SideTop Middle, offset 12])
+      case getPendingPopups ctx of
+        [queued] -> do
+          popupPlacement queued `shouldBe` (SideTop, Middle)
+          popupOffset queued `shouldBe` 12
+        other -> expectationFailure ("expected exactly one pending popup, got " ++ show (length other))
 
     it "runs and draws its content once its own queued action is executed" $ do
       (_, ctx) <- runTwoElem (popup ElemA [content (fillRectElement (RGBA 1 0 0 1))])
