@@ -14,7 +14,7 @@
 --
 -- While open, arrow keys move the keyboard highlight between items (reusing
 -- ordinary Tab\/Shift-Tab focus traversal, remapped to Up\/Down within the
--- item list's own focus scope -- see 'itemsElement'), Enter or a click on
+-- item list's own focus scope), Enter or a click on
 -- an item activates it and closes the menu, Escape closes it without
 -- activating anything, and a completed click outside both the trigger and
 -- the item list closes it too. Every closing path returns focus to the
@@ -50,7 +50,7 @@ import Blink.Element (Element (..), HasLayoutConfig (..), height, width)
 
 -- | Identifies one part of a 'menuButton': the trigger button itself
 -- ('MenuButtonTrigger'), the item list's own focus scope
--- ('MenuButtonList' -- see 'itemsElement'), or one of its items, tagged by
+-- ('MenuButtonList'), or one of its items, tagged by
 -- the item's own data value rather than its position in the list -- the
 -- same rationale as 'Blink.Controls.ToggleGroup.ToggleGroupPart'.
 data MenuButtonPart a
@@ -126,7 +126,7 @@ onOpenChanged f = Attribute (\c -> c
 -- rule as 'Blink.Controls.Button.button' (a click, or Enter while focused).
 -- While open, the list renders through 'Blink.Popup.popup', anchored to the
 -- trigger's own bounds, below and left-aligned with it by default, and
--- keyboard focus moves into it (see 'itemsElement'). Defaults to filling
+-- keyboard focus moves into it. Defaults to filling
 -- the width it's given and sizing its height to its own chrome-wrapped
 -- caption, the same as 'Blink.Controls.Button.button'; override with
 -- 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.

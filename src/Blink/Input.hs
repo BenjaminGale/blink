@@ -248,7 +248,7 @@ data Mouse e = Mouse
     -- Defaults to 'maxBound' ("nothing qualifies"), not 0, so a context that
     -- never drains popups (most tests, built on "Blink.Interaction") never
     -- misreads an ordinary hit-rect as a popup's. See
-    -- 'Blink.View.Mouse.isOccludedByPopupFor'.
+    -- @isOccludedByPopupFor@ in "Blink.View.Mouse".
   }
 
 -- | No button held, nothing hovered -- the starting state for a fresh

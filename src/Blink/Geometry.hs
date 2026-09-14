@@ -210,22 +210,22 @@ rectCentredAt p r =
            (pointY p - rectHeight r / 2)
     ) r
 
--- | Which edge of the anchor a popup opens from. Prefixed ('SideTop', not
--- 'Top') to avoid colliding with 'Data.Either.Left'\/'Data.Either.Right'.
+-- | Which edge of the anchor a popup opens from. Prefixed (@SideTop@, not
+-- plain @Top@) to avoid colliding with 'Data.Either.Left'\/'Data.Either.Right'.
 data Side = SideTop | SideBottom | SideLeft | SideRight
   deriving (Eq, Show)
 
 -- | How a popup is aligned along the anchor's edge, on the axis
--- perpendicular to 'Side' -- e.g. for 'Bottom', whether the popup's left
--- edge, centre, or right edge lines up with the anchor's.
+-- perpendicular to 'Side' -- e.g. for 'SideBottom', whether the popup's
+-- left edge, centre, or right edge lines up with the anchor's.
 data Edge = Start | Middle | End
   deriving (Eq, Show)
 
 -- | Positions a popup of @size@ against @anchor@, per @(side, edge)@ and
 -- @offset@ (the gap between the anchor's edge and the popup), then flips to
 -- the opposite 'Side' if that placement would overflow @window@ -- e.g.
--- 'Bottom' becomes 'Top' when there isn't room below the anchor. Used by
--- "Blink.Popup" to place a popup's content once its size is known.
+-- 'SideBottom' becomes 'SideTop' when there isn't room below the anchor.
+-- Used by "Blink.Popup" to place a popup's content once its size is known.
 placePopup :: Rectangle -> Rectangle -> Size -> (Side, Edge) -> Double -> Rectangle
 placePopup anchor window size (side, edge) offset
   | overflowsOnSide window preferred side = placeAt anchor size (flipSide side) edge offset

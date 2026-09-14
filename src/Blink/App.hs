@@ -280,8 +280,8 @@ buildCtx app winRect inputState delta isAnimTick state prevCtx =
 -- | Runs @el@ (the whole view tree for a render pass), then drains and runs
 -- any popups it queued via 'Blink.Popup.popup' -- see 'drainPopups'. Every
 -- render pass goes through this rather than 'runElement'/'runView' directly,
--- so a popup queued on either 'runFrame''s first pass or 'rerenderPass''s
--- second one is always run out before the pass's output is read.
+-- so a popup queued on either the first pass ('runFrame') or the second
+-- ('rerenderPass') is always run out before that pass's output is read.
 runViewAndPopups :: Element e msg -> ViewContext e msg -> IO ((), ViewContext e msg)
 runViewAndPopups el ctx = do
   (a, ctx') <- runView (runElement el) ctx
@@ -292,7 +292,8 @@ runViewAndPopups el ctx = do
 -- 'placePopup'. Their draws and hit-rects append onto @ctx@'s own, landing
 -- after everything the main tree already produced -- on top, and never
 -- occluded by it. 'markPopupFloor' runs first, marking every hit-rect
--- registered from here on as a popup's -- see 'isOccludedByPopupFor'.
+-- registered from here on as a popup's -- see @isOccludedByPopupFor@ in
+-- "Blink.View.Mouse".
 drainPopups :: ViewContext e msg -> IO (ViewContext e msg)
 drainPopups ctx0 = do
   (_, ctx1) <- runView markPopupFloor ctx0
