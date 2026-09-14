@@ -36,7 +36,13 @@ and calls into Blink.
 
 - **Controls** — A standard set of interactive controls: buttons,
   checkboxes, toggles, radio buttons, text inputs, sliders, progress bars,
-  labels, dividers, and repeat buttons.
+  labels, dividers, repeat buttons, and menu buttons that open a dropdown
+  list of items.
+
+- **Popups** — A deferred overlay layer for content that needs to draw on
+  top of, and unclipped by, the rest of the view: positioned against an
+  anchor, automatically flipped to stay inside the window, and never
+  occluded by whatever's behind it. Menu buttons are built on it directly.
 
 - **Layout** — A layout system combining row and column arrangement with
   spacing and alignment, size constraints (fill, exact size, minimum,
