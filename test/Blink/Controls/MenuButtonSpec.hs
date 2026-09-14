@@ -7,7 +7,7 @@ import Test.Hspec
 
 import Blink.App
 import Blink.Controls.Button (onActivated)
-import Blink.Controls.Control (onFocusGained, post, postWith)
+import Blink.Controls.Control (isEnabled, onFocusGained, post, postWith)
 import Blink.Controls.Label (text)
 import Blink.Controls.MenuButton (MenuButtonPart (..), isOpen, itemAttrs, items, menuButton, onOpenChanged)
 import Blink.Element (elLayout, height, width)
@@ -53,6 +53,21 @@ menuApp = App
         , itemAttrs (\i -> [text (T.pack (show i))])
         ]) { elLayout = Layout fill fill TopLeft }
   , update  = put
+  }
+
+-- | 'menuApp', but disabled -- clicking its trigger must not open it, the
+-- same as any other disabled control refusing to activate.
+disabledMenuApp :: App (MenuButtonPart Item) Bool Bool
+disabledMenuApp = menuApp
+  { view = \open ->
+      (menuButton id
+        [ text "File"
+        , isOpen open
+        , onOpenChanged (postWith id)
+        , items [Open, Save]
+        , itemAttrs (\i -> [text (T.pack (show i))])
+        , isEnabled False
+        ]) { elLayout = Layout fill fill TopLeft }
   }
 
 -- | What changes the open flag, or logs a keyboard-navigation event, in
@@ -150,6 +165,12 @@ spec = describe "Blink.Controls.MenuButton.menuButton" $ do
     _      <- stepFrame handle (mkInput triggerPoint False) -- opens
     _      <- stepFrame handle (mkInput triggerPoint True)
     result <- stepFrame handle (mkInput triggerPoint False) -- closes
+    drawnTexts result `shouldNotContain` ["Open", "Save"]
+
+  it "does not open on click while disabled" $ do
+    handle <- configureEventDriven disabledMenuApp nullMsgQueue (pure ()) noOpMeasurers
+    _      <- stepFrame handle (mkInput triggerPoint True)
+    result <- stepFrame handle (mkInput triggerPoint False)
     drawnTexts result `shouldNotContain` ["Open", "Save"]
 
   describe "keyboard navigation while open" $ do
