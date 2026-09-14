@@ -232,11 +232,21 @@ data HitRect = HitRect
 -- "was something nested inside me, or drawn after me, also hit here" --
 -- see 'Blink.View.isOccludedFor'.
 data Mouse e = Mouse
-  { mouseButton        :: ButtonState e
-  , mouseHoverPrev     :: Map.Map e HoverState
-  , mouseHoverNext     :: Map.Map e HoverState
-  , mouseHitRectsPrev  :: Map.Map e HitRect
-  , mouseHitRectsNext  :: Map.Map e HitRect
+  { mouseButton     :: ButtonState e
+  , mouseHoverPrev  :: Map.Map e HoverState
+  , mouseHoverNext  :: Map.Map e HoverState
+  , mouseHitRectsPrev :: Map.Map e HitRect
+  , mouseHitRectsNext :: Map.Map e HitRect
+  , mousePopupFloor :: Int
+    -- ^ The lowest 'hitRectIndex' in 'mouseHitRectsPrev' that belongs to a
+    -- popup rather than the main view tree. 'Blink.View.Mouse.markPopupFloor'
+    -- writes it once per frame, right before "Blink.App"'s drain step runs
+    -- that frame's popups, so a query during the main tree walk always sees
+    -- the *previous* frame's floor -- the same timing as 'mouseHitRectsPrev'.
+    -- Defaults to 'maxBound' ("nothing qualifies"), not 0, so a context that
+    -- never drains popups (most tests, built on "Blink.Interaction") never
+    -- misreads an ordinary hit-rect as a popup's. See
+    -- 'Blink.View.Mouse.isOccludedByPopupFor'.
   }
 
 -- | No button held, nothing hovered -- the starting state for a fresh
@@ -248,6 +258,7 @@ emptyMouse = Mouse
   , mouseHoverNext    = Map.empty
   , mouseHitRectsPrev = Map.empty
   , mouseHitRectsNext = Map.empty
+  , mousePopupFloor   = maxBound
   }
 
 -- | Rolls 'mouseHoverNext'\/'mouseHitRectsNext' (this completed frame's

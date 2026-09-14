@@ -144,6 +144,7 @@ import Blink.View
   , PendingPopup (popupAnchor, popupSize, popupPlacement, popupOffset, popupRun)
   , getPendingPopups, clearPendingPopups
   , getWindowSize, withBounds
+  , markPopupFloor
   )
 import Blink.Element (Element, runElement)
 import Blink.Update (Update, runUpdateEffects)
@@ -287,12 +288,15 @@ runViewAndPopups el ctx = do
   ctx''     <- drainPopups ctx'
   pure (a, ctx'')
 
--- | Runs each popup queued this render pass, in queue order, each at its own
--- anchor rect (no placement math yet -- see the popup-support plan). Their
--- draws and hit-rects append onto @ctx@'s own, landing after everything the
--- main tree already produced -- on top, and never occluded by it.
+-- | Runs each popup queued this render pass, in queue order, positioned per
+-- 'placePopup'. Their draws and hit-rects append onto @ctx@'s own, landing
+-- after everything the main tree already produced -- on top, and never
+-- occluded by it. 'markPopupFloor' runs first, marking every hit-rect
+-- registered from here on as a popup's -- see 'isOccludedByPopupFor'.
 drainPopups :: ViewContext e msg -> IO (ViewContext e msg)
-drainPopups ctx0 = clearPendingPopups <$> foldM runOne ctx0 (getPendingPopups ctx0)
+drainPopups ctx0 = do
+  (_, ctx1) <- runView markPopupFloor ctx0
+  clearPendingPopups <$> foldM runOne ctx1 (getPendingPopups ctx1)
   where
     runOne ctx p = snd <$> runView (place p) ctx
     place p = do

@@ -16,6 +16,8 @@ module Blink.View.Mouse
   , isAnyMouseOver
   , registerHitRect
   , isOccludedFor
+  , markPopupFloor
+  , isOccludedByPopupFor
   , isButtonDown
   , contextButtonDown
   , isButtonReleased
@@ -161,6 +163,37 @@ isOccludedFor eid = do
     Just (HitRect _ myIdx) -> pure $ any (occludes myIdx p) (Map.toList (Map.delete eid prev))
   where
     occludes myIdx p (_, HitRect r idx) = idx > myIdx && containsPoint p r
+
+-- | Records the current hit-rect registration count as the boundary between
+-- the main view tree's hit-rects and a popup's -- called once per frame by
+-- "Blink.App"'s drain step, immediately before it starts running that
+-- frame's popups, so every hit-rect registered from here on this frame is a
+-- popup's. See 'mousePopupFloor' and 'isOccludedByPopupFor'.
+markPopupFloor :: View e msg ()
+markPopupFloor = modifyMouse $ \m -> m { mousePopupFloor = Map.size (mouseHitRectsNext m) }
+
+-- | 'True' when, per last frame's 'registerHitRect' calls, an open popup
+-- covered this element's position -- unlike 'isOccludedFor', which also
+-- reports 'True' for two ordinary, intentionally-overlapping controls (a
+-- composite and a child it renders on top of itself), this only looks at
+-- rects registered at or after 'mousePopupFloor', i.e. only by a popup's
+-- own content. Used to suppress hover specifically for a popup covering a
+-- control, without disturbing the unconditional-hover behaviour ordinary
+-- overlapping controls rely on elsewhere (see 'Blink.Controls.Control.watchHover').
+--
+-- Unlike 'isOccludedFor', @eid@ need not have been registered last frame
+-- itself -- the popup-floor comparison doesn't need @eid@'s own index, so a
+-- control freshly hit for the first time this frame can still correctly
+-- report an open popup covering it.
+isOccludedByPopupFor :: Ord e => e -> View e msg Bool
+isOccludedByPopupFor eid = do
+  p     <- getMousePos
+  mouse <- gets ctxMouse
+  let prev     = mouseHitRectsPrev mouse
+      floorIdx = mousePopupFloor mouse
+  pure $ any (occludesByPopup floorIdx p) (Map.toList (Map.delete eid prev))
+  where
+    occludesByPopup floorIdx p (_, HitRect r idx) = idx >= floorIdx && containsPoint p r
 
 -- | 'True' when the left button is currently held, whether this is the
 -- first frame of the press or a later one -- callers that only care whether

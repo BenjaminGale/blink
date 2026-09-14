@@ -355,6 +355,8 @@ module Blink.View
   , isAnyMouseOver
   , registerHitRect
   , isOccludedFor
+  , markPopupFloor
+  , isOccludedByPopupFor
   , isButtonDown
   , isButtonReleased
   , isDragging

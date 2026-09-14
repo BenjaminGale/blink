@@ -13,11 +13,12 @@ import Blink.Controls.Control
   )
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
-import Blink.Input (InputState (..), Key (..), KeyEvent (..))
+import Blink.Input (HitRect (..), InputState (..), Key (..), KeyEvent (..), Mouse (..), emptyMouse)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonPressed))
 import Blink.View
+import Blink.View.Context (ViewContext (ctxInput, ctxMouse))
 
 data TestElement
   = ElemA | ElemB | ElemC
@@ -305,6 +306,37 @@ spec = describe "Blink.Controls.Control.control" $ do
         [MouseDown onA, DragTo onB, MouseUp onB, Wait 1, MoveTo (Point 200 200)]
         [MoveTo onB]
       resultMessages result `shouldBe` ["B entered"]
+
+  describe "occluded by a popup" $ do
+    -- Stands in for a popup's own registered hit-rect covering the point
+    -- under test -- as "Blink.App"'s drain step would leave it in
+    -- 'mouseHitRectsPrev' after a real frame, without needing a real popup
+    -- or a real second frame to produce that state.
+    let mousePos  = Point 50 50 -- inside ElemA's margin-inset hit area
+        popupRect = Rectangle 0 0 100 100
+        withMouseAt = (\ctx -> ctx { ctxInput = InputState mousePos False [] [] 0 })
+        withLastFrameRect idx floorIdx ctx = ctx
+          { ctxMouse = emptyMouse
+              { mouseHitRectsPrev = Map.singleton ElemB (HitRect popupRect idx)
+              , mousePopupFloor   = floorIdx
+              }
+          }
+        attrsA = [focusPolicy NotFocusable, onMouseEntered (post ("A entered" :: String))]
+        enteredMessages ctx = do
+          (_, ctx') <- runView (renderAt ElemA attrsA) ctx
+          pure (getMessages ctx')
+
+    it "does not fire mouse-entered when a popup covered this point last frame" $ do
+      msgs <- enteredMessages (withLastFrameRect 5 5 (withMouseAt seedCtx))
+      msgs `shouldBe` []
+
+    it "fires mouse-entered normally when nothing covered this point last frame" $ do
+      msgs <- enteredMessages (withMouseAt seedCtx)
+      msgs `shouldBe` ["A entered"]
+
+    it "still fires mouse-entered when the covering rect predates the popup floor (an ordinary overlapping control, not a popup)" $ do
+      msgs <- enteredMessages (withLastFrameRect 1 5 (withMouseAt seedCtx))
+      msgs `shouldBe` ["A entered"]
 
   describe "click-to-focus" $ do
     it "does not take effect on the mouse-down's own frame" $ do

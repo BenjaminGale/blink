@@ -802,9 +802,10 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       wasDragging <- isDragging eid
       hit         <- isRegionHit
       let eligible = not disabled && hit
-      occluded <- if eligible then isOccludedFor eid else pure False
+      occluded        <- if eligible then isOccludedFor eid else pure False
+      occludedByPopup <- if eligible then isOccludedByPopupFor eid else pure False
       free     <- isMouseFreeFor eid
-      hoverI <- watchHover eid (eligible && free) occluded
+      hoverI <- watchHover eid (eligible && free && not occludedByPopup) occluded
       mouseI <- watchMouseButton eid (ccMouseActivation cc) eligible occluded
       focusI <- watchFocus eid disabled
       let interaction = (noInteraction placeholderStyle)
