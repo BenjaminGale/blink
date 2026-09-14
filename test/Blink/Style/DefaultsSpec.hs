@@ -12,6 +12,7 @@ import Blink.Controls.Style (iconStyleKey)
 import Blink.Controls.Image (imageStyleKey)
 import Blink.Controls.Label (labelStyleKey)
 import Blink.Controls.List.Style (listItemStyleKey, listStyleKey)
+import Blink.Controls.MenuButton.Style (menuButtonListStyleKey)
 import Blink.Controls.ProgressBar (progressBarStyleKey)
 import Blink.Controls.RadioButton (radioButtonStyleKey)
 import Blink.Controls.ScrollBar (scrollBarButtonStyleKey, scrollBarStyleKey, scrollBarTrackStyleKey)
@@ -63,6 +64,7 @@ spec = describe "Blink.Style.Defaults" $ do
           , treeChevronStyleKey
           , tableHeaderStyleKey, tableColumnDividerStyleKey
           , iconStyleKey
+          , menuButtonListStyleKey
           ]
 
     it "gives a button the surface colour at rest" $ do

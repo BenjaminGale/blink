@@ -15,9 +15,10 @@
 -- While open, arrow keys move the keyboard highlight between items (reusing
 -- ordinary Tab\/Shift-Tab focus traversal, remapped to Up\/Down within the
 -- item list's own focus scope -- see 'itemsElement'), Enter or a click on
--- an item activates it and closes the menu, and Escape closes it without
--- activating anything. Either way, focus returns to the trigger. Closing on
--- an outside click is a later addition -- see the popup-support plan.
+-- an item activates it and closes the menu, Escape closes it without
+-- activating anything, and a completed click outside both the trigger and
+-- the item list closes it too. Every closing path returns focus to the
+-- trigger.
 module Blink.Controls.MenuButton
   ( MenuButtonConfig
   , MenuButtonPart (..)
@@ -36,11 +37,13 @@ import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonB
 import Blink.Controls.Control
 import Blink.Controls.Label
   (HasLabelledConfig (..), LabelledConfig (..), captionElement, lcText, renderLabelledContent)
+import Blink.Controls.MenuButton.Style (menuButtonListStyleKey)
 import Blink.Controls.ToggleButton
   (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleBase)
+import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input (InputState (inputKeyEvents), Key (KeyDown, KeyEscape, KeyUp), KeyEvent (key))
 import Blink.Layout.Box (children, vBox)
-import Blink.Layout.Constraints (fitContent)
+import Blink.Layout.Constraints (Layout (..), fitContent)
 import Blink.Popup (content, popup)
 import Blink.View
 import Blink.Element (Element (..), HasLayoutConfig (..), height, width)
@@ -179,18 +182,31 @@ arrowNavigationKeys = NavigationKeys { navAdvance = [(KeyDown, [])], navRetreat 
 
 -- | A top-to-bottom list of buttons, one per item, sized to fit its own
 -- content on both axes so the popup measures a natural size from it rather
--- than stretching to fill the window. Runs in its own focus scope
--- ('MenuButtonList'), with Up\/Down remapped to move between items (see
--- 'arrowNavigationKeys'); an item's own activation, Escape pressed while
--- this scope holds focus, or a click completing outside both the trigger
--- and this list, all run @close@. @onTrigger@ is whether the trigger's own
--- bounds were hit this frame, captured by 'runMenuButton' before this list
--- (a separate 'Element', run later, at a different ambient bounds) is even
--- queued.
+-- than stretching to fill the window, drawn on a panel background\/border
+-- (see 'menuButtonListStyleKey') -- a plain, non-focusable
+-- 'Blink.Controls.Control.control' wrapping it, purely for that chrome, the
+-- same way 'Blink.Controls.ToggleGroup.toggleGroup' wraps its own box of
+-- items. Runs in its own focus scope ('MenuButtonList'), with Up\/Down
+-- remapped to move between items (see 'arrowNavigationKeys'); an item's own
+-- activation, Escape pressed while this scope holds focus, or a click
+-- completing outside both the trigger and this list, all run @close@.
+-- @onTrigger@ is whether the trigger's own bounds were hit this frame,
+-- captured by 'runMenuButton' before this list (a separate 'Element', run
+-- later, at a different ambient bounds) is even queued.
 itemsElement :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg () -> Bool -> Element e msg
-itemsElement tag cfg close onTrigger = box { elRun = scopedRun }
+itemsElement tag cfg close onTrigger = Element
+  { elLayout  = Layout fitContent fitContent TopLeft
+  , elMeasure = measureChrome menuButtonListStyleKey box
+  , elRun     = void (control panelCfg)
+  }
   where
     box = vBox [ width fitContent, height fitContent, children (map toItemElement (mbItems cfg)) ]
+
+    panelCfg = defaultControlConfig
+      { ccStyleKey    = menuButtonListStyleKey
+      , ccFocusPolicy = NotFocusable
+      , ccContent     = const scopedRun
+      }
 
     -- Seeds 'previousTabStop' with the scope's own id before any item
     -- renders, so Up on the first item finds no real predecessor and does
