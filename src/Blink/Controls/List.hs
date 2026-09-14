@@ -550,6 +550,10 @@ defaultRowHeight = 32
 wheelRowsPerNotch :: Double
 wheelRowsPerNotch = 3
 
+-- | The total height @n@ fixed-@rh@-tall rows take up, stacked vertically.
+totalRowsHeight :: Double -> Int -> Double
+totalRowsHeight rh n = fromIntegral n * rh
+
 -- | 'defaultControlConfig' (styled via @Class \"list\"@), filling its
 -- parent's width and sizing its height to its own rows, no per-row render
 -- (draws nothing), a 32px row height, and no reactions, starting from the
@@ -663,7 +667,7 @@ virtualizedRows scrollBarTag itemCount rh renderRows = do
     then runElement (scrollableRows viewportHeight)
     else runElement (vBox [children (renderRows contentHeight 0 itemCount)])
   where
-    contentHeight = fromIntegral itemCount * rh
+    contentHeight = totalRowsHeight rh itemCount
     listScrollEid = scrollBarTag ScrollBar
 
     scrollableRows viewportHeight = hBox
@@ -959,7 +963,7 @@ scrollRowIntoView mkId cfg itemCount viewportHeight idx = when (maxOffset > 0) $
   mapM_ (setScrollStateNow listScrollEid) newFrac
   where
     listScrollEid = mkId (ListScrollBar ScrollBar)
-    contentHeight = fromIntegral itemCount * lcRowHeight cfg
+    contentHeight = totalRowsHeight (lcRowHeight cfg) itemCount
     maxOffset     = contentHeight - viewportHeight
 
 -- | A single fixed-height stand-in for every current row stacked
@@ -970,4 +974,4 @@ scrollRowIntoView mkId cfg itemCount viewportHeight idx = when (maxOffset > 0) $
 -- height matters for measurement, never any row's actual content.
 rowsSpacer :: ListConfig sel e msg a -> [ItemState a] -> Element e msg
 rowsSpacer cfg states =
-  elementWithLayout (Layout fill (exactly (fromIntegral (length states) * lcRowHeight cfg)) TopLeft) (pure ())
+  elementWithLayout (Layout fill (exactly (totalRowsHeight (lcRowHeight cfg) (length states))) TopLeft) (pure ())
