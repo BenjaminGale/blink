@@ -20,6 +20,7 @@ module Blink.Input
   , mnemonicActivated
     -- * Frame input
   , InputState (..)
+  , emptyInputState
     -- * Mouse
   , MouseCapture (..)
   , ButtonState (..)
@@ -40,7 +41,7 @@ module Blink.Input
 import Data.Char (toUpper)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import Blink.Geometry (Point, Rectangle)
+import Blink.Geometry (Point (..), Rectangle)
 
 -- | The subset of keys that Blink's controls respond to. Text entry is
 -- handled via 'inputTypedText' in 'InputState'; 'Key' covers only
@@ -131,7 +132,26 @@ data InputState = InputState
     -- revealing what's below); negative scrolls up/back. Zero when the
     -- wheel didn't move this frame. Already corrects for the platform's
     -- "natural"/flipped scrolling setting, so a consumer never has to.
+  , inputAltHeld       :: Bool
+    -- ^ 'True' while Alt is physically held, sampled fresh every frame --
+    -- unlike 'inputKeyEvents', which only reports the frame a key is
+    -- pressed, this reflects the held-down /level/, the same continuous
+    -- style as 'inputLeftButtonDown'. Used to show a mnemonic's underline
+    -- (see 'Blink.Controls.Label.mnemonic') only while Alt is actually
+    -- held, rather than permanently.
   } deriving (Eq, Show)
+
+-- | Nothing held or pressed. Build a specific frame's state by record
+-- update on this, never by listing every field.
+emptyInputState :: InputState
+emptyInputState = InputState
+  { inputMousePosition  = Point 0 0
+  , inputLeftButtonDown = False
+  , inputKeyEvents      = []
+  , inputTypedText      = []
+  , inputWheelDelta     = 0
+  , inputAltHeld        = False
+  }
 
 -- | Which element, if any, holds mouse capture during a drag. A control
 -- acquires capture on press so that it keeps receiving drag input even once

@@ -9,7 +9,7 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, post, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform)
-import Blink.Input (InputState (..), Key (..), Modifier (..))
+import Blink.Input (InputState (..), emptyInputState, Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -61,13 +61,7 @@ fixedCharWidth = TextMeasurer
   }
 
 noInput :: InputState
-noInput = InputState
-  { inputMousePosition  = Point 200 200
-  , inputLeftButtonDown = False
-  , inputKeyEvents      = []
-  , inputTypedText      = []
-  , inputWheelDelta     = 0
-  }
+noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 focusPt :: Point
 focusPt = Point 50 50

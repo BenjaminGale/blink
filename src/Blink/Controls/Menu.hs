@@ -18,14 +18,17 @@ module Blink.Controls.Menu
   ) where
 
 import Control.Monad (forM_, void, when)
+import Data.Char (toUpper)
 import Data.List (find)
 
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig)
 import Blink.Controls.Control
-import Blink.Controls.Label (captionElement, lcText, renderLabelledContent)
+import Blink.Controls.Label (captionElement, lcMnemonic, lcText, renderLabelledContent)
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input
-  (InputState (inputKeyEvents), Key (KeyDown, KeyEscape, KeyLeft, KeyRight, KeyTab, KeyUp), KeyEvent (key))
+  ( InputState (inputKeyEvents), Key (KeyChar, KeyDown, KeyEscape, KeyLeft, KeyRight, KeyTab, KeyUp)
+  , KeyEvent (key), mnemonicActivated
+  )
 import Blink.Layout.Box (children, vBox)
 import Blink.Layout.Constraints (Layout (..), fitContent)
 import Blink.Popup (Edge (Start), Side (SideRight), content, placement, popup)
@@ -115,6 +118,7 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
         handleOutsideClick
         handleArrowKeys
         handleLeftArrow
+        handleMnemonics
       elRun box
 
     anySubmenuFocused = do
@@ -184,6 +188,25 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
     itemAt xs idx = case drop idx xs of
       (x : _) -> Just x
       []      -> Nothing
+
+    itemMnemonic item = lcMnemonic (bcLabelled (resolve defaultButtonConfig (itemAttrsFor item)))
+
+    -- Alt+letter, matched against each item's own 'mnemonic' (see
+    -- 'Blink.Controls.Label.mnemonic'), activates it the same way a click
+    -- would, without needing it highlighted first -- or, for an item with a
+    -- submenu, opens the submenu instead, the same target 'runSubmenu'
+    -- reaches via Right-arrow.
+    handleMnemonics = case items of
+      [] -> pure ()
+      is -> do
+        evs <- inputKeyEvents <$> getInput
+        forM_ (find (\it -> maybe False (`mnemonicActivated` evs) (itemMnemonic it)) is) $ \item -> do
+          forM_ (itemMnemonic item) (consumeKey . KeyChar . toUpper)
+          case submenuFor item of
+            Just (subId, _) -> requestFocus (Just listId) subId
+            Nothing         -> do
+              runHandlers (bcOnActivated (resolve defaultButtonConfig (itemAttrsFor item))) ()
+              cbCloseAll closeBehaviour
 
     toItemElement item = Element
       { elLayout  = bcLayout itemCfg

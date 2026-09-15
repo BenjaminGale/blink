@@ -36,17 +36,19 @@ module Blink.Controls.MenuBar
 
 import Control.Monad (forM_, void, when)
 
+import Data.Char (toUpper)
 import Data.List (elemIndex, find)
 
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), defaultButtonConfig)
 import Blink.Controls.Control
-import Blink.Controls.Label (captionElement, lcText, renderLabelledContent)
+import Blink.Controls.Label (captionElement, lcMnemonic, lcText, renderLabelledContent)
 import Blink.Controls.Menu (menuListWithSubmenus, submenuInPlay)
 import Blink.Controls.MenuBar.Style (menuBarLabelStyleKey, menuBarListStyleKey, menuBarStyleKey)
 import Blink.Controls.ToggleButton
   (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleBase)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
-import Blink.Input (InputState (inputKeyEvents), Key (KeyLeft, KeyRight), KeyEvent (key))
+import Blink.Input
+  (InputState (inputKeyEvents), Key (KeyChar, KeyLeft, KeyRight), KeyEvent (key), mnemonicActivated)
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Popup (content, popup)
@@ -181,8 +183,21 @@ menuBar tag attrs = Element
     ccfg = (mbrControl cfg)
       { ccElementId   = Just (tag MenuBar)
       , ccFocusPolicy = NotFocusable
-      , ccContent     = const (getBounds >>= runElement . rowBox)
+      , ccContent     = const (handleMnemonics >> getBounds >>= runElement . rowBox)
       }
+
+    -- Alt+letter, matched against each top-level label's own 'mnemonic'
+    -- (see 'Blink.Controls.Label.mnemonic'), opens that menu -- same as
+    -- clicking the label, except idempotent while it's already open,
+    -- rather than toggling it closed.
+    handleMnemonics = do
+      scope <- getCurrentScope
+      evs   <- inputKeyEvents <$> getInput
+      forM_ (find (\m -> maybe False (`mnemonicActivated` evs) (labelMnemonic m)) (mbrMenus cfg)) $ \menuKey -> do
+        forM_ (labelMnemonic menuKey) (consumeKey . KeyChar . toUpper)
+        when (mbrOpenMenu cfg /= Just menuKey) (openMenuFor tag cfg scope menuKey)
+
+    labelMnemonic m = lcMnemonic (bcLabelled (resolve defaultButtonConfig (mbrLabelAttrs cfg m)))
 
 -- | Runs one top-level label as 'toggleBase' (its "selected" state
 -- standing in for its own dropdown being open), toggling whenever it's
@@ -212,9 +227,7 @@ runMenuBarLabel tag cfg menuKey labelCfg rowBounds = do
       justOpened   = tgiSelected r && not wasOpen
       someOtherOpen = maybe False (/= menuKey) (mbrOpenMenu cfg)
       hoveredIn    = ciMouseEntered (biControl (tgiButton r))
-      open newKey  = do
-        runHandlers (mbrOnOpenChanged cfg) (Just newKey)
-        requestFocus enclosingScope (tag (MenuBarList newKey))
+      open         = openMenuFor tag cfg enclosingScope
       close        = do
         runHandlers (mbrOnOpenChanged cfg) Nothing
         requestFocus enclosingScope labelId
@@ -235,6 +248,15 @@ runMenuBarLabel tag cfg menuKey labelCfg rowBounds = do
       , tgcOnSelectedChanged =
           [ \opened -> concatMap ($ (if opened then Just menuKey else Nothing)) (mbrOnOpenChanged cfg) ]
       }
+
+-- | Opens @newKey@'s own dropdown: fires 'mbrOnOpenChanged' with it, and
+-- moves focus into its item list's own scope. Shared by a label's own
+-- click-driven open ('runMenuBarLabel') and the bar-level Alt+letter
+-- mnemonic handler ('menuBar').
+openMenuFor :: (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> Maybe e -> a -> View e msg ()
+openMenuFor tag cfg enclosingScope newKey = do
+  runHandlers (mbrOnOpenChanged cfg) (Just newKey)
+  requestFocus enclosingScope (tag (MenuBarList newKey))
 
 -- | The menu adjacent to @menuKey@ in @allMenus@, wrapping from the last
 -- back to the first (and back) -- 'KeyRight' moves forward, any other key

@@ -43,6 +43,7 @@ module Blink.Controls
     -- * Label
   , label
   , text
+  , mnemonic
   , target
     -- * List
   , list
@@ -124,7 +125,7 @@ import Blink.Controls.Button (activation, button, onActivated)
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Divider (divider, orientation, thickness)
 import Blink.Controls.Image (image, source, fitWidth, fitHeight, preserveRatio)
-import Blink.Controls.Label (label, target, text)
+import Blink.Controls.Label (label, mnemonic, target, text)
 import Blink.Controls.List (list, onItemActivated, renderItem, rowHeight, selection)
 import Blink.Controls.MenuBar (labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu)
 import Blink.Controls.MenuButton (isOpen, itemAttrs, menuButton, onOpenChanged)

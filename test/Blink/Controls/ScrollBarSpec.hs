@@ -10,7 +10,7 @@ import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.ScrollBar
   (ScrollBarConfig, ScrollBarPart (..), scrollBar, scrollBarButtonStyleKey, scrollBarOrientation, step)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), noBorder, uniform)
-import Blink.Input (InputState (..))
+import Blink.Input (InputState (..), emptyInputState)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonMouseOver))
@@ -51,7 +51,7 @@ testTheme = Theme
       }
 
 noInput :: InputState
-noInput = InputState (Point 200 200) False [] [] 0
+noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 -- | A vertical scrollbar (the default orientation) 16px wide, 100px tall:
 -- the decrement arrow occupies y 0-16, the track y 16-84, the increment

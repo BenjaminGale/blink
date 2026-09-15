@@ -13,7 +13,7 @@ import Blink.Controls.Control
   )
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
-import Blink.Input (HitRect (..), InputState (..), Key (..), KeyEvent (..), Mouse (..), emptyMouse)
+import Blink.Input (HitRect (..), InputState (..), Key (..), KeyEvent (..), Mouse (..), emptyInputState, emptyMouse)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonPressed))
@@ -113,12 +113,12 @@ three attrsA attrsB attrsC = do
 seedCtx :: ViewContext TestElement String
 seedCtx = emptyViewContext testBounds noInput testTheme
   where
-    noInput = InputState (Point 200 200) False [] [] 0
+    noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 pressedSeedCtx :: ViewContext TestElement String
 pressedSeedCtx = emptyViewContext testBounds noInput pressedTestTheme
   where
-    noInput = InputState (Point 200 200) False [] [] 0
+    noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 -- | The margin-inset hit area for a control rendered at 'testBounds' with
 -- the 10px margin every test style here uses.
@@ -314,7 +314,7 @@ spec = describe "Blink.Controls.Control.control" $ do
     -- or a real second frame to produce that state.
     let mousePos  = Point 50 50 -- inside ElemA's margin-inset hit area
         popupRect = Rectangle 0 0 100 100
-        withMouseAt = (\ctx -> ctx { ctxInput = InputState mousePos False [] [] 0 })
+        withMouseAt = (\ctx -> ctx { ctxInput = emptyInputState { inputMousePosition = mousePos } })
         withLastFrameRect idx floorIdx ctx = ctx
           { ctxMouse = emptyMouse
               { mouseHitRectsPrev = Map.singleton ElemB (HitRect popupRect idx)

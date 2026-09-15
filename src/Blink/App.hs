@@ -111,6 +111,7 @@ module Blink.App
   , BlinkHandle (..)
     -- * Frame types
   , FrameInput (..)
+  , emptyFrameInput
   , FrameResult (..)
     -- * Commands
   , MsgQueue (..)
@@ -129,7 +130,7 @@ import GHC.Clock (getMonotonicTimeNSec)
 
 import Blink.Cmd (Cmd, runCmd)
 import Blink.Geometry (Point (..), Rectangle, Size (..), placePopup, rectFromSize)
-import Blink.Input (KeyEvent, InputState (..), advanceButton)
+import Blink.Input (KeyEvent, InputState (..), advanceButton, emptyInputState)
 import Blink.View.Context (ctxMouse)
 import Blink.Rendering (DrawCommand, CursorShape, TextMeasurer (..), ImageMeasurer (..), Measurers (..))
 import Blink.Style (Theme)
@@ -234,6 +235,9 @@ data FrameInput = FrameInput
   , wheelDelta    :: Double
     -- ^ Vertical mouse wheel movement for this frame -- see
     -- 'Blink.Input.inputWheelDelta'.
+  , altHeld       :: Bool
+    -- ^ Whether Alt is physically held this frame -- see
+    -- 'Blink.Input.inputAltHeld'.
   , windowSize    :: Size
     -- ^ Current dimensions of the window's drawing area.
   , quitRequested   :: Bool
@@ -244,6 +248,22 @@ data FrameInput = FrameInput
     -- rather than a platform input event. Blink's ticker calls the @notify@
     -- callback passed to 'configureEventDriven'; backends should detect that
     -- wake-up and set this field accordingly.
+  }
+
+-- | Nothing held or pressed, a 0x0 window, not quitting, not a tick. Build
+-- a specific frame's input by record update on this, never by listing
+-- every field.
+emptyFrameInput :: FrameInput
+emptyFrameInput = FrameInput
+  { mousePosition   = Point 0 0
+  , mouseButtonDown = False
+  , keyEvents       = []
+  , typedText       = []
+  , wheelDelta      = 0
+  , altHeld         = False
+  , windowSize      = Size 0 0
+  , quitRequested   = False
+  , isAnimationTick = False
   }
 
 -- | The result of processing a single frame.
@@ -451,15 +471,6 @@ toResult input draws cursor state
   | quitRequested input = Quit draws cursor state
   | otherwise           = Continue draws cursor state
 
-emptyInputState :: InputState
-emptyInputState = InputState
-  { inputMousePosition  = Point 0 0
-  , inputLeftButtonDown = False
-  , inputKeyEvents      = []
-  , inputTypedText      = []
-  , inputWheelDelta     = 0
-  }
-
 toInputState :: FrameInput -> InputState
 toInputState fi = InputState
   { inputMousePosition  = mousePosition fi
@@ -467,6 +478,7 @@ toInputState fi = InputState
   , inputKeyEvents      = keyEvents fi
   , inputTypedText      = typedText fi
   , inputWheelDelta     = wheelDelta fi
+  , inputAltHeld        = altHeld fi
   }
 
 -- Clears keyboard, text, and wheel events for the second render pass in

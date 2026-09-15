@@ -6,7 +6,7 @@ import Test.Hspec
 
 import Blink.Controls.Image (ImageConfig, fitHeight, fitWidth, image, preserveRatio, source)
 import Blink.Geometry (Point (..), Rectangle (..), Size (..), noBorder, uniform)
-import Blink.Input (InputState (..))
+import Blink.Input (InputState (..), emptyInputState)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.View
@@ -41,13 +41,7 @@ testTheme :: Theme ()
 testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
 
 noInput :: InputState
-noInput = InputState
-  { inputMousePosition  = Point 200 200
-  , inputLeftButtonDown = False
-  , inputKeyEvents      = []
-  , inputTypedText      = []
-  , inputWheelDelta     = 0
-  }
+noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 -- | Reports a fixed 100x50 natural size for any path, so the fit/
 -- preserve-ratio maths below have a known, non-square starting point.

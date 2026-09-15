@@ -1078,6 +1078,14 @@ imagePage s =
 menuBarMenus :: [Text]
 menuBarMenus = ["File", "Edit", "View"]
 
+-- | Each top-level label's own mnemonic letter -- its initial, distinct
+-- across 'menuBarMenus' so Alt+letter opens each one unambiguously.
+menuBarLabelMnemonic :: Text -> Char
+menuBarLabelMnemonic "File" = 'F'
+menuBarLabelMnemonic "Edit" = 'E'
+menuBarLabelMnemonic "View" = 'V'
+menuBarLabelMnemonic m      = T.head m
+
 menuBarItemsFor :: Text -> [Text]
 menuBarItemsFor "File" = ["New", "Open", "Save", "Export"]
 menuBarItemsFor "Edit" = ["Cut", "Copy", "Paste"]
@@ -1099,7 +1107,7 @@ topMenuBar :: AppState -> DemoUI ()
 topMenuBar s =
   runElement $ menuBar DemoMenuBar
     [ menus menuBarMenus
-    , labelAttrs (\m -> [text m, height fill])
+    , labelAttrs (\m -> [text m, mnemonic (menuBarLabelMnemonic m), height fill])
     , menuItems menuBarItemsFor
     , MenuBar.itemAttrs (\_ i -> [text i, onActivated (post (MenuBarItemActivated i))])
     , MenuBar.submenuItems menuBarSubmenuItemsFor

@@ -8,11 +8,11 @@ import Test.Hspec
 import Blink.App
 import Blink.Controls.Button (ButtonConfig, onActivated)
 import Blink.Controls.Control (onFocusGained, post)
-import Blink.Controls.Label (text)
+import Blink.Controls.Label (mnemonic, text)
 import Blink.Controls.Menu (menuListWithSubmenus)
 import Blink.Element (Attribute, elLayout, elementWithLayout, height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..), uniform)
-import Blink.Input (Key (..), KeyEvent (..))
+import Blink.Input (Key (..), KeyEvent (..), Modifier (Alt))
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), noOpMeasurers)
 import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), emptyTheme, noBorder)
@@ -90,21 +90,27 @@ menuApp = App
   where
     itemAttrsFor :: Item -> [Attribute (ButtonConfig Part Event)]
     itemAttrsFor item =
-      [ text (T.pack (show item)), width (exactly 40), height (exactly 20)
+      [ text (T.pack (show item)), mnemonic (itemMnemonic item), width (exactly 40), height (exactly 20)
       , onFocusGained (post (Logged (T.pack (show item) <> " focused")))
       , onActivated    (post (Logged (T.pack (show item) <> " activated")))
       ]
 
+-- | Each item's own mnemonic letter -- the initial of its name, distinct
+-- across the whole set (top-level and submenu alike) so a test can target
+-- any one of them unambiguously.
+itemMnemonic :: Item -> Char
+itemMnemonic Open   = 'O'
+itemMnemonic Save   = 'S'
+itemMnemonic Export = 'E'
+itemMnemonic Csv    = 'C'
+itemMnemonic Pdf    = 'P'
+itemMnemonic Json   = 'J'
+
 mkInput :: Point -> Bool -> FrameInput
-mkInput p down = FrameInput
+mkInput p down = emptyFrameInput
   { mousePosition   = p
   , mouseButtonDown = down
-  , keyEvents       = []
-  , typedText       = []
-  , wheelDelta      = 0
   , windowSize      = Size 300 300
-  , quitRequested   = False
-  , isAnimationTick = False
   }
 
 nullMsgQueue :: MsgQueue msg
@@ -125,6 +131,11 @@ drawnTexts r = [t | DrawText _ t _ _ <- resultDraws r]
 -- spuriously reclicks anything.
 keyInput :: Key -> FrameInput
 keyInput k = (mkInput (Point 200 200) False) { keyEvents = [KeyEvent k [] False] }
+
+-- | Alt held with a mnemonic letter (as the backend would report it, always
+-- uppercase -- see 'Blink.Input.KeyChar'), mouse resting off every item.
+altKeyInput :: Char -> FrameInput
+altKeyInput c = (mkInput (Point 200 200) False) { keyEvents = [KeyEvent (KeyChar c) [Alt] False] }
 
 exportPoint, pdfPoint :: Point
 exportPoint = Point 20 50   -- within Export's own (0,40)-(40,60)
@@ -260,6 +271,34 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       _      <- stepFrame handle (mkInput pdfPoint True)
       result <- stepFrame handle (mkInput pdfPoint False)
       resultState result `shouldContain` ["Pdf activated"]
+
+  describe "mnemonics" $ do
+    it "Alt+letter activates a plain item and closes the whole menu, without needing it highlighted first" $ do
+      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- settle handle -- Open highlighted, not Save
+      result <- stepFrame handle (altKeyInput 'S')
+      let log' = resultState result
+      log' `shouldContain` ["Save activated"]
+      last log' `shouldBe` "Closed"
+
+    it "Alt+letter on an item with a submenu opens it instead of activating it" $ do
+      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- settle handle -- Open highlighted, not Export
+      _      <- stepFrame handle (altKeyInput 'E')
+      result <- stepFrame handle (mkInput (Point 200 200) False)
+      drawnTexts result `shouldContain` ["Csv", "Pdf", "Json"]
+      last (resultState result) `shouldBe` "Csv focused"
+      resultState result `shouldNotContain` ["Closed"]
+
+    it "Alt+letter for a submenu item activates it once its submenu is open" $ do
+      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- settle handle
+      _      <- downTimes handle 2
+      _      <- stepFrame handle (keyInput KeyRight) -- opens, focuses Csv
+      result <- stepFrame handle (altKeyInput 'P')
+      let log' = resultState result
+      log' `shouldContain` ["Pdf activated"]
+      last log' `shouldBe` "Closed"
 
   describe "clicking the parent item while its submenu is open" $
     it "does not treat the click as outside and close everything" $ do

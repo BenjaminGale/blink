@@ -185,15 +185,10 @@ hoverApp = App
   }
 
 mkInput :: Point -> Bool -> FrameInput
-mkInput p down = FrameInput
+mkInput p down = emptyFrameInput
   { mousePosition   = p
   , mouseButtonDown = down
-  , keyEvents       = []
-  , typedText       = []
-  , wheelDelta      = 0
   , windowSize      = Size 100 100
-  , quitRequested   = False
-  , isAnimationTick = False
   }
 
 nullMsgQueue :: MsgQueue msg

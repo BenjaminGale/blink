@@ -1,16 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls.MenuBarSpec (spec) where
 
+import Data.Char (toUpper)
 import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
 import Blink.Controls.Control (postWith)
-import Blink.Controls.Label (text)
+import Blink.Controls.Label (mnemonic, text)
 import Blink.Controls.MenuBar (MenuBarPart (..), itemAttrs, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu)
 import Blink.Element (elLayout, height, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..), uniform)
-import Blink.Input (Key (KeyLeft, KeyRight), KeyEvent (..))
+import Blink.Input (Key (KeyChar, KeyLeft, KeyRight), KeyEvent (..), Modifier (Alt))
 import Blink.Layout.Constraints (Layout (..), exactly)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), noOpMeasurers)
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
@@ -23,6 +24,10 @@ data Item = Open | Save | Cut | Copy deriving (Eq, Ord, Show)
 labelText :: TopMenu -> T.Text
 labelText FileMenu = "File"
 labelText EditMenu = "Edit"
+
+labelMnemonic :: TopMenu -> Char
+labelMnemonic FileMenu = 'F'
+labelMnemonic EditMenu = 'E'
 
 itemsFor :: TopMenu -> [Item]
 itemsFor FileMenu = [Open, Save]
@@ -58,7 +63,7 @@ menuBarApp = App
   , view    = \open ->
       (menuBar id
         [ menus [FileMenu, EditMenu]
-        , labelAttrs (\m -> [text (labelText m), width (exactly 40), height (exactly 20)])
+        , labelAttrs (\m -> [text (labelText m), mnemonic (labelMnemonic m), width (exactly 40), height (exactly 20)])
         , menuItems itemsFor
         , itemAttrs (\_ i -> [text (T.pack (show i)), width (exactly 40), height (exactly 20)])
         , openMenu open
@@ -68,15 +73,10 @@ menuBarApp = App
   }
 
 mkInput :: Point -> Bool -> FrameInput
-mkInput p down = FrameInput
+mkInput p down = emptyFrameInput
   { mousePosition   = p
   , mouseButtonDown = down
-  , keyEvents       = []
-  , typedText       = []
-  , wheelDelta      = 0
   , windowSize      = Size 100 100
-  , quitRequested   = False
-  , isAnimationTick = False
   }
 
 nullMsgQueue :: MsgQueue msg
@@ -114,6 +114,12 @@ click handle p = do
 -- pressed) so it never spuriously reclicks anything.
 keyInput :: Key -> FrameInput
 keyInput k = (mkInput fileTriggerPoint False) { keyEvents = [KeyEvent k [] False] }
+
+-- | Alt held with a mnemonic letter (as the backend would report it, always
+-- uppercase -- see 'Blink.Input.KeyChar'), mouse resting off every
+-- label/item.
+altKeyInput :: Char -> FrameInput
+altKeyInput c = (mkInput (Point 90 90) False) { keyEvents = [KeyEvent (KeyChar (toUpper c)) [Alt] False] }
 
 spec :: Spec
 spec = describe "Blink.Controls.MenuBar.menuBar" $ do
@@ -175,6 +181,26 @@ spec = describe "Blink.Controls.MenuBar.menuBar" $ do
       _      <- click handle fileTriggerPoint -- opens File
       result <- stepFrame handle (keyInput KeyLeft) -- File -> Edit (wraps backward)
       resultState result `shouldBe` Just EditMenu
+
+  describe "mnemonics" $ do
+    it "Alt+letter opens the matching top-level menu" $ do
+      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      result <- stepFrame handle (altKeyInput 'F')
+      resultState result `shouldBe` Just FileMenu
+      drawnTexts result `shouldContain` ["Open", "Save"]
+
+    it "Alt+letter switches to a different menu while one is already open" $ do
+      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- click handle fileTriggerPoint -- opens File
+      result <- stepFrame handle (altKeyInput 'E')
+      resultState result `shouldBe` Just EditMenu
+      drawnTexts result `shouldContain` ["Cut", "Copy"]
+
+    it "Alt+letter of the already-open menu leaves it open rather than closing it" $ do
+      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- click handle fileTriggerPoint -- opens File
+      result <- stepFrame handle (altKeyInput 'F')
+      resultState result `shouldBe` Just FileMenu
 
   describe "hover-to-switch while a dropdown is open" $ do
     it "hovering a different label switches to its dropdown without a click" $ do
