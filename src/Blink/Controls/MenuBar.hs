@@ -29,6 +29,7 @@ module Blink.Controls.MenuBar
   , labelAttrs
   , menuItems
   , itemAttrs
+  , submenuItems
   , openMenu
   , onOpenMenuChanged
   ) where
@@ -40,7 +41,7 @@ import Data.List (elemIndex, find)
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement, lcText, renderLabelledContent)
-import Blink.Controls.Menu (menuList)
+import Blink.Controls.Menu (menuListWithSubmenus, submenuInPlay)
 import Blink.Controls.MenuBar.Style (menuBarLabelStyleKey, menuBarListStyleKey, menuBarStyleKey)
 import Blink.Controls.ToggleButton
   (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleBase)
@@ -63,6 +64,7 @@ data MenuBarPart a b
   | MenuBarLabel a
   | MenuBarList a
   | MenuBarItem a b
+  | MenuBarSubmenu a b
   deriving (Eq, Ord, Show)
 
 -- | Every capability 'menuBar' resolves: its own container control, the
@@ -77,6 +79,7 @@ data MenuBarConfig e a b msg = MenuBarConfig
   , mbrLabelAttrs    :: a -> [Attribute (ButtonConfig e msg)]
   , mbrItemsFor      :: a -> [b]
   , mbrItemAttrs     :: a -> b -> [Attribute (ButtonConfig e msg)]
+  , mbrSubmenuItemsFor :: a -> b -> [b]
   , mbrOpenMenu      :: Maybe a
   , mbrOnOpenChanged :: [Maybe a -> [Effect e msg]]
   }
@@ -93,6 +96,7 @@ defaultMenuBarConfig = MenuBarConfig
   , mbrLabelAttrs    = const []
   , mbrItemsFor      = const []
   , mbrItemAttrs     = \_ _ -> []
+  , mbrSubmenuItemsFor = \_ _ -> []
   , mbrOpenMenu      = Nothing
   , mbrOnOpenChanged = []
   }
@@ -130,6 +134,11 @@ menuItems f = Attribute (\c -> c { mbrItemsFor = f })
 -- module.
 itemAttrs :: (a -> b -> [Attribute (ButtonConfig e msg)]) -> Attribute (MenuBarConfig e a b msg)
 itemAttrs f = Attribute (\c -> c { mbrItemAttrs = f })
+
+-- | The data to build one item's own submenu from, given its menu and
+-- itself. Defaults to @\\_ _ -> []@ (no submenu).
+submenuItems :: (a -> b -> [b]) -> Attribute (MenuBarConfig e a b msg)
+submenuItems f = Attribute (\c -> c { mbrSubmenuItemsFor = f })
 
 -- | Which top-level menu, if any, currently has its dropdown open.
 -- External state the caller owns and re-supplies every frame, the same as
@@ -243,8 +252,8 @@ adjacentMenu allMenus menuKey dir = do
     (x : _) -> Just x
     []      -> Nothing
 
--- | The dropdown itself -- see 'Blink.Controls.Menu.menuList' for the
--- shared engine. @onBar@ is whether the click landed anywhere on the bar's
+-- | The dropdown itself -- see 'Blink.Controls.Menu.menuListWithSubmenus'
+-- for the shared engine. @onBar@ is whether the click landed anywhere on the bar's
 -- own row (any label, not just @menuKey@'s), captured by 'runMenuBarLabel'
 -- before this list (a separate 'Element', run later, at a different
 -- ambient bounds) is even queued -- so clicking a *different* label, which
@@ -262,11 +271,21 @@ itemsElement
   -> Element e msg
 itemsElement tag cfg menuKey close onBar switchByKey = base { elRun = handleMenuSwitchKeys >> elRun base }
   where
-    base = menuList menuBarListStyleKey (tag (MenuBarList menuKey)) (tag . MenuBarItem menuKey)
-      (mbrItemsFor cfg menuKey) (mbrItemAttrs cfg menuKey) close onBar
+    listId  = tag (MenuBarList menuKey)
+    itemId  = tag . MenuBarItem menuKey
+    items   = mbrItemsFor cfg menuKey
+    submenuFor item = case mbrSubmenuItemsFor cfg menuKey item of
+      [] -> Nothing
+      xs -> Just (tag (MenuBarSubmenu menuKey item), xs)
 
+    base = menuListWithSubmenus menuBarListStyleKey listId itemId items (mbrItemAttrs cfg menuKey) submenuFor
+      close onBar
+
+    -- Left\/Right belongs to a submenu the moment one is highlighted or
+    -- open (see 'submenuInPlay'); only otherwise does it switch menus.
     handleMenuSwitchKeys = do
-      evs <- inputKeyEvents <$> getInput
-      forM_ (find ((`elem` [KeyLeft, KeyRight]) . key) evs) $ \e -> do
+      inPlay <- submenuInPlay listId itemId items submenuFor
+      evs    <- inputKeyEvents <$> getInput
+      when (not inPlay) $ forM_ (find ((`elem` [KeyLeft, KeyRight]) . key) evs) $ \e -> do
         consumeKey (key e)
         switchByKey (key e)

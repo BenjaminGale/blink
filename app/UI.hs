@@ -9,7 +9,7 @@ import Blink.Controls.Label (LabelConfig)
 import Blink.Controls.List
   (ListPart (..), MultiSelection, SingleSelection, multiSelection, selectFirst, selectedItems, singleSelection)
 import qualified Blink.Controls.List as List (isItem, onSelectionChanged)
-import qualified Blink.Controls.MenuBar as MenuBar (itemAttrs)
+import qualified Blink.Controls.MenuBar as MenuBar (itemAttrs, submenuItems)
 import qualified Blink.Controls.MenuButton as MenuButton (items)
 import Blink.Controls.ProgressBar (ProgressValue (..))
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)
@@ -1079,10 +1079,14 @@ menuBarMenus :: [Text]
 menuBarMenus = ["File", "Edit", "View"]
 
 menuBarItemsFor :: Text -> [Text]
-menuBarItemsFor "File" = ["New", "Open", "Save"]
+menuBarItemsFor "File" = ["New", "Open", "Save", "Export"]
 menuBarItemsFor "Edit" = ["Cut", "Copy", "Paste"]
 menuBarItemsFor "View" = ["Zoom In", "Zoom Out"]
 menuBarItemsFor _      = []
+
+menuBarSubmenuItemsFor :: Text -> Text -> [Text]
+menuBarSubmenuItemsFor "File" "Export" = ["CSV", "PDF", "JSON"]
+menuBarSubmenuItemsFor _      _        = []
 
 -- | 'menuBar': a row of top-level menus spanning the whole window, above
 -- the sidebar\/page area. Its open menu is external, caller-owned state,
@@ -1098,6 +1102,7 @@ topMenuBar s =
     , labelAttrs (\m -> [text m, height fill])
     , menuItems menuBarItemsFor
     , MenuBar.itemAttrs (\_ i -> [text i, onActivated (post (MenuBarItemActivated i))])
+    , MenuBar.submenuItems menuBarSubmenuItemsFor
     , openMenu (menuBarOpenMenu s)
     , onOpenMenuChanged (postWith SetMenuBarOpenMenu)
     , height fill

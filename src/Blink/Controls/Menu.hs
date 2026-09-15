@@ -8,16 +8,13 @@
 -- both the menu's own trigger area and this list closing it too, and so
 -- does Tab or Shift-Tab.
 --
--- 'menuListWithSubmenus' extends the same engine with optional per-item
--- submenus: an item's own submenu opens, as a side-anchored popup, on
--- hover, a click, or Right-arrow while that item holds the keyboard
--- highlight, and closes back to its own parent list -- never the whole
--- menu -- on Left-arrow or Escape, with its own independent Up\/Down
--- wraparound. Nesting is unbounded: a submenu item can carry a further
--- submenu of its own, through the same mechanism.
+-- 'menuListWithSubmenus' adds optional per-item submenus, opened on hover,
+-- a click, or Right-arrow, closing back to their own parent (not the whole
+-- menu) on Left-arrow or Escape.
 module Blink.Controls.Menu
   ( menuList
   , menuListWithSubmenus
+  , submenuInPlay
   ) where
 
 import Control.Monad (forM_, void, when)
@@ -60,13 +57,10 @@ menuList styleKey listId itemId items itemAttrsFor close onOutsideTrigger =
     CloseBehaviour { cbCloseAll = close, cbCloseThis = close, cbNested = False }
     onOutsideTrigger
 
--- | 'menuList', extended with optional per-item submenus -- see the module
--- header. @submenuFor@ gives an item's own submenu, if it has one: the
--- element id its own nested list\/focus scope runs under (built the same
--- way as @itemId@, e.g. a sibling constructor of the same tag type), paired
--- with its own items -- themselves eligible for a further @submenuFor@ of
--- their own, the same function applying at every depth. 'Nothing' means the
--- item has no submenu.
+-- | 'menuList' with optional per-item submenus. @submenuFor@ gives an
+-- item's own submenu, if it has one: its own list\/focus scope id (built
+-- the same way as @itemId@) paired with its items, which may carry a
+-- further submenu of their own via the same function.
 menuListWithSubmenus
   :: (Ord e, Ord b)
   => StyleKey e -> e -> (b -> e) -> [b] -> (b -> [Attribute (ButtonConfig e msg)]) -> (b -> Maybe (e, [b]))
@@ -77,24 +71,14 @@ menuListWithSubmenus styleKey listId itemId items itemAttrsFor submenuFor close 
     CloseBehaviour { cbCloseAll = close, cbCloseThis = close, cbNested = False }
     onOutsideTrigger
 
--- | How a 'menuListCore' instance reacts to whatever closes it -- see
--- 'menuListWithSubmenus'. A flat, top-level list (from 'menuList', or the
--- outermost call under 'menuListWithSubmenus') uses the same action for
--- both fields, since there is no parent level to pop back to; a submenu,
--- opened recursively (see 'runSubmenu'), pops back to its own parent list
--- on 'cbCloseThis' and only unwinds every level on 'cbCloseAll'.
+-- | A flat, top-level list uses the same action for both fields; a
+-- submenu, opened recursively, pops back to its own parent on
+-- 'cbCloseThis' and only unwinds every level on 'cbCloseAll'.
 data CloseBehaviour e msg = CloseBehaviour
   { cbCloseAll  :: View e msg ()
-    -- ^ Fires on an item's own activation, an outside click, or Tab\/
-    -- Shift-Tab -- all of which, native menus agree, dismiss the whole
-    -- cascade, not just the level the event happened to land on.
   , cbCloseThis :: View e msg ()
-    -- ^ Fires on Escape, and (only when 'cbNested') Left-arrow -- both of
-    -- which back out one level at a time.
   , cbNested    :: Bool
-    -- ^ Whether Left-arrow should back out a level at all -- 'False' for a
-    -- top-level list, which has nothing to back out to; native menus leave
-    -- Left-arrow alone there rather than closing on it.
+    -- ^ Whether Left-arrow backs out a level -- only for a submenu.
   }
 
 -- | The shared engine behind both 'menuList' and 'menuListWithSubmenus'.
@@ -121,13 +105,8 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
       , ccContent     = const scopedRun
       }
 
-    -- Escape\/Tab\/outside-click\/arrow-key handling all read and react to
-    -- this level's own highlight -- but while that highlight actually
-    -- points at an open submenu's own id (see 'runSubmenu'), every one of
-    -- those belongs to the submenu instead, which runs later this same
-    -- frame as its own deferred popup (see "Blink.Popup") and handles them
-    -- itself. Left alone here, they'd misfire against a highlight that no
-    -- longer names any item in this list at all.
+    -- While the highlight points at an open submenu, this level's own
+    -- handling is skipped; the submenu (its own deferred popup) owns it.
     scopedRun = withFocusScope listId $ do
       openSubmenu <- anySubmenuFocused
       when (not openSubmenu) $ do
@@ -147,16 +126,13 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
     -- Closes on Escape whenever this list is open, regardless of which
     -- item (if any) currently holds focus within it -- matching a native
     -- menu, which closes on Escape without needing a specific item
-    -- highlighted. Only backs out one level (see 'cbCloseThis').
+    -- highlighted.
     handleEscape = do
       evs <- inputKeyEvents <$> getInput
       case find ((== KeyEscape) . key) evs of
         Just e  -> consumeKey (key e) >> cbCloseThis closeBehaviour
         Nothing -> pure ()
 
-    -- Left-arrow is this list's own "back out" key when it's itself a
-    -- submenu (see 'cbNested') -- a no-op for a top-level list, which has
-    -- no parent level to back out to.
     handleLeftArrow = when (cbNested closeBehaviour) $ do
       evs <- inputKeyEvents <$> getInput
       case find ((== KeyLeft) . key) evs of
@@ -164,10 +140,7 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
         Nothing -> pure ()
 
     -- Closes on Tab\/Shift-Tab too: this list renders after its trigger's
-    -- own siblings, so a plain handoff can't reach them. Unwinds every
-    -- level at once, the same as an outside click -- Tab is leaving the
-    -- whole menu behind for the rest of the page, not stepping back into a
-    -- parent level of it.
+    -- own siblings, so a plain handoff can't reach them.
     handleTabOut = do
       evs <- inputKeyEvents <$> getInput
       case find ((== KeyTab) . key) evs of
@@ -179,9 +152,7 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
     -- exposes) that lands neither on @onOutsideTrigger@'s own region nor
     -- anywhere in this list -- an item click is itself within this list's
     -- own bounds, so it never reads as "outside" here; it closes via its
-    -- own activation instead (see 'toItemElement'). Unwinds every level,
-    -- like Tab -- a click that misses everything is aimed at whatever's
-    -- behind the whole cascade, not just this level of it.
+    -- own activation instead (see 'toItemElement').
     handleOutsideClick = do
       released <- isButtonReleased
       onList   <- isRegionHit
@@ -227,17 +198,6 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
         itemCfg  = resolve defaultButtonConfig (width fitContent : height fitContent : itemAttrsFor item)
         itemCtrl = (bcControl itemCfg) { ccContent = const (renderLabelledContent (bcLabelled itemCfg)) }
 
-    -- Opens @item@'s own submenu -- moving this list's highlight from the
-    -- item's own id onto its submenu's id, the two mutually-exclusive
-    -- values 'anySubmenuFocused' distinguishes -- on hover, a click, or
-    -- Right-arrow while @item@ holds the highlight, and renders it (through
-    -- this same engine, recursively) via 'Blink.Popup.popup' for as long as
-    -- it stays open. Right-arrow is scoped to a highlighted item, same as
-    -- Up\/Down; hover and a click are not, so sweeping the pointer across a
-    -- row of submenu items -- or clicking one outright -- opens whichever
-    -- one it lands on without needing it highlighted first, matching
-    -- 'Blink.Controls.MenuBar.menuBar's own hover-sweep between top-level
-    -- menus.
     runSubmenu item subId subItems r = do
       opened <- isFocused subId
       when (not opened) $ do
@@ -258,14 +218,8 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
         Just e  -> consumeKey (key e) >> pure True
         Nothing -> pure False
 
-    -- The submenu itself: another 'menuListCore', anchored to its own
-    -- triggering item's just-rendered bounds via the SideRight popup. Its
-    -- own Escape\/Left-arrow pop back to @item@ (see 'CloseBehaviour'),
-    -- refocusing it in this list, rather than unwinding this list too.
-    -- @onItem@ -- whether the click landed on @item@'s own bounds, captured
-    -- while they were still the ambient bounds in 'runSubmenu' -- keeps a
-    -- click back on the triggering item from reading as outside the
-    -- submenu and closing it a second time via a conflicting path.
+    -- @onItem@ is whether the click landed on @item@'s own bounds, so a
+    -- click back on it isn't treated as outside the submenu too.
     submenuElement item subId subItems onItem =
       menuListCore styleKey subId itemId subItems itemAttrsFor submenuFor
         CloseBehaviour
@@ -274,3 +228,14 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
           , cbNested    = True
           }
         onItem
+
+-- | 'True' when @listId@'s own current highlight is an item with a submenu,
+-- or that item's own open submenu -- i.e. whether Left\/Right belongs to
+-- this list rather than an enclosing composite (see
+-- 'Blink.Controls.MenuBar.menuBar's own top-level Left\/Right switching).
+submenuInPlay :: (Ord e, Ord b) => e -> (b -> e) -> [b] -> (b -> Maybe (e, [b])) -> View e msg Bool
+submenuInPlay listId itemId items submenuFor = withFocusScope listId $ do
+  cur <- getFocus
+  pure $ any (\it -> case submenuFor it of
+                        Just (subId, _) -> cur == Just (itemId it) || cur == Just subId
+                        Nothing         -> False) items

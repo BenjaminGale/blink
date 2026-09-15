@@ -291,23 +291,16 @@ runViewAndPopups el ctx = do
 
 -- | Runs each popup queued this render pass, in queue order, positioned per
 -- 'placePopup', and repeats against whatever a popup's own run queues in
--- turn -- a submenu, opened from within its parent menu's already-deferred
--- popup content, queues exactly this way (see
--- "Blink.Controls.Menu"). Their draws and hit-rects append onto @ctx@'s
--- own, landing after everything the main tree (and every earlier popup
--- layer) already produced -- on top, and never occluded by it.
--- 'markPopupFloor' runs once, before the first layer, marking every
--- hit-rect registered from here on (every layer alike) as a popup's -- see
--- @isOccludedByPopupFor@ in "Blink.View.Mouse".
+-- turn (a submenu opened from a menu's own popup, say). Their draws and
+-- hit-rects append onto @ctx@'s own, landing on top of everything already
+-- produced this frame. 'markPopupFloor' runs once, up front, marking every
+-- hit-rect from here on as a popup's -- see @isOccludedByPopupFor@ in
+-- "Blink.View.Mouse".
 drainPopups :: Ord e => ViewContext e msg -> IO (ViewContext e msg)
 drainPopups ctx0 = do
   (_, ctx1) <- runView markPopupFloor ctx0
   drainLayer ctx1
   where
-    -- Clears the layer about to run before running it, so only popups
-    -- freshly queued during this layer (a nested submenu, say) remain
-    -- pending once it's done, and the loop terminates as soon as a layer
-    -- queues nothing further.
     drainLayer ctx = case getPendingPopups ctx of
       [] -> pure ctx
       ps -> foldM runOne (clearPendingPopups ctx) ps >>= drainLayer
@@ -316,12 +309,8 @@ drainPopups ctx0 = do
       window <- getWindowSize
       let rect = placePopup (popupAnchor p) window (popupSize p) (popupPlacement p) (popupOffset p)
           run  = withBounds rect (popupRun p)
-      -- Re-enters the scope 'popupRun' was queued from (see
-      -- 'PendingPopup.popupOriginScope'), so it runs with the same focus
-      -- ambient it would have had inline. Layers drain outermost first, so
-      -- by the time a nested popup's own origin scope is re-entered here,
-      -- its enclosing chain up to root has already been reaffirmed by the
-      -- layer that queued it.
+      -- Re-enters the scope this popup was queued from, so it runs with
+      -- the focus ambient it would have had inline (see PendingPopup.popupOriginScope).
       maybe run (`withFocusScope` run) (popupOriginScope p)
 
 -- | Folds a batch of messages into state via @update@, in order, collecting
