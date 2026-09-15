@@ -33,9 +33,11 @@ module Blink.Controls.MenuBar
   , onOpenMenuChanged
   ) where
 
-import Control.Monad (void, when)
+import Control.Monad (forM_, void, when)
 
-import Blink.Controls.Button (ButtonConfig (..), defaultButtonConfig)
+import Data.List (elemIndex, find)
+
+import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement, lcText, renderLabelledContent)
 import Blink.Controls.Menu (menuList)
@@ -43,6 +45,7 @@ import Blink.Controls.MenuBar.Style (menuBarListStyleKey, menuBarStyleKey)
 import Blink.Controls.ToggleButton
   (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleBase)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
+import Blink.Input (InputState (inputKeyEvents), Key (KeyLeft, KeyRight), KeyEvent (key))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Popup (content, popup)
@@ -182,6 +185,12 @@ menuBar tag attrs = Element
 -- the very frame it opens, moves focus into the item list's own scope (see
 -- 'itemsElement'). @rowBounds@ is the whole bar's own resolved rectangle
 -- (captured once, before any label runs) -- see 'itemsElement's @onBar@.
+--
+-- Also switches to this label's own menu, without a click, the moment the
+-- pointer enters it while some *other* menu is already open -- the
+-- standard menu-bar convention of "sweeping" across the bar once one menu
+-- has been opened. Never fires while nothing is open, so idle hovering
+-- across the bar never opens anything.
 runMenuBarLabel
   :: (Ord e, Ord a, Ord b)
   => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> ButtonConfig e msg -> Rectangle
@@ -190,13 +199,20 @@ runMenuBarLabel tag cfg menuKey labelCfg rowBounds = do
   enclosingScope <- getCurrentScope
   r <- toggleBase labelId toggleCfg
   onBar <- withBounds rowBounds isRegionHit
-  let wasOpen    = mbrOpenMenu cfg == Just menuKey
-      justOpened = tgiSelected r && not wasOpen
-      close      = do
+  let wasOpen      = mbrOpenMenu cfg == Just menuKey
+      justOpened   = tgiSelected r && not wasOpen
+      someOtherOpen = maybe False (/= menuKey) (mbrOpenMenu cfg)
+      hoveredIn    = ciMouseEntered (biControl (tgiButton r))
+      open newKey  = do
+        runHandlers (mbrOnOpenChanged cfg) (Just newKey)
+        requestFocus enclosingScope (tag (MenuBarList newKey))
+      close        = do
         runHandlers (mbrOnOpenChanged cfg) Nothing
         requestFocus enclosingScope labelId
+      switchByKey dir = forM_ (adjacentMenu (mbrMenus cfg) menuKey dir) open
+  when (hoveredIn && someOtherOpen) (open menuKey)
   when justOpened $ requestFocus enclosingScope (tag (MenuBarList menuKey))
-  when (tgiSelected r) $ popup labelId [content (itemsElement tag cfg menuKey close onBar)]
+  when (tgiSelected r) $ popup labelId [content (itemsElement tag cfg menuKey close onBar switchByKey)]
   pure r
   where
     labelId   = tag (MenuBarLabel menuKey)
@@ -208,6 +224,22 @@ runMenuBarLabel tag cfg menuKey labelCfg rowBounds = do
           [ \opened -> concatMap ($ (if opened then Just menuKey else Nothing)) (mbrOnOpenChanged cfg) ]
       }
 
+-- | The menu adjacent to @menuKey@ in @allMenus@, wrapping from the last
+-- back to the first (and back) -- 'KeyRight' moves forward, any other key
+-- (only ever 'KeyLeft', see 'itemsElement') moves backward. 'Nothing' if
+-- @menuKey@ isn't in @allMenus@, which cannot happen in practice since
+-- every 'runMenuBarLabel' call is for a menu drawn from 'mbrMenus'.
+adjacentMenu :: Eq a => [a] -> a -> Key -> Maybe a
+adjacentMenu allMenus menuKey dir = do
+  i <- elemIndex menuKey allMenus
+  let count = length allMenus
+      next  = case dir of
+        KeyRight -> (i + 1) `mod` count
+        _        -> (i - 1) `mod` count
+  case drop next allMenus of
+    (x : _) -> Just x
+    []      -> Nothing
+
 -- | The dropdown itself -- see 'Blink.Controls.Menu.menuList' for the
 -- shared engine. @onBar@ is whether the click landed anywhere on the bar's
 -- own row (any label, not just @menuKey@'s), captured by 'runMenuBarLabel'
@@ -215,9 +247,23 @@ runMenuBarLabel tag cfg menuKey labelCfg rowBounds = do
 -- ambient bounds) is even queued -- so clicking a *different* label, which
 -- already handles switching via its own activation, is never also treated
 -- as "outside" here and closed a second time with a conflicting value.
+--
+-- Wraps 'menuList' with Left\/Right handling on top: since this list only
+-- ever runs while its own menu is the open one, any Left\/Right pressed
+-- this frame is unambiguously meant for switching to the adjacent menu
+-- (see 'adjacentMenu'), the same reasoning 'menuList' already applies to
+-- Escape and Tab.
 itemsElement
   :: (Ord e, Ord a, Ord b)
-  => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> View e msg () -> Bool -> Element e msg
-itemsElement tag cfg menuKey close onBar =
-  menuList menuBarListStyleKey (tag (MenuBarList menuKey)) (tag . MenuBarItem menuKey)
-    (mbrItemsFor cfg menuKey) (mbrItemAttrs cfg menuKey) close onBar
+  => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> View e msg () -> Bool -> (Key -> View e msg ())
+  -> Element e msg
+itemsElement tag cfg menuKey close onBar switchByKey = base { elRun = handleMenuSwitchKeys >> elRun base }
+  where
+    base = menuList menuBarListStyleKey (tag (MenuBarList menuKey)) (tag . MenuBarItem menuKey)
+      (mbrItemsFor cfg menuKey) (mbrItemAttrs cfg menuKey) close onBar
+
+    handleMenuSwitchKeys = do
+      evs <- inputKeyEvents <$> getInput
+      forM_ (find ((`elem` [KeyLeft, KeyRight]) . key) evs) $ \e -> do
+        consumeKey (key e)
+        switchByKey (key e)

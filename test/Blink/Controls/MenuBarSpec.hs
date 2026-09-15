@@ -10,6 +10,7 @@ import Blink.Controls.Label (text)
 import Blink.Controls.MenuBar (MenuBarPart (..), itemAttrs, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu)
 import Blink.Element (elLayout, height, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..), uniform)
+import Blink.Input (Key (KeyLeft, KeyRight), KeyEvent (..))
 import Blink.Layout.Constraints (Layout (..), exactly)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), noOpMeasurers)
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
@@ -109,6 +110,11 @@ click handle p = do
   _ <- stepFrame handle (mkInput p True)
   stepFrame handle (mkInput p False)
 
+-- | A single key press, with the mouse left resting on File's trigger (not
+-- pressed) so it never spuriously reclicks anything.
+keyInput :: Key -> FrameInput
+keyInput k = (mkInput fileTriggerPoint False) { keyEvents = [KeyEvent k [] False] }
+
 spec :: Spec
 spec = describe "Blink.Controls.MenuBar.menuBar" $ do
   it "opens a menu's dropdown on click, drawing its items' text" $ do
@@ -129,15 +135,56 @@ spec = describe "Blink.Controls.MenuBar.menuBar" $ do
     result <- click handle fileTriggerPoint -- closes it
     drawnTexts result `shouldNotContain` ["Open", "Save"]
 
-  it "clicking a different label switches which dropdown is open" $ do
-    handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
-    _      <- click handle fileTriggerPoint -- opens File
-    result <- click handle editTriggerPoint -- switches to Edit
-    drawnTexts result `shouldContain` ["Cut", "Copy"]
-    drawnTexts result `shouldNotContain` ["Open", "Save"]
+  it "moving the pointer to a different label switches which dropdown is open, before any click completes" $ do
+    handle  <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+    _       <- click handle fileTriggerPoint -- opens File
+    -- hovering Edit already switches to it (see hover-to-switch below); the
+    -- click that follows lands on a label already open, so it closes it
+    -- right back -- the same "second click on an open label closes it"
+    -- rule 'closes a menu's dropdown on a second click of the same label'
+    -- already covers, generalised to whichever label switching just opened.
+    midClick <- stepFrame handle (mkInput editTriggerPoint False)
+    resultState midClick `shouldBe` Just EditMenu
+    drawnTexts midClick `shouldContain` ["Cut", "Copy"]
+    final <- click handle editTriggerPoint
+    resultState final `shouldBe` Nothing
 
   it "clicking an item activates it and closes the menu" $ do
     handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
     _      <- click handle fileTriggerPoint -- opens File
     result <- click handle fileItemPoint
     resultState result `shouldBe` Nothing
+
+  describe "left/right menu-switching while a dropdown is open" $ do
+    it "Right moves to the next menu" $ do
+      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- click handle fileTriggerPoint -- opens File
+      result <- stepFrame handle (keyInput KeyRight)
+      resultState result `shouldBe` Just EditMenu
+      drawnTexts result `shouldContain` ["Cut", "Copy"]
+
+    it "Right on the last menu wraps to the first, in a single keypress" $ do
+      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- click handle fileTriggerPoint      -- opens File
+      _      <- stepFrame handle (keyInput KeyRight) -- File -> Edit
+      result <- stepFrame handle (keyInput KeyRight) -- Edit -> File
+      resultState result `shouldBe` Just FileMenu
+
+    it "Left moves to the previous menu, wrapping from the first to the last" $ do
+      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- click handle fileTriggerPoint -- opens File
+      result <- stepFrame handle (keyInput KeyLeft) -- File -> Edit (wraps backward)
+      resultState result `shouldBe` Just EditMenu
+
+  describe "hover-to-switch while a dropdown is open" $ do
+    it "hovering a different label switches to its dropdown without a click" $ do
+      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- click handle fileTriggerPoint -- opens File
+      result <- stepFrame handle (mkInput editTriggerPoint False) -- hovers Edit, no click
+      resultState result `shouldBe` Just EditMenu
+      drawnTexts result `shouldContain` ["Cut", "Copy"]
+
+    it "hovering a label does nothing while no dropdown is open" $ do
+      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      result <- stepFrame handle (mkInput editTriggerPoint False) -- just hovering, nothing open
+      resultState result `shouldBe` Nothing
