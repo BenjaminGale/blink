@@ -14,6 +14,10 @@
 -- 'Blink.Controls.ToggleGroup.onSelectionChanged' (the latter stays in
 -- this umbrella, being here first) -- import "Blink.Controls.List"
 -- qualified for it.
+--
+-- 'Blink.Controls.MenuButton.items' clashes with
+-- 'Blink.Controls.ToggleGroup.items' (the latter stays in this umbrella,
+-- being here first) -- import "Blink.Controls.MenuButton" qualified for it.
 module Blink.Controls
   ( -- * Button
     button
@@ -91,6 +95,14 @@ module Blink.Controls
   , selectedItem
   , allowDeselect
   , onSelectionChanged
+    -- * MenuButton
+    -- | 'Blink.Controls.MenuButton.items' clashes with 'items' above (this
+    -- module's own, from "Blink.Controls.ToggleGroup") and stays out of
+    -- this umbrella -- import "Blink.Controls.MenuButton" qualified for it.
+  , menuButton
+  , itemAttrs
+  , isOpen
+  , onOpenChanged
   ) where
 
 import Blink.Controls.Button (activation, button, onActivated)
@@ -99,6 +111,7 @@ import Blink.Controls.Divider (divider, orientation, thickness)
 import Blink.Controls.Image (image, source, fitWidth, fitHeight, preserveRatio)
 import Blink.Controls.Label (label, target, text)
 import Blink.Controls.List (list, onItemActivated, renderItem, rowHeight, selection)
+import Blink.Controls.MenuButton (isOpen, itemAttrs, menuButton, onOpenChanged)
 import Blink.Controls.ProgressBar (bandSpeed, bandWidth, progress, progressBar)
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.RepeatButton (initialDelay, repeatButton, repeatInterval)

@@ -9,6 +9,7 @@ import Blink.Controls.Label (LabelConfig)
 import Blink.Controls.List
   (ListPart (..), MultiSelection, SingleSelection, multiSelection, selectFirst, selectedItems, singleSelection)
 import qualified Blink.Controls.List as List (isItem, onSelectionChanged)
+import qualified Blink.Controls.MenuButton as MenuButton (items)
 import Blink.Controls.ProgressBar (ProgressValue (..))
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)
 import qualified Blink.Controls.Slider as Slider (value)
@@ -47,6 +48,8 @@ data AppState = AppState
   , clickCount     :: Int
   , toggleOn       :: Bool
   , radioChoice    :: Maybe Text
+  , fileMenuOpen    :: Bool
+  , fileMenuLastAction :: Text
   , inputText      :: Text
   , passwordText   :: Text
   , animating      :: Bool
@@ -86,6 +89,8 @@ data Msg
   | ResetClicks
   | SetToggle Bool
   | PickRadio Text
+  | SetFileMenuOpen Bool
+  | FileMenuItemActivated Text
   | SetInputText Text
   | SetPasswordText Text
   | SetAnimating Bool
@@ -120,6 +125,8 @@ demoApp = App
       , clickCount     = 0
       , toggleOn       = False
       , radioChoice    = Nothing
+      , fileMenuOpen    = False
+      , fileMenuLastAction = ""
       , inputText      = ""
       , passwordText   = ""
       , animating      = False
@@ -159,6 +166,8 @@ updateApp msg = case msg of
   ResetClicks           -> modify $ \s -> s { clickCount = 0 }
   SetToggle v          -> modify $ \s -> s { toggleOn = v }
   PickRadio v          -> modify $ \s -> s { radioChoice = Just v }
+  SetFileMenuOpen v       -> modify $ \s -> s { fileMenuOpen = v }
+  FileMenuItemActivated v -> modify $ \s -> s { fileMenuLastAction = v }
   SetInputText t       -> modify $ \s -> s { inputText = t }
   SetPasswordText t    -> modify $ \s -> s { passwordText = t }
   SetAnimating v       -> modify $ \s -> s { animating = v }
@@ -329,6 +338,31 @@ rowRadio s =
       , isEnabled (editingEnabled s)
       ]
     )
+
+fileMenuActions :: [Text]
+fileMenuActions = ["New", "Open", "Save"]
+
+-- | 'menuButton': a plain button that opens a dropdown list of items below
+-- it. Its open state is external, caller-owned state, the same as every
+-- other stateful control here -- see 'fileMenuOpen'.
+rowMenuButton :: AppState -> Element ControlId Msg
+rowMenuButton s =
+  hBox
+    ( rowLayout ++
+      [ spacing 8
+      , children
+          [ menuButton FileMenuButton
+              [ text "File", isOpen (fileMenuOpen s), onOpenChanged (postWith SetFileMenuOpen)
+              , MenuButton.items fileMenuActions
+              , itemAttrs (\a -> [text a, onActivated (post (FileMenuItemActivated a))])
+              , isEnabled (editingEnabled s), width (exactly 120), height fill
+              ]
+          , caption statusText [width fill, height fill, align MiddleLeft]
+          ]
+      ]
+    )
+  where
+    statusText = "Last action: " <> if T.null (fileMenuLastAction s) then "none" else fileMenuLastAction s
 
 rowTextInput :: AppState -> Element ControlId Msg
 rowTextInput s =
@@ -1057,6 +1091,7 @@ mainList s =
         , rowButtons s
         , rowToggle s
         , rowRadio s
+        , rowMenuButton s
         , rowTextInput s
         , rowPasswordInput s
         , rowAnimate s

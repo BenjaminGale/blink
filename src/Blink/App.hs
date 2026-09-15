@@ -121,14 +121,14 @@ module Blink.App
   ) where
 
 import Control.Concurrent (forkIO, threadDelay)
-import Control.Monad (when, void)
+import Control.Monad (foldM, when, void)
 import Data.IORef
 import Data.Text (Text)
 import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
 
 import Blink.Cmd (Cmd, runCmd)
-import Blink.Geometry (Point (..), Rectangle, Size (..), rectFromSize)
+import Blink.Geometry (Point (..), Rectangle, Size (..), placePopup, rectFromSize)
 import Blink.Input (KeyEvent, InputState (..), advanceButton)
 import Blink.View.Context (ctxMouse)
 import Blink.Rendering (DrawCommand, CursorShape, TextMeasurer (..), ImageMeasurer (..), Measurers (..))
@@ -141,6 +141,10 @@ import Blink.View
   , runView, getDrawCommands, getCursorShape, getMessages, hasPendingUiEffects
   , UiEffect, queueUiEffects
   , contextAnimation, contextRequiresAnimation
+  , PendingPopup (popupAnchor, popupSize, popupPlacement, popupOffset, popupRun)
+  , getPendingPopups, clearPendingPopups
+  , getWindowSize, withBounds
+  , markPopupFloor
   )
 import Blink.Element (Element, runElement)
 import Blink.Update (Update, runUpdateEffects)
@@ -273,6 +277,34 @@ buildCtx app winRect inputState delta isAnimTick state prevCtx =
       animState = mkAnimationState delta elapsed isAnimTick
   in nextFrameContext winRect inputState (theme app state) animState prevCtx
 
+-- | Runs @el@ (the whole view tree for a render pass), then drains and runs
+-- any popups it queued via 'Blink.Popup.popup' -- see 'drainPopups'. Every
+-- render pass goes through this rather than 'runElement'/'runView' directly,
+-- so a popup queued on either the first pass ('runFrame') or the second
+-- ('rerenderPass') is always run out before that pass's output is read.
+runViewAndPopups :: Element e msg -> ViewContext e msg -> IO ((), ViewContext e msg)
+runViewAndPopups el ctx = do
+  (a, ctx') <- runView (runElement el) ctx
+  ctx''     <- drainPopups ctx'
+  pure (a, ctx'')
+
+-- | Runs each popup queued this render pass, in queue order, positioned per
+-- 'placePopup'. Their draws and hit-rects append onto @ctx@'s own, landing
+-- after everything the main tree already produced -- on top, and never
+-- occluded by it. 'markPopupFloor' runs first, marking every hit-rect
+-- registered from here on as a popup's -- see @isOccludedByPopupFor@ in
+-- "Blink.View.Mouse".
+drainPopups :: ViewContext e msg -> IO (ViewContext e msg)
+drainPopups ctx0 = do
+  (_, ctx1) <- runView markPopupFloor ctx0
+  clearPendingPopups <$> foldM runOne ctx1 (getPendingPopups ctx1)
+  where
+    runOne ctx p = snd <$> runView (place p) ctx
+    place p = do
+      window <- getWindowSize
+      let rect = placePopup (popupAnchor p) window (popupSize p) (popupPlacement p) (popupOffset p)
+      withBounds rect (popupRun p)
+
 -- | Folds a batch of messages into state via @update@, in order, collecting
 -- every 'Cmd' and 'UiEffect' any of them requested along the way.
 foldMsgs :: App e msg s -> s -> [msg] -> (s, [Cmd msg], [UiEffect e])
@@ -312,7 +344,7 @@ runFrame app refs queue notify input = do
 
   prevCtx <- readIORef (refsCtx refs)
   let ctx = buildCtx app winRect inputState delta (isAnimationTick input) state prevCtx
-  ((), ctx') <- runView (runElement (view app state)) ctx
+  ((), ctx') <- runViewAndPopups (view app state) ctx
   -- Cmd results that completed since the last frame are treated as having
   -- happened before this frame's own view emissions.
   pending <- drainMsgs queue
@@ -379,7 +411,7 @@ rerenderPass app queue notify input firstPassCtx state1 = do
       rerendered  = rerenderContext winRect (clearKeyEvents inputState)
                       (theme app state1) (contextAnimation firstPassCtx) firstPassCtx
       freshCtx    = suppressFreshButtonEdge inputState rerendered
-  (_, ctx2) <- runView (runElement (view app state1)) freshCtx
+  (_, ctx2) <- runViewAndPopups (view app state1) freshCtx
   -- No third pass: re-running an already-settled focus change through
   -- rerenderContext re-emits the same gained/lost messages, so looping
   -- would never converge. This frame's draws can lag the fold by one

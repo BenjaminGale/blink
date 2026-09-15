@@ -11,14 +11,18 @@ import Test.Hspec
 import Blink.App
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
-import Blink.Layout.Constraints (Layout (..), fill)
+import Blink.Layout.Constraints (Layout (..), exactly, fill)
+import Blink.Popup (content, popup)
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
 import Blink.View
 import Blink.View.Drawing (fillRect, drawText)
 import Blink.Element (Element, elLayout, elementWithLayout)
 import Blink.Controls.Checkbox (checkbox)
-import Blink.Controls.Control (control, defaultControlConfig, elementId, onFocusGained, onFocusLost, post, postWith, resolve)
+import Blink.Controls.Control
+  ( ControlInteraction (ciClicked, ciMouseDown)
+  , control, defaultControlConfig, elementId, onFocusGained, onFocusLost, post, postWith, resolve
+  )
 import Blink.Controls.ToggleButton (isSelected, onSelectedChanged)
 import qualified Blink.Controls.Slider as Slider
 import qualified Blink.Controls.TextInput as TextInput
@@ -128,6 +132,112 @@ drawingApp c = App
   , view           = \_ -> fullView (fillRect c)
   , update         = \_ -> pure ()
   }
+
+-- | The popup content's fixed size and anchor for 'popupDrawOrderApp' and
+-- 'popupOcclusionApp' -- small and away from every window edge, so the
+-- default placement (below, left-aligned) never has to flip. Placement
+-- itself (including flipping) has its own dedicated tests in
+-- "Blink.PopupSpec"; these two apps are only about draw order and
+-- occlusion, so they deliberately sidestep it.
+popupAnchorRect :: Rectangle
+popupAnchorRect = Rectangle 10 10 20 20
+
+popupContentLayout :: Layout
+popupContentLayout = Layout (exactly 10) (exactly 10) TopLeft
+
+-- | Where 'popupAnchorRect' and 'popupContentLayout' place a popup with the
+-- default placement -- below the anchor, left-aligned.
+popupPlacedRect :: Rectangle
+popupPlacedRect = Rectangle 10 30 10 10
+
+-- Draws a FillRect for the main tree, then queues a popup anchored well away
+-- from the window edges that draws a different-coloured FillRect -- proves
+-- the popup's draw lands after the main tree's in the same frame's draw
+-- command list.
+popupDrawOrderApp :: (Colour, Colour) -> App () () ()
+popupDrawOrderApp (mainColour, popupColour) = App
+  { startUp        = pure ()
+  , theme          = const (emptyTheme (testMetrics, testStyleSet))
+  , view           = \_ -> fullView $ do
+      fillRect mainColour
+      withBounds popupAnchorRect $
+        popup () [content (elementWithLayout popupContentLayout (fillRect popupColour))]
+  , update         = \_ -> pure ()
+  }
+
+data PopupElem = MainCtl | PopupCtl deriving (Eq, Ord, Show)
+
+-- | Registers a hit-rect for both an ordinary control (covering the whole
+-- window, standing in for the rest of the app) and a popup anchored well
+-- away from the window edges, each reporting whether it's occluded (per
+-- last frame's registered rects) as app state -- proves the popup's
+-- hit-rect is registered with a higher index than the main tree's, so a
+-- frame later it occludes the ordinary control at a point under the popup,
+-- but is never itself occluded.
+popupOcclusionApp :: App PopupElem (PopupElem, Bool) (Bool, Bool)
+popupOcclusionApp = App
+  { startUp = pure (False, False)
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \_ -> fullView $ do
+      registerHitRect MainCtl
+      mainOccluded <- isOccludedFor MainCtl
+      emit (MainCtl, mainOccluded)
+      withBounds popupAnchorRect $ popup PopupCtl [content popupHitRectElement]
+  , update  = \(eid, occluded) -> modify $ \(m, p) ->
+      if eid == MainCtl then (occluded, p) else (m, occluded)
+  }
+  where
+    popupHitRectElement :: Element PopupElem (PopupElem, Bool)
+    popupHitRectElement = elementWithLayout popupContentLayout $ do
+      registerHitRect PopupCtl
+      popupOccluded <- isOccludedFor PopupCtl
+      emit (PopupCtl, popupOccluded)
+
+-- | A real click (not just a hit-rect check) at a point under an open
+-- popup must not reach the ordinary control behind it -- the regression
+-- this app exists to catch: an earlier version of the popup-occlusion fix
+-- suppressed hover but left the ordinary control still clickable straight
+-- through the popup on top of it.
+popupClickThroughApp :: App PopupElem Bool Bool
+popupClickThroughApp = App
+  { startUp = pure False
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \_ -> fullView $ do
+      ci <- control (resolve defaultControlConfig [elementId MainCtl])
+      when (ciClicked ci) (emit True)
+      withBounds popupAnchorRect $ popup PopupCtl [content popupButtonElement]
+  , update  = \clicked -> modify (|| clicked)
+  }
+  where
+    popupButtonElement :: Element PopupElem Bool
+    popupButtonElement = elementWithLayout popupContentLayout
+      (void (control (resolve defaultControlConfig [elementId PopupCtl])))
+
+-- | Like 'popupClickThroughApp', but watches 'ciMouseDown' (what drives an
+-- ordinary control's own click-to-focus, and a 'Blink.Controls.Label.label's
+-- 'Blink.Controls.Label.target' redirect) rather than 'ciClicked' -- a
+-- fresh press was never gated by occlusion the way capture-driven clicks
+-- already were, so a mousedown landing on an open popup could still reach
+-- a control's own focus-claiming behind it.
+popupMouseDownThroughApp :: App PopupElem Bool Bool
+popupMouseDownThroughApp = App
+  { startUp = pure False
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \_ -> fullView $ do
+      ci <- control (resolve defaultControlConfig [elementId MainCtl])
+      when (ciMouseDown ci) (emit True)
+      withBounds popupAnchorRect $ popup PopupCtl [content popupButtonElement]
+  , update  = \down -> modify (|| down)
+  }
+  where
+    popupButtonElement :: Element PopupElem Bool
+    popupButtonElement = elementWithLayout popupContentLayout
+      (void (control (resolve defaultControlConfig [elementId PopupCtl])))
+
+-- | Falls within 'popupPlacedRect' (and, being anywhere in the window, also
+-- within the ordinary control's full-window bounds in 'popupOcclusionApp').
+underPopupInput :: FrameInput
+underPopupInput = normalInput { mousePosition = Point 15 35 }
 
 -- Dispatches (+1) and also draws the current app state as text.
 -- The drawn value differs between continuous (pre-dispatch) and
@@ -377,6 +487,44 @@ spec = do
         handle <- configureContinuous multiEmitApp nullMsgQueue nullMeasurers
         result <- stepFrame handle normalInput
         resultState result `shouldBe` "ab"
+
+    describe "popups" $ do
+      it "a popup's draw commands land after the main tree's in the same frame" $ do
+        let mainColour  = RGBA 1 0 0 1
+            popupColour = RGBA 0 1 0 1
+        handle <- configureContinuous (popupDrawOrderApp (mainColour, popupColour)) nullMsgQueue nullMeasurers
+        result <- stepFrame handle normalInput
+        resultDraws result `shouldBe`
+          [ FillRect (Rectangle 0 0 100 100) mainColour
+          , FillRect popupPlacedRect popupColour
+          ]
+
+      it "a popup's hit-rect occludes the ordinary control a frame later, but is never occluded itself" $ do
+        handle <- configureContinuous popupOcclusionApp nullMsgQueue nullMeasurers
+        _      <- stepFrame handle underPopupInput -- registers both hit-rects for the first time
+        result <- stepFrame handle underPopupInput
+        resultState result `shouldBe` (True, False)
+
+      it "does not let a click reach an ordinary control through an open popup on top of it" $ do
+        handle <- configureContinuous popupClickThroughApp nullMsgQueue nullMeasurers
+        _      <- stepFrame handle underPopupInput -- primes both hit-rects at this position
+        _      <- stepFrame handle (underPopupInput { mouseButtonDown = True })
+        result <- stepFrame handle (underPopupInput { mouseButtonDown = False })
+        resultState result `shouldBe` False
+
+      it "still lets a click reach the ordinary control where the popup doesn't cover it" $ do
+        handle <- configureContinuous popupClickThroughApp nullMsgQueue nullMeasurers
+        let elsewhere = normalInput { mousePosition = Point 80 80 }
+        _      <- stepFrame handle elsewhere
+        _      <- stepFrame handle (elsewhere { mouseButtonDown = True })
+        result <- stepFrame handle (elsewhere { mouseButtonDown = False })
+        resultState result `shouldBe` True
+
+      it "does not let a mousedown reach an ordinary control's click-to-focus through an open popup" $ do
+        handle <- configureContinuous popupMouseDownThroughApp nullMsgQueue nullMeasurers
+        _      <- stepFrame handle underPopupInput -- primes both hit-rects at this position
+        result <- stepFrame handle (underPopupInput { mouseButtonDown = True })
+        resultState result `shouldBe` False
 
     describe "configureEventDriven" $ do
       it "a normal frame returns Continue" $ do

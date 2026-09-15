@@ -774,7 +774,8 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       wasFocused   <- isFocused eid
       currentScope <- getCurrentScope
       applySelfFocus eid wasFocused
-      applyNavigationKeys wasFocused
+      -- NotFocusable can still be the ambient focus (a scope's own id) -- skip Tab so the scope handles it first.
+      when (ccFocusPolicy cc /= NotFocusable) (applyNavigationKeys wasFocused)
       nowFocused <- isFocused eid
       fireFocusChangeDirect cc (focusTransition wasFocused nowFocused)
       (m, styles) <- getStyleSet styleKey
@@ -802,10 +803,25 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       wasDragging <- isDragging eid
       hit         <- isRegionHit
       let eligible = not disabled && hit
-      occluded <- if eligible then isOccludedFor eid else pure False
+      occluded        <- if eligible then isOccludedFor eid else pure False
+      occludedByPopup <- if eligible then isOccludedByPopupFor eid else pure False
       free     <- isMouseFreeFor eid
-      hoverI <- watchHover eid (eligible && free) occluded
-      mouseI <- watchMouseButton eid (ccMouseActivation cc) eligible occluded
+      -- registerHitRect must run unconditionally here, or isOccludedFor
+      -- loses this element's entry the very next frame and click-through
+      -- protection undoes itself; popup occlusion only masks hover below.
+      hoverI0 <- watchHover eid (eligible && free) occluded
+      let hoverI
+            | occludedByPopup = hoverI0 { hiHovered = False, hiMouseEntered = False }
+            | otherwise       = hoverI0
+      mouseI0 <- watchMouseButton eid (ccMouseActivation cc) eligible occluded
+      -- Unlike 'ciClicked' (already protected, via 'acquireCapture' backing
+      -- off under 'occluded'), a fresh press was never gated by occlusion
+      -- at all -- so a popup-covered control's own click-to-focus
+      -- ('label's 'target' included) would otherwise still fire on a press
+      -- that visually lands on the popup on top of it.
+      let mouseI
+            | occludedByPopup = mouseI0 { mbiMouseDown = False }
+            | otherwise       = mouseI0
       focusI <- watchFocus eid disabled
       let interaction = (noInteraction placeholderStyle)
             { ciHovered      = hiHovered hoverI

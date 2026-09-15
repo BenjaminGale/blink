@@ -69,10 +69,12 @@ library
         Blink.Controls.TextInput
         Blink.Controls.ToggleButton
         Blink.Controls.ToggleGroup
+        Blink.Controls.MenuButton
         Blink.Controls.Table
         Blink.Controls.Tree
         Blink.Controls.TreeTable
         Blink.Element
+        Blink.Popup
         Blink.Layout
         Blink.Layout.Border
         Blink.Layout.Box
@@ -96,6 +98,7 @@ library
         Blink.Controls.ToggleGroup.Style
         Blink.Controls.Table.Style
         Blink.Controls.Tree.Style
+        Blink.Controls.MenuButton.Style
     hs-source-dirs: src
 
 executable demo
@@ -121,11 +124,13 @@ test-suite blink-tests
     main-is: Main.hs
     other-modules:
         Blink.AppSpec
+        Blink.ElementSpec
         Blink.Generators
         Blink.GeometrySpec
         Blink.InputSpec
         Blink.Interaction
         Blink.InteractionSpec
+        Blink.PopupSpec
         Blink.UpdateSpec
         Blink.Controls.ButtonBehaviour
         Blink.Controls.ButtonSpec
@@ -138,6 +143,7 @@ test-suite blink-tests
         Blink.Controls.FixedFocusBehaviour
         Blink.Controls.LabelSpec
         Blink.Controls.ListSpec
+        Blink.Controls.MenuButtonSpec
         Blink.Controls.ProgressBarSpec
         Blink.Controls.RadioButtonSpec
         Blink.Controls.RepeatButtonSpec

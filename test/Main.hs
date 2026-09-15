@@ -2,6 +2,7 @@ module Main (main) where
 
 import Test.Hspec
 import qualified Blink.AppSpec as App
+import qualified Blink.ElementSpec as Element
 import qualified Blink.Controls.ButtonSpec as Button
 import qualified Blink.Controls.CheckboxSpec as Checkbox
 import qualified Blink.Controls.ControlSpec as Control
@@ -9,6 +10,7 @@ import qualified Blink.Controls.DividerSpec as Divider
 import qualified Blink.Controls.ImageSpec as Image
 import qualified Blink.Controls.LabelSpec as Label
 import qualified Blink.Controls.ListSpec as List
+import qualified Blink.Controls.MenuButtonSpec as MenuButton
 import qualified Blink.Controls.ProgressBarSpec as ProgressBar
 import qualified Blink.Controls.RadioButtonSpec as RadioButton
 import qualified Blink.Controls.RepeatButtonSpec as RepeatButton
@@ -24,6 +26,7 @@ import qualified Blink.GeometrySpec as Geometry
 import qualified Blink.InputSpec as Input
 import qualified Blink.InteractionSpec as Interaction
 import qualified Blink.LayoutSpec as Layout
+import qualified Blink.PopupSpec as Popup
 import qualified Blink.Style.DefaultsSpec as StyleDefaults
 import qualified Blink.View.AnimationSpec as ViewAnimation
 import qualified Blink.View.ContextSpec as ViewContext
@@ -55,8 +58,10 @@ main = hspec $ do
   ViewScroll.spec
   ViewSelection.spec
   Update.spec
+  Element.spec
   Geometry.spec
   Layout.spec
+  Popup.spec
   Input.spec
   Control.spec
   Label.spec
@@ -65,6 +70,7 @@ main = hspec $ do
   ToggleGroup.spec
   Checkbox.spec
   List.spec
+  MenuButton.spec
   Tree.spec
   Table.spec
   TreeTable.spec

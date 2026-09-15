@@ -267,6 +267,13 @@ module Blink.View
   , getDrawCommands
   , getMessages
   , hasPendingUiEffects
+    -- * Popups
+    -- | The deferred-overlay bookkeeping "Blink.Popup" and "Blink.App"
+    -- build on; import "Blink.Popup" for the public 'Blink.Popup.popup' API.
+  , PendingPopup (..)
+  , queuePopup
+  , getPendingPopups
+  , clearPendingPopups
   , settleEffects
   , settleAndClearEffects
   , contextRequiresAnimation
@@ -348,6 +355,8 @@ module Blink.View
   , isAnyMouseOver
   , registerHitRect
   , isOccludedFor
+  , markPopupFloor
+  , isOccludedByPopupFor
   , isButtonDown
   , isButtonReleased
   , isDragging

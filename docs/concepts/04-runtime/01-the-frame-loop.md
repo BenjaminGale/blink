@@ -27,15 +27,24 @@ same three things:
 2. **Run the view.** `runView` walks the view tree your `view` function
    produces, threading that context through it. Controls read from it
    (is this element focused? what are the current bounds?) and write to it
-   (append a draw command, queue a message, claim focus).
+   (append a draw command, queue a message, claim focus). A control that
+   opened a popup (`Blink.Controls.MenuButton.menuButton`, or anything
+   else built on `Blink.Popup.popup`) doesn't draw its popup content here
+   -- it just queues it, to be run in step 2a below.
+2a. **Run any popups.** Once the main walk finishes, Blink runs every
+    popup queued during it, each positioned against its own anchor,
+    appending their draws and hit-rects onto the same context -- landing
+    after (so on top of) everything the main walk already produced. See
+    `Blink.Popup`'s own module documentation for why popup content has to
+    be deferred like this rather than drawn inline where it's declared.
 3. **Extract the results.** `getDrawCommands` pulls out what to render this
    frame; `getMessages` pulls out what the view asked to happen, in the
    order it asked for it.
 
-The context produced by step 2 becomes next frame's starting point: that's
-the arrow feeding back into step 1, and it is everything that persists
-between frames on Blink's side. The context is the complete record of
-"last frame" as far as Blink is concerned.
+The context produced by steps 2 and 2a becomes next frame's starting
+point: that's the arrow feeding back into step 1, and it is everything
+that persists between frames on Blink's side. The context is the complete
+record of "last frame" as far as Blink is concerned.
 
 ## Contents of the frame context
 

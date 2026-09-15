@@ -40,6 +40,10 @@ module Blink.Geometry
   , alignRect
     -- * Alignment
   , Alignment (..)
+    -- * Popup placement
+  , Side (..)
+  , Edge (..)
+  , placePopup
   ) where
 
 -- | A point in 2D screen space (pixels, top-left origin, Y increases downward).
@@ -205,3 +209,61 @@ rectCentredAt p r =
     (Point (pointX p - rectWidth r / 2)
            (pointY p - rectHeight r / 2)
     ) r
+
+-- | Which edge of the anchor a popup opens from. Prefixed (@SideTop@, not
+-- plain @Top@) to avoid colliding with 'Data.Either.Left'\/'Data.Either.Right'.
+data Side = SideTop | SideBottom | SideLeft | SideRight
+  deriving (Eq, Show)
+
+-- | How a popup is aligned along the anchor's edge, on the axis
+-- perpendicular to 'Side' -- e.g. for 'SideBottom', whether the popup's
+-- left edge, centre, or right edge lines up with the anchor's.
+data Edge = Start | Middle | End
+  deriving (Eq, Show)
+
+-- | Positions a popup of @size@ against @anchor@, per @(side, edge)@ and
+-- @offset@ (the gap between the anchor's edge and the popup), then flips to
+-- the opposite 'Side' if that placement would overflow @window@ -- e.g.
+-- 'SideBottom' becomes 'SideTop' when there isn't room below the anchor.
+-- Used by "Blink.Popup" to place a popup's content once its size is known.
+placePopup :: Rectangle -> Rectangle -> Size -> (Side, Edge) -> Double -> Rectangle
+placePopup anchor window size (side, edge) offset
+  | overflowsOnSide window preferred side = placeAt anchor size (flipSide side) edge offset
+  | otherwise                              = preferred
+  where
+    preferred = placeAt anchor size side edge offset
+
+flipSide :: Side -> Side
+flipSide SideTop    = SideBottom
+flipSide SideBottom = SideTop
+flipSide SideLeft   = SideRight
+flipSide SideRight  = SideLeft
+
+placeAt :: Rectangle -> Size -> Side -> Edge -> Double -> Rectangle
+placeAt anchor (Size w h) side edge offset = case side of
+  SideBottom -> Rectangle crossPos              (rectY anchor + rectHeight anchor + offset) w h
+  SideTop    -> Rectangle crossPos              (rectY anchor - h - offset)                 w h
+  SideRight  -> Rectangle (rectX anchor + rectWidth anchor + offset) crossPos               w h
+  SideLeft   -> Rectangle (rectX anchor - w - offset)                crossPos               w h
+  where
+    crossPos = case side of
+      SideBottom -> edgePos (rectX anchor) (rectWidth anchor) w edge
+      SideTop    -> edgePos (rectX anchor) (rectWidth anchor) w edge
+      SideRight  -> edgePos (rectY anchor) (rectHeight anchor) h edge
+      SideLeft   -> edgePos (rectY anchor) (rectHeight anchor) h edge
+
+edgePos :: Double -> Double -> Double -> Edge -> Double
+edgePos anchorOrigin anchorLen popupLen edge = case edge of
+  Start  -> anchorOrigin
+  Middle -> anchorOrigin + (anchorLen - popupLen) / 2
+  End    -> anchorOrigin + anchorLen - popupLen
+
+-- | 'True' when @rect@ overflows @window@ on the edge @side@ opens toward
+-- -- the only overflow 'placePopup' reacts to; it does not clamp
+-- misalignment on the cross axis.
+overflowsOnSide :: Rectangle -> Rectangle -> Side -> Bool
+overflowsOnSide window rect side = case side of
+  SideBottom -> rectY rect + rectHeight rect > rectY window + rectHeight window
+  SideTop    -> rectY rect < rectY window
+  SideRight  -> rectX rect + rectWidth rect > rectX window + rectWidth window
+  SideLeft   -> rectX rect < rectX window
