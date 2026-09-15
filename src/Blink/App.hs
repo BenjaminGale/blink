@@ -141,10 +141,11 @@ import Blink.View
   , runView, getDrawCommands, getCursorShape, getMessages, hasPendingUiEffects
   , UiEffect, queueUiEffects
   , contextAnimation, contextRequiresAnimation
-  , PendingPopup (popupAnchor, popupSize, popupPlacement, popupOffset, popupRun)
+  , PendingPopup (popupAnchor, popupSize, popupPlacement, popupOffset, popupRun, popupOriginScope)
   , getPendingPopups, clearPendingPopups
   , getWindowSize, withBounds
   , markPopupFloor
+  , withFocusScope
   )
 import Blink.Element (Element, runElement)
 import Blink.Update (Update, runUpdateEffects)
@@ -282,28 +283,46 @@ buildCtx app winRect inputState delta isAnimTick state prevCtx =
 -- render pass goes through this rather than 'runElement'/'runView' directly,
 -- so a popup queued on either the first pass ('runFrame') or the second
 -- ('rerenderPass') is always run out before that pass's output is read.
-runViewAndPopups :: Element e msg -> ViewContext e msg -> IO ((), ViewContext e msg)
+runViewAndPopups :: Ord e => Element e msg -> ViewContext e msg -> IO ((), ViewContext e msg)
 runViewAndPopups el ctx = do
   (a, ctx') <- runView (runElement el) ctx
   ctx''     <- drainPopups ctx'
   pure (a, ctx'')
 
 -- | Runs each popup queued this render pass, in queue order, positioned per
--- 'placePopup'. Their draws and hit-rects append onto @ctx@'s own, landing
--- after everything the main tree already produced -- on top, and never
--- occluded by it. 'markPopupFloor' runs first, marking every hit-rect
--- registered from here on as a popup's -- see @isOccludedByPopupFor@ in
--- "Blink.View.Mouse".
-drainPopups :: ViewContext e msg -> IO (ViewContext e msg)
+-- 'placePopup', and repeats against whatever a popup's own run queues in
+-- turn -- a submenu, opened from within its parent menu's already-deferred
+-- popup content, queues exactly this way (see
+-- "Blink.Controls.Menu"). Their draws and hit-rects append onto @ctx@'s
+-- own, landing after everything the main tree (and every earlier popup
+-- layer) already produced -- on top, and never occluded by it.
+-- 'markPopupFloor' runs once, before the first layer, marking every
+-- hit-rect registered from here on (every layer alike) as a popup's -- see
+-- @isOccludedByPopupFor@ in "Blink.View.Mouse".
+drainPopups :: Ord e => ViewContext e msg -> IO (ViewContext e msg)
 drainPopups ctx0 = do
   (_, ctx1) <- runView markPopupFloor ctx0
-  clearPendingPopups <$> foldM runOne ctx1 (getPendingPopups ctx1)
+  drainLayer ctx1
   where
+    -- Clears the layer about to run before running it, so only popups
+    -- freshly queued during this layer (a nested submenu, say) remain
+    -- pending once it's done, and the loop terminates as soon as a layer
+    -- queues nothing further.
+    drainLayer ctx = case getPendingPopups ctx of
+      [] -> pure ctx
+      ps -> foldM runOne (clearPendingPopups ctx) ps >>= drainLayer
     runOne ctx p = snd <$> runView (place p) ctx
     place p = do
       window <- getWindowSize
       let rect = placePopup (popupAnchor p) window (popupSize p) (popupPlacement p) (popupOffset p)
-      withBounds rect (popupRun p)
+          run  = withBounds rect (popupRun p)
+      -- Re-enters the scope 'popupRun' was queued from (see
+      -- 'PendingPopup.popupOriginScope'), so it runs with the same focus
+      -- ambient it would have had inline. Layers drain outermost first, so
+      -- by the time a nested popup's own origin scope is re-entered here,
+      -- its enclosing chain up to root has already been reaffirmed by the
+      -- layer that queued it.
+      maybe run (`withFocusScope` run) (popupOriginScope p)
 
 -- | Folds a batch of messages into state via @update@, in order, collecting
 -- every 'Cmd' and 'UiEffect' any of them requested along the way.

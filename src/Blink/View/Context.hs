@@ -675,6 +675,18 @@ data PendingPopup e msg = PendingPopup
     -- 'Blink.Popup.offset'.
   , popupRun       :: View e msg ()
     -- ^ The popup content's own frame action, extracted at queue time.
+  , popupOriginScope :: Maybe e
+    -- ^ The focus scope ambient when 'Blink.Popup.popup' was called ('Nothing'
+    -- for root) -- see 'Blink.View.Focus.getCurrentScope'. Run after the
+    -- whole view tree finishes, a popup would otherwise always resume at
+    -- root's own ambient regardless of where it was queued from, so a
+    -- submenu queued from within its parent menu's own already-deferred
+    -- popup content (see "Blink.Controls.Menu") would never see its parent
+    -- item's own scope as "claimed" and could never auto-focus into itself.
+    -- "Blink.App"'s drain step re-enters this scope (via
+    -- 'Blink.View.Focus.withFocusScope') before running 'popupRun', so the
+    -- popup runs with exactly the ambient it would have had rendered
+    -- inline at its point of origin.
   }
 
 -- | The frame context threaded through every 'View' computation. Carries the

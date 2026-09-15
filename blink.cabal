@@ -146,6 +146,7 @@ test-suite blink-tests
         Blink.Controls.FixedFocusBehaviour
         Blink.Controls.LabelSpec
         Blink.Controls.ListSpec
+        Blink.Controls.MenuSpec
         Blink.Controls.MenuBarSpec
         Blink.Controls.MenuButtonSpec
         Blink.Controls.ProgressBarSpec

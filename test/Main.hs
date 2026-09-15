@@ -10,6 +10,7 @@ import qualified Blink.Controls.DividerSpec as Divider
 import qualified Blink.Controls.ImageSpec as Image
 import qualified Blink.Controls.LabelSpec as Label
 import qualified Blink.Controls.ListSpec as List
+import qualified Blink.Controls.MenuSpec as Menu
 import qualified Blink.Controls.MenuBarSpec as MenuBar
 import qualified Blink.Controls.MenuButtonSpec as MenuButton
 import qualified Blink.Controls.ProgressBarSpec as ProgressBar
@@ -71,6 +72,7 @@ main = hspec $ do
   ToggleGroup.spec
   Checkbox.spec
   List.spec
+  Menu.spec
   MenuButton.spec
   MenuBar.spec
   Tree.spec
