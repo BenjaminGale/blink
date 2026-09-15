@@ -17,6 +17,7 @@ module Blink.Input
     Key (..)
   , Modifier (..)
   , KeyEvent (..)
+  , mnemonicActivated
     -- * Frame input
   , InputState (..)
     -- * Mouse
@@ -36,6 +37,7 @@ module Blink.Input
   , HitRect (..)
   ) where
 
+import Data.Char (toUpper)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Blink.Geometry (Point, Rectangle)
@@ -67,12 +69,17 @@ data Key
     -- ^ Down arrow.
   | KeyEscape
     -- ^ Escape key.
+  | KeyChar Char
+    -- ^ A letter key, reported as its uppercase form regardless of Shift.
+    -- Covers mnemonic letters (see 'mnemonicActivated') that aren't
+    -- otherwise enumerated above.
   deriving (Eq, Show)
 
 -- | Keyboard modifier keys. Carried alongside a 'Key' in 'KeyEvent'.
 data Modifier
   = Shift -- ^ Shift key held during the key press.
   | Ctrl  -- ^ Ctrl key held during the key press.
+  | Alt   -- ^ Alt \/ Option key held during the key press.
   deriving (Eq, Show)
 
 -- | A single keyboard event from the platform: a key press together with
@@ -92,6 +99,15 @@ data KeyEvent = KeyEvent
     -- "Blink.Controls.Button"'s Enter-while-focused activation) checks
     -- this and ignores the event when it's 'True'.
   } deriving (Eq, Show)
+
+-- | 'True' if a frame's key events include Alt held together with the given
+-- mnemonic letter, matched case-insensitively. Ignores auto-repeat, so
+-- holding Alt+letter down only activates the mnemonic once per physical
+-- press. Used by "Blink.Controls.MenuBar" and "Blink.Controls.Menu" to open
+-- a top-level menu or activate an item by its underlined letter.
+mnemonicActivated :: Char -> [KeyEvent] -> Bool
+mnemonicActivated c = any $ \e ->
+  key e == KeyChar (toUpper c) && Alt `elem` modifiers e && not (keyRepeat e)
 
 -- | All per-frame input assembled by the backend. Passed to the view tree
 -- via the 'Blink.App.FrameInput' each frame.
