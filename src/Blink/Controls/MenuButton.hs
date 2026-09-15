@@ -15,9 +15,9 @@
 -- While open, Up\/Down move the keyboard highlight between items, wrapping
 -- from the last item back to the first (and back), Enter or a click on an
 -- item activates it and closes the menu, Escape closes it without
--- activating anything, and a completed click outside both the trigger and
--- the item list closes it too. Every closing path returns focus to the
--- trigger.
+-- activating anything, a completed click outside both the trigger and the
+-- item list closes it too, and so does Tab or Shift-Tab. Every closing path
+-- returns focus to the trigger.
 module Blink.Controls.MenuButton
   ( MenuButtonConfig
   , MenuButtonPart (..)
@@ -40,7 +40,7 @@ import Blink.Controls.MenuButton.Style (menuButtonListStyleKey)
 import Blink.Controls.ToggleButton
   (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleBase)
 import Blink.Geometry (Alignment (TopLeft))
-import Blink.Input (InputState (inputKeyEvents), Key (KeyDown, KeyEscape, KeyUp), KeyEvent (key))
+import Blink.Input (InputState (inputKeyEvents), Key (KeyDown, KeyEscape, KeyTab, KeyUp), KeyEvent (key))
 import Blink.Layout.Box (children, vBox)
 import Blink.Layout.Constraints (Layout (..), fitContent)
 import Blink.Popup (content, popup)
@@ -205,6 +205,7 @@ itemsElement tag cfg close onTrigger = Element
 
     scopedRun = withFocusScope (tag MenuButtonList) $ do
       handleEscape
+      handleTabOut
       handleOutsideClick
       handleArrowKeys
       elRun box
@@ -215,6 +216,13 @@ itemsElement tag cfg close onTrigger = Element
     handleEscape = do
       evs <- inputKeyEvents <$> getInput
       case find ((== KeyEscape) . key) evs of
+        Just e  -> consumeKey (key e) >> close
+        Nothing -> pure ()
+
+    -- Closes on Tab\/Shift-Tab too: this list renders after the trigger's own siblings, so a plain handoff can't reach them.
+    handleTabOut = do
+      evs <- inputKeyEvents <$> getInput
+      case find ((== KeyTab) . key) evs of
         Just e  -> consumeKey (key e) >> close
         Nothing -> pure ()
 

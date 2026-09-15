@@ -11,19 +11,20 @@ import Blink.App
 import Blink.Controls.Button (onActivated)
 import Blink.Controls.Control
   ( ControlInteraction (ciMouseDown)
-  , control, defaultControlConfig, elementId, isEnabled, onFocusGained, onMouseEntered, post, postWith, resolve
+  , control, defaultControlConfig, elementId, isEnabled, onFocusGained, onFocusLost, onMouseEntered
+  , post, postWith, resolve
   )
 import Blink.Controls.Label (text)
 import Blink.Controls.MenuButton (MenuButtonPart (..), isOpen, itemAttrs, items, menuButton, onOpenChanged)
 import Blink.Element (Element, elLayout, elementWithLayout, height, runElement, width)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..), uniform)
-import Blink.Input (Key (KeyDown, KeyEscape, KeyReturn, KeyUp), KeyEvent (..))
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
+import Blink.Input (Key (KeyDown, KeyEscape, KeyReturn, KeyTab, KeyUp), KeyEvent (..), Modifier (Shift))
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), noOpMeasurers)
 import Blink.Style (Metrics (..), Palette (..), Style (..), StyleSet (..), VisualState (..), emptyTheme, noBorder)
 import Blink.Style.Defaults (defaultTheme)
 import Blink.Update (modify, put)
-import Blink.View (View, emit)
+import Blink.View (View, emit, withBounds)
 
 data Item = Open | Save deriving (Eq, Ord, Show)
 
@@ -225,6 +226,61 @@ navOutsidePoint  = Point 80 80
 keyInput :: Key -> FrameInput
 keyInput k = (mkInput triggerPoint False) { keyEvents = [KeyEvent k [] False] }
 
+-- | A plain focusable control on either side of the menu button.
+data SiblingElem = SiblingBefore | SiblingAfter | SiblingMenu (MenuButtonPart Item)
+  deriving (Eq, Ord, Show)
+
+-- | What changes the open flag, or logs a keyboard-navigation event, in
+-- 'navSiblingApp'.
+data SiblingEvent = SiblingOpen Bool | SiblingLog Text
+
+-- | Like 'navApp', but with a plain focusable control placed before and
+-- after the menu button in the root focus scope: @Before(0,0)-(40,20)@,
+-- trigger @(50,0)-(90,20)@, items below the trigger, @After(100,0)-(140,20)@.
+navSiblingApp :: App SiblingElem SiblingEvent (Bool, [Text])
+navSiblingApp = App
+  { startUp = pure (False, [])
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \(open, _) -> fullView $ do
+      withBounds (Rectangle 0 0 40 20) $ void $ control $ resolve defaultControlConfig
+        [ elementId SiblingBefore
+        , onFocusGained (post (SiblingLog "Before focused"))
+        , onFocusLost   (post (SiblingLog "Before lost"))
+        ]
+      withBounds (Rectangle 50 0 40 20) $ void $ runElement
+        ((menuButton SiblingMenu
+          [ text "File"
+          , isOpen open
+          , onOpenChanged (postWith SiblingOpen)
+          , onFocusGained (post (SiblingLog "Trigger focused"))
+          , onFocusLost   (post (SiblingLog "Trigger lost"))
+          , items [Open, Save]
+          , itemAttrs (\i ->
+              [ text (T.pack (show i))
+              , width (exactly 40), height (exactly 20)
+              , onFocusGained (post (SiblingLog (T.pack (show i) <> " focused")))
+              , onFocusLost   (post (SiblingLog (T.pack (show i) <> " lost")))
+              ])
+          ]) { elLayout = Layout (exactly 40) (exactly 20) TopLeft })
+      withBounds (Rectangle 100 0 40 20) $ void $ control $ resolve defaultControlConfig
+        [ elementId SiblingAfter
+        , onFocusGained (post (SiblingLog "After focused"))
+        , onFocusLost   (post (SiblingLog "After lost"))
+        ]
+  , update  = \m -> modify $ \(open, log') -> case m of
+      SiblingOpen b -> (b, log' ++ ["Open=" <> T.pack (show b)])
+      SiblingLog t  -> (open, log' ++ [t])
+  }
+
+-- | 'navSiblingApp'-only point: the trigger sits at (50,0)-(90,20).
+siblingTriggerPoint :: Point
+siblingTriggerPoint = Point 70 10
+
+-- | A single key press (with optional modifiers), mouse left resting on the
+-- trigger so it never spuriously reclicks anything.
+siblingKeyInput :: Key -> [Modifier] -> FrameInput
+siblingKeyInput k mods = (mkInput siblingTriggerPoint False) { keyEvents = [KeyEvent k mods False] }
+
 spec :: Spec
 spec = describe "Blink.Controls.MenuButton.menuButton" $ do
   it "opens on click, rendering its items' text through the popup layer" $ do
@@ -300,6 +356,26 @@ spec = describe "Blink.Controls.MenuButton.menuButton" $ do
       let (open, log') = resultState result
       open `shouldBe` False
       log' `shouldNotContain` ["Open activated", "Save activated"]
+      last log' `shouldBe` "Trigger focused"
+
+  describe "keyboard navigation across the menu's own focus scope boundary" $ do
+    it "Tab from the last item closes the menu and returns focus to the trigger, not a random root-scope control" $ do
+      handle <- configureEventDriven navSiblingApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- stepFrame handle (mkInput siblingTriggerPoint True)
+      _      <- stepFrame handle (mkInput siblingTriggerPoint False) -- opens, focuses Open
+      _      <- stepFrame handle (siblingKeyInput KeyDown [])        -- Open -> Save (last item)
+      result <- stepFrame handle (siblingKeyInput KeyTab [])
+      let (open, log') = resultState result
+      open `shouldBe` False
+      last log' `shouldBe` "Trigger focused"
+
+    it "Shift-Tab from the first item closes the menu and returns focus to the trigger, not a random root-scope control" $ do
+      handle <- configureEventDriven navSiblingApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- stepFrame handle (mkInput siblingTriggerPoint True)
+      _      <- stepFrame handle (mkInput siblingTriggerPoint False) -- opens, focuses Open
+      result <- stepFrame handle (siblingKeyInput KeyTab [Shift])
+      let (open, log') = resultState result
+      open `shouldBe` False
       last log' `shouldBe` "Trigger focused"
 
   describe "outside-click dismissal" $ do

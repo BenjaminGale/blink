@@ -774,7 +774,8 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       wasFocused   <- isFocused eid
       currentScope <- getCurrentScope
       applySelfFocus eid wasFocused
-      applyNavigationKeys wasFocused
+      -- NotFocusable can still be the ambient focus (a scope's own id) -- skip Tab so the scope handles it first.
+      when (ccFocusPolicy cc /= NotFocusable) (applyNavigationKeys wasFocused)
       nowFocused <- isFocused eid
       fireFocusChangeDirect cc (focusTransition wasFocused nowFocused)
       (m, styles) <- getStyleSet styleKey
