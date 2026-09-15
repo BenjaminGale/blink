@@ -33,18 +33,17 @@ module Blink.Controls.MenuBar
   , onOpenMenuChanged
   ) where
 
-import Control.Monad (forM_, void, when)
-import Data.List (find)
+import Control.Monad (void, when)
 
-import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig)
+import Blink.Controls.Button (ButtonConfig (..), defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement, lcText, renderLabelledContent)
+import Blink.Controls.Menu (menuList)
 import Blink.Controls.MenuBar.Style (menuBarListStyleKey, menuBarStyleKey)
 import Blink.Controls.ToggleButton
   (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleBase)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
-import Blink.Input (InputState (inputKeyEvents), Key (KeyDown, KeyEscape, KeyTab, KeyUp), KeyEvent (key))
-import Blink.Layout.Box (children, hBox, vBox)
+import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Popup (content, popup)
 import Blink.View
@@ -209,103 +208,16 @@ runMenuBarLabel tag cfg menuKey labelCfg rowBounds = do
           [ \opened -> concatMap ($ (if opened then Just menuKey else Nothing)) (mbrOnOpenChanged cfg) ]
       }
 
--- | A top-to-bottom list of buttons, one per item of the menu @menuKey@,
--- sized to fit its own content on both axes, drawn on a panel
--- background\/border (see 'menuBarListStyleKey') -- a plain, non-focusable
--- 'Blink.Controls.Control.control' wrapping it, purely for that chrome,
--- exactly as 'Blink.Controls.MenuButton.itemsElement' does for a single
--- menu button. Runs in its own focus scope ('MenuBarList' for @menuKey@),
--- with the same Escape\/Tab\/outside-click\/arrow-key handling.
--- @onBar@ is whether the click landed anywhere on the bar's own row (any
--- label, not just @menuKey@'s), captured by 'runMenuBarLabel' before this
--- list (a separate 'Element', run later, at a different ambient bounds) is
--- even queued -- so clicking a *different* label, which already handles
--- switching via its own activation, is never also treated as "outside"
--- here and closed a second time with a conflicting value.
+-- | The dropdown itself -- see 'Blink.Controls.Menu.menuList' for the
+-- shared engine. @onBar@ is whether the click landed anywhere on the bar's
+-- own row (any label, not just @menuKey@'s), captured by 'runMenuBarLabel'
+-- before this list (a separate 'Element', run later, at a different
+-- ambient bounds) is even queued -- so clicking a *different* label, which
+-- already handles switching via its own activation, is never also treated
+-- as "outside" here and closed a second time with a conflicting value.
 itemsElement
   :: (Ord e, Ord a, Ord b)
   => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> View e msg () -> Bool -> Element e msg
-itemsElement tag cfg menuKey close onBar = Element
-  { elLayout  = Layout fitContent fitContent TopLeft
-  , elMeasure = measureChrome menuBarListStyleKey box
-  , elRun     = void (control panelCfg)
-  }
-  where
-    menuItemsHere = mbrItemsFor cfg menuKey
-    box = vBox [ width fitContent, height fitContent, children (map toItemElement menuItemsHere) ]
-
-    -- ccElementId matters beyond styling: without one this never registers
-    -- a hit-rect, so a click on the panel background (not an item) would
-    -- reach straight through to whatever's behind the popup.
-    panelCfg = defaultControlConfig
-      { ccElementId   = Just (tag (MenuBarList menuKey))
-      , ccStyleKey    = menuBarListStyleKey
-      , ccFocusPolicy = NotFocusable
-      , ccContent     = const scopedRun
-      }
-
-    scopedRun = withFocusScope (tag (MenuBarList menuKey)) $ do
-      handleEscape
-      handleTabOut
-      handleOutsideClick
-      handleArrowKeys
-      elRun box
-
-    -- Closes on Escape whenever this list is open, regardless of which
-    -- item (if any) currently holds focus within it.
-    handleEscape = do
-      evs <- inputKeyEvents <$> getInput
-      case find ((== KeyEscape) . key) evs of
-        Just e  -> consumeKey (key e) >> close
-        Nothing -> pure ()
-
-    -- Closes on Tab\/Shift-Tab too: this list renders after the label's
-    -- own siblings, so a plain handoff can't reach them.
-    handleTabOut = do
-      evs <- inputKeyEvents <$> getInput
-      case find ((== KeyTab) . key) evs of
-        Just e  -> consumeKey (key e) >> close
-        Nothing -> pure ()
-
-    -- Closes on a completed click that lands neither on the bar's own row
-    -- (any label) nor anywhere in this list -- an item click is itself
-    -- within this list's own bounds, so it never reads as "outside" here;
-    -- it closes via its own activation instead (see 'toItemElement').
-    handleOutsideClick = do
-      released <- isButtonReleased
-      onList   <- isRegionHit
-      when (released && not onBar && not onList) close
-
-    -- Moves the highlight to the next/previous item on Down\/Up, wrapping
-    -- from the last item to the first (and back) in a single keypress.
-    handleArrowKeys = case menuItemsHere of
-      [] -> pure ()
-      is -> do
-        evs <- inputKeyEvents <$> getInput
-        forM_ (find ((`elem` [KeyDown, KeyUp]) . key) evs) $ \e -> do
-          consumeKey (key e)
-          current <- getFocus
-          let count        = length is
-              currentIndex = current >>= (`lookup` zip (map (tag . MenuBarItem menuKey) is) [0 ..])
-              nextIndex = case (key e, currentIndex) of
-                (KeyDown, Nothing) -> 0
-                (KeyDown, Just i)  -> (i + 1) `mod` count
-                (_,       Nothing) -> count - 1
-                (_,       Just i)  -> (i - 1) `mod` count
-          forM_ (itemAt is nextIndex) $ \item ->
-            requestFocus (Just (tag (MenuBarList menuKey))) (tag (MenuBarItem menuKey item))
-
-    itemAt xs idx = case drop idx xs of
-      (x : _) -> Just x
-      []      -> Nothing
-
-    toItemElement item = Element
-      { elLayout  = bcLayout itemCfg
-      , elMeasure = measureChrome (ccStyleKey (bcControl itemCfg)) (captionElement (lcText (bcLabelled itemCfg)))
-      , elRun     = do
-          r <- buttonBase (tag (MenuBarItem menuKey item)) itemCfg { bcControl = itemCtrl }
-          when (biActivated r) close
-      }
-      where
-        itemCfg  = resolve defaultButtonConfig (width fitContent : height fitContent : mbrItemAttrs cfg menuKey item)
-        itemCtrl = (bcControl itemCfg) { ccContent = const (renderLabelledContent (bcLabelled itemCfg)) }
+itemsElement tag cfg menuKey close onBar =
+  menuList menuBarListStyleKey (tag (MenuBarList menuKey)) (tag . MenuBarItem menuKey)
+    (mbrItemsFor cfg menuKey) (mbrItemAttrs cfg menuKey) close onBar

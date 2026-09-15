@@ -69,6 +69,7 @@ library
         Blink.Controls.TextInput
         Blink.Controls.ToggleButton
         Blink.Controls.ToggleGroup
+        Blink.Controls.Menu
         Blink.Controls.MenuButton
         Blink.Controls.MenuBar
         Blink.Controls.Table
