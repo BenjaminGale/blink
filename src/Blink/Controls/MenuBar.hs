@@ -41,7 +41,7 @@ import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), default
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement, lcText, renderLabelledContent)
 import Blink.Controls.Menu (menuList)
-import Blink.Controls.MenuBar.Style (menuBarListStyleKey, menuBarStyleKey)
+import Blink.Controls.MenuBar.Style (menuBarLabelStyleKey, menuBarListStyleKey, menuBarStyleKey)
 import Blink.Controls.ToggleButton
   (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleBase)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
@@ -162,10 +162,10 @@ menuBar tag attrs = Element
   }
   where
     cfg = resolve defaultMenuBarConfig attrs
-    rowBox rowBounds = hBox [ width fill, height fitContent, children (map (toLabel rowBounds) (mbrMenus cfg)) ]
+    rowBox rowBounds = hBox [ width fill, height fill, children (map (toLabel rowBounds) (mbrMenus cfg)) ]
     toLabel rowBounds menuKey = Element
       { elLayout  = bcLayout labelCfg
-      , elMeasure = measureChrome (ccStyleKey (bcControl labelCfg)) (captionElement (lcText (bcLabelled labelCfg)))
+      , elMeasure = measureChrome menuBarLabelStyleKey (captionElement (lcText (bcLabelled labelCfg)))
       , elRun     = void (runMenuBarLabel tag cfg menuKey labelCfg rowBounds)
       }
       where labelCfg = resolve defaultButtonConfig (width fitContent : height fitContent : mbrLabelAttrs cfg menuKey)
@@ -216,7 +216,10 @@ runMenuBarLabel tag cfg menuKey labelCfg rowBounds = do
   pure r
   where
     labelId   = tag (MenuBarLabel menuKey)
-    labelCtrl = (bcControl labelCfg) { ccContent = const (renderLabelledContent (bcLabelled labelCfg)) }
+    labelCtrl = (bcControl labelCfg)
+      { ccStyleKey = menuBarLabelStyleKey
+      , ccContent  = const (renderLabelledContent (bcLabelled labelCfg))
+      }
     toggleCfg = defaultToggleButtonConfig
       { tgcButton            = labelCfg { bcControl = labelCtrl }
       , tgcSelected          = mbrOpenMenu cfg == Just menuKey
