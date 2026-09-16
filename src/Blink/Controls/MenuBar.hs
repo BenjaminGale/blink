@@ -282,11 +282,11 @@ adjacentMenu allMenus menuKey dir = do
 -- already handles switching via its own activation, is never also treated
 -- as "outside" here and closed a second time with a conflicting value.
 --
--- Wraps 'menuList' with Left\/Right handling on top: since this list only
--- ever runs while its own menu is the open one, any Left\/Right pressed
--- this frame is unambiguously meant for switching to the adjacent menu
--- (see 'adjacentMenu'), the same reasoning 'menuList' already applies to
--- Escape and Tab.
+-- Wraps 'Blink.Controls.Menu.menuList' with Left\/Right handling on top: since
+-- this list only ever runs while its own menu is the open one, any
+-- Left\/Right pressed this frame is unambiguously meant for switching to the
+-- adjacent menu (see 'adjacentMenu'), the same reasoning
+-- 'Blink.Controls.Menu.menuList' already applies to Escape and Tab.
 itemsElement
   :: (Ord e, Ord a, Ord b)
   => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> View e msg () -> Bool -> (Key -> View e msg ())
