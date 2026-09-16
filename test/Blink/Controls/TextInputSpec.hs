@@ -1,19 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls.TextInputSpec (spec) where
 
-import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Data.Char (isDigit)
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute, post, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), insetRect, noBorder, uniform)
+import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), insetRect, uniform)
 import Blink.Input (InputState (..), emptyInputState, Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Style (..), Theme)
 import Blink.Controls.TextInput
   (TextInputConfig, displayFilter, inputFilter, onInput, onSubmit, placeholder, value, textInput)
 import Blink.View
@@ -24,32 +24,14 @@ data TestElement = Field | Other | Second deriving (Eq, Ord, Show)
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
-testColour :: Colour
-testColour = RGBA 0 0 0 1
-
 testBackground :: Colour
 testBackground = RGBA 1 1 1 1
 
 testStyle :: Style
-testStyle = Style
-  { styleBackground   = testBackground
-  , styleTextColour   = testColour
-  , styleTextAlign    = AlignLeft
-  , styleBorderColour = Nothing
-  }
-
-testMetrics :: Metrics
-testMetrics = Metrics
-  { metricsMargin      = uniform 10
-  , metricsPadding     = uniform 5
-  , metricsBorderEdges = noBorder
-  }
-
-testStyleSet :: StyleSet
-testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
+testStyle = (plainStyle testColour) { styleBackground = testBackground, styleTextAlign = AlignLeft }
 
 testTheme :: Theme TestElement
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
+testTheme = mkTestTheme standardMetrics (plainStyleSet testStyle)
 
 -- | Every character is a fixed 20px wide, for tests that need real
 -- character-offset math (click placement, scrolling).

@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls.RepeatButtonSpec (spec) where
 
-import qualified Data.Map.Strict as Map
 import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (forAll, choose)
@@ -10,13 +9,13 @@ import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import Blink.Controls.Button (onActivated)
 import Blink.Controls.ButtonBehaviour (ButtonBehaviourConfig (..), buttonBehaviourSpec, defaultButtonBehaviourConfig)
 import Blink.Controls.Control (Attribute, elementId, post)
+import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.RepeatButton (RepeatButtonConfig, initialDelay, repeatButton, repeatInterval)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (InputState (..), emptyInputState)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), fill)
-import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Theme)
 import Blink.View
 import Blink.Element (Element (..), runElement)
 
@@ -25,29 +24,8 @@ data TestElement = Ok deriving (Eq, Ord, Show)
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
-testColour :: Colour
-testColour = RGBA 0 0 0 1
-
-testStyle :: Style
-testStyle = Style
-  { styleBackground   = testColour
-  , styleTextColour   = testColour
-  , styleTextAlign    = AlignCenter
-  , styleBorderColour = Nothing
-  }
-
-testMetrics :: Metrics
-testMetrics = Metrics
-  { metricsMargin      = uniform 10
-  , metricsPadding     = uniform 5
-  , metricsBorderEdges = noBorder
-  }
-
-testStyleSet :: StyleSet
-testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
-
 testTheme :: Theme TestElement
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
+testTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
 
 noInput :: InputState
 noInput = emptyInputState { inputMousePosition = Point 200 200 }

@@ -12,11 +12,12 @@ import Blink.Controls.Control
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, post, postWith, resolve
   )
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
+import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (HitRect (..), InputState (..), Key (..), KeyEvent (..), Mouse (..), emptyInputState, emptyMouse)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonPressed))
+import Blink.Rendering (Colour (..), DrawCommand (..))
+import Blink.Style (StyleSet (..), Theme (..), VisualState (CommonPressed), styleBackground)
 import Blink.View
 import Blink.View.Context (ViewContext (ctxInput, ctxMouse))
 
@@ -32,29 +33,11 @@ rectC = Rectangle 100 0 50 100
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
-testColour :: Colour
-testColour = RGBA 0 0 0 1
-
-testStyle :: Style
-testStyle = Style
-  { styleBackground   = testColour
-  , styleTextColour   = testColour
-  , styleTextAlign    = AlignCenter
-  , styleBorderColour = Nothing
-  }
-
-testMetrics :: Metrics
-testMetrics = Metrics
-  { metricsMargin      = uniform 10
-  , metricsPadding     = uniform 5
-  , metricsBorderEdges = noBorder
-  }
-
 testStyleSet :: StyleSet
-testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
+testStyleSet = plainStyleSet (plainStyle testColour)
 
 testTheme :: Theme TestElement
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
+testTheme = mkTestTheme standardMetrics testStyleSet
 
 pressedColour :: Colour
 pressedColour = RGBA 1 1 1 1
@@ -65,7 +48,7 @@ pressedColour = RGBA 1 1 1 1
 pressedTestTheme :: Theme TestElement
 pressedTestTheme = testTheme
   { themeDefaultStyle =
-      ( testMetrics
+      ( standardMetrics
       , testStyleSet { styleOverrides = Map.singleton CommonPressed (\s -> s { styleBackground = pressedColour }) }
       )
   }

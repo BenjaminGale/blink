@@ -5,14 +5,15 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
+import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.ToggleButton (ToggleConfig, isSelected, toggleButton, toggleChecked)
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (InputState (..), emptyInputState)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Style (StyleSet (..), Theme, styleTextColour)
 import Blink.View
 import Blink.Element (elLayout, runElement)
 
@@ -21,38 +22,13 @@ data TestElement = Ok deriving (Eq, Ord, Show)
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
-testColour :: Colour
-testColour = RGBA 0 0 0 1
-
-testStyle :: Style
-testStyle = Style
-  { styleBackground   = testColour
-  , styleTextColour   = testColour
-  , styleTextAlign    = AlignCenter
-  , styleBorderColour = Nothing
-  }
-
-testMetrics :: Metrics
-testMetrics = Metrics
-  { metricsMargin      = uniform 10
-  , metricsPadding     = uniform 5
-  , metricsBorderEdges = noBorder
-  }
-
-testStyleSet :: StyleSet
-testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
-
 pressedColour :: Colour
 pressedColour = RGBA 1 1 1 1
 
 toggleTestTheme :: Theme TestElement
-toggleTestTheme = Theme
-  { themeElementStyles = Map.empty
-  , themeDefaultStyle  =
-      ( testMetrics
-      , testStyleSet { styleOverrides = Map.singleton toggleChecked (\s -> s { styleTextColour = pressedColour }) }
-      )
-  }
+toggleTestTheme = mkTestTheme standardMetrics
+  ((plainStyleSet (plainStyle testColour))
+    { styleOverrides = Map.singleton toggleChecked (\s -> s { styleTextColour = pressedColour }) })
 
 noInput :: InputState
 noInput = emptyInputState { inputMousePosition = Point 200 200 }

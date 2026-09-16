@@ -5,17 +5,18 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
+import Blink.Controls.Fixtures (plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.Label (text)
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.Style (iconStyleKey)
 import Blink.Controls.ToggleButton (ToggleConfig, isSelected)
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (InputState (..), emptyInputState)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonMouseOver))
+import Blink.Style (StyleSet (..), Theme (..), VisualState (CommonMouseOver), styleTextColour)
 import Blink.View
 import Blink.Element (elLayout, runElement)
 
@@ -24,26 +25,8 @@ data TestElement = OptionA deriving (Eq, Ord, Show)
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
-testColour :: Colour
-testColour = RGBA 0 0 0 1
-
-testStyle :: Style
-testStyle = Style
-  { styleBackground   = testColour
-  , styleTextColour   = testColour
-  , styleTextAlign    = AlignCenter
-  , styleBorderColour = Nothing
-  }
-
-testMetrics :: Metrics
-testMetrics = Metrics
-  { metricsMargin      = uniform 10
-  , metricsPadding     = uniform 5
-  , metricsBorderEdges = noBorder
-  }
-
 testStyleSet :: StyleSet
-testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
+testStyleSet = plainStyleSet (plainStyle testColour)
 
 -- | Distinct from 'testColour', so a test can tell whether the icon
 -- actually resolved 'iconHoverColour' the way it does elsewhere via
@@ -54,14 +37,14 @@ iconHoverColour = RGBA 0 0 1 1
 
 iconStyleSet :: StyleSet
 iconStyleSet = StyleSet
-  { styleBase      = testStyle
+  { styleBase      = plainStyle testColour
   , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleTextColour = iconHoverColour })
   }
 
 testTheme :: Theme TestElement
 testTheme = Theme
-  { themeElementStyles = Map.singleton iconStyleKey (testMetrics, iconStyleSet)
-  , themeDefaultStyle  = (testMetrics, testStyleSet)
+  { themeElementStyles = Map.singleton iconStyleKey (standardMetrics, iconStyleSet)
+  , themeDefaultStyle  = (standardMetrics, testStyleSet)
   }
 
 noInput :: InputState

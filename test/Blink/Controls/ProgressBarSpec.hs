@@ -1,19 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls.ProgressBarSpec (spec) where
 
-import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute, elementId, isEnabled)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
-import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform)
+import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (InputState (..), emptyInputState)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, bandWidth, progress, progressBar)
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Rendering (DrawCommand (..))
+import Blink.Style (Theme)
 import Blink.View
 import Blink.Element (runElement)
 
@@ -22,29 +22,8 @@ data TestElement = Bar deriving (Eq, Ord, Show)
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
-testColour :: Colour
-testColour = RGBA 0 0 0 1
-
-testStyle :: Style
-testStyle = Style
-  { styleBackground   = testColour
-  , styleTextColour   = testColour
-  , styleTextAlign    = AlignCenter
-  , styleBorderColour = Nothing
-  }
-
-testMetrics :: Metrics
-testMetrics = Metrics
-  { metricsMargin      = uniform 10
-  , metricsPadding     = uniform 5
-  , metricsBorderEdges = noBorder
-  }
-
-testStyleSet :: StyleSet
-testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
-
 testTheme :: Theme TestElement
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
+testTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
 
 noInput :: InputState
 noInput = emptyInputState { inputMousePosition = Point 200 200 }

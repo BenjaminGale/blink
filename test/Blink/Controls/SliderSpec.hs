@@ -6,12 +6,13 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute, FocusPolicy (..), focusPolicy, onFocusGained, onFocusLost, post, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
+import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics)
+import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform, uniformBorder)
 import Blink.Input (InputState (..), emptyInputState, Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.Slider (SliderConfig, onValueChanged, slider, step, thumbColourFor, value)
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Rendering (Colour (..), DrawCommand (..))
+import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.View
 import Blink.Element (runElement)
 
@@ -26,25 +27,13 @@ testColour :: Colour
 testColour = RGBA 0.4 0.4 0.4 1
 
 testStyle :: Style
-testStyle = Style
-  { styleBackground   = testColour
-  , styleTextColour   = testColour
-  , styleTextAlign    = AlignCenter
-  , styleBorderColour = Nothing
-  }
-
-testMetrics :: Metrics
-testMetrics = Metrics
-  { metricsMargin      = uniform 10
-  , metricsPadding     = uniform 5
-  , metricsBorderEdges = noBorder
-  }
+testStyle = plainStyle testColour
 
 testStyleSet :: StyleSet
-testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
+testStyleSet = plainStyleSet testStyle
 
 testTheme :: Theme TestElement
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
+testTheme = mkTestTheme standardMetrics testStyleSet
 
 noInput :: InputState
 noInput = emptyInputState { inputMousePosition = Point 200 200 }
@@ -100,7 +89,7 @@ grooveColour = RGBA 0.5 0.5 0.5 1
 withGrooveColour :: Theme TestElement
 withGrooveColour = Theme
   { themeElementStyles = Map.empty
-  , themeDefaultStyle  = (testMetrics, StyleSet (testStyle { styleBorderColour = Just grooveColour }) Map.empty)
+  , themeDefaultStyle  = (standardMetrics, StyleSet (testStyle { styleBorderColour = Just grooveColour }) Map.empty)
   }
 
 -- | The focus ring around the whole control.

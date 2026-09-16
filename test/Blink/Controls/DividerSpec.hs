@@ -9,12 +9,13 @@ import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBeha
 import Blink.Controls.Divider (DividerConfig, divider, orientation, thickness)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
-import Blink.Geometry (Alignment (Center), Orientation (..), Point (..), Rectangle (..), insetRect, noBorder, uniform)
+import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Geometry (Alignment (Center), Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (InputState (..), emptyInputState)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (exactly)
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Rendering (DrawCommand (..))
+import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.View
 import Blink.Element (align, runElement, width)
 
@@ -23,32 +24,17 @@ data TestElement = Bar deriving (Eq, Ord, Show)
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
-testColour :: Colour
-testColour = RGBA 0 0 0 1
-
--- | Set (unlike most other controls' test styles) since the drawn line
--- itself -- not some secondary decoration -- is what a divider's border
--- colour means; see 'noLineTheme' for the "nothing set" case.
+-- | Border set (unlike most other controls' test styles) since the drawn
+-- line itself -- not some secondary decoration -- is what a divider's
+-- border colour means; see 'noLineTheme' for the "nothing set" case.
 testStyle :: Style
-testStyle = Style
-  { styleBackground   = testColour
-  , styleTextColour   = testColour
-  , styleTextAlign    = AlignCenter
-  , styleBorderColour = Just testColour
-  }
-
-testMetrics :: Metrics
-testMetrics = Metrics
-  { metricsMargin      = uniform 10
-  , metricsPadding     = uniform 5
-  , metricsBorderEdges = noBorder
-  }
+testStyle = (plainStyle testColour) { styleBorderColour = Just testColour }
 
 testStyleSet :: StyleSet
-testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
+testStyleSet = plainStyleSet testStyle
 
 testTheme :: Theme TestElement
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
+testTheme = mkTestTheme standardMetrics testStyleSet
 
 -- | Same as 'testTheme' but with no border colour set, so the "draws
 -- nothing" tests below can confirm the line itself goes undrawn -- the
@@ -56,7 +42,7 @@ testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMet
 noLineTheme :: Theme TestElement
 noLineTheme = Theme
   { themeElementStyles = Map.empty
-  , themeDefaultStyle  = (testMetrics, testStyleSet { styleBase = testStyle { styleBorderColour = Nothing } })
+  , themeDefaultStyle  = (standardMetrics, testStyleSet { styleBase = testStyle { styleBorderColour = Nothing } })
   }
 
 noInput :: InputState

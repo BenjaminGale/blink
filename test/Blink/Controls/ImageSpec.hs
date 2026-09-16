@@ -1,44 +1,28 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls.ImageSpec (spec) where
 
-import qualified Data.Map.Strict as Map
 import Test.Hspec
 
+import Blink.Controls.Fixtures (mkTestTheme, plainMetrics, plainStyle, plainStyleSet, testColour)
 import Blink.Controls.Image (ImageConfig, fitHeight, fitWidth, image, preserveRatio, source)
-import Blink.Geometry (Point (..), Rectangle (..), Size (..), noBorder, uniform)
+import Blink.Geometry (Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (InputState (..), emptyInputState)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Theme, styleTextAlign)
 import Blink.View
 import Blink.Element (Attribute, runElement)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
-testStyle :: Style
-testStyle = Style
-  { styleBackground   = RGBA 0 0 0 1
-  , styleTextColour   = RGBA 0 0 0 1
-  , styleTextAlign    = AlignLeft
-  , styleBorderColour = Nothing
-  }
-
 -- | No margin\/padding\/border, so the drawn rectangle below reflects
 -- 'image'\'s own computed size directly, with no chrome inset to account
 -- for -- chrome itself is 'measureChrome', shared machinery already
 -- covered elsewhere.
-testMetrics :: Metrics
-testMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
-  }
-
-testStyleSet :: StyleSet
-testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = Map.empty }
-
 testTheme :: Theme ()
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
+testTheme = mkTestTheme
+  (plainMetrics (uniform 0) (uniform 0))
+  (plainStyleSet ((plainStyle testColour) { styleTextAlign = AlignLeft }))
 
 noInput :: InputState
 noInput = emptyInputState { inputMousePosition = Point 200 200 }
