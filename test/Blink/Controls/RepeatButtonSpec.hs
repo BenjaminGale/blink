@@ -9,15 +9,13 @@ import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import Blink.Controls.Button (onActivated)
 import Blink.Controls.ButtonBehaviour (ButtonBehaviourConfig (..), buttonBehaviourSpec, defaultButtonBehaviourConfig)
 import Blink.Controls.Control (Attribute, elementId, post)
-import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Controls.Fixtures (fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.RepeatButton (RepeatButtonConfig, initialDelay, repeatButton, repeatInterval)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
+import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Style (Theme)
 import Blink.View
-import Blink.Element (Element (..), runElement)
 
 data TestElement = Ok deriving (Eq, Ord, Show)
 
@@ -44,7 +42,7 @@ seedCtx = emptyViewContext testBounds noInput testTheme
 -- for the same reason. 'repeatButton' defaults to fitting its own caption
 -- height, same as 'Blink.Controls.Button.button'.
 renderWithId :: [Attribute'] -> View TestElement String ()
-renderWithId attrs = runElement (repeatButton Ok attrs) { elLayout = Layout fill fill TopLeft }
+renderWithId attrs = fullSizeAt (repeatButton Ok attrs)
 
 taggedActivated :: [Attribute']
 taggedActivated = [onActivated (post "Activated")]

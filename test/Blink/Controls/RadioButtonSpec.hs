@@ -5,19 +5,17 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
-import Blink.Controls.Fixtures (hitRectFor, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Controls.Fixtures (fullSizeAt, hitRectFor, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
 import Blink.Controls.Label (text)
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.Style (iconStyleKey)
 import Blink.Controls.ToggleButton (ToggleConfig, isSelected)
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
+import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (StyleSet (..), Theme (..), VisualState (CommonMouseOver), styleTextColour)
 import Blink.View
-import Blink.Element (elLayout, runElement)
 
 data TestElement = OptionA deriving (Eq, Ord, Show)
 
@@ -56,17 +54,11 @@ type Attribute' = Attribute (ToggleConfig TestElement String)
 seedCtx :: ViewContext TestElement String
 seedCtx = emptyViewContext testBounds noInput testTheme
 
--- | The behaviour contracts below are about interaction, not sizing --
--- they're written against a radio button that fills its given bounds
--- entirely, as every control did before controls reported their own
--- 'Layout'. 'radioButton' now defaults to sizing itself to its own content,
--- so these tests ask for the old full-size behaviour explicitly, the same
--- way any other caller would.
 fullSize :: [Attribute'] -> View TestElement String ()
-fullSize attrs = runElement (radioButton OptionA attrs) { elLayout = Layout fill fill TopLeft }
+fullSize attrs = fullSizeAt (radioButton OptionA attrs)
 
 start :: [Attribute'] -> IO (ViewContext TestElement String)
-start attrs = snd <$> runView (fullSize attrs) seedCtx
+start attrs = startAt seedCtx (fullSize attrs)
 
 spec :: Spec
 spec = describe "Blink.Controls.RadioButton" $ do

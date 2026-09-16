@@ -7,17 +7,15 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute, post, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
+import Blink.Controls.Fixtures (fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Geometry (Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Style (..), Theme)
 import Blink.Controls.TextInput
   (TextInputConfig, displayFilter, inputFilter, onInput, onSubmit, placeholder, value, textInput)
 import Blink.View
-import Blink.Element (elLayout, runElement)
 
 data TestElement = Field | Other | Second deriving (Eq, Ord, Show)
 
@@ -70,14 +68,8 @@ seedWith :: TextMeasurer -> ViewContext TestElement String
 seedWith measurer = withMeasurers (noOpMeasurers { msrText = measurer })
                        (emptyViewContext testBounds noInput testTheme)
 
--- | The behaviour \/ rendering contracts below are about interaction, not
--- sizing -- they're written against a field that fills its given bounds
--- entirely, as every control did before controls reported their own
--- 'Layout'. 'textInput' now defaults to sizing its height to one line of
--- text, so every call site here asks for the old full-size behaviour
--- explicitly, the same way any other caller would.
 fullSizeTextInput :: TestElement -> [Attribute'] -> View TestElement String ()
-fullSizeTextInput eid attrs = runElement (textInput eid attrs) { elLayout = Layout fill fill TopLeft }
+fullSizeTextInput eid attrs = fullSizeAt (textInput eid attrs)
 
 -- | 'Field' run alongside a second, already-focused element, so 'Field'
 -- itself never gains focus.

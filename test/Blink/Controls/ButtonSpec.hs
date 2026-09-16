@@ -6,7 +6,8 @@ import Test.Hspec
 import Blink.Controls.Button (ButtonActivation (..), ButtonConfig, activation, button, onActivated)
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec, defaultButtonBehaviourConfig)
 import Blink.Controls.Control (Attribute, post)
-import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Controls.Fixtures
+  (fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
 import Blink.Controls.Label (text)
 import qualified Data.Text as T
 
@@ -34,17 +35,11 @@ type Attribute' = Attribute (ButtonConfig TestElement String)
 seedCtx :: ViewContext TestElement String
 seedCtx = emptyViewContext testBounds noInput testTheme
 
--- | The behaviour contracts below (hover, click, focus, ...) are about
--- interaction, not sizing -- they're written against a button that fills
--- its given bounds entirely, as every control did before controls reported
--- their own 'Layout'. 'button' now defaults to sizing its height to its
--- own content, so these tests ask for the old full-size behaviour
--- explicitly, the same way any other caller would.
 fullSize :: [Attribute'] -> View TestElement String ()
-fullSize attrs = runElement (button Ok attrs) { elLayout = Layout fill fill TopLeft }
+fullSize attrs = fullSizeAt (button Ok attrs)
 
 start :: [Attribute'] -> IO (ViewContext TestElement String)
-start attrs = snd <$> runView (fullSize attrs) seedCtx
+start attrs = startAt seedCtx (fullSize attrs)
 
 spec :: Spec
 spec = describe "Blink.Controls.Button" $ do

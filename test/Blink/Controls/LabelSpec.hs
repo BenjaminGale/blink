@@ -7,16 +7,15 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
-import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
+import Blink.Controls.Fixtures
+  (fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
+import Blink.Geometry (Point (..), Rectangle (..), Size (..))
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.Label (LabelConfig, label, mnemonic, target, text)
-import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (DrawCommand (..), TextAlign (..))
 import Blink.Style (Theme)
 import Blink.View
-import Blink.Element (elLayout, runElement)
 
 data TestElement = Caption | Target deriving (Eq, Ord, Show)
 
@@ -37,24 +36,18 @@ type Attribute' = Attribute (LabelConfig TestElement String)
 seedCtx :: ViewContext TestElement String
 seedCtx = emptyViewContext testBounds noInput testTheme
 
--- | The behaviour contracts below are about interaction, not sizing --
--- they're written against a label that fills its given bounds entirely, as
--- every control did before controls reported their own 'Layout'. 'label'
--- now defaults to sizing its height to its own content, so these tests ask
--- for the old full-size behaviour explicitly, the same way any other
--- caller would.
 fullSize :: [Attribute'] -> View TestElement String ()
-fullSize attrs = runElement (label Caption attrs) { elLayout = Layout fill fill TopLeft }
+fullSize attrs = fullSizeAt (label Caption attrs)
 
 start :: [Attribute'] -> IO (ViewContext TestElement String)
-start attrs = snd <$> runView (fullSize attrs) seedCtx
+start attrs = startAt seedCtx (fullSize attrs)
 
 -- | Same as 'seedCtx', but with Alt reported held this frame.
 altHeldCtx :: ViewContext TestElement String
 altHeldCtx = emptyViewContext testBounds (noInput { inputAltHeld = True }) testTheme
 
 startWithAltHeld :: [Attribute'] -> IO (ViewContext TestElement String)
-startWithAltHeld attrs = snd <$> runView (fullSize attrs) altHeldCtx
+startWithAltHeld attrs = startAt altHeldCtx (fullSize attrs)
 
 -- | Where 'mnemonic'\'s underline lands for @\"Hello\"@\'s @\'e\'@ under
 -- 'testStyle'\'s 'AlignCenter' and 'noOpMeasurers' (every measurement,
@@ -89,8 +82,7 @@ tallAltHeldCtx =
     (emptyViewContext tallBounds (noInput { inputAltHeld = True }) testTheme)
 
 startTall :: [Attribute'] -> IO (ViewContext TestElement String)
-startTall attrs =
-  snd <$> runView (runElement (label Caption attrs) { elLayout = Layout fill fill TopLeft }) tallAltHeldCtx
+startTall attrs = startAt tallAltHeldCtx (fullSize attrs)
 
 -- | Same shape as 'fakeTextMeasurer', but 40px tall -- taller than
 -- 'shortBounds'\'s own content rect, standing in for a real font whose
@@ -107,9 +99,10 @@ shortBounds = Rectangle 0 0 200 50
 
 startShortOverflowing :: [Attribute'] -> IO (ViewContext TestElement String)
 startShortOverflowing attrs =
-  snd <$> runView (runElement (label Caption attrs) { elLayout = Layout fill fill TopLeft })
+  startAt
     (withMeasurers (noOpMeasurers { msrText = fakeOverflowingTextMeasurer })
       (emptyViewContext shortBounds (noInput { inputAltHeld = True }) testTheme))
+    (fullSize attrs)
 
 spec :: Spec
 spec = describe "Blink.Controls.Label" $ do

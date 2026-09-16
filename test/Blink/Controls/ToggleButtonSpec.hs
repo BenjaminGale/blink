@@ -5,16 +5,15 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
-import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Controls.Fixtures
+  (fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
 import Blink.Controls.ToggleButton (ToggleConfig, isSelected, toggleButton, toggleChecked)
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
-import Blink.Layout.Constraints (Layout (..), fill)
+import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (StyleSet (..), Theme, styleTextColour)
 import Blink.View
-import Blink.Element (elLayout, runElement)
 
 data TestElement = Ok deriving (Eq, Ord, Show)
 
@@ -37,13 +36,11 @@ type Attribute' = Attribute (ToggleConfig TestElement String)
 seedCtx :: ViewContext TestElement String
 seedCtx = emptyViewContext testBounds noInput toggleTestTheme
 
--- | See 'Blink.Controls.ButtonSpec.fullSize' -- same reasoning, for
--- 'toggleButton'.
 fullSize :: [Attribute'] -> View TestElement String ()
-fullSize attrs = runElement (toggleButton Ok attrs) { elLayout = Layout fill fill TopLeft }
+fullSize attrs = fullSizeAt (toggleButton Ok attrs)
 
 start :: [Attribute'] -> IO (ViewContext TestElement String)
-start attrs = snd <$> runView (fullSize attrs) seedCtx
+start attrs = startAt seedCtx (fullSize attrs)
 
 spec :: Spec
 spec = describe "Blink.Controls.ToggleButton" $ do

@@ -10,14 +10,19 @@ module Blink.Controls.Fixtures
   , mkTestTheme
   , noInput
   , hitRectFor
+  , fullSizeAt
+  , startAt
   ) where
 
 import qualified Data.Map.Strict as Map
 
-import Blink.Geometry (Insets, Point (..), Rectangle, insetRect, noBorder, uniform)
+import Blink.Element (Element, elLayout, runElement)
+import Blink.Geometry (Alignment (TopLeft), Insets, Point (..), Rectangle, insetRect, noBorder, uniform)
 import Blink.Input (InputState (..), emptyInputState)
+import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.View (View, ViewContext, runView)
 
 testColour :: Colour
 testColour = RGBA 0 0 0 1
@@ -60,3 +65,14 @@ noInput = emptyInputState { inputMousePosition = Point 200 200 }
 -- with 'standardMetrics'\'s 10px margin.
 hitRectFor :: Rectangle -> Rectangle
 hitRectFor = insetRect (metricsMargin standardMetrics)
+
+-- | Runs @el@ forced to fill its given bounds entirely -- the behaviour
+-- every control had before controls started reporting their own
+-- 'Layout' and sizing to content. Behaviour contracts written against
+-- "fills the bounds" ask for this explicitly, the same way any other
+-- caller would.
+fullSizeAt :: Element e msg -> View e msg ()
+fullSizeAt el = runElement el { elLayout = Layout fill fill TopLeft }
+
+startAt :: ViewContext e msg -> View e msg () -> IO (ViewContext e msg)
+startAt ctx v = snd <$> runView v ctx
