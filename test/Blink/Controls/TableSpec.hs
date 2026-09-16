@@ -6,7 +6,6 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, postWith)
 import Blink.Controls.List
   (ItemState, ListPart (..), SingleSelection, isItem, onSelectionChanged, rowHeight, selectAt, selectFirst, selection, unselected)
-import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Controls.Table
 import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
 import Blink.Element (Element (..), runElement, width)
@@ -84,6 +83,22 @@ sortableColumns =
 renderSortableTable :: [Attribute (TableConfig SingleSelection TestElem String Int)] -> View TestElem String ()
 renderSortableTable attrs = runElement $ table Part
   ( columns sortableColumns
+  : width (exactly 100)
+  : rowHeight 20
+  : attrs
+  )
+
+-- | Like 'testColumns', but sortable -- for 'scrollOnSortSpec', which needs
+-- both a sort and, via 'cellMarker', each row's actually-rendered position.
+sortableMarkedColumns :: [ColumnConfig TestElem String Int]
+sortableMarkedColumns =
+  [ column [header (marker "H-Name"), cellWidth (ColumnFixed 40), cell (cellMarker "Name"), sortable True]
+  , column [header (marker "H-Age"), cellWidth (ColumnFixed 60), cell (cellMarker "Age"), sortable True]
+  ]
+
+renderSortableMarkedTable :: [Attribute (TableConfig SingleSelection TestElem String Int)] -> View TestElem String ()
+renderSortableMarkedTable attrs = runElement $ table Part
+  ( columns sortableMarkedColumns
   : width (exactly 100)
   : rowHeight 20
   : attrs
@@ -266,24 +281,28 @@ scrollOnSortSpec :: Spec
 scrollOnSortSpec = describe "table sorting scrolls the selection into view" $
   it "scrolls a row a sort moved off-screen back into view" $ do
     -- Header (20px) leaves a 30px row viewport (1.5 of 5 20px rows).
-    let shortBounds   = Rectangle 0 0 100 50
-        fiveItems     = [1, 2, 3, 4, 5]
-        cursorOnFirst = selectFirst fiveItems
-        tableScrollEid = Part (TableRow (ListScrollBar ScrollBar))
+    let shortBounds     = Rectangle 0 0 100 50
+        viewportTop     = 20 -- header height
+        viewportBottom  = 50 -- shortBounds height
+        fiveItems       = [1, 2, 3, 4, 5]
+        cursorOnFirst   = selectFirst fiveItems
+        -- The Y out of a marker message like "Name5@0.0,80.0+40.0".
+        rowY m = read (takeWhile (/= '+') (drop 1 (dropWhile (/= ',') m))) :: Double
 
     step1 <- runInteractions shortBounds seedCtx
-      (renderSortableTable [selection cursorOnFirst])
+      (renderSortableMarkedTable [selection cursorOnFirst])
       []
       [Wait 1]
 
     -- Simulates a sort moving the selected item from the top row to the
     -- last, with no click or key press on the table itself driving it.
     result <- runInteractions shortBounds (resultContext step1)
-      (renderSortableTable [selection (selectAt 4 fiveItems), sortedBy (Just (0, Ascending))])
+      (renderSortableMarkedTable [selection (selectAt 4 fiveItems), sortedBy (Just (0, Ascending))])
       []
       [Wait 1]
 
-    contextScrollState tableScrollEid (resultContext result) `shouldBe` 1
+    let selectedRowY = rowY (head (filter (\m -> take 5 m == "Name5") (resultMessages result)))
+    selectedRowY `shouldSatisfy` \y -> y >= viewportTop && y < viewportBottom
 
 focusSpec :: Spec
 focusSpec = describe "table header focus" $
