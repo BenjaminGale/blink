@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls.ToggleGroupSpec (spec) where
 
-import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
@@ -13,12 +12,11 @@ import Blink.Controls.ToggleGroup
   ( ToggleGroupConfig, ToggleGroupPart (..), allowDeselect, defaultToggleGroupConfig
   , items, onSelectionChanged, selectedItem, tggSelected, toggleAttributes, toggleButtonGroup
   )
-import Blink.Controls.Fixtures (noInput)
+import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
 import Blink.Generators (genPointIn)
-import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
+import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Layout.Constraints (exactly, fill)
-import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Theme)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.View
 import Blink.Element (height, runElement, width)
@@ -41,22 +39,7 @@ tag ToggleGroup         = Group
 tag (ToggleGroupItem s) = Item s
 
 testTheme :: Theme TestElement
-testTheme = Theme
-  { themeElementStyles = Map.empty
-  , themeDefaultStyle  = (emptyMetrics, StyleSet emptyStyle Map.empty)
-  }
-  where
-    emptyStyle = Style
-      { styleBackground   = RGBA 0 0 0 1
-      , styleTextColour   = RGBA 0 0 0 1
-      , styleTextAlign    = AlignCenter
-      , styleBorderColour = Nothing
-      }
-    emptyMetrics = Metrics
-      { metricsMargin      = uniform 0
-      , metricsPadding     = uniform 0
-      , metricsBorderEdges = noBorder
-      }
+testTheme = mkTestTheme zeroMetrics (plainStyleSet (plainStyle testColour))
 
 -- | Three equal 100px-wide slots, filling 'groupBounds' with no gaps: Small
 -- at x 0-100, Medium at 100-200, Large at 200-300.

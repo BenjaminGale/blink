@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls.TreeTableSpec (spec) where
 
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Tree (Tree (..))
 import Test.Hspec
@@ -11,14 +10,13 @@ import Blink.Controls.List
   (Direction (..), ItemState, SingleSelection, isItem, moveCursor, onSelectionChanged, rowHeight, selectItem, selection, unselected)
 import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..), cell, cellWidth, column, sortable)
 import Blink.Controls.TreeTable
-import Blink.Controls.Fixtures (noInput)
+import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
 import Blink.Element (Element (..), runElement, width)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Theme)
 import Blink.View
 
 -- | src
@@ -34,22 +32,7 @@ forest0 =
 newtype TestElem = Part (TreeTablePart String) deriving (Eq, Ord, Show)
 
 testTheme :: Theme TestElem
-testTheme = Theme
-  { themeElementStyles = Map.empty
-  , themeDefaultStyle  = (emptyMetrics, StyleSet emptyStyle Map.empty)
-  }
-  where
-    emptyStyle = Style
-      { styleBackground   = RGBA 0 0 0 1
-      , styleTextColour   = RGBA 0 0 0 1
-      , styleTextAlign    = AlignCenter
-      , styleBorderColour = Nothing
-      }
-    emptyMetrics = Metrics
-      { metricsMargin      = uniform 0
-      , metricsPadding     = uniform 0
-      , metricsBorderEdges = noBorder
-      }
+testTheme = mkTestTheme zeroMetrics (plainStyleSet (plainStyle testColour))
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 90

@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls.ListSpec (spec) where
 
-import qualified Data.Map.Strict as Map
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (fromJust)
 import Test.Hspec
@@ -9,14 +8,13 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, postWith, resolve)
 import Blink.Controls.List
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
-import Blink.Controls.Fixtures (noInput)
+import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
 import Blink.Element (Element (..), height, runElement, width)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Theme)
 import Blink.View
 
 -- * Pure model tests
@@ -266,22 +264,7 @@ testItems :: [Int]
 testItems = [1, 2, 3]
 
 testTheme :: Theme TestElem
-testTheme = Theme
-  { themeElementStyles = Map.empty
-  , themeDefaultStyle  = (emptyMetrics, StyleSet emptyStyle Map.empty)
-  }
-  where
-    emptyStyle = Style
-      { styleBackground   = RGBA 0 0 0 1
-      , styleTextColour   = RGBA 0 0 0 1
-      , styleTextAlign    = AlignCenter
-      , styleBorderColour = Nothing
-      }
-    emptyMetrics = Metrics
-      { metricsMargin      = uniform 0
-      , metricsPadding     = uniform 0
-      , metricsBorderEdges = noBorder
-      }
+testTheme = mkTestTheme zeroMetrics (plainStyleSet (plainStyle testColour))
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 60

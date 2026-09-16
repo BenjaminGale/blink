@@ -9,12 +9,12 @@ import Blink.Controls.Control
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.ScrollBar
   (ScrollBarConfig, ScrollBarPart (..), scrollBar, scrollBarButtonStyleKey, scrollBarOrientation, step)
-import Blink.Controls.Fixtures (noInput)
-import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), noBorder, uniform)
+import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
+import Blink.Geometry (Orientation (..), Point (..), Rectangle (..))
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonMouseOver))
+import Blink.Rendering (Colour (..), DrawCommand (..))
+import Blink.Style (StyleSet (..), Theme (..), VisualState (CommonMouseOver), styleBase, styleTextColour)
 import Blink.View
 import Blink.Element (runElement)
 
@@ -30,26 +30,8 @@ tag = Part
 scrollEid :: TestElement
 scrollEid = tag ScrollBar
 
-testColour :: Colour
-testColour = RGBA 0 0 0 1
-
 testTheme :: Theme TestElement
-testTheme = Theme
-  { themeElementStyles = Map.empty
-  , themeDefaultStyle  = (emptyMetrics, StyleSet emptyStyle Map.empty)
-  }
-  where
-    emptyStyle = Style
-      { styleBackground   = testColour
-      , styleTextColour   = testColour
-      , styleTextAlign    = AlignCenter
-      , styleBorderColour = Nothing
-      }
-    emptyMetrics = Metrics
-      { metricsMargin      = uniform 0
-      , metricsPadding     = uniform 0
-      , metricsBorderEdges = noBorder
-      }
+testTheme = mkTestTheme zeroMetrics (plainStyleSet (plainStyle testColour))
 
 -- | A vertical scrollbar (the default orientation) 16px wide, 100px tall:
 -- the decrement arrow occupies y 0-16, the track y 16-84, the increment

@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls.TableSpec (spec) where
 
-import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute, postWith)
@@ -9,13 +8,13 @@ import Blink.Controls.List
   (ItemState, ListPart (..), SingleSelection, isItem, onSelectionChanged, rowHeight, selectAt, selectFirst, selection, unselected)
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Controls.Table
-import Blink.Controls.Fixtures (noInput)
+import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
 import Blink.Element (Element (..), runElement, width)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Palette (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Rendering (Colour (..))
+import Blink.Style (Palette (..), Theme)
 import Blink.Style.Defaults (defaultTheme)
 import Blink.View
 
@@ -25,22 +24,7 @@ newtype TestElem = Part (TablePart Int) deriving (Eq, Ord, Show)
 -- 80px-tall scene forces scrolling (see 'scrollingSpec') while a 90px
 -- one shows everything at once (see 'widgetSpec').
 testTheme :: Theme TestElem
-testTheme = Theme
-  { themeElementStyles = Map.empty
-  , themeDefaultStyle  = (emptyMetrics, StyleSet emptyStyle Map.empty)
-  }
-  where
-    emptyStyle = Style
-      { styleBackground   = RGBA 0 0 0 1
-      , styleTextColour   = RGBA 0 0 0 1
-      , styleTextAlign    = AlignCenter
-      , styleBorderColour = Nothing
-      }
-    emptyMetrics = Metrics
-      { metricsMargin      = uniform 0
-      , metricsPadding     = uniform 0
-      , metricsBorderEdges = noBorder
-      }
+testTheme = mkTestTheme zeroMetrics (plainStyleSet (plainStyle testColour))
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 90

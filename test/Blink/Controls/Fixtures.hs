@@ -6,6 +6,7 @@ module Blink.Controls.Fixtures
   , plainStyle
   , plainMetrics
   , standardMetrics
+  , zeroMetrics
   , plainStyleSet
   , mkTestTheme
   , noInput
@@ -49,6 +50,11 @@ plainMetrics margin padding = Metrics
 -- tests render against.
 standardMetrics :: Metrics
 standardMetrics = plainMetrics (uniform 10) (uniform 5)
+
+-- | No margin, no padding, no border -- the convention list/tree/table
+-- family tests render against.
+zeroMetrics :: Metrics
+zeroMetrics = plainMetrics (uniform 0) (uniform 0)
 
 plainStyleSet :: Style -> StyleSet
 plainStyleSet s = StyleSet { styleBase = s, styleOverrides = Map.empty }
