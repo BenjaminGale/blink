@@ -10,7 +10,7 @@ import Blink.Controls.Fixtures (contentRectFor, hitRectFor, mkTestTheme, noInput
 import Blink.Geometry (Point (..), Rectangle (..), uniformBorder)
 import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Controls.Slider (SliderConfig, onValueChanged, slider, step, thumbColourFor, value)
+import Blink.Controls.Slider (SliderConfig, onValueChanged, slider, step, value)
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..))
 import Blink.View
@@ -69,6 +69,13 @@ thumbColouredAt c x = FillRect (contentRect { rectX = x, rectY = rectY contentRe
 -- | The thumb in the plain (not hovered, not dragging) colour.
 thumbAt :: Double -> DrawCommand
 thumbAt = thumbColouredAt testColour
+
+-- | 'testColour' darkened toward black by the same factors
+-- 'Blink.Controls.Slider.thumbColourFor' applies on hover (0.85) and drag
+-- (0.7), computed rather than hand-rounded so this matches exactly.
+hoverThumbColour, dragThumbColour :: Colour
+hoverThumbColour = RGBA (0.4 * 0.85) (0.4 * 0.85) (0.4 * 0.85) 1
+dragThumbColour  = RGBA (0.4 * 0.7) (0.4 * 0.7) (0.4 * 0.7) 1
 
 -- | The full-width groove, at the same vertical position as the filled
 -- track 'filledAt' draws over.
@@ -158,13 +165,13 @@ spec = describe "Blink.Controls.Slider" $ do
     it "darkens only the thumb, not the filled track, on hover" $ do
       result <- runInteractions testBounds seedCtx (runElement (slider Handle [value 0.5])) [MoveTo midPoint] []
       let draws = resultDraws result
-      draws `shouldContain` [thumbColouredAt (thumbColourFor False True testColour) 43]
+      draws `shouldContain` [thumbColouredAt hoverThumbColour 43]
       draws `shouldContain` [filledAt 29]
 
     it "darkens the thumb further while dragging than while merely hovering" $ do
       result <- runInteractions testBounds seedCtx (runElement (slider Handle [value 0])) [] [MouseDown midPoint]
       let draws = resultDraws result
-      draws `shouldContain` [thumbColouredAt (thumbColourFor True True testColour) 21]
+      draws `shouldContain` [thumbColouredAt dragThumbColour 21]
       draws `shouldContain` [filledAt 0]
 
   describe "dragging" $ do
