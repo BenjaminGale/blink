@@ -5,12 +5,11 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
-import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.ToggleButton (ToggleConfig, isSelected, toggleButton, toggleChecked)
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, uniform)
-import Blink.Input (InputState (..), emptyInputState)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (StyleSet (..), Theme, styleTextColour)
@@ -30,13 +29,8 @@ toggleTestTheme = mkTestTheme standardMetrics
   ((plainStyleSet (plainStyle testColour))
     { styleOverrides = Map.singleton toggleChecked (\s -> s { styleTextColour = pressedColour }) })
 
-noInput :: InputState
-noInput = emptyInputState { inputMousePosition = Point 200 200 }
-
--- | The margin-inset hit area for a control rendered at 'testBounds' with
--- the 10px margin every test style here uses.
 hitRect :: Rectangle
-hitRect = insetRect (uniform 10) testBounds
+hitRect = hitRectFor testBounds
 
 type Attribute' = Attribute (ToggleConfig TestElement String)
 

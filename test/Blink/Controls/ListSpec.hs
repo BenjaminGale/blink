@@ -9,9 +9,10 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, postWith, resolve)
 import Blink.Controls.List
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
+import Blink.Controls.Fixtures (noInput)
 import Blink.Element (Element (..), height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
-import Blink.Input (InputState (..), emptyInputState, Key (..), Modifier (..))
+import Blink.Input (Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), TextAlign (..))
@@ -284,9 +285,6 @@ testTheme = Theme
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 60
-
-noInput :: InputState
-noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 seedCtx :: ViewContext TestElem String
 seedCtx = emptyViewContext testBounds noInput testTheme

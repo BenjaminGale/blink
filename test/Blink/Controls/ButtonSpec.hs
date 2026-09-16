@@ -6,12 +6,11 @@ import Test.Hspec
 import Blink.Controls.Button (ButtonActivation (..), ButtonConfig, activation, button, onActivated)
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec, defaultButtonBehaviourConfig)
 import Blink.Controls.Control (Attribute, post)
-import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.Label (text)
 import qualified Data.Text as T
 
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), insetRect, uniform)
-import Blink.Input (InputState (..), emptyInputState)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Rendering (DrawCommand (..), TextAlign (..))
@@ -27,13 +26,8 @@ testBounds = Rectangle 0 0 100 100
 testTheme :: Theme TestElement
 testTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
 
-noInput :: InputState
-noInput = emptyInputState { inputMousePosition = Point 200 200 }
-
--- | The margin-inset hit area for a control rendered at 'testBounds' with
--- the 10px margin every test style here uses.
 hitRect :: Rectangle
-hitRect = insetRect (uniform 10) testBounds
+hitRect = hitRectFor testBounds
 
 type Attribute' = Attribute (ButtonConfig TestElement String)
 

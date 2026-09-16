@@ -3,10 +3,9 @@ module Blink.Controls.ImageSpec (spec) where
 
 import Test.Hspec
 
-import Blink.Controls.Fixtures (mkTestTheme, plainMetrics, plainStyle, plainStyleSet, testColour)
+import Blink.Controls.Fixtures (mkTestTheme, noInput, plainMetrics, plainStyle, plainStyleSet, testColour)
 import Blink.Controls.Image (ImageConfig, fitHeight, fitWidth, image, preserveRatio, source)
-import Blink.Geometry (Point (..), Rectangle (..), Size (..), uniform)
-import Blink.Input (InputState (..), emptyInputState)
+import Blink.Geometry (Rectangle (..), Size (..), uniform)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Theme, styleTextAlign)
 import Blink.View
@@ -23,9 +22,6 @@ testTheme :: Theme ()
 testTheme = mkTestTheme
   (plainMetrics (uniform 0) (uniform 0))
   (plainStyleSet ((plainStyle testColour) { styleTextAlign = AlignLeft }))
-
-noInput :: InputState
-noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 -- | Reports a fixed 100x50 natural size for any path, so the fit/
 -- preserve-ratio maths below have a known, non-square starting point.

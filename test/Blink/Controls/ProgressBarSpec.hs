@@ -7,9 +7,8 @@ import Blink.Controls.Control (Attribute, elementId, isEnabled)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
-import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics, testColour)
-import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform)
-import Blink.Input (InputState (..), emptyInputState)
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, bandWidth, progress, progressBar)
 import Blink.Rendering (DrawCommand (..))
@@ -25,13 +24,8 @@ testBounds = Rectangle 0 0 100 100
 testTheme :: Theme TestElement
 testTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
 
-noInput :: InputState
-noInput = emptyInputState { inputMousePosition = Point 200 200 }
-
--- | The margin-inset hit area for a control rendered at 'testBounds' with
--- the 10px margin every test style here uses.
 hitRect :: Rectangle
-hitRect = insetRect (uniform 10) testBounds
+hitRect = hitRectFor testBounds
 
 -- | Content rect for 'testBounds': inset by margin (10) then padding (5).
 contentRect :: Rectangle

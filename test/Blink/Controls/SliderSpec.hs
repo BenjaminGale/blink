@@ -6,9 +6,9 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute, FocusPolicy (..), focusPolicy, onFocusGained, onFocusLost, post, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics)
-import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform, uniformBorder)
-import Blink.Input (InputState (..), emptyInputState, Key (..))
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics)
+import Blink.Geometry (Point (..), Rectangle (..), uniformBorder)
+import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.Slider (SliderConfig, onValueChanged, slider, step, thumbColourFor, value)
 import Blink.Rendering (Colour (..), DrawCommand (..))
@@ -35,13 +35,8 @@ testStyleSet = plainStyleSet testStyle
 testTheme :: Theme TestElement
 testTheme = mkTestTheme standardMetrics testStyleSet
 
-noInput :: InputState
-noInput = emptyInputState { inputMousePosition = Point 200 200 }
-
--- | The margin-inset hit area for a control rendered at 'testBounds' with
--- the 10px margin every test style here uses.
 hitRect :: Rectangle
-hitRect = insetRect (uniform 10) testBounds
+hitRect = hitRectFor testBounds
 
 -- | Content rect for 'testBounds': inset by margin (10) then padding (5).
 contentRect :: Rectangle

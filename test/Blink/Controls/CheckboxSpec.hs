@@ -6,13 +6,12 @@ import Test.Hspec
 
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Control (Attribute)
-import Blink.Controls.Fixtures (plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Controls.Fixtures (hitRectFor, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.Label (text)
 import Blink.Controls.Style (iconStyleKey)
 import Blink.Controls.ToggleButton (ToggleConfig, isSelected)
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, uniform)
-import Blink.Input (InputState (..), emptyInputState)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -47,15 +46,10 @@ testTheme = Theme
   , themeDefaultStyle  = (standardMetrics, testStyleSet)
   }
 
-noInput :: InputState
-noInput = emptyInputState { inputMousePosition = Point 200 200 }
-
--- | The margin-inset hit area for a control rendered at 'testBounds' with
--- the 10px margin every test style here uses -- covers both the checkbox's
--- glyph (x: 15-43) and caption (x: 49-85), so random points from within it
--- exercise both halves.
+-- | Covers both the checkbox's glyph (x: 15-43) and caption (x: 49-85),
+-- so random points from within it exercise both halves.
 hitRect :: Rectangle
-hitRect = insetRect (uniform 10) testBounds
+hitRect = hitRectFor testBounds
 
 type Attribute' = Attribute (ToggleConfig TestElement String)
 

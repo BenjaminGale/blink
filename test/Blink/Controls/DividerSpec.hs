@@ -9,9 +9,8 @@ import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBeha
 import Blink.Controls.Divider (DividerConfig, divider, orientation, thickness)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
-import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics, testColour)
-import Blink.Geometry (Alignment (Center), Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
-import Blink.Input (InputState (..), emptyInputState)
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Geometry (Alignment (Center), Orientation (..), Point (..), Rectangle (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (exactly)
 import Blink.Rendering (DrawCommand (..))
@@ -45,9 +44,6 @@ noLineTheme = Theme
   , themeDefaultStyle  = (standardMetrics, testStyleSet { styleBase = testStyle { styleBorderColour = Nothing } })
   }
 
-noInput :: InputState
-noInput = emptyInputState { inputMousePosition = Point 200 200 }
-
 -- | A horizontal divider's own resolved bounds at 'testBounds' with the
 -- default thickness (1) and 'testMetrics': fills the offered width, and is
 -- just tall enough for its thickness plus chrome (1 + 2*10 margin + 2*5
@@ -58,7 +54,7 @@ horizontalOuterRect = Rectangle 0 0 100 31
 
 -- | The margin-inset hit area for 'horizontalOuterRect'.
 hitRect :: Rectangle
-hitRect = insetRect (uniform 10) horizontalOuterRect
+hitRect = hitRectFor horizontalOuterRect
 
 -- | Content rect for 'horizontalOuterRect': inset by margin (10) then
 -- padding (5) -- the thin strip the line itself is drawn into.

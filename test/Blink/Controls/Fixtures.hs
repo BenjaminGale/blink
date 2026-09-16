@@ -8,11 +8,14 @@ module Blink.Controls.Fixtures
   , standardMetrics
   , plainStyleSet
   , mkTestTheme
+  , noInput
+  , hitRectFor
   ) where
 
 import qualified Data.Map.Strict as Map
 
-import Blink.Geometry (Insets, noBorder, uniform)
+import Blink.Geometry (Insets, Point (..), Rectangle, insetRect, noBorder, uniform)
+import Blink.Input (InputState (..), emptyInputState)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 
@@ -47,3 +50,13 @@ plainStyleSet s = StyleSet { styleBase = s, styleOverrides = Map.empty }
 
 mkTestTheme :: Metrics -> StyleSet -> Theme e
 mkTestTheme m s = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (m, s) }
+
+-- | A cursor position well outside any control under test, so nothing
+-- reads as hovered by default.
+noInput :: InputState
+noInput = emptyInputState { inputMousePosition = Point 200 200 }
+
+-- | The margin-inset hit area for a control rendered at the given bounds
+-- with 'standardMetrics'\'s 10px margin.
+hitRectFor :: Rectangle -> Rectangle
+hitRectFor = insetRect (metricsMargin standardMetrics)

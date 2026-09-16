@@ -12,7 +12,7 @@ import Blink.Controls.Control
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, post, postWith, resolve
   )
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (HitRect (..), InputState (..), Key (..), KeyEvent (..), Mouse (..), emptyInputState, emptyMouse)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -95,18 +95,12 @@ three attrsA attrsB attrsC = do
 
 seedCtx :: ViewContext TestElement String
 seedCtx = emptyViewContext testBounds noInput testTheme
-  where
-    noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 pressedSeedCtx :: ViewContext TestElement String
 pressedSeedCtx = emptyViewContext testBounds noInput pressedTestTheme
-  where
-    noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
--- | The margin-inset hit area for a control rendered at 'testBounds' with
--- the 10px margin every test style here uses.
 hitRect :: Rectangle
-hitRect = insetRect (uniform 10) testBounds
+hitRect = hitRectFor testBounds
 
 -- | The draw command for a control's chrome fill, inset by the 10px margin
 -- every test style here uses.

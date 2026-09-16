@@ -7,9 +7,9 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
-import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics, testColour)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), insetRect, uniform)
-import Blink.Input (InputState (..), emptyInputState)
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
+import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.Label (LabelConfig, label, mnemonic, target, text)
 import Blink.Layout.Constraints (Layout (..), fill)
@@ -26,16 +26,11 @@ testBounds = Rectangle 0 0 100 100
 testTheme :: Theme TestElement
 testTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
 
-noInput :: InputState
-noInput = emptyInputState { inputMousePosition = Point 200 200 }
-
 onCaption :: Point
 onCaption = Point 50 50
 
--- | The margin-inset hit area for a control rendered at 'testBounds' with
--- the 10px margin the test style here uses.
 hitRect :: Rectangle
-hitRect = insetRect (uniform 10) testBounds
+hitRect = hitRectFor testBounds
 
 type Attribute' = Attribute (LabelConfig TestElement String)
 

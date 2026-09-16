@@ -11,9 +11,10 @@ import Blink.Controls.List
   (Direction (..), ItemState, SingleSelection, isItem, moveCursor, onSelectionChanged, rowHeight, selectItem, selection, unselected)
 import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..), cell, cellWidth, column, sortable)
 import Blink.Controls.TreeTable
+import Blink.Controls.Fixtures (noInput)
 import Blink.Element (Element (..), runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
-import Blink.Input (InputState (..), emptyInputState, Key (..))
+import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), TextAlign (..))
@@ -49,9 +50,6 @@ testTheme = Theme
       , metricsPadding     = uniform 0
       , metricsBorderEdges = noBorder
       }
-
-noInput :: InputState
-noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 90

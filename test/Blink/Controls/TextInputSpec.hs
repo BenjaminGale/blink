@@ -7,9 +7,9 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute, post, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Controls.Fixtures (mkTestTheme, plainStyle, plainStyleSet, standardMetrics, testColour)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), insetRect, uniform)
-import Blink.Input (InputState (..), emptyInputState, Key (..), Modifier (..))
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
+import Blink.Input (Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -42,9 +42,6 @@ fixedCharWidth = TextMeasurer
   , tmTextSize     = \t -> pure (Size (fromIntegral (T.length t) * 20) 20)
   }
 
-noInput :: InputState
-noInput = emptyInputState { inputMousePosition = Point 200 200 }
-
 focusPt :: Point
 focusPt = Point 50 50
 
@@ -52,10 +49,8 @@ focusPt = Point 50 50
 contentRect :: Rectangle
 contentRect = Rectangle 15 15 70 70
 
--- | The margin-inset hit area for a control rendered at 'testBounds' with
--- the 10px margin the test style here uses.
 hitRect :: Rectangle
-hitRect = insetRect (uniform 10) testBounds
+hitRect = hitRectFor testBounds
 
 cursorRectAt :: Double -> DrawCommand
 cursorRectAt x = FillRect (Rectangle x 15 1 70) testColour
