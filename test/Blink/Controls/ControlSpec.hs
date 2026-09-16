@@ -14,12 +14,11 @@ import Blink.Controls.Control
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform)
-import Blink.Input (HitRect (..), InputState (..), Key (..), KeyEvent (..), Mouse (..), emptyInputState, emptyMouse)
+import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.Style (StyleSet (..), Theme (..), VisualState (CommonPressed), styleBackground)
 import Blink.View
-import Blink.View.Context (ViewContext (ctxInput, ctxMouse))
 
 data TestElement
   = ElemA | ElemB | ElemC
@@ -285,34 +284,34 @@ spec = describe "Blink.Controls.Control.control" $ do
       resultMessages result `shouldBe` ["B entered"]
 
   describe "occluded by a popup" $ do
-    -- Stands in for a popup's own registered hit-rect covering the point
-    -- under test -- as "Blink.App"'s drain step would leave it in
-    -- 'mouseHitRectsPrev' after a real frame, without needing a real popup
-    -- or a real second frame to produce that state.
+    -- Simulates a popup's own content having registered a hit-rect over this
+    -- point on the previous frame, via the same public
+    -- 'markPopupFloor'/'registerHitRect' primitives "Blink.App"'s own drain
+    -- step calls, driven across two real frames with 'runInteractions' --
+    -- rather than poking 'ViewContext' fields by hand.
     let mousePos  = Point 50 50 -- inside ElemA's margin-inset hit area
-        popupRect = Rectangle 0 0 100 100
-        withMouseAt = (\ctx -> ctx { ctxInput = emptyInputState { inputMousePosition = mousePos } })
-        withLastFrameRect idx floorIdx ctx = ctx
-          { ctxMouse = emptyMouse
-              { mouseHitRectsPrev = Map.singleton ElemB (HitRect popupRect idx)
-              , mousePopupFloor   = floorIdx
-              }
-          }
-        attrsA = [focusPolicy NotFocusable, onMouseEntered (post ("A entered" :: String))]
-        enteredMessages ctx = do
-          (_, ctx') <- runView (renderAt ElemA attrsA) ctx
-          pure (getMessages ctx')
+        elsewhere = Point 200 200
+        popupRect = testBounds
+        attrsA    = [focusPolicy NotFocusable, onMouseEntered (post ("A entered" :: String))]
+        withOverlay markFloorFirst = do
+          renderAt ElemA attrsA
+          if markFloorFirst
+            then markPopupFloor >> withBounds popupRect (registerHitRect ElemB)
+            else withBounds popupRect (registerHitRect ElemB) >> markPopupFloor
+        enteredAfter render = do
+          result <- runInteractions testBounds seedCtx render [MoveTo elsewhere] [MoveTo mousePos]
+          pure (resultMessages result)
 
     it "does not fire mouse-entered when a popup covered this point last frame" $ do
-      msgs <- enteredMessages (withLastFrameRect 5 5 (withMouseAt seedCtx))
+      msgs <- enteredAfter (withOverlay True)
       msgs `shouldBe` []
 
     it "fires mouse-entered normally when nothing covered this point last frame" $ do
-      msgs <- enteredMessages (withMouseAt seedCtx)
+      msgs <- enteredAfter (renderAt ElemA attrsA)
       msgs `shouldBe` ["A entered"]
 
     it "still fires mouse-entered when the covering rect predates the popup floor (an ordinary overlapping control, not a popup)" $ do
-      msgs <- enteredMessages (withLastFrameRect 1 5 (withMouseAt seedCtx))
+      msgs <- enteredAfter (withOverlay False)
       msgs `shouldBe` ["A entered"]
 
   describe "click-to-focus" $ do
