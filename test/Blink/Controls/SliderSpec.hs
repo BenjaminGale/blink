@@ -6,7 +6,7 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute, FocusPolicy (..), focusPolicy, onFocusGained, onFocusLost, post, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics)
+import Blink.Controls.Fixtures (contentRectFor, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics)
 import Blink.Geometry (Point (..), Rectangle (..), uniformBorder)
 import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -38,9 +38,8 @@ testTheme = mkTestTheme standardMetrics testStyleSet
 hitRect :: Rectangle
 hitRect = hitRectFor testBounds
 
--- | Content rect for 'testBounds': inset by margin (10) then padding (5).
 contentRect :: Rectangle
-contentRect = Rectangle 15 15 70 70
+contentRect = contentRectFor testBounds
 
 -- | The horizontal margin 'Blink.Controls.Slider.contentInset' leaves
 -- between 'contentRect' and the track on each side.

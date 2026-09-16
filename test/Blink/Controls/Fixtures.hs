@@ -11,6 +11,7 @@ module Blink.Controls.Fixtures
   , mkTestTheme
   , noInput
   , hitRectFor
+  , contentRectFor
   , fullSizeAt
   , startAt
   ) where
@@ -71,6 +72,11 @@ noInput = emptyInputState { inputMousePosition = Point 200 200 }
 -- with 'standardMetrics'\'s 10px margin.
 hitRectFor :: Rectangle -> Rectangle
 hitRectFor = insetRect (metricsMargin standardMetrics)
+
+-- | The margin-and-padding-inset content area for a control rendered at
+-- the given bounds with 'standardMetrics'.
+contentRectFor :: Rectangle -> Rectangle
+contentRectFor = insetRect (metricsPadding standardMetrics) . hitRectFor
 
 -- | Runs @el@ forced to fill its given bounds entirely -- the behaviour
 -- every control had before controls started reporting their own

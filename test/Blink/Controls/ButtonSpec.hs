@@ -7,7 +7,9 @@ import Blink.Controls.Button (ButtonActivation (..), ButtonConfig, activation, b
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec, defaultButtonBehaviourConfig)
 import Blink.Controls.Control (Attribute, post)
 import Blink.Controls.Fixtures
-  (fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
+  ( contentRectFor, fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics
+  , startAt, testColour
+  )
 import Blink.Controls.Label (text)
 import qualified Data.Text as T
 
@@ -30,6 +32,9 @@ testTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
 hitRect :: Rectangle
 hitRect = hitRectFor testBounds
 
+contentRect :: Rectangle
+contentRect = contentRectFor testBounds
+
 type Attribute' = Attribute (ButtonConfig TestElement String)
 
 seedCtx :: ViewContext TestElement String
@@ -47,7 +52,7 @@ spec = describe "Blink.Controls.Button" $ do
 
   it "draws its text in the resolved style" $ do
     ctx <- start [text "OK"]
-    getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "OK" testColour AlignCenter]
+    getDrawCommands ctx `shouldContain` [DrawText contentRect "OK" testColour AlignCenter]
 
   it "defaults to filling the given width and fitting its own content height" $ do
     -- Every other test in this file overrides 'elLayout' ('fullSize' to

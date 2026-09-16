@@ -7,7 +7,7 @@ import Blink.Controls.Control (Attribute, elementId, isEnabled)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
-import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Controls.Fixtures (contentRectFor, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, bandWidth, progress, progressBar)
@@ -27,9 +27,8 @@ testTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
 hitRect :: Rectangle
 hitRect = hitRectFor testBounds
 
--- | Content rect for 'testBounds': inset by margin (10) then padding (5).
 contentRect :: Rectangle
-contentRect = Rectangle 15 15 70 70
+contentRect = contentRectFor testBounds
 
 type Attribute' = Attribute (ProgressBarConfig TestElement String)
 

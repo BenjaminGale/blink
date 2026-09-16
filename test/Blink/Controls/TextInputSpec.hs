@@ -7,7 +7,7 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute, post, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Controls.Fixtures (fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Controls.Fixtures (contentRectFor, fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Geometry (Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -43,9 +43,8 @@ fixedCharWidth = TextMeasurer
 focusPt :: Point
 focusPt = Point 50 50
 
--- | Content rect for 'testBounds': inset by margin (10) then padding (5).
 contentRect :: Rectangle
-contentRect = Rectangle 15 15 70 70
+contentRect = contentRectFor testBounds
 
 hitRect :: Rectangle
 hitRect = hitRectFor testBounds

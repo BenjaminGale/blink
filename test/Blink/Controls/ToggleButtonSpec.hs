@@ -6,7 +6,9 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
 import Blink.Controls.Fixtures
-  (fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
+  ( contentRectFor, fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics
+  , startAt, testColour
+  )
 import Blink.Controls.ToggleButton (ToggleConfig, isSelected, toggleButton, toggleChecked)
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 
@@ -31,6 +33,9 @@ toggleTestTheme = mkTestTheme standardMetrics
 hitRect :: Rectangle
 hitRect = hitRectFor testBounds
 
+contentRect :: Rectangle
+contentRect = contentRectFor testBounds
+
 type Attribute' = Attribute (ToggleConfig TestElement String)
 
 seedCtx :: ViewContext TestElement String
@@ -49,8 +54,8 @@ spec = describe "Blink.Controls.ToggleButton" $ do
 
     it "draws in its normal style while not selected" $ do
       ctx <- start []
-      getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "" testColour AlignCenter]
+      getDrawCommands ctx `shouldContain` [DrawText contentRect "" testColour AlignCenter]
 
     it "draws in its pressed style while selected, even without being physically pressed" $ do
       ctx <- start [isSelected True]
-      getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "" pressedColour AlignCenter]
+      getDrawCommands ctx `shouldContain` [DrawText contentRect "" pressedColour AlignCenter]
