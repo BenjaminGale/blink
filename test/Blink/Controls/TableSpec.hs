@@ -5,7 +5,7 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute, postWith)
 import Blink.Controls.List
-  (ItemState, ListPart (..), SingleSelection, isItem, onSelectionChanged, rowHeight, selectAt, selectFirst, selection, unselected)
+  (ItemState, SingleSelection, isItem, onSelectionChanged, rowHeight, selectAt, selectFirst, selection, unselected)
 import Blink.Controls.Table
 import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
 import Blink.Element (Element (..), runElement, width)
@@ -307,15 +307,24 @@ scrollOnSortSpec = describe "table sorting scrolls the selection into view" $
 focusSpec :: Spec
 focusSpec = describe "table header focus" $
   it "clicking a header cell never claims focus for it, since it's NotFocusable" $ do
-    -- The table's own root auto-claims focus by the end of setup, since
-    -- nothing else is focused; a header cell taking focus on click (were
-    -- it wrongly Focusable) would change this chain, not leave it as-is.
     let headerPoint = at 10 10
-    result <- runInteractions testBounds seedCtx
+
+    -- The table's own root auto-claims focus by the end of setup, since
+    -- nothing else is focused.
+    settled <- runInteractions testBounds seedCtx
       (renderSilentTable [selection (unselected items)])
-      [Wait 1, MoveTo headerPoint]
+      []
+      [Wait 1]
+    let chainBeforeClick = contextFocusChain (resultContext settled)
+    chainBeforeClick `shouldNotBe` []
+
+    -- A header cell taking focus on click (were it wrongly Focusable)
+    -- would change this chain; it must not.
+    result <- runInteractions testBounds (resultContext settled)
+      (renderSilentTable [selection (unselected items)])
+      [MoveTo headerPoint]
       [ClickAt headerPoint, Wait 1]
-    contextFocusChain (resultContext result) `shouldBe` [Part (TableRow List)]
+    contextFocusChain (resultContext result) `shouldBe` chainBeforeClick
 
 columnCountEdgeSpec :: Spec
 columnCountEdgeSpec = describe "table column count edge cases" $ do
