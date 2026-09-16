@@ -20,6 +20,7 @@ module Blink.Controls.Label
   , HasLabelledConfig (..)
   , defaultLabelledConfig
   , text
+  , mnemonic
   , renderLabelledContent
   , captionElement
 
@@ -31,28 +32,33 @@ module Blink.Controls.Label
   , target
   ) where
 
-import Control.Monad (forM_)
+import Control.Monad (forM_, when)
+import Data.Char (toUpper)
 import Data.Text (Text)
+import qualified Data.Text as T
 
 import Blink.Controls.Control
 import Blink.Controls.Label.Style (labelStyleKey)
-import Blink.Geometry (Alignment (TopLeft))
+import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..))
+import Blink.Input (InputState (inputAltHeld))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
+import Blink.Rendering (TextAlign (..))
 import Blink.Style (Style (..))
-import Blink.View (View, currentStyle, getCurrentScope, measureText)
-import Blink.View.Drawing (drawText)
+import Blink.View (View, charOffset, currentStyle, getBounds, getCurrentScope, getInput, measureText, withBounds)
+import Blink.View.Drawing (drawText, fillRect)
 import Blink.Element (Element (..), HasLayoutConfig (..))
 
 -- * Caption fragment
 
--- | A displayed caption.
-newtype LabelledConfig e msg = LabelledConfig
-  { lcText :: Text
+-- | A displayed caption, with an optional mnemonic letter (see 'mnemonic').
+data LabelledConfig e msg = LabelledConfig
+  { lcText     :: Text
+  , lcMnemonic :: Maybe Char
   }
 
--- | @\"\"@.
+-- | @\"\"@, no mnemonic.
 defaultLabelledConfig :: LabelledConfig e msg
-defaultLabelledConfig = LabelledConfig { lcText = "" }
+defaultLabelledConfig = LabelledConfig { lcText = "", lcMnemonic = Nothing }
 
 -- | Implemented by any config type that nests a 'LabelledConfig', letting
 -- 'text' be applied to it directly.
@@ -66,12 +72,55 @@ instance HasLabelledConfig e msg (LabelledConfig e msg) where
 text :: HasLabelledConfig e msg cfg => Text -> Attribute cfg
 text t = overLabelled (Attribute (\lc -> lc { lcText = t }))
 
+-- | Marks a letter of the caption as its mnemonic: 'renderLabelledContent'
+-- underlines the caption's first occurrence of it (matched
+-- case-insensitively), and "Blink.Controls.MenuBar"\/"Blink.Controls.Menu"
+-- use it together with 'Blink.Input.mnemonicActivated' to let Alt+letter
+-- open a top-level menu or activate an item. Unset by default, in which
+-- case no letter is underlined and Alt+letter does nothing for this
+-- caption.
+mnemonic :: HasLabelledConfig e msg cfg => Char -> Attribute cfg
+mnemonic c = overLabelled (Attribute (\lc -> lc { lcMnemonic = Just c }))
+
 -- | Draws @cfg@'s text into the current bounds, in the resolved style's
--- text colour and alignment.
+-- text colour and alignment, underlining its mnemonic letter (if any --
+-- see 'mnemonic') while Alt is held, the same convention native menus use
+-- so a caption's mnemonic doesn't permanently clutter it.
 renderLabelledContent :: LabelledConfig e msg -> View e msg ()
 renderLabelledContent cfg = do
-  s <- currentStyle
+  s       <- currentStyle
+  altHeld <- inputAltHeld <$> getInput
   drawText (styleTextColour s) (styleTextAlign s) (lcText cfg)
+  when altHeld $ forM_ (lcMnemonic cfg) (drawMnemonicUnderline s (lcText cfg))
+
+-- | Underlines @t@'s first occurrence of @c@ (matched case-insensitively)
+-- with a thin rule just under the text, positioned by 'charOffset' and
+-- shifted to match how the backend itself places @t@ under @styleTextAlign@
+-- horizontally and centres it vertically within the current bounds -- see
+-- @alignedTextRect@ in @app/Rendering.hs@, whose formula this mirrors on
+-- both axes so the rule lands under the drawn glyph itself rather than the
+-- bottom of @bounds@, which is usually taller than the glyph (e.g. a
+-- 'Blink.Controls.MenuBar.menuBar' label filling the whole bar's height).
+drawMnemonicUnderline :: Style -> Text -> Char -> View e msg ()
+drawMnemonicUnderline s t c = forM_ (T.findIndex ((== toUpper c) . toUpper) t) $ \i -> do
+  bounds     <- getBounds
+  targetSize <- measureText t
+  loX        <- charOffset t i
+  hiX        <- charOffset t (i + 1)
+  let textTop = rectY bounds + (rectHeight bounds - sizeHeight targetSize) / 2
+      startX  = case styleTextAlign s of
+        AlignLeft   -> rectX bounds
+        AlignCenter -> rectX bounds + (rectWidth bounds - sizeWidth targetSize) / 2
+        AlignRight  -> rectX bounds + rectWidth bounds - sizeWidth targetSize
+      -- Clamped so a glyph taller than bounds never pushes the rule past bounds' own clip.
+      underlineY = min (textTop + sizeHeight targetSize) (rectY bounds + rectHeight bounds - 1)
+      underlineRect = Rectangle
+        { rectX      = startX + realToFrac loX
+        , rectY      = underlineY
+        , rectWidth  = realToFrac (hiX - loX)
+        , rectHeight = 1
+        }
+  withBounds underlineRect (fillRect (styleTextColour s))
 
 -- | A minimal, non-wrapping caption measure -- stand-in for a proper
 -- @textBlock@ primitive, which doesn't exist yet. Reports the caption's

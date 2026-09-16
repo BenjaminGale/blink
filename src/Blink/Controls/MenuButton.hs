@@ -29,23 +29,18 @@ module Blink.Controls.MenuButton
   , onOpenChanged
   ) where
 
-import Control.Monad (forM_, void, when)
-import Data.List (find)
+import Control.Monad (void, when)
 
-import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig)
+import Blink.Controls.Button (ButtonConfig (..))
 import Blink.Controls.Control
-import Blink.Controls.Label
-  (HasLabelledConfig (..), LabelledConfig (..), captionElement, lcText, renderLabelledContent)
+import Blink.Controls.Label (HasLabelledConfig (..), LabelledConfig (..), captionElement, lcText, renderLabelledContent)
+import Blink.Controls.Menu (menuList)
 import Blink.Controls.MenuButton.Style (menuButtonListStyleKey)
 import Blink.Controls.ToggleButton
   (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleBase)
-import Blink.Geometry (Alignment (TopLeft))
-import Blink.Input (InputState (inputKeyEvents), Key (KeyDown, KeyEscape, KeyTab, KeyUp), KeyEvent (key))
-import Blink.Layout.Box (children, vBox)
-import Blink.Layout.Constraints (Layout (..), fitContent)
 import Blink.Popup (content, popup)
 import Blink.View
-import Blink.Element (Element (..), HasLayoutConfig (..), height, width)
+import Blink.Element (Element (..), HasLayoutConfig (..))
 
 -- | Identifies one part of a 'menuButton': the trigger button itself
 -- ('MenuButtonTrigger'), the item list's own focus scope
@@ -161,7 +156,8 @@ runMenuButton tag cfg = do
       justOpened = tgiSelected r && not wasOpen
       close      = do
         runHandlers (tgcOnSelectedChanged (mbToggle cfg)) False
-        requestFocus enclosingScope triggerId
+        alreadyClaimed <- hasQueuedFocus enclosingScope
+        when (not alreadyClaimed) $ requestFocus enclosingScope triggerId
   when justOpened $ requestFocus enclosingScope (tag MenuButtonList)
   when (tgiSelected r) $ popup triggerId [content (itemsElement tag cfg close onTrigger)]
   pure r
@@ -170,108 +166,13 @@ runMenuButton tag cfg = do
     btn       = tgcButton (mbToggle cfg)
     ctrl      = (bcControl btn) { ccContent = const (renderLabelledContent (bcLabelled btn)) }
 
--- | A top-to-bottom list of buttons, one per item, sized to fit its own
--- content on both axes so the popup measures a natural size from it rather
--- than stretching to fill the window, drawn on a panel background\/border
--- (see 'menuButtonListStyleKey') -- a plain, non-focusable
--- 'Blink.Controls.Control.control' wrapping it, purely for that chrome, the
--- same way 'Blink.Controls.ToggleGroup.toggleGroup' wraps its own box of
--- items. Runs in its own focus scope ('MenuButtonList'), with Up\/Down
--- moving the highlight between items, wrapping at either end (see
--- 'handleArrowKeys'); an item's own activation, Escape pressed while this
--- scope holds focus, or a click completing outside both the trigger and
--- this list, all run @close@. @onTrigger@ is whether the trigger's own
--- bounds were hit this frame, captured by 'runMenuButton' before this list
--- (a separate 'Element', run later, at a different ambient bounds) is even
--- queued.
+-- | The dropdown itself -- see 'Blink.Controls.Menu.menuList' for the
+-- shared engine: Up\/Down move the keyboard highlight between items
+-- (wrapping at either end), an item's own activation, Escape, or a click
+-- completing outside both the trigger and this list, all run @close@.
+-- @onTrigger@ is whether the trigger's own bounds were hit this frame,
+-- captured by 'runMenuButton' before this list (a separate 'Element', run
+-- later, at a different ambient bounds) is even queued.
 itemsElement :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg () -> Bool -> Element e msg
-itemsElement tag cfg close onTrigger = Element
-  { elLayout  = Layout fitContent fitContent TopLeft
-  , elMeasure = measureChrome menuButtonListStyleKey box
-  , elRun     = void (control panelCfg)
-  }
-  where
-    box = vBox [ width fitContent, height fitContent, children (map toItemElement (mbItems cfg)) ]
-
-    -- ccElementId matters beyond styling: without one this never registers
-    -- a hit-rect, so a click on the panel background (not an item) would
-    -- reach straight through to whatever's behind the popup.
-    panelCfg = defaultControlConfig
-      { ccElementId   = Just (tag MenuButtonList)
-      , ccStyleKey    = menuButtonListStyleKey
-      , ccFocusPolicy = NotFocusable
-      , ccContent     = const scopedRun
-      }
-
-    scopedRun = withFocusScope (tag MenuButtonList) $ do
-      handleEscape
-      handleTabOut
-      handleOutsideClick
-      handleArrowKeys
-      elRun box
-
-    -- Closes on Escape whenever the list is open, regardless of which item
-    -- (if any) currently holds focus within it -- matching a native menu,
-    -- which closes on Escape without needing a specific item highlighted.
-    handleEscape = do
-      evs <- inputKeyEvents <$> getInput
-      case find ((== KeyEscape) . key) evs of
-        Just e  -> consumeKey (key e) >> close
-        Nothing -> pure ()
-
-    -- Closes on Tab\/Shift-Tab too: this list renders after the trigger's own siblings, so a plain handoff can't reach them.
-    handleTabOut = do
-      evs <- inputKeyEvents <$> getInput
-      case find ((== KeyTab) . key) evs of
-        Just e  -> consumeKey (key e) >> close
-        Nothing -> pure ()
-
-    -- Closes on a completed click (mirroring 'ActivateOnClick's own
-    -- release-based timing, the only discrete click edge the public API
-    -- exposes) that lands neither on the trigger nor anywhere in this list
-    -- -- an item click is itself within this list's own bounds, so it never
-    -- reads as "outside" here; it closes via its own activation instead
-    -- (see 'toItemElement').
-    handleOutsideClick = do
-      released <- isButtonReleased
-      onList   <- isRegionHit
-      when (released && not onTrigger && not onList) close
-
-    -- Moves the highlight to the next/previous item on Down\/Up, wrapping
-    -- from the last item to the first (and back) in a single keypress --
-    -- unlike Tab\/Shift-Tab's own traversal, a menu's items are expected to
-    -- cycle, matching every native menu\/dropdown. Redirects focus
-    -- explicitly by position rather than reusing Tab\/Shift-Tab's own
-    -- give-up-and-let-the-neighbour-auto-claim mechanism, which has no
-    -- wraparound of its own.
-    handleArrowKeys = case mbItems cfg of
-      [] -> pure ()
-      menuItems -> do
-        evs <- inputKeyEvents <$> getInput
-        forM_ (find ((`elem` [KeyDown, KeyUp]) . key) evs) $ \e -> do
-          consumeKey (key e)
-          current <- getFocus
-          let count        = length menuItems
-              currentIndex = current >>= (`lookup` zip (map (tag . MenuButtonItem) menuItems) [0 ..])
-              nextIndex = case (key e, currentIndex) of
-                (KeyDown, Nothing) -> 0
-                (KeyDown, Just i)  -> (i + 1) `mod` count
-                (_,       Nothing) -> count - 1
-                (_,       Just i)  -> (i - 1) `mod` count
-          forM_ (itemAt menuItems nextIndex) $ \item ->
-            requestFocus (Just (tag MenuButtonList)) (tag (MenuButtonItem item))
-
-    itemAt xs idx = case drop idx xs of
-      (x : _) -> Just x
-      []      -> Nothing
-
-    toItemElement item = Element
-      { elLayout  = bcLayout itemCfg
-      , elMeasure = measureChrome (ccStyleKey (bcControl itemCfg)) (captionElement (lcText (bcLabelled itemCfg)))
-      , elRun     = do
-          r <- buttonBase (tag (MenuButtonItem item)) itemCfg { bcControl = itemCtrl }
-          when (biActivated r) close
-      }
-      where
-        itemCfg  = resolve defaultButtonConfig (width fitContent : height fitContent : mbItemAttrs cfg item)
-        itemCtrl = (bcControl itemCfg) { ccContent = const (renderLabelledContent (bcLabelled itemCfg)) }
+itemsElement tag cfg close onTrigger =
+  menuList menuButtonListStyleKey (tag MenuButtonList) (tag . MenuButtonItem) (mbItems cfg) (mbItemAttrs cfg) close onTrigger

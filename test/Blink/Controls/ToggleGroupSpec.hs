@@ -15,7 +15,7 @@ import Blink.Controls.ToggleGroup
   )
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
-import Blink.Input (InputState (..))
+import Blink.Input (InputState (..), emptyInputState)
 import Blink.Layout.Constraints (exactly, fill)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
@@ -59,7 +59,7 @@ testTheme = Theme
       }
 
 noInput :: InputState
-noInput = InputState (Point 200 200) False [] [] 0
+noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 -- | Three equal 100px-wide slots, filling 'groupBounds' with no gaps: Small
 -- at x 0-100, Medium at 100-200, Large at 200-300.

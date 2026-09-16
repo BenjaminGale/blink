@@ -383,6 +383,7 @@ module Blink.View
   , disclaimFocus
   , requestFocus
   , requestClearFocus
+  , hasQueuedFocus
   , withFocusScope
   , consumeKey
   , withoutKeyEvents

@@ -18,6 +18,11 @@
 -- 'Blink.Controls.MenuButton.items' clashes with
 -- 'Blink.Controls.ToggleGroup.items' (the latter stays in this umbrella,
 -- being here first) -- import "Blink.Controls.MenuButton" qualified for it.
+--
+-- 'Blink.Controls.MenuBar.itemAttrs' clashes with
+-- 'Blink.Controls.MenuButton.itemAttrs' (the latter stays in this
+-- umbrella, being here first) -- import "Blink.Controls.MenuBar" qualified
+-- for it.
 module Blink.Controls
   ( -- * Button
     button
@@ -38,6 +43,7 @@ module Blink.Controls
     -- * Label
   , label
   , text
+  , mnemonic
   , target
     -- * List
   , list
@@ -103,14 +109,25 @@ module Blink.Controls
   , itemAttrs
   , isOpen
   , onOpenChanged
+    -- * MenuBar
+    -- | 'Blink.Controls.MenuBar.itemAttrs' clashes with 'itemAttrs' above
+    -- (from "Blink.Controls.MenuButton") and stays out of this umbrella --
+    -- import "Blink.Controls.MenuBar" qualified for it.
+  , menuBar
+  , menus
+  , labelAttrs
+  , menuItems
+  , openMenu
+  , onOpenMenuChanged
   ) where
 
 import Blink.Controls.Button (activation, button, onActivated)
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Divider (divider, orientation, thickness)
 import Blink.Controls.Image (image, source, fitWidth, fitHeight, preserveRatio)
-import Blink.Controls.Label (label, target, text)
+import Blink.Controls.Label (label, mnemonic, target, text)
 import Blink.Controls.List (list, onItemActivated, renderItem, rowHeight, selection)
+import Blink.Controls.MenuBar (labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu)
 import Blink.Controls.MenuButton (isOpen, itemAttrs, menuButton, onOpenChanged)
 import Blink.Controls.ProgressBar (bandSpeed, bandWidth, progress, progressBar)
 import Blink.Controls.RadioButton (radioButton)

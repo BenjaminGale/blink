@@ -7,7 +7,7 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, FocusPolicy (..), focusPolicy, onFocusGained, onFocusLost, post, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, noBorder, uniform, uniformBorder)
-import Blink.Input (InputState (..), Key (..))
+import Blink.Input (InputState (..), emptyInputState, Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.Slider (SliderConfig, onValueChanged, slider, step, thumbColourFor, value)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -47,13 +47,7 @@ testTheme :: Theme TestElement
 testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
 
 noInput :: InputState
-noInput = InputState
-  { inputMousePosition  = Point 200 200
-  , inputLeftButtonDown = False
-  , inputKeyEvents      = []
-  , inputTypedText      = []
-  , inputWheelDelta     = 0
-  }
+noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 -- | The margin-inset hit area for a control rendered at 'testBounds' with
 -- the 10px margin every test style here uses.

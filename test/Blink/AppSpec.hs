@@ -36,13 +36,8 @@ fullView = elementWithLayout (Layout fill fill TopLeft) . void
 -- Test infrastructure
 
 mkInput :: Bool -> Bool -> FrameInput
-mkInput quit animTick = FrameInput
-  { mousePosition   = Point 0 0
-  , mouseButtonDown = False
-  , keyEvents       = []
-  , typedText       = []
-  , wheelDelta      = 0
-  , windowSize      = Size 100 100
+mkInput quit animTick = emptyFrameInput
+  { windowSize      = Size 100 100
   , quitRequested   = quit
   , isAnimationTick = animTick
   }

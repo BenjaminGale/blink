@@ -12,7 +12,7 @@ import Blink.Controls.ButtonBehaviour (ButtonBehaviourConfig (..), buttonBehavio
 import Blink.Controls.Control (Attribute, elementId, post)
 import Blink.Controls.RepeatButton (RepeatButtonConfig, initialDelay, repeatButton, repeatInterval)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), insetRect, noBorder, uniform)
-import Blink.Input (InputState (..))
+import Blink.Input (InputState (..), emptyInputState)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), TextAlign (..))
@@ -50,13 +50,7 @@ testTheme :: Theme TestElement
 testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (testMetrics, testStyleSet) }
 
 noInput :: InputState
-noInput = InputState
-  { inputMousePosition  = Point 200 200
-  , inputLeftButtonDown = False
-  , inputKeyEvents      = []
-  , inputTypedText      = []
-  , inputWheelDelta     = 0
-  }
+noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 -- | The margin-inset hit area for a control rendered at 'testBounds' with
 -- the 10px margin every test style here uses.

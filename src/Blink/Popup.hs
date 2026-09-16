@@ -18,7 +18,7 @@ module Blink.Popup
 
 import Blink.Element (Attribute (..), Element (..), emptyElement, measureElement, resolve)
 import Blink.Geometry (Edge (..), Point (..), Rectangle (..), Side (..))
-import Blink.View (PendingPopup (..), View, getBounds, getWindowSize, queuePopup)
+import Blink.View (PendingPopup (..), View, getBounds, getCurrentScope, getWindowSize, queuePopup)
 
 -- | Every capability 'popup' resolves: the content to show, where to anchor
 -- it, and where it sits relative to that anchor. Defaults to 'emptyElement',
@@ -73,15 +73,17 @@ popup eid attrs = do
   anchor <- case popAt cfg of
     Just p  -> pure (Rectangle (pointX p) (pointY p) 0 0)
     Nothing -> getBounds
-  window <- getWindowSize
-  size   <- measureElement window (popContent cfg)
+  window      <- getWindowSize
+  size        <- measureElement window (popContent cfg)
+  originScope <- getCurrentScope
   queuePopup PendingPopup
-    { popupId        = eid
-    , popupAnchor    = anchor
-    , popupSize      = size
-    , popupPlacement = popPlacement cfg
-    , popupOffset    = popOffset cfg
-    , popupRun       = elRun (popContent cfg)
+    { popupId          = eid
+    , popupAnchor      = anchor
+    , popupSize        = size
+    , popupPlacement   = popPlacement cfg
+    , popupOffset      = popOffset cfg
+    , popupRun         = elRun (popContent cfg)
+    , popupOriginScope = originScope
     }
   where
     cfg = resolve defaultPopupConfig attrs

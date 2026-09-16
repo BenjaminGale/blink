@@ -26,7 +26,7 @@ module Blink.View.Fixtures
 import qualified Data.Map.Strict as Map
 
 import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
-import Blink.Input (InputState (..))
+import Blink.Input (InputState (..), emptyInputState)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.View
@@ -43,13 +43,7 @@ twoElemTheme :: Theme TwoElems
 twoElemTheme = mkTheme
 
 noInput :: InputState
-noInput = InputState
-  { inputMousePosition  = Point 0 0
-  , inputLeftButtonDown = False
-  , inputKeyEvents      = []
-  , inputTypedText      = []
-  , inputWheelDelta     = 0
-  }
+noInput = emptyInputState { inputMousePosition = Point 0 0 }
 
 buttonDown :: InputState
 buttonDown = noInput { inputLeftButtonDown = True }

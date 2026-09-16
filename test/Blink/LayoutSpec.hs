@@ -8,7 +8,7 @@ import Test.QuickCheck (Gen, NonNegative (..), choose, forAll, ioProperty)
 
 import Blink.Generators ()
 import Blink.Geometry (Alignment (..), Point (..), Rectangle (..), uniform)
-import Blink.Input (KeyEvent, InputState (..))
+import Blink.Input (InputState (..), emptyInputState)
 import Blink.Layout
 import Blink.Layout.Constraints (capLength, minLength)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -20,13 +20,7 @@ import Blink.Element (Attribute, elementWithLayout, runElement)
 -- Test infrastructure
 
 noInput :: InputState
-noInput = InputState
-  { inputMousePosition  = Point 0 0
-  , inputLeftButtonDown = False
-  , inputKeyEvents      = [] :: [KeyEvent]
-  , inputTypedText      = []
-  , inputWheelDelta     = 0
-  }
+noInput = emptyInputState { inputMousePosition = Point 0 0 }
 
 emptyStyle :: Style
 emptyStyle = Style

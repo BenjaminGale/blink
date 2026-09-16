@@ -11,7 +11,7 @@ import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Controls.Table
 import Blink.Element (Element (..), runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
-import Blink.Input (InputState (..))
+import Blink.Input (InputState (..), emptyInputState)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), TextAlign (..))
@@ -43,7 +43,7 @@ testTheme = Theme
       }
 
 noInput :: InputState
-noInput = InputState (Point 200 200) False [] [] 0
+noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 90

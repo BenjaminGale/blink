@@ -10,7 +10,7 @@ import Blink.Controls.Divider (DividerConfig, divider, orientation, thickness)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Geometry (Alignment (Center), Orientation (..), Point (..), Rectangle (..), insetRect, noBorder, uniform)
-import Blink.Input (InputState (..))
+import Blink.Input (InputState (..), emptyInputState)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (exactly)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -60,13 +60,7 @@ noLineTheme = Theme
   }
 
 noInput :: InputState
-noInput = InputState
-  { inputMousePosition  = Point 200 200
-  , inputLeftButtonDown = False
-  , inputKeyEvents      = []
-  , inputTypedText      = []
-  , inputWheelDelta     = 0
-  }
+noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 -- | A horizontal divider's own resolved bounds at 'testBounds' with the
 -- default thickness (1) and 'testMetrics': fills the offered width, and is

@@ -60,6 +60,28 @@ spec = do
       wasHit NotOver `shouldBe` False
       wasHit Exited `shouldBe` False
 
+  describe "mnemonicActivated" $ do
+    it "detects Alt held together with the matching letter" $
+      mnemonicActivated 'F' [KeyEvent (KeyChar 'F') [Alt] False] `shouldBe` True
+
+    it "matches regardless of the queried letter's case" $
+      mnemonicActivated 'f' [KeyEvent (KeyChar 'F') [Alt] False] `shouldBe` True
+
+    it "does not match the letter without Alt held" $
+      mnemonicActivated 'F' [KeyEvent (KeyChar 'F') [] False] `shouldBe` False
+
+    it "does not match a different letter" $
+      mnemonicActivated 'F' [KeyEvent (KeyChar 'E') [Alt] False] `shouldBe` False
+
+    it "ignores a synthesized auto-repeat of the key" $
+      mnemonicActivated 'F' [KeyEvent (KeyChar 'F') [Alt] True] `shouldBe` False
+
+    it "finds the match among other unrelated key events" $
+      mnemonicActivated 'F'
+        [ KeyEvent KeyEscape [] False
+        , KeyEvent (KeyChar 'F') [Alt] False
+        ] `shouldBe` True
+
   describe "advanceMouse" $ do
     it "starts with nothing held and nothing hovered" $ do
       mouseButton (emptyMouse :: Mouse Elem) `shouldBe` ButtonUp

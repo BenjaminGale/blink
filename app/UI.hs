@@ -9,6 +9,7 @@ import Blink.Controls.Label (LabelConfig)
 import Blink.Controls.List
   (ListPart (..), MultiSelection, SingleSelection, multiSelection, selectFirst, selectedItems, singleSelection)
 import qualified Blink.Controls.List as List (isItem, onSelectionChanged)
+import qualified Blink.Controls.MenuBar as MenuBar (itemAttrs, submenuItems)
 import qualified Blink.Controls.MenuButton as MenuButton (items)
 import Blink.Controls.ProgressBar (ProgressValue (..))
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBarTrackStyleKey)
@@ -50,6 +51,8 @@ data AppState = AppState
   , radioChoice    :: Maybe Text
   , fileMenuOpen    :: Bool
   , fileMenuLastAction :: Text
+  , menuBarOpenMenu    :: Maybe Text
+  , menuBarLastAction  :: Text
   , inputText      :: Text
   , passwordText   :: Text
   , animating      :: Bool
@@ -91,6 +94,8 @@ data Msg
   | PickRadio Text
   | SetFileMenuOpen Bool
   | FileMenuItemActivated Text
+  | SetMenuBarOpenMenu (Maybe Text)
+  | MenuBarItemActivated Text
   | SetInputText Text
   | SetPasswordText Text
   | SetAnimating Bool
@@ -127,6 +132,8 @@ demoApp = App
       , radioChoice    = Nothing
       , fileMenuOpen    = False
       , fileMenuLastAction = ""
+      , menuBarOpenMenu    = Nothing
+      , menuBarLastAction  = ""
       , inputText      = ""
       , passwordText   = ""
       , animating      = False
@@ -168,6 +175,8 @@ updateApp msg = case msg of
   PickRadio v          -> modify $ \s -> s { radioChoice = Just v }
   SetFileMenuOpen v       -> modify $ \s -> s { fileMenuOpen = v }
   FileMenuItemActivated v -> modify $ \s -> s { fileMenuLastAction = v }
+  SetMenuBarOpenMenu v    -> modify $ \s -> s { menuBarOpenMenu = v }
+  MenuBarItemActivated v  -> modify $ \s -> s { menuBarLastAction = v }
   SetInputText t       -> modify $ \s -> s { inputText = t }
   SetPasswordText t    -> modify $ \s -> s { passwordText = t }
   SetAnimating v       -> modify $ \s -> s { animating = v }
@@ -542,6 +551,7 @@ footer s = do
                       else ""
       keyText    = "Last Key Press: "
                 <> if T.null (lastInput s) then "none" else lastInput s <> countSuffix
+      menuText   = "Menu: " <> if T.null (menuBarLastAction s) then "none" else menuBarLastAction s
   runElement $ hBox
     [ spacing 24, margin 4, alignment Center
     , children
@@ -549,6 +559,7 @@ footer s = do
         , caption mouseText  [width (exactly 160), height fill, align MiddleLeft]
         , caption buttonText [width (exactly 160), height fill, align MiddleLeft]
         , caption hoverText  [width (exactly 100), height fill, align MiddleLeft]
+        , caption menuText   [width (exactly 140), height fill, align MiddleLeft]
         , caption keyText    [width fill,          height fill, align MiddleLeft]
         ]
     ]
@@ -1064,11 +1075,55 @@ imagePage s =
 
 -- Top-level view
 
+menuBarMenus :: [Text]
+menuBarMenus = ["File", "Edit", "View"]
+
+-- | Each top-level label's own mnemonic letter -- its initial, distinct
+-- across 'menuBarMenus' so Alt+letter opens each one unambiguously.
+menuBarLabelMnemonic :: Text -> Char
+menuBarLabelMnemonic "File" = 'F'
+menuBarLabelMnemonic "Edit" = 'E'
+menuBarLabelMnemonic "View" = 'V'
+menuBarLabelMnemonic m      = T.head m
+
+menuBarItemsFor :: Text -> [Text]
+menuBarItemsFor "File" = ["New", "Open", "Save", "Export"]
+menuBarItemsFor "Edit" = ["Cut", "Copy", "Paste"]
+menuBarItemsFor "View" = ["Zoom In", "Zoom Out"]
+menuBarItemsFor _      = []
+
+menuBarSubmenuItemsFor :: Text -> Text -> [Text]
+menuBarSubmenuItemsFor "File" "Export" = ["CSV", "PDF", "JSON"]
+menuBarSubmenuItemsFor _      _        = []
+
+-- | 'menuBar': a row of top-level menus spanning the whole window, above
+-- the sidebar\/page area. Its open menu is external, caller-owned state,
+-- the same as every other stateful control here -- see 'menuBarOpenMenu'.
+-- Fills the whole top strip alone -- 'menuBar''s own row always sizes
+-- itself to fill the width it's given, so it can't share space with a
+-- sibling in the same box the way 'rowMenuButton' does; the last-activated
+-- item shows in 'footer' instead.
+topMenuBar :: AppState -> DemoUI ()
+topMenuBar s =
+  runElement $ menuBar DemoMenuBar
+    [ menus menuBarMenus
+    , labelAttrs (\m -> [text m, mnemonic (menuBarLabelMnemonic m), height fill])
+    , menuItems menuBarItemsFor
+    , MenuBar.itemAttrs (\_ i -> [text i, onActivated (post (MenuBarItemActivated i))])
+    , MenuBar.submenuItems menuBarSubmenuItemsFor
+    , openMenu (menuBarOpenMenu s)
+    , onOpenMenuChanged (postWith SetMenuBarOpenMenu)
+    , height fill
+    ]
+
 demoView :: AppState -> Element ControlId Msg
 demoView s = elementWithLayout (Layout fill fill TopLeft) $ do
   input <- getInput
   when (darkMode s) $ fillRect (RGBA 0.082 0.102 0.129 1)
-  borderLayout [left sidebarWidth (sidebar s), centre (pageContent s), bottom 36 (footer s)]
+  borderLayout
+    [ top 36 (topMenuBar s)
+    , left sidebarWidth (sidebar s), centre (pageContent s), bottom 36 (footer s)
+    ]
   anyHov <- isAnyMouseOver
   let typed   = T.concat (inputTypedText input)
       keyName = case inputKeyEvents input of

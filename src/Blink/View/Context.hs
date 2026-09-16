@@ -50,6 +50,7 @@ module Blink.View.Context
   , emit
   , emitUi
   , queueUiEffects
+  , getUiEffects
     -- * Bounds
   , getBounds
   , getWindowSize
@@ -675,6 +676,11 @@ data PendingPopup e msg = PendingPopup
     -- 'Blink.Popup.offset'.
   , popupRun       :: View e msg ()
     -- ^ The popup content's own frame action, extracted at queue time.
+  , popupOriginScope :: Maybe e
+    -- ^ The focus scope ambient when 'Blink.Popup.popup' was called
+    -- ('Nothing' for root) -- see 'Blink.View.Focus.getCurrentScope'.
+    -- "Blink.App"'s drain step re-enters it before running 'popupRun', so a
+    -- popup runs with the same focus ambient it would have had inline.
   }
 
 -- | The frame context threaded through every 'View' computation. Carries the
@@ -1086,8 +1092,8 @@ queueUiEffects :: [UiEffect e] -> ViewContext e msg -> ViewContext e msg
 queueUiEffects effs ctx = ctx { ctxOutputs = foldl' queueOne (ctxOutputs ctx) effs }
   where queueOne out eff = out { outEvents = EffectUi eff : outEvents out }
 
--- Internal: the 'UiEffect's queued with 'emitUi' during the frame, in emit
--- order, messages discarded.
+-- | The 'UiEffect's queued with 'emitUi' so far this frame, in emit order,
+-- messages discarded.
 getUiEffects :: ViewContext e msg -> [UiEffect e]
 getUiEffects ctx = [eff | EffectUi eff <- reverse (outEvents (ctxOutputs ctx))]
 

@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Geometry (Point (..), Rectangle (..), uniform, noBorder)
-import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
+import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..), emptyInputState)
 import Blink.Interaction
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
@@ -35,7 +35,7 @@ testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
 seedAt :: Point -> ViewContext () msg
-seedAt p = emptyViewContext testBounds (InputState p False [] [] 0) testTheme
+seedAt p = emptyViewContext testBounds (emptyInputState { inputMousePosition = p }) testTheme
 
 seedAt0 :: ViewContext () msg
 seedAt0 = seedAt (Point 0 0)

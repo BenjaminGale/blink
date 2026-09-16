@@ -19,6 +19,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Blink.Geometry
 import Blink.Controls.List (ListPart)
+import Blink.Controls.MenuBar (MenuBarPart)
 import Blink.Controls.MenuButton (MenuButtonPart)
 import Blink.Controls.ScrollBar (ScrollBarPart)
 import Blink.Controls.ToggleGroup (ToggleGroupPart)
@@ -48,6 +49,7 @@ data ControlId = Label
              | ToggleCtl
              | RadioOption (ToggleGroupPart Text)
              | FileMenuButton (MenuButtonPart Text)
+             | DemoMenuBar (MenuBarPart Text Text)
              | TextInputCtl
              | PasswordInputCtl
              | AnimateCheckbox

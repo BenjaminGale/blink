@@ -17,7 +17,7 @@ import Blink.Controls.Tree
 import Blink.Controls.Tree.Style (treeChevronStyleKey)
 import Blink.Element (Element (..), runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
-import Blink.Input (InputState (..), Key (..))
+import Blink.Input (InputState (..), emptyInputState, Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -123,7 +123,7 @@ chromeTheme = testTheme
       }
 
 noInput :: InputState
-noInput = InputState (Point 200 200) False [] [] 0
+noInput = emptyInputState { inputMousePosition = Point 200 200 }
 
 seedCtx :: ViewContext TestElem String
 seedCtx = emptyViewContext testBounds noInput testTheme

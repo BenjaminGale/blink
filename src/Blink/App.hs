@@ -111,6 +111,7 @@ module Blink.App
   , BlinkHandle (..)
     -- * Frame types
   , FrameInput (..)
+  , emptyFrameInput
   , FrameResult (..)
     -- * Commands
   , MsgQueue (..)
@@ -129,7 +130,7 @@ import GHC.Clock (getMonotonicTimeNSec)
 
 import Blink.Cmd (Cmd, runCmd)
 import Blink.Geometry (Point (..), Rectangle, Size (..), placePopup, rectFromSize)
-import Blink.Input (KeyEvent, InputState (..), advanceButton)
+import Blink.Input (KeyEvent, InputState (..), advanceButton, emptyInputState)
 import Blink.View.Context (ctxMouse)
 import Blink.Rendering (DrawCommand, CursorShape, TextMeasurer (..), ImageMeasurer (..), Measurers (..))
 import Blink.Style (Theme)
@@ -141,10 +142,11 @@ import Blink.View
   , runView, getDrawCommands, getCursorShape, getMessages, hasPendingUiEffects
   , UiEffect, queueUiEffects
   , contextAnimation, contextRequiresAnimation
-  , PendingPopup (popupAnchor, popupSize, popupPlacement, popupOffset, popupRun)
+  , PendingPopup (popupAnchor, popupSize, popupPlacement, popupOffset, popupRun, popupOriginScope)
   , getPendingPopups, clearPendingPopups
   , getWindowSize, withBounds
   , markPopupFloor
+  , withFocusScope
   )
 import Blink.Element (Element, runElement)
 import Blink.Update (Update, runUpdateEffects)
@@ -233,6 +235,9 @@ data FrameInput = FrameInput
   , wheelDelta    :: Double
     -- ^ Vertical mouse wheel movement for this frame -- see
     -- 'Blink.Input.inputWheelDelta'.
+  , altHeld       :: Bool
+    -- ^ Whether Alt is physically held this frame -- see
+    -- 'Blink.Input.inputAltHeld'.
   , windowSize    :: Size
     -- ^ Current dimensions of the window's drawing area.
   , quitRequested   :: Bool
@@ -243,6 +248,22 @@ data FrameInput = FrameInput
     -- rather than a platform input event. Blink's ticker calls the @notify@
     -- callback passed to 'configureEventDriven'; backends should detect that
     -- wake-up and set this field accordingly.
+  }
+
+-- | Nothing held or pressed, a 0x0 window, not quitting, not a tick. Build
+-- a specific frame's input by record update on this, never by listing
+-- every field.
+emptyFrameInput :: FrameInput
+emptyFrameInput = FrameInput
+  { mousePosition   = Point 0 0
+  , mouseButtonDown = False
+  , keyEvents       = []
+  , typedText       = []
+  , wheelDelta      = 0
+  , altHeld         = False
+  , windowSize      = Size 0 0
+  , quitRequested   = False
+  , isAnimationTick = False
   }
 
 -- | The result of processing a single frame.
@@ -282,28 +303,35 @@ buildCtx app winRect inputState delta isAnimTick state prevCtx =
 -- render pass goes through this rather than 'runElement'/'runView' directly,
 -- so a popup queued on either the first pass ('runFrame') or the second
 -- ('rerenderPass') is always run out before that pass's output is read.
-runViewAndPopups :: Element e msg -> ViewContext e msg -> IO ((), ViewContext e msg)
+runViewAndPopups :: Ord e => Element e msg -> ViewContext e msg -> IO ((), ViewContext e msg)
 runViewAndPopups el ctx = do
   (a, ctx') <- runView (runElement el) ctx
   ctx''     <- drainPopups ctx'
   pure (a, ctx'')
 
 -- | Runs each popup queued this render pass, in queue order, positioned per
--- 'placePopup'. Their draws and hit-rects append onto @ctx@'s own, landing
--- after everything the main tree already produced -- on top, and never
--- occluded by it. 'markPopupFloor' runs first, marking every hit-rect
--- registered from here on as a popup's -- see @isOccludedByPopupFor@ in
+-- 'placePopup', and repeats against whatever a popup's own run queues in
+-- turn (a submenu opened from a menu's own popup, say). Their draws and
+-- hit-rects append onto @ctx@'s own, landing on top of everything already
+-- produced this frame. 'markPopupFloor' runs once, up front, marking every
+-- hit-rect from here on as a popup's -- see @isOccludedByPopupFor@ in
 -- "Blink.View.Mouse".
-drainPopups :: ViewContext e msg -> IO (ViewContext e msg)
+drainPopups :: Ord e => ViewContext e msg -> IO (ViewContext e msg)
 drainPopups ctx0 = do
   (_, ctx1) <- runView markPopupFloor ctx0
-  clearPendingPopups <$> foldM runOne ctx1 (getPendingPopups ctx1)
+  drainLayer ctx1
   where
+    drainLayer ctx = case getPendingPopups ctx of
+      [] -> pure ctx
+      ps -> foldM runOne (clearPendingPopups ctx) ps >>= drainLayer
     runOne ctx p = snd <$> runView (place p) ctx
     place p = do
       window <- getWindowSize
       let rect = placePopup (popupAnchor p) window (popupSize p) (popupPlacement p) (popupOffset p)
-      withBounds rect (popupRun p)
+          run  = withBounds rect (popupRun p)
+      -- Re-enters the scope this popup was queued from, so it runs with
+      -- the focus ambient it would have had inline (see PendingPopup.popupOriginScope).
+      maybe run (`withFocusScope` run) (popupOriginScope p)
 
 -- | Folds a batch of messages into state via @update@, in order, collecting
 -- every 'Cmd' and 'UiEffect' any of them requested along the way.
@@ -443,15 +471,6 @@ toResult input draws cursor state
   | quitRequested input = Quit draws cursor state
   | otherwise           = Continue draws cursor state
 
-emptyInputState :: InputState
-emptyInputState = InputState
-  { inputMousePosition  = Point 0 0
-  , inputLeftButtonDown = False
-  , inputKeyEvents      = []
-  , inputTypedText      = []
-  , inputWheelDelta     = 0
-  }
-
 toInputState :: FrameInput -> InputState
 toInputState fi = InputState
   { inputMousePosition  = mousePosition fi
@@ -459,6 +478,7 @@ toInputState fi = InputState
   , inputKeyEvents      = keyEvents fi
   , inputTypedText      = typedText fi
   , inputWheelDelta     = wheelDelta fi
+  , inputAltHeld        = altHeld fi
   }
 
 -- Clears keyboard, text, and wheel events for the second render pass in

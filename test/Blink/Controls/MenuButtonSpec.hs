@@ -184,16 +184,54 @@ hoverApp = App
   , update  = const (pure ())
   }
 
+-- | Two independent 'menuButton's, side by side at root scope, each with a
+-- single item, both logging their own trigger's and item's focus-gained
+-- events -- for the outside-click race in 'twoMenusApp' below: menu A's
+-- trigger sits at (0,0)-(40,20) with its item at (0,20)-(40,40); menu B's
+-- at (100,0)-(140,20) and (100,20)-(140,40), far enough apart that a click
+-- on one is unambiguously "outside" the other.
+data TwoMenuElem = MenuAPart (MenuButtonPart Item) | MenuBPart (MenuButtonPart Item)
+  deriving (Eq, Ord, Show)
+
+data TwoMenuEvent = SetOpenA Bool | SetOpenB Bool | TwoMenuLogged Text
+
+twoMenusApp :: App TwoMenuElem TwoMenuEvent (Bool, Bool, [Text])
+twoMenusApp = App
+  { startUp = pure (False, False, [])
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \(openA, openB, _) -> fullView $ do
+      withBounds (Rectangle 0 0 40 20) $ void $
+        runElement (oneMenu MenuAPart "A" openA (postWith SetOpenA))
+      withBounds (Rectangle 100 0 40 20) $ void $
+        runElement (oneMenu MenuBPart "B" openB (postWith SetOpenB))
+  , update  = \m -> modify $ \(openA, openB, log') -> case m of
+      SetOpenA b     -> (b, openB, log')
+      SetOpenB b     -> (openA, b, log')
+      TwoMenuLogged t -> (openA, openB, log' ++ [t])
+  }
+  where
+    oneMenu tag label open onOpen =
+      (menuButton tag
+        [ text label
+        , isOpen open
+        , onOpenChanged onOpen
+        , onFocusGained (post (TwoMenuLogged (label <> " trigger focused")))
+        , items [Open]
+        , itemAttrs (const
+            [ text "X", width (exactly 40), height (exactly 20)
+            , onFocusGained (post (TwoMenuLogged (label <> " item focused")))
+            ])
+        ]) { elLayout = Layout (exactly 40) (exactly 20) TopLeft }
+
+menuATriggerPoint, menuBTriggerPoint :: Point
+menuATriggerPoint = Point 20 10
+menuBTriggerPoint = Point 120 10
+
 mkInput :: Point -> Bool -> FrameInput
-mkInput p down = FrameInput
+mkInput p down = emptyFrameInput
   { mousePosition   = p
   , mouseButtonDown = down
-  , keyEvents       = []
-  , typedText       = []
-  , wheelDelta      = 0
   , windowSize      = Size 100 100
-  , quitRequested   = False
-  , isAnimationTick = False
   }
 
 nullMsgQueue :: MsgQueue msg
@@ -398,6 +436,17 @@ spec = describe "Blink.Controls.MenuButton.menuButton" $ do
       _      <- stepFrame handle (mkInput navItemPoint True)
       result <- stepFrame handle (mkInput navItemPoint False)
       snd (resultState result) `shouldContain` ["Open activated"]
+
+    it "focuses the newly opened menu, not the trigger of the one an outside click just closed" $ do
+      handle <- configureEventDriven twoMenusApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- stepFrame handle (mkInput menuATriggerPoint True)
+      _      <- stepFrame handle (mkInput menuATriggerPoint False) -- opens A, focuses "A item"
+      _      <- stepFrame handle (mkInput menuBTriggerPoint True)
+      result <- stepFrame handle (mkInput menuBTriggerPoint False) -- closes A, opens B
+      let (openA, openB, log') = resultState result
+      openA `shouldBe` False
+      openB `shouldBe` True
+      last log' `shouldBe` "B item focused"
 
   it "still draws an item's hover style once the popup's own panel is already registered" $ do
     handle <- configureEventDriven hoverApp nullMsgQueue (pure ()) noOpMeasurers

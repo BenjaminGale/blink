@@ -10,6 +10,7 @@ import qualified SDL.Font as Font
 import qualified SDL.Raw
 import Control.Concurrent.STM (atomically, flushTBQueue, newTBQueueIO, writeTBQueue)
 import Control.Monad (foldM, unless, void)
+import Data.Char (chr, toUpper)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Maybe (isJust)
 import Foreign.Ptr (nullPtr)
@@ -128,6 +129,7 @@ loop handle btnDown applyCursor renderFrame window checkAnimTick = do
   where
     stepEvent pos winSize (btn, _) event = do
       isAnimTick <- checkAnimTick [event]
+      mods       <- SDL.getModState
       let btn' = updateButton btn event
           fi   = FrameInput
                    { mousePosition   = pos
@@ -135,6 +137,7 @@ loop handle btnDown applyCursor renderFrame window checkAnimTick = do
                    , keyEvents       = toKeyEvents event
                    , typedText       = toTypedText event
                    , wheelDelta      = toWheelDelta event
+                   , altHeld         = SDL.keyModifierLeftAlt mods || SDL.keyModifierRightAlt mods
                    , windowSize      = winSize
                    , quitRequested   = SDL.eventPayload event == SDL.QuitEvent
                    , isAnimationTick = isAnimTick
@@ -151,8 +154,26 @@ updateButton current e = case SDL.eventPayload e of
           SDL.Pressed  -> True
   _ -> current
 
+-- | The uppercase letter a letter keycode ('SDL.KeycodeA' through
+-- 'SDL.KeycodeZ', whose underlying codes are the ASCII lowercase range)
+-- represents, or 'Nothing' for any other keycode.
+letterKeycode :: SDL.Keycode -> Maybe Char
+letterKeycode kc
+  | code >= SDL.unwrapKeycode SDL.KeycodeA && code <= SDL.unwrapKeycode SDL.KeycodeZ
+  = Just (toUpper (chr (fromIntegral code)))
+  | otherwise = Nothing
+  where code = SDL.unwrapKeycode kc
+
 toKeyEvents :: SDL.Event -> [KeyEvent]
 toKeyEvents e = case SDL.eventPayload e of
+  SDL.KeyboardEvent d
+    | SDL.keyboardEventKeyMotion d == SDL.Pressed
+    , let keysym = SDL.keyboardEventKeysym d
+    , let mods   = SDL.keysymModifier keysym
+    , let alt    = SDL.keyModifierLeftAlt mods || SDL.keyModifierRightAlt mods
+    , Just c <- letterKeycode (SDL.keysymKeycode keysym)
+    , alt
+    -> [KeyEvent { key = KeyChar c, modifiers = [Alt], keyRepeat = SDL.keyboardEventRepeat d }]
   SDL.KeyboardEvent d
     | SDL.keyboardEventKeyMotion d == SDL.Pressed
     -> let rep = SDL.keyboardEventRepeat d

@@ -69,7 +69,9 @@ library
         Blink.Controls.TextInput
         Blink.Controls.ToggleButton
         Blink.Controls.ToggleGroup
+        Blink.Controls.Menu
         Blink.Controls.MenuButton
+        Blink.Controls.MenuBar
         Blink.Controls.Table
         Blink.Controls.Tree
         Blink.Controls.TreeTable
@@ -99,6 +101,7 @@ library
         Blink.Controls.Table.Style
         Blink.Controls.Tree.Style
         Blink.Controls.MenuButton.Style
+        Blink.Controls.MenuBar.Style
     hs-source-dirs: src
 
 executable demo
@@ -143,6 +146,8 @@ test-suite blink-tests
         Blink.Controls.FixedFocusBehaviour
         Blink.Controls.LabelSpec
         Blink.Controls.ListSpec
+        Blink.Controls.MenuSpec
+        Blink.Controls.MenuBarSpec
         Blink.Controls.MenuButtonSpec
         Blink.Controls.ProgressBarSpec
         Blink.Controls.RadioButtonSpec
