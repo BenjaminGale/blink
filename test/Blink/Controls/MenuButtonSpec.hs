@@ -8,7 +8,7 @@ import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
-import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultDraws, resultState)
+import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultDraws, resultState, testMetrics, testStyleSet)
 import Blink.Controls.Button (onActivated)
 import Blink.Controls.Control
   ( ControlInteraction (ciMouseDown)
@@ -18,34 +18,16 @@ import Blink.Controls.Control
 import Blink.Controls.Label (text)
 import Blink.Controls.MenuButton (MenuButtonPart (..), isOpen, itemAttrs, items, menuButton, onOpenChanged)
 import Blink.Element (Element, elLayout, elementWithLayout, height, runElement, width)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (KeyDown, KeyEscape, KeyReturn, KeyTab, KeyUp), KeyEvent (..), Modifier (Shift))
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), noOpMeasurers)
-import Blink.Style (Metrics (..), Palette (..), Style (..), StyleSet (..), VisualState (..), emptyTheme, noBorder)
+import Blink.Rendering (Colour (..), DrawCommand (..), noOpMeasurers)
+import Blink.Style (Palette (..), Style (styleBackground), StyleSet (styleOverrides), VisualState (..), emptyTheme)
 import Blink.Style.Defaults (defaultTheme)
 import Blink.Update (modify, put)
 import Blink.View (View, emit, withBounds)
 
 data Item = Open | Save deriving (Eq, Ord, Show)
-
-testStyle :: Style
-testStyle = Style
-  { styleBackground   = RGBA 0 0 0 1
-  , styleTextColour   = RGBA 0 0 0 1
-  , styleTextAlign    = AlignLeft
-  , styleBorderColour = Nothing
-  }
-
-testMetrics :: Metrics
-testMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
-  }
-
-testStyleSet :: StyleSet
-testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = mempty }
 
 -- | A single menu button, filling the whole window so any point in it
 -- reliably hits the trigger, with two items -- 'Open' and 'Save'.

@@ -6,17 +6,17 @@ import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
-import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultState)
+import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultState, testMetrics, testStyleSet)
 import Blink.Controls.Button (ButtonConfig, onActivated)
 import Blink.Controls.Control (onFocusGained, post)
 import Blink.Controls.Label (mnemonic, text)
 import Blink.Controls.Menu (menuListWithSubmenus)
 import Blink.Element (Attribute, elLayout, elementWithLayout, height, runElement, width)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..), uniform)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Alt))
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (Colour (..), TextAlign (..), noOpMeasurers)
-import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), emptyTheme, noBorder)
+import Blink.Rendering (noOpMeasurers)
+import Blink.Style (StyleKey (..), emptyTheme)
 import Blink.Update (modify)
 import Blink.View (emit, getFocus, requestFocus)
 
@@ -33,20 +33,6 @@ data Part = ItemPart Item | ExportSubmenu deriving (Eq, Ord, Show)
 
 testStyleKey :: StyleKey Part
 testStyleKey = Class "testMenu"
-
-testStyle :: Style
-testStyle = Style
-  { styleBackground   = RGBA 0 0 0 1
-  , styleTextColour   = RGBA 0 0 0 1
-  , styleTextAlign    = AlignLeft
-  , styleBorderColour = Nothing
-  }
-
-testMetrics :: Metrics
-testMetrics = Metrics { metricsMargin = uniform 0, metricsPadding = uniform 0, metricsBorderEdges = noBorder }
-
-testStyleSet :: StyleSet
-testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = mempty }
 
 -- | 'Export's own submenu -- its focus-scope\/panel id, and its items.
 -- Every other item has none.

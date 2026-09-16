@@ -9,13 +9,13 @@ import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
-import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultDraws, resultState)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
+import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultDraws, resultState, testMetrics, testStyleSet)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Popup (content, popup)
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
+import Blink.Style (emptyTheme)
 import Blink.View
 import Blink.View.Drawing (fillRect, drawText)
 import Blink.Element (Element, elLayout, elementWithLayout)
@@ -62,24 +62,6 @@ newTestMsgQueue = do
         , drainMsgs  = atomicModifyIORef' ref (\ms -> ([], ms))
         }
   pure (queue, takeMVar done)
-
-testStyle :: Style
-testStyle = Style
-  { styleBackground   = RGBA 0 0 0 1
-  , styleTextColour   = RGBA 0 0 0 1
-  , styleTextAlign    = AlignLeft
-  , styleBorderColour = Nothing
-  }
-
-testMetrics :: Metrics
-testMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
-  }
-
-testStyleSet :: StyleSet
-testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = mempty }
 
 drawnImages :: FrameResult s -> [Text]
 drawnImages r = [p | DrawImage _ p _ <- resultDraws r]

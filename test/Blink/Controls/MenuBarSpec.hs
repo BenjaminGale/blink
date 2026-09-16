@@ -6,16 +6,16 @@ import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
-import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultState)
+import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultState, testMetrics, testStyleSet)
 import Blink.Controls.Control (postWith)
 import Blink.Controls.Label (mnemonic, text)
 import Blink.Controls.MenuBar (MenuBarPart (..), itemAttrs, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu)
 import Blink.Element (elLayout, height, width)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..), uniform)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..))
 import Blink.Input (Key (KeyChar, KeyLeft, KeyRight), KeyEvent (..), Modifier (Alt))
 import Blink.Layout.Constraints (Layout (..), exactly)
-import Blink.Rendering (Colour (..), TextAlign (..), noOpMeasurers)
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
+import Blink.Rendering (noOpMeasurers)
+import Blink.Style (emptyTheme)
 import Blink.Update (put)
 
 data TopMenu = FileMenu | EditMenu deriving (Eq, Ord, Show)
@@ -33,24 +33,6 @@ labelMnemonic EditMenu = 'E'
 itemsFor :: TopMenu -> [Item]
 itemsFor FileMenu = [Open, Save]
 itemsFor EditMenu = [Cut, Copy]
-
-testStyle :: Style
-testStyle = Style
-  { styleBackground   = RGBA 0 0 0 1
-  , styleTextColour   = RGBA 0 0 0 1
-  , styleTextAlign    = AlignLeft
-  , styleBorderColour = Nothing
-  }
-
-testMetrics :: Metrics
-testMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
-  }
-
-testStyleSet :: StyleSet
-testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = mempty }
 
 -- | A menu bar with two menus -- File(Open, Save) and Edit(Cut, Copy) --
 -- each label a fixed 40x20, laid out left to right, so File sits at
