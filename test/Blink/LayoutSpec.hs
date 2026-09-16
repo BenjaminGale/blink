@@ -1,50 +1,19 @@
 module Blink.LayoutSpec (spec) where
 
 import Control.Monad (forM_)
-import qualified Data.Map.Strict as Map
 import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (Gen, NonNegative (..), choose, forAll, ioProperty)
 
 import Blink.Generators ()
-import Blink.Geometry (Alignment (..), Point (..), Rectangle (..), uniform)
-import Blink.Input (InputState (..), emptyInputState)
+import Blink.Geometry (Alignment (..), Rectangle (..))
 import Blink.Layout
 import Blink.Layout.Constraints (capLength, minLength)
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), noBorder)
+import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.View
+import Blink.View.Fixtures (emptyTheme, noInput)
 import Blink.View.Drawing (fillRect)
 import Blink.Element (Attribute, elementWithLayout, runElement)
-
--- Test infrastructure
-
-noInput :: InputState
-noInput = emptyInputState { inputMousePosition = Point 0 0 }
-
-emptyStyle :: Style
-emptyStyle = Style
-  { styleBackground   = RGBA 0 0 0 1
-  , styleTextColour   = RGBA 0 0 0 1
-  , styleTextAlign    = AlignCenter
-  , styleBorderColour = Nothing
-  }
-
-emptyMetrics :: Metrics
-emptyMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
-  }
-
-emptyStyleSet :: StyleSet
-emptyStyleSet = StyleSet { styleBase = emptyStyle, styleOverrides = Map.empty }
-
-emptyTheme :: Theme ()
-emptyTheme = Theme
-  { themeElementStyles = Map.empty
-  , themeDefaultStyle  = (emptyMetrics, emptyStyleSet)
-  }
 
 testColour :: Colour
 testColour = RGBA 0 0 0 1

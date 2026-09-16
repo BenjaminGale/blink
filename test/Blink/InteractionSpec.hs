@@ -1,41 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.InteractionSpec (spec) where
 
-import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Geometry (Point (..), Rectangle (..), uniform, noBorder)
+import Blink.Geometry (Point (..))
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..), emptyInputState)
 import Blink.Interaction
-import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
 import Blink.View
-
-emptyStyle :: Style
-emptyStyle = Style
-  { styleBackground   = RGBA 0 0 0 1
-  , styleTextColour   = RGBA 0 0 0 1
-  , styleTextAlign    = AlignCenter
-  , styleBorderColour = Nothing
-  }
-
-emptyMetrics :: Metrics
-emptyMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
-  }
-
-testTheme :: Theme ()
-testTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (emptyMetrics, testStyleSet) }
-  where
-    testStyleSet = StyleSet emptyStyle Map.empty
-
-testBounds :: Rectangle
-testBounds = Rectangle 0 0 100 100
+import Blink.View.Fixtures (emptyTheme, testBounds)
 
 seedAt :: Point -> ViewContext () msg
-seedAt p = emptyViewContext testBounds (emptyInputState { inputMousePosition = p }) testTheme
+seedAt p = emptyViewContext testBounds (emptyInputState { inputMousePosition = p }) emptyTheme
 
 seedAt0 :: ViewContext () msg
 seedAt0 = seedAt (Point 0 0)
