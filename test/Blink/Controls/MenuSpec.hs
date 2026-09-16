@@ -6,6 +6,7 @@ import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
+import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultState)
 import Blink.Controls.Button (ButtonConfig, onActivated)
 import Blink.Controls.Control (onFocusGained, post)
 import Blink.Controls.Label (mnemonic, text)
@@ -14,7 +15,7 @@ import Blink.Element (Attribute, elLayout, elementWithLayout, height, runElement
 import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..), uniform)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Alt))
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), noOpMeasurers)
+import Blink.Rendering (Colour (..), TextAlign (..), noOpMeasurers)
 import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), emptyTheme, noBorder)
 import Blink.Update (modify)
 import Blink.View (emit, getFocus, requestFocus)
@@ -112,20 +113,6 @@ mkInput p down = emptyFrameInput
   , mouseButtonDown = down
   , windowSize      = Size 300 300
   }
-
-nullMsgQueue :: MsgQueue msg
-nullMsgQueue = MsgQueue { enqueueMsg = \_ -> pure (), drainMsgs = pure [] }
-
-resultState :: FrameResult s -> s
-resultState (Continue _ _ s) = s
-resultState (Quit _ _ s)     = s
-
-resultDraws :: FrameResult s -> [DrawCommand]
-resultDraws (Continue ds _ _) = ds
-resultDraws (Quit ds _ _)     = ds
-
-drawnTexts :: FrameResult s -> [Text]
-drawnTexts r = [t | DrawText _ t _ _ <- resultDraws r]
 
 -- | A single key press, mouse left resting off every item so it never
 -- spuriously reclicks anything.

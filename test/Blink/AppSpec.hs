@@ -9,6 +9,7 @@ import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
+import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultDraws, resultState)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (Key (..), KeyEvent (..), InputState (..))
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
@@ -48,11 +49,6 @@ normalInput = mkInput False False
 nullMeasurers :: Measurers
 nullMeasurers = noOpMeasurers
 
--- | A 'MsgQueue' that holds nothing -- fine for any test app that never
--- requests a 'Cmd' via 'cmd'.
-nullMsgQueue :: MsgQueue msg
-nullMsgQueue = MsgQueue { enqueueMsg = \_ -> pure (), drainMsgs = pure [] }
-
 -- | A real, IORef-backed 'MsgQueue' for tests that do exercise 'Cmd'
 -- dispatch, paired with an 'MVar' that's filled each time a message is
 -- enqueued -- lets a test block until an asynchronously-dispatched 'Cmd'
@@ -84,17 +80,6 @@ testMetrics = Metrics
 
 testStyleSet :: StyleSet
 testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = mempty }
-
-resultState :: FrameResult s -> s
-resultState (Continue _ _ s) = s
-resultState (Quit _ _ s)     = s
-
-resultDraws :: FrameResult s -> [DrawCommand]
-resultDraws (Continue ds _ _) = ds
-resultDraws (Quit ds _ _)     = ds
-
-drawnTexts :: FrameResult s -> [Text]
-drawnTexts r = [t | DrawText _ t _ _ <- resultDraws r]
 
 drawnImages :: FrameResult s -> [Text]
 drawnImages r = [p | DrawImage _ p _ <- resultDraws r]

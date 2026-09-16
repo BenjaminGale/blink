@@ -6,6 +6,7 @@ import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
+import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultState)
 import Blink.Controls.Control (postWith)
 import Blink.Controls.Label (mnemonic, text)
 import Blink.Controls.MenuBar (MenuBarPart (..), itemAttrs, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu)
@@ -13,7 +14,7 @@ import Blink.Element (elLayout, height, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..), uniform)
 import Blink.Input (Key (KeyChar, KeyLeft, KeyRight), KeyEvent (..), Modifier (Alt))
 import Blink.Layout.Constraints (Layout (..), exactly)
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), noOpMeasurers)
+import Blink.Rendering (Colour (..), TextAlign (..), noOpMeasurers)
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyTheme, noBorder)
 import Blink.Update (put)
 
@@ -78,20 +79,6 @@ mkInput p down = emptyFrameInput
   , mouseButtonDown = down
   , windowSize      = Size 100 100
   }
-
-nullMsgQueue :: MsgQueue msg
-nullMsgQueue = MsgQueue { enqueueMsg = \_ -> pure (), drainMsgs = pure [] }
-
-resultState :: FrameResult s -> s
-resultState (Continue _ _ s) = s
-resultState (Quit _ _ s)     = s
-
-resultDraws :: FrameResult s -> [DrawCommand]
-resultDraws (Continue ds _ _) = ds
-resultDraws (Quit ds _ _)     = ds
-
-drawnTexts :: FrameResult s -> [T.Text]
-drawnTexts r = [t | DrawText _ t _ _ <- resultDraws r]
 
 fileTriggerPoint, editTriggerPoint, fileItemPoint :: Point
 fileTriggerPoint = Point 20 10

@@ -8,6 +8,7 @@ import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
+import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultDraws, resultState)
 import Blink.Controls.Button (onActivated)
 import Blink.Controls.Control
   ( ControlInteraction (ciMouseDown)
@@ -233,20 +234,6 @@ mkInput p down = emptyFrameInput
   , mouseButtonDown = down
   , windowSize      = Size 100 100
   }
-
-nullMsgQueue :: MsgQueue msg
-nullMsgQueue = MsgQueue { enqueueMsg = \_ -> pure (), drainMsgs = pure [] }
-
-resultState :: FrameResult s -> s
-resultState (Continue _ _ s) = s
-resultState (Quit _ _ s)     = s
-
-resultDraws :: FrameResult s -> [DrawCommand]
-resultDraws (Continue ds _ _) = ds
-resultDraws (Quit ds _ _)     = ds
-
-drawnTexts :: FrameResult s -> [Text]
-drawnTexts r = [t | DrawText _ t _ _ <- resultDraws r]
 
 triggerPoint :: Point
 triggerPoint = Point 50 50
