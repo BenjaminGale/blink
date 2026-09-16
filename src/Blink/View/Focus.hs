@@ -25,6 +25,7 @@ module Blink.View.Focus
   , disclaimFocus
   , requestFocus
   , requestClearFocus
+  , hasQueuedFocus
   , withFocusScope
   , getPreviousTabStop
   , setPreviousTabStop
@@ -149,6 +150,17 @@ requestFocus scopeId target = queueEffect (Focus scopeId target)
 -- from 'View' or 'Blink.Update.Update' -- see 'HasUiEffect'.
 requestClearFocus :: HasUiEffect e m => Maybe e -> m ()
 requestClearFocus scopeId = queueEffect (ClearFocus scopeId)
+
+-- | 'True' when a 'Focus'\/'ClearFocus' effect targeting this scope is
+-- already queued this frame. Lets a fallback focus request (e.g. returning
+-- focus to a trigger on close) skip itself rather than clobber a fresher
+-- claim made earlier in the same pass -- see 'requestFocus'.
+hasQueuedFocus :: Eq e => Maybe e -> View e msg Bool
+hasQueuedFocus scopeId = gets (any matches . getUiEffects)
+  where
+    matches (Focus sid _)    = sid == scopeId
+    matches (ClearFocus sid) = sid == scopeId
+    matches _                 = False
 
 -- | Marks a sub-tree as belonging to a composite focus scope (a list, a
 -- tree — anything with sub-items), addressed by its own globally-unique id.

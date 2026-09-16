@@ -156,7 +156,8 @@ runMenuButton tag cfg = do
       justOpened = tgiSelected r && not wasOpen
       close      = do
         runHandlers (tgcOnSelectedChanged (mbToggle cfg)) False
-        requestFocus enclosingScope triggerId
+        alreadyClaimed <- hasQueuedFocus enclosingScope
+        when (not alreadyClaimed) $ requestFocus enclosingScope triggerId
   when justOpened $ requestFocus enclosingScope (tag MenuButtonList)
   when (tgiSelected r) $ popup triggerId [content (itemsElement tag cfg close onTrigger)]
   pure r

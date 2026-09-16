@@ -230,7 +230,8 @@ runMenuBarLabel tag cfg menuKey labelCfg rowBounds = do
       open         = openMenuFor tag cfg enclosingScope
       close        = do
         runHandlers (mbrOnOpenChanged cfg) Nothing
-        requestFocus enclosingScope labelId
+        alreadyClaimed <- hasQueuedFocus enclosingScope
+        when (not alreadyClaimed) $ requestFocus enclosingScope labelId
       switchByKey dir = forM_ (adjacentMenu (mbrMenus cfg) menuKey dir) open
   when (hoveredIn && someOtherOpen) (open menuKey)
   when justOpened $ requestFocus enclosingScope (tag (MenuBarList menuKey))

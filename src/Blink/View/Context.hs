@@ -50,6 +50,7 @@ module Blink.View.Context
   , emit
   , emitUi
   , queueUiEffects
+  , getUiEffects
     -- * Bounds
   , getBounds
   , getWindowSize
@@ -1091,8 +1092,8 @@ queueUiEffects :: [UiEffect e] -> ViewContext e msg -> ViewContext e msg
 queueUiEffects effs ctx = ctx { ctxOutputs = foldl' queueOne (ctxOutputs ctx) effs }
   where queueOne out eff = out { outEvents = EffectUi eff : outEvents out }
 
--- Internal: the 'UiEffect's queued with 'emitUi' during the frame, in emit
--- order, messages discarded.
+-- | The 'UiEffect's queued with 'emitUi' so far this frame, in emit order,
+-- messages discarded.
 getUiEffects :: ViewContext e msg -> [UiEffect e]
 getUiEffects ctx = [eff | EffectUi eff <- reverse (outEvents (ctxOutputs ctx))]
 
