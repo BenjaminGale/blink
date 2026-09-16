@@ -6,13 +6,14 @@ import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
 import Blink.Controls.Control (Attribute, StyleKey (..), control, defaultControlConfig, elementId, isEnabled, postWith, resolve)
-import Blink.Controls.ElementBehaviour (tagged)
+import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.Label (text)
 import Blink.Controls.ToggleGroup
   ( ToggleGroupConfig, ToggleGroupPart (..), allowDeselect, defaultToggleGroupConfig
   , items, onSelectionChanged, selectedItem, tggSelected, toggleAttributes, toggleButtonGroup
   )
-import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
+import Blink.Controls.Fixtures
+  (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Layout.Constraints (exactly, fill)
@@ -48,6 +49,23 @@ groupBounds = Rectangle 0 0 300 100
 
 seedCtx :: ViewContext TestElement String
 seedCtx = emptyViewContext groupBounds noInput testTheme
+
+-- | Bounds and theme for 'controlBehaviourSpec', with 'standardMetrics'\'s
+-- real 10px margin -- every other test in this file renders against
+-- 'zeroMetrics', where a margin\/hit-region distinction doesn't exist. Sized
+-- so the group's 300x100 content (three 100px-wide items, per 'render')
+-- exactly fills the margin-inset area.
+controlTestBounds :: Rectangle
+controlTestBounds = Rectangle 0 0 320 120
+
+controlTestTheme :: Theme TestElement
+controlTestTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
+
+controlSeedCtx :: ViewContext TestElement String
+controlSeedCtx = emptyViewContext controlTestBounds noInput controlTestTheme
+
+controlHitRect :: Rectangle
+controlHitRect = hitRectFor controlTestBounds
 
 type Attribute' = Attribute (ToggleGroupConfig TestElement Size String)
 
@@ -149,11 +167,14 @@ spec = describe "Blink.Controls.ToggleGroup" $ do
         [ClickAt (inSlot Medium)]
       resultMessages result `shouldBe` []
 
+  -- The group's own id is permanently 'Blink.Controls.Control.NotFocusable'
+  -- (see 'Blink.Controls.ToggleGroup.toggleGroup'): Tab moves directly
+  -- between its items, never landing on the group itself.
   describe "as a control" $
-    it "still raises its own raw mouse events, since it's built on `control`" $ monadicIO $ do
-      p <- pick (genPointIn groupBounds)
-      result <- run $ runInteractions groupBounds seedCtx (render (selectedItem Nothing : tagged)) [] [MoveTo p]
-      assert ("MouseEntered" `elem` resultMessages result)
+    controlBehaviourSpec
+      (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
+      controlTestBounds controlSeedCtx Group (Point 5 5) controlHitRect (Point 400 400)
+      render
 
   describe "focus" $ do
     it "is not itself a tab stop -- Tab from before lands directly on the first item" $ do
