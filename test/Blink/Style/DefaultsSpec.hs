@@ -23,9 +23,12 @@ import Blink.Controls.ToggleButton (toggleButtonStyleKey, toggleChecked)
 import Blink.Controls.ToggleGroup (radioButtonGroupStyleKey, toggleButtonGroupStyleKey)
 import Blink.Controls.Table.Style (tableColumnDividerStyleKey, tableHeaderStyleKey)
 import Blink.Controls.Tree.Style (treeChevronStyleKey)
+import Blink.Controls.Fixtures (noInput)
+import Blink.Geometry (Rectangle (..))
 import Blink.Rendering (Colour (..))
 import Blink.Style
 import Blink.Style.Defaults (defaultTheme)
+import Blink.View (emptyViewContext, getStyleSet, runView)
 
 testPalette :: Palette
 testPalette = Palette
@@ -43,13 +46,15 @@ testPalette = Palette
   , paletteIconHover       = RGBA 0.7 0.7 1.0 1
   }
 
-resolvedAt :: StyleKey () -> Set.Set VisualState -> Style
-resolvedAt key active =
-  case Map.lookup key (themeElementStyles thm) of
-    Just (_, ss) -> resolveStyle ss active
-    Nothing      -> resolveStyle (snd (themeDefaultStyle thm)) active
+-- | The resolved 'Style' the real render path would produce for @key@ with
+-- @active@ pseudo-states, driven through the actual 'getStyleSet' lookup
+-- rather than a hand-duplicated fallback.
+resolvedAt :: StyleKey () -> Set.Set VisualState -> IO Style
+resolvedAt key active = do
+  ((_, ss), _) <- runView (getStyleSet key) ctx
+  pure (resolveStyle ss active)
   where
-    thm = defaultTheme testPalette :: Theme ()
+    ctx = emptyViewContext (Rectangle 0 0 100 100) noInput (defaultTheme testPalette :: Theme ())
 
 spec :: Spec
 spec = describe "Blink.Style.Defaults" $ do
@@ -70,25 +75,28 @@ spec = describe "Blink.Style.Defaults" $ do
           ]
 
     it "gives a button the surface colour at rest" $ do
-      styleBackground (resolvedAt buttonStyleKey (Set.singleton CommonNormal)) `shouldBe` paletteSurface testPalette
+      style <- resolvedAt buttonStyleKey (Set.singleton CommonNormal)
+      styleBackground style `shouldBe` paletteSurface testPalette
 
     it "gives a button the accent fill while pressed" $ do
-      styleBackground (resolvedAt buttonStyleKey (Set.singleton CommonPressed)) `shouldBe` paletteAccent testPalette
+      style <- resolvedAt buttonStyleKey (Set.singleton CommonPressed)
+      styleBackground style `shouldBe` paletteAccent testPalette
 
     it "gives a button the focus ring border while focused" $ do
-      styleBorderColour (resolvedAt buttonStyleKey (Set.fromList [CommonNormal, FocusFocused]))
-        `shouldBe` Just (paletteFocusRing testPalette)
+      style <- resolvedAt buttonStyleKey (Set.fromList [CommonNormal, FocusFocused])
+      styleBorderColour style `shouldBe` Just (paletteFocusRing testPalette)
 
     it "gives a toggle button the accent fill while checked" $ do
-      styleBackground (resolvedAt toggleButtonStyleKey (Set.fromList [CommonNormal, toggleChecked]))
-        `shouldBe` paletteAccent testPalette
+      style <- resolvedAt toggleButtonStyleKey (Set.fromList [CommonNormal, toggleChecked])
+      styleBackground style `shouldBe` paletteAccent testPalette
 
     it "keeps a checkbox transparent at rest, tinted on hover" $ do
-      styleBackground (resolvedAt checkboxStyleKey (Set.singleton CommonMouseOver))
-        `shouldBe` paletteSurfaceHover testPalette
+      style <- resolvedAt checkboxStyleKey (Set.singleton CommonMouseOver)
+      styleBackground style `shouldBe` paletteSurfaceHover testPalette
 
     it "mutes a disabled label's text" $ do
-      styleTextColour (resolvedAt labelStyleKey (Set.singleton CommonDisabled)) `shouldBe` paletteTextMuted testPalette
+      style <- resolvedAt labelStyleKey (Set.singleton CommonDisabled)
+      styleTextColour style `shouldBe` paletteTextMuted testPalette
 
     -- Every control below is focusable under its own default 'FocusPolicy'
     -- (see each control module's own 'Blink.Controls.Control.focusPolicy'
@@ -106,7 +114,9 @@ spec = describe "Blink.Style.Defaults" $ do
             ]
       forM_ focusableStyleKeys $ \key ->
         it ("gives " <> show key <> " a distinct look while focused") $ do
-          resolvedAt key (Set.singleton FocusFocused) `shouldNotBe` resolvedAt key Set.empty
+          focused <- resolvedAt key (Set.singleton FocusFocused)
+          normal  <- resolvedAt key Set.empty
+          focused `shouldNotBe` normal
 
     -- 'toggleButtonStyleKey' is the only one of these with no glyph of its
     -- own to show checked/unchecked, so it's the only one whose 'StyleSet'
@@ -115,5 +125,6 @@ spec = describe "Blink.Style.Defaults" $ do
     describe "toggle pseudo-state coverage" $ do
       let key = toggleButtonStyleKey :: StyleKey ()
       it ("gives " <> show key <> " a distinct look while checked") $ do
-        resolvedAt key (Set.fromList [CommonNormal, toggleChecked])
-          `shouldNotBe` resolvedAt key (Set.singleton CommonNormal)
+        checked <- resolvedAt key (Set.fromList [CommonNormal, toggleChecked])
+        normal  <- resolvedAt key (Set.singleton CommonNormal)
+        checked `shouldNotBe` normal
