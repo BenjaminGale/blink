@@ -6,9 +6,10 @@ import Data.Maybe (fromJust)
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute, postWith, resolve)
+import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
-import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
 import Blink.Element (Element (..), height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (..), Modifier (..))
@@ -25,6 +26,7 @@ spec = describe "Blink.Controls.List" $ do
   requiredSpec
   multiSpec
   rangeSpec
+  contractSpec
   widgetSpec
   scrollingSpec
 
@@ -306,6 +308,41 @@ reactions =
   [ onSelectionChanged (postWith (\s -> (selectedMsg s)))
   , onItemActivated (postWith (\x -> (activatedMsg x)))
   ]
+
+-- | 'standardMetrics', not 'testTheme'\'s zero metrics, so the shared
+-- control contract below has a real margin to test hit-region behaviour
+-- against.
+contractTheme :: Theme TestElem
+contractTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
+
+-- | Wide enough to hold a 100x80 list ('renderEmptyList's explicit width\/
+-- height) with room to spare, so points outside it are still trivial to
+-- name.
+contractBounds :: Rectangle
+contractBounds = Rectangle 0 0 100 100
+
+contractCtx :: ViewContext TestElem String
+contractCtx = emptyViewContext contractBounds noInput contractTheme
+
+-- | The fixed 100x80 outer rect below ('renderEmptyList's explicit width\/
+-- height) inset by 'standardMetrics'\'s margin.
+contractHitRect :: Rectangle
+contractHitRect = hitRectFor (Rectangle 0 0 100 80)
+
+-- | 'renderList' with a fixed height and no items, so nothing is rendered
+-- inside 'contractHitRect' to occlude it -- every point in there hits the
+-- list's own root control, exactly what the shared contract needs.
+renderEmptyList :: [Attribute (ListConfig SingleSelection TestElem String Int)] -> View TestElem String ()
+renderEmptyList attrs = renderList (height (exactly 80) : selection (unselected []) : attrs)
+
+-- | The shared raw-event\/focus\/hit-region contract every
+-- 'Blink.Controls.Control.control'-based widget must satisfy. 'list'
+-- discards any 'Blink.Controls.Control.elementId' passed to it in favour
+-- of its own @mkId 'List'@ (see 'Blink.Controls.List.listBase'), so the
+-- element id under test here is fixed to that, not a caller-chosen one.
+contractSpec :: Spec
+contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
+  contractBounds contractCtx (Part List) (Point 5 5) contractHitRect (Point 200 200) renderEmptyList
 
 widgetSpec :: Spec
 widgetSpec = describe "list" $ do

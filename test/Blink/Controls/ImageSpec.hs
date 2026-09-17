@@ -6,9 +6,9 @@ import Test.Hspec
 import Blink.Controls.Control (elementId)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
-import Blink.Controls.Fixtures (mkTestTheme, noInput, plainMetrics, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainMetrics, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.Image (ImageConfig, fitHeight, fitWidth, image, preserveRatio, source)
-import Blink.Geometry (Point (..), Rectangle (..), Size (..), insetRect, uniform)
+import Blink.Geometry (Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Theme, styleTextAlign)
 import Blink.View
@@ -65,16 +65,12 @@ contractMeasurers = noOpMeasurers
 contractCtx :: ViewContext TestElement String
 contractCtx = withMeasurers contractMeasurers (emptyViewContext testBounds noInput contractTheme)
 
--- | 'contractOuterRect' inset by 'standardMetrics'\'s margin (10) on every
--- side -- the hit region 'controlBehaviourSpec' expects.
-contractHitRect :: Rectangle
-contractHitRect = insetRect (uniform 10) contractOuterRect
-
 -- | The rendered rect at 'contractMeasurers'\'s 40x40 natural size plus
 -- chrome (margin 10, padding 5 on each side), aligned 'TopLeft' within
--- 'testBounds'.
-contractOuterRect :: Rectangle
-contractOuterRect = Rectangle 0 0 70 70
+-- 'testBounds', inset by 'standardMetrics'\'s margin -- the hit region
+-- 'controlBehaviourSpec' expects.
+contractHitRect :: Rectangle
+contractHitRect = hitRectFor (Rectangle 0 0 70 70)
 
 -- | 'image' with 'elementId' 'Pic' set -- for the shared behaviour
 -- contracts below, which need a real identity to track hover\/click\/focus
