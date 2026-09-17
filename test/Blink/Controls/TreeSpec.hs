@@ -7,6 +7,7 @@ import Data.Tree (Tree (..))
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute, postWith)
+import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
   ( Direction (..), ListPart (..), MultiSelection, SingleSelection, isItem, moveCursor, multiSelected
   , onSelectionChanged, rowHeight, selectItem, selectedItems, selection, unselected
@@ -15,8 +16,8 @@ import Blink.Controls.List.Style (listStyleKey)
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Controls.Tree
 import Blink.Controls.Tree.Style (treeChevronStyleKey)
-import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
-import Blink.Element (Element (..), runElement, width)
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
+import Blink.Element (Element (..), height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
 import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -150,6 +151,26 @@ renderSilentTree attrs = runElement $ tree Part
 
 items :: [String]
 items = ["src", "src/List.hs", "src/Controls", "test"]
+
+-- | Real margin, unlike 'testTheme', for the hit-region contract below.
+contractTheme :: Theme TestElem
+contractTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
+
+contractCtx :: ViewContext TestElem String
+contractCtx = emptyViewContext testBounds noInput contractTheme
+
+-- | 'renderEmptyTree's fixed 100x40 outer rect, inset by 'standardMetrics'.
+contractHitRect :: Rectangle
+contractHitRect = hitRectFor (Rectangle 0 0 100 40)
+
+-- | No forest, so nothing occludes 'contractHitRect'.
+renderEmptyTree :: [Attribute (TreeConfig SingleSelection TestElem String String)] -> View TestElem String ()
+renderEmptyTree attrs = renderSilentTree (forest [] : selection (unselected []) : height (exactly 40) : attrs)
+
+-- | 'tree' discards any elementId in favour of its own root id.
+contractSpec :: Spec
+contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
+  testBounds contractCtx (Part (TreeRow List)) (Point 5 5) contractHitRect (Point 200 200) renderEmptyTree
 
 widgetSpec :: Spec
 widgetSpec = describe "tree" $ do
@@ -437,6 +458,7 @@ chromeSpec = describe "tree keyboard scrolling with list chrome" $
 spec :: Spec
 spec = describe "Blink.Controls.Tree" $ do
   flattenVisibleSpec
+  contractSpec
   widgetSpec
   keyboardSpec
   multiKeyboardSpec
