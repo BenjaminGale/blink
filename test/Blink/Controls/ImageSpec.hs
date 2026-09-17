@@ -3,13 +3,18 @@ module Blink.Controls.ImageSpec (spec) where
 
 import Test.Hspec
 
-import Blink.Controls.Fixtures (mkTestTheme, noInput, plainMetrics, plainStyle, plainStyleSet, testColour)
+import Blink.Controls.Control (elementId)
+import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
+import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
+import Blink.Controls.Fixtures (mkTestTheme, noInput, plainMetrics, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.Image (ImageConfig, fitHeight, fitWidth, image, preserveRatio, source)
-import Blink.Geometry (Rectangle (..), Size (..), uniform)
+import Blink.Geometry (Point (..), Rectangle (..), Size (..), insetRect, uniform)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Theme, styleTextAlign)
 import Blink.View
 import Blink.Element (Attribute, runElement)
+
+data TestElement = Pic deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -43,8 +48,47 @@ zeroSizeMeasurers = noOpMeasurers
 run :: [Attribute (ImageConfig () String)] -> IO [DrawCommand]
 run attrs = getDrawCommands . snd <$> runView (runElement (image (source "test.svg" : attrs))) seedCtx
 
+-- | 'standardMetrics', not 'testTheme'\'s zero metrics, so the shared
+-- behaviour contracts below have a real margin to test hit-region and
+-- focus-region behaviour against.
+contractTheme :: Theme TestElement
+contractTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
+
+-- | A 40x40 natural size, small enough that chrome ('standardMetrics'\'s
+-- margin and padding, 10 and 5 on each side) still fits within
+-- 'testBounds'.
+contractMeasurers :: Measurers
+contractMeasurers = noOpMeasurers
+  { msrImage = ImageMeasurer { imNaturalSize = \_ -> pure (Size 40 40) }
+  }
+
+contractCtx :: ViewContext TestElement String
+contractCtx = withMeasurers contractMeasurers (emptyViewContext testBounds noInput contractTheme)
+
+-- | 'contractOuterRect' inset by 'standardMetrics'\'s margin (10) on every
+-- side -- the hit region 'controlBehaviourSpec' expects.
+contractHitRect :: Rectangle
+contractHitRect = insetRect (uniform 10) contractOuterRect
+
+-- | The rendered rect at 'contractMeasurers'\'s 40x40 natural size plus
+-- chrome (margin 10, padding 5 on each side), aligned 'TopLeft' within
+-- 'testBounds'.
+contractOuterRect :: Rectangle
+contractOuterRect = Rectangle 0 0 70 70
+
+-- | 'image' with 'elementId' 'Pic' set -- for the shared behaviour
+-- contracts below, which need a real identity to track hover\/click\/focus
+-- against.
+renderWithId :: [Attribute (ImageConfig TestElement String)] -> View TestElement String ()
+renderWithId attrs = runElement (image (elementId Pic : source "test.svg" : attrs))
+
 spec :: Spec
 spec = describe "Blink.Controls.Image" $ do
+  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
+    testBounds contractCtx Pic (Point 5 5) contractHitRect (Point 200 200) renderWithId
+
+  fixedNotFocusableSpec testBounds contractCtx renderWithId
+
   it "sizes to the image's natural size when no fit dimension is set" $ do
     draws <- run []
     draws `shouldContain` [DrawImage (Rectangle 0 0 100 50) "test.svg" (RGBA 1 1 1 1)]
