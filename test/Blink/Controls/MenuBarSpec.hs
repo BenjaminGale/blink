@@ -7,16 +7,20 @@ import Test.Hspec
 
 import Blink.App
 import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultState, testMetrics, testStyleSet)
-import Blink.Controls.Control (postWith)
+import Blink.Controls.Control (Attribute, postWith)
+import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
+import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.Label (mnemonic, text)
-import Blink.Controls.MenuBar (MenuBarPart (..), itemAttrs, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu)
-import Blink.Element (elLayout, height, width)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..))
+import Blink.Controls.MenuBar (MenuBarConfig, MenuBarPart (..), itemAttrs, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu)
+import Blink.Element (elLayout, height, runElement, width)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (KeyChar, KeyLeft, KeyRight), KeyEvent (..), Modifier (Alt))
 import Blink.Layout.Constraints (Layout (..), exactly)
 import Blink.Rendering (noOpMeasurers)
-import Blink.Style (emptyTheme)
+import Blink.Style (Theme, emptyTheme)
 import Blink.Update (put)
+import Blink.View (View, ViewContext, emptyViewContext)
 
 data TopMenu = FileMenu | EditMenu deriving (Eq, Ord, Show)
 
@@ -90,8 +94,38 @@ keyInput k = (mkInput fileTriggerPoint False) { keyEvents = [KeyEvent k [] False
 altKeyInput :: Char -> FrameInput
 altKeyInput c = (mkInput (Point 90 90) False) { keyEvents = [KeyEvent (KeyChar (toUpper c)) [Alt] False] }
 
+newtype ContractElem = ContractPart (MenuBarPart Int Int) deriving (Eq, Ord, Show)
+
+-- | Real margin, unlike 'testMetrics', for the hit-region contract below.
+contractTheme :: Theme ContractElem
+contractTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
+
+contractBounds :: Rectangle
+contractBounds = Rectangle 0 0 100 40
+
+contractCtx :: ViewContext ContractElem String
+contractCtx = emptyViewContext contractBounds noInput contractTheme
+
+-- | 'contractBounds' inset by 'standardMetrics'.
+contractHitRect :: Rectangle
+contractHitRect = hitRectFor contractBounds
+
+-- | No menus, so nothing occludes 'contractHitRect'; a fixed height, since
+-- 'fitContent' would otherwise collapse to just chrome.
+renderEmptyMenuBar :: [Attribute (MenuBarConfig ContractElem Int Int String)] -> View ContractElem String ()
+renderEmptyMenuBar attrs = runElement $ menuBar ContractPart (menus [] : height (exactly 40) : attrs)
+
+-- | The bar's own container is fixed 'NotFocusable'.
+contractSpec :: Spec
+contractSpec = do
+  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
+    contractBounds contractCtx (ContractPart MenuBar) (Point 5 5) contractHitRect (Point 200 200) renderEmptyMenuBar
+  fixedNotFocusableSpec contractBounds contractCtx renderEmptyMenuBar
+
 spec :: Spec
 spec = describe "Blink.Controls.MenuBar.menuBar" $ do
+  contractSpec
+
   it "opens a menu's dropdown on click, drawing its items' text" $ do
     handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
     result <- click handle fileTriggerPoint
