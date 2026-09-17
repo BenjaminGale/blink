@@ -6,12 +6,15 @@ import Data.Tree (Tree (..))
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute, postWith)
+import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
-  (Direction (..), ItemState, SingleSelection, isItem, moveCursor, onSelectionChanged, rowHeight, selectItem, selection, unselected)
+  ( Direction (..), ItemState, ListPart (List), SingleSelection, isItem, moveCursor, onSelectionChanged, rowHeight
+  , selectItem, selection, unselected
+  )
 import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..), cell, cellWidth, column, sortable)
 import Blink.Controls.TreeTable
-import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
-import Blink.Element (Element (..), runElement, width)
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
+import Blink.Element (Element (..), height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -96,6 +99,27 @@ renderSilentTreeTable attrs = runElement $ treeTable Part
   : forest forest0
   : attrs
   )
+
+-- | Real margin, unlike 'testTheme', for the hit-region contract below.
+contractTheme :: Theme TestElem
+contractTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
+
+contractCtx :: ViewContext TestElem String
+contractCtx = emptyViewContext testBounds noInput contractTheme
+
+-- | 'renderEmptyTreeTable's fixed 100x40 outer rect, inset by 'standardMetrics'.
+contractHitRect :: Rectangle
+contractHitRect = hitRectFor (Rectangle 0 0 100 40)
+
+-- | No columns or forest, so nothing occludes 'contractHitRect'.
+renderEmptyTreeTable :: [Attribute (TreeTableConfig SingleSelection TestElem String String)] -> View TestElem String ()
+renderEmptyTreeTable attrs =
+  renderSilentTreeTable (columns [] : forest [] : selection (unselected []) : height (exactly 40) : attrs)
+
+-- | 'treeTable' discards any elementId in favour of its own root id.
+contractSpec :: Spec
+contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
+  testBounds contractCtx (Part (TTRow List)) (Point 5 5) contractHitRect (Point 200 200) renderEmptyTreeTable
 
 widgetSpec :: Spec
 widgetSpec = describe "treeTable" $
@@ -206,6 +230,7 @@ sortingSpec = describe "treeTable column-click sorting" $
 
 spec :: Spec
 spec = describe "Blink.Controls.TreeTable" $ do
+  contractSpec
   widgetSpec
   expansionSpec
   keyboardSpec
