@@ -4,11 +4,14 @@ module Blink.Controls.TableSpec (spec) where
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute, postWith)
+import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
-  (ItemState, SingleSelection, isItem, onSelectionChanged, rowHeight, selectAt, selectFirst, selection, unselected)
+  ( ItemState, ListPart (List), SingleSelection, isItem, onSelectionChanged, rowHeight, selectAt, selectFirst
+  , selection, unselected
+  )
 import Blink.Controls.Table
-import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
-import Blink.Element (Element (..), runElement, width)
+import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
+import Blink.Element (Element (..), height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
@@ -65,6 +68,26 @@ renderTable attrs = runElement $ table Part
   : rowHeight 20
   : attrs
   )
+
+-- | Real margin, unlike 'testTheme', for the hit-region contract below.
+contractTheme :: Theme TestElem
+contractTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
+
+contractCtx :: ViewContext TestElem String
+contractCtx = emptyViewContext testBounds noInput contractTheme
+
+-- | 'renderEmptyTable's fixed 100x80 outer rect, inset by 'standardMetrics'.
+contractHitRect :: Rectangle
+contractHitRect = hitRectFor (Rectangle 0 0 100 80)
+
+-- | No columns or items, so nothing occludes 'contractHitRect'.
+renderEmptyTable :: [Attribute (TableConfig SingleSelection TestElem String Int)] -> View TestElem String ()
+renderEmptyTable attrs = renderTable (columns [] : selection (unselected []) : height (exactly 80) : attrs)
+
+-- | 'table' discards any elementId in favour of its own root id.
+contractSpec :: Spec
+contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
+  testBounds contractCtx (Part (TableRow List)) (Point 5 5) contractHitRect (Point 200 200) renderEmptyTable
 
 silentColumns :: [ColumnConfig TestElem String Int]
 silentColumns =
@@ -350,6 +373,7 @@ columnCountEdgeSpec = describe "table column count edge cases" $ do
 
 spec :: Spec
 spec = describe "Blink.Controls.Table" $ do
+  contractSpec
   widgetSpec
   chromeAlignmentSpec
   scrollingSpec

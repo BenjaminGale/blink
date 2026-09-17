@@ -309,40 +309,25 @@ reactions =
   , onItemActivated (postWith (\x -> (activatedMsg x)))
   ]
 
--- | 'standardMetrics', not 'testTheme'\'s zero metrics, so the shared
--- control contract below has a real margin to test hit-region behaviour
--- against.
+-- | Real margin, unlike 'testTheme', for the hit-region contract below.
 contractTheme :: Theme TestElem
 contractTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
 
--- | Wide enough to hold a 100x80 list ('renderEmptyList's explicit width\/
--- height) with room to spare, so points outside it are still trivial to
--- name.
-contractBounds :: Rectangle
-contractBounds = Rectangle 0 0 100 100
-
 contractCtx :: ViewContext TestElem String
-contractCtx = emptyViewContext contractBounds noInput contractTheme
+contractCtx = emptyViewContext testBounds noInput contractTheme
 
--- | The fixed 100x80 outer rect below ('renderEmptyList's explicit width\/
--- height) inset by 'standardMetrics'\'s margin.
+-- | 'renderEmptyList's fixed 100x40 outer rect, inset by 'standardMetrics'.
 contractHitRect :: Rectangle
-contractHitRect = hitRectFor (Rectangle 0 0 100 80)
+contractHitRect = hitRectFor (Rectangle 0 0 100 40)
 
--- | 'renderList' with a fixed height and no items, so nothing is rendered
--- inside 'contractHitRect' to occlude it -- every point in there hits the
--- list's own root control, exactly what the shared contract needs.
+-- | No items, so nothing occludes 'contractHitRect'.
 renderEmptyList :: [Attribute (ListConfig SingleSelection TestElem String Int)] -> View TestElem String ()
-renderEmptyList attrs = renderList (height (exactly 80) : selection (unselected []) : attrs)
+renderEmptyList attrs = renderList (height (exactly 40) : selection (unselected []) : attrs)
 
--- | The shared raw-event\/focus\/hit-region contract every
--- 'Blink.Controls.Control.control'-based widget must satisfy. 'list'
--- discards any 'Blink.Controls.Control.elementId' passed to it in favour
--- of its own @mkId 'List'@ (see 'Blink.Controls.List.listBase'), so the
--- element id under test here is fixed to that, not a caller-chosen one.
+-- | 'list' discards any elementId in favour of its own root id.
 contractSpec :: Spec
 contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
-  contractBounds contractCtx (Part List) (Point 5 5) contractHitRect (Point 200 200) renderEmptyList
+  testBounds contractCtx (Part List) (Point 5 5) contractHitRect (Point 200 200) renderEmptyList
 
 widgetSpec :: Spec
 widgetSpec = describe "list" $ do

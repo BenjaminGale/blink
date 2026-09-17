@@ -48,15 +48,11 @@ zeroSizeMeasurers = noOpMeasurers
 run :: [Attribute (ImageConfig () String)] -> IO [DrawCommand]
 run attrs = getDrawCommands . snd <$> runView (runElement (image (source "test.svg" : attrs))) seedCtx
 
--- | 'standardMetrics', not 'testTheme'\'s zero metrics, so the shared
--- behaviour contracts below have a real margin to test hit-region and
--- focus-region behaviour against.
+-- | Real margin, unlike 'testTheme', for the hit-region contract below.
 contractTheme :: Theme TestElement
 contractTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
 
--- | A 40x40 natural size, small enough that chrome ('standardMetrics'\'s
--- margin and padding, 10 and 5 on each side) still fits within
--- 'testBounds'.
+-- | Small enough, with chrome, to fit 'testBounds' -- unlike 'stubMeasurers'.
 contractMeasurers :: Measurers
 contractMeasurers = noOpMeasurers
   { msrImage = ImageMeasurer { imNaturalSize = \_ -> pure (Size 40 40) }
@@ -65,16 +61,11 @@ contractMeasurers = noOpMeasurers
 contractCtx :: ViewContext TestElement String
 contractCtx = withMeasurers contractMeasurers (emptyViewContext testBounds noInput contractTheme)
 
--- | The rendered rect at 'contractMeasurers'\'s 40x40 natural size plus
--- chrome (margin 10, padding 5 on each side), aligned 'TopLeft' within
--- 'testBounds', inset by 'standardMetrics'\'s margin -- the hit region
--- 'controlBehaviourSpec' expects.
+-- | 'renderWithId's rendered 70x70 rect, inset by 'standardMetrics'.
 contractHitRect :: Rectangle
 contractHitRect = hitRectFor (Rectangle 0 0 70 70)
 
--- | 'image' with 'elementId' 'Pic' set -- for the shared behaviour
--- contracts below, which need a real identity to track hover\/click\/focus
--- against.
+-- | 'image' with a real id, for the shared behaviour contracts below.
 renderWithId :: [Attribute (ImageConfig TestElement String)] -> View TestElement String ()
 renderWithId attrs = runElement (image (elementId Pic : source "test.svg" : attrs))
 
