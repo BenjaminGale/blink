@@ -32,7 +32,7 @@ module Blink.Rendering
   ) where
 
 import Data.Text (Text)
-import Blink.Geometry (Rectangle, Size (..), BorderEdges)
+import Blink.Geometry (Rectangle, Size (..), Colour (..), isVisible, Border)
 
 -- | Text measurement operations provided to the View for cursor positioning.
 -- Construct one from your platform's font API and pass it to
@@ -54,16 +54,6 @@ noOpTextMeasurer = TextMeasurer
   , tmCharAtOffset = \_ _ -> pure 0
   , tmTextSize     = \_ -> pure (Size 0 0)
   }
-
--- | An RGBA colour with components in @[0, 1]@.
-data Colour = RGBA Double Double Double Double
-  deriving (Eq, Show)
-
--- | 'True' when the colour has a non-zero alpha component and will
--- contribute visible output when rendered. Used to skip draw calls for
--- fully transparent fills.
-isVisible :: Colour -> Bool
-isVisible (RGBA _ _ _ a) = a /= 0
 
 -- | Horizontal alignment of text within its bounding rectangle.
 data TextAlign = AlignLeft | AlignCenter | AlignRight
@@ -112,8 +102,9 @@ noOpMeasurers = Measurers
 data DrawCommand
   = FillRect Rectangle Colour
     -- ^ Fill the rectangle with a solid colour.
-  | StrokeBorder Rectangle Colour BorderEdges
-    -- ^ Stroke the border of the rectangle with the given colour and per-side widths in pixels.
+  | StrokeBorder Rectangle Border
+    -- ^ Stroke the rectangle's border with the given stack of layers,
+    -- drawn back-to-front.
   | DrawText Rectangle Text Colour TextAlign
     -- ^ Render text within the rectangle using the given colour and alignment.
   | DrawImage Rectangle ImagePath Colour

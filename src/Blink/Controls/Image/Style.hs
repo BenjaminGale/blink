@@ -30,7 +30,6 @@ imageMetrics :: Metrics
 imageMetrics = Metrics
   { metricsMargin      = uniform 0
   , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
   }
 
 -- | Fully transparent and borderless -- an app that wants a border or
@@ -42,7 +41,7 @@ imageStyle p = StyleSet
       { styleBackground   = transparent
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignLeft
-      , styleBorderColour = Nothing
+      , styleBorder       = noBorder
       }
   , styleOverrides = Map.empty
   }

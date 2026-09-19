@@ -7,8 +7,8 @@ them:
 
   * 'Palette' — a small set of named colours every built-in control's
     style is typically derived from.
-  * 'Metrics' — a control's size (margin\/padding\/border width), looked
-    up independently of interaction state.
+  * 'Metrics' — a control's margin\/padding, looked up independently of
+    interaction state.
   * 'VisualState' — the state(s) a control can be in: common
     (normal\/hovered\/pressed\/disabled), focus, and control-specific
     (e.g. a toggle's checked\/unchecked).
@@ -57,14 +57,13 @@ baseStyle = Style
   { styleBackground   = paletteSurface palette
   , styleTextColour   = paletteTextPrimary palette
   , styleTextAlign    = AlignCenter
-  , styleBorderColour = Nothing
+  , styleBorder       = noBorder
   }
 
 baseMetrics :: Metrics
 baseMetrics = Metrics
   { metricsMargin      = uniform 2
   , metricsPadding     = uniform 4
-  , metricsBorderEdges = noBorder
   }
 
 baseStyleSet :: StyleSet
@@ -72,8 +71,7 @@ baseStyleSet = StyleSet
   { styleBase      = baseStyle
   , styleOverrides = Map.fromList
       [ (CommonMouseOver, \\s -> s { styleBackground = paletteSurfaceHover palette })
-      , (FocusFocused,    \\s -> s { styleBorderColour = Just (paletteFocusRing palette)
-                                   })
+      , (FocusFocused,    \\s -> s { styleBorder = soloBorder (paletteFocusRing palette) 1 })
       ]
   }
 
@@ -117,19 +115,32 @@ module Blink.Style
   , Theme (..)
   , emptyTheme
     -- * Re-exports
-  , BorderEdges (..)
+  , CornerRadii (..)
+  , EdgeVisibility (..)
+  , BorderLayer (..)
+  , Border
   , noBorder
-  , uniformBorder
+  , uniformRadii
+  , allEdgesVisible
+    -- * Border convenience
+  , styleBorderColour
+  , soloBorder
+  , withBorderColour
   ) where
 
 import Data.Foldable (foldl')
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (listToMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 
-import Blink.Geometry (BorderEdges (..), Insets, noBorder, uniformBorder)
+import Blink.Geometry
+  ( Insets
+  , CornerRadii (..), EdgeVisibility (..), BorderLayer (..), Border
+  , noBorder, uniformRadii, allEdgesVisible
+  )
 import Blink.Rendering (Colour (..), TextAlign (..))
 
 -- * Palette
@@ -159,11 +170,12 @@ data Palette = Palette
 
 -- | A control's size, independent of interaction state: one 'Metrics'
 -- value per 'StyleKey', looked up without knowing which 'VisualState's
--- are currently active.
+-- are currently active. Border thickness is not here -- it lives on
+-- 'Style' via 'styleBorder', since a border (unlike margin\/padding) can
+-- vary by 'VisualState' (e.g. a focus ring).
 data Metrics = Metrics
-  { metricsMargin :: Insets            -- ^ Space between the slot edge and the background rectangle.
-  , metricsPadding :: Insets           -- ^ Space between the background rectangle and the content rectangle.
-  , metricsBorderEdges :: BorderEdges  -- ^ Per-side border widths in pixels.
+  { metricsMargin :: Insets   -- ^ Space between the slot edge and the background rectangle.
+  , metricsPadding :: Insets  -- ^ Space between the background rectangle and the content rectangle.
   } deriving (Eq, Show)
 
 -- * Visual states
@@ -212,11 +224,36 @@ groupOf (Custom g _)    = g
 -- applied. Resolved into the active 'Style' for this frame by
 -- 'resolveStyle', and read back via 'Blink.View.currentStyle'.
 data Style = Style
-  { styleBackground :: Colour         -- ^ Fill colour for the background rectangle (inside the margin).
-  , styleTextColour :: Colour         -- ^ Colour used for text and simple fill drawing.
-  , styleTextAlign :: TextAlign       -- ^ Horizontal text alignment within the content rectangle.
-  , styleBorderColour :: Maybe Colour -- ^ Stroke colour for the border; 'Nothing' suppresses the border.
+  { styleBackground :: Colour   -- ^ Fill colour for the background rectangle (inside the margin).
+  , styleTextColour :: Colour   -- ^ Colour used for text and simple fill drawing.
+  , styleTextAlign :: TextAlign -- ^ Horizontal text alignment within the content rectangle.
+  , styleBorder :: Border       -- ^ The border's layer stack, drawn back-to-front; 'noBorder' draws nothing.
   } deriving (Eq, Show)
+
+-- | The colour of the outermost (first) layer in a 'Style' record's
+-- border, if it has one -- for code that only draws a single flat
+-- colour, such as the manually-drawn line in
+-- 'Blink.Controls.Divider.divider'.
+styleBorderColour :: Style -> Maybe Colour
+styleBorderColour = listToMaybe . map layerColour . styleBorder
+
+-- | A single, square, fully-visible border layer of @width@ pixels at
+-- @colour@ -- the usual way to build a one-layer 'styleBorder'.
+soloBorder :: Colour -> Double -> Border
+soloBorder colour width =
+  [ BorderLayer
+      { layerColour  = colour
+      , layerWidth   = width
+      , layerOffset  = 0
+      , layerRadii   = uniformRadii 0
+      , layerVisible = allEdgesVisible
+      }
+  ]
+
+-- | Replaces every layer's colour, keeping its shape unchanged -- how a
+-- per-'VisualState' override recolours a border without knowing its shape.
+withBorderColour :: Colour -> Border -> Border
+withBorderColour c = map (\l -> l { layerColour = c })
 
 -- | A base 'Style' plus sparse, additive per-'VisualState' overrides. An
 -- override is a plain record-update function -- a state that only

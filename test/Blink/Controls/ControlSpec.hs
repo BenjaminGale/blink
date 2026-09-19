@@ -7,7 +7,7 @@ import Test.Hspec
 
 import Blink.Controls.Control
   ( Attribute, ControlConfig (..), FocusOptions (..), FocusPolicy (..)
-  , control, defaultControlConfig, defaultFocusOptions, elementId, focusTargetOnClick, isEnabled, focusPolicy
+  , chromeInsets, control, defaultControlConfig, defaultFocusOptions, elementId, focusTargetOnClick, isEnabled, focusPolicy
   , onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, post, postWith, resolve
   )
@@ -17,7 +17,10 @@ import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..))
-import Blink.Style (StyleSet (..), Theme (..), VisualState (CommonPressed), styleBackground)
+import Blink.Style
+  ( StyleSet (..), Theme (..), VisualState (CommonPressed)
+  , BorderLayer (..), EdgeVisibility (..), allEdgesVisible, styleBackground, styleBorder, uniformRadii
+  )
 import Blink.View
 
 data TestElement
@@ -129,6 +132,25 @@ spec = describe "Blink.Controls.Control.control" $ do
     it "draws in its pressed style while the mouse is held down over it" $ do
       result <- runInteractions testBounds pressedSeedCtx (renderControl []) [] [MouseDown (Point 50 50)]
       getDrawCommands (resultContext result) `shouldContain` [chromeFill pressedColour testBounds]
+
+    describe "with a layered border" $ do
+      -- A base layer (width 2, offset 0) plus an outer ring (width 1,
+      -- offset 3, bottom edge hidden) -- covers a multi-layer stack, the
+      -- max-not-sum inset rule, and edge visibility all at once.
+      let ring       = allEdgesVisible { edgeBottomVisible = False }
+          baseLayer  = BorderLayer testColour 2 0 (uniformRadii 0) allEdgesVisible
+          ringLayer  = BorderLayer pressedColour 1 3 (uniformRadii 0) ring
+          border     = [baseLayer, ringLayer]
+          layeredStyle = (plainStyle testColour) { styleBorder = border }
+          layeredCtx = mkTestTheme standardMetrics (plainStyleSet layeredStyle)
+          bg         = insetRect (uniform 10) testBounds
+
+      it "draws both layers, in order, as a single StrokeBorder command" $ do
+        ctx <- snd <$> runView (renderControl []) (emptyViewContext testBounds noInput layeredCtx)
+        getDrawCommands ctx `shouldContain` [StrokeBorder bg border]
+
+      it "insets the content by the layer that extends furthest out (4px), not their sum (5px)" $
+        chromeInsets standardMetrics layeredStyle `shouldBe` uniform 19
 
     describe "with a nested child control" $ do
       let rectChild = Rectangle 20 20 40 40

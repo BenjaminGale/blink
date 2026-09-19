@@ -25,10 +25,12 @@ import qualified Blink.Controls.TableSpec as Table
 import qualified Blink.Controls.TreeSpec as Tree
 import qualified Blink.Controls.TreeTableSpec as TreeTable
 import qualified Blink.GeometrySpec as Geometry
+import qualified Blink.Rendering.RoundedRectSpec as RoundedRect
 import qualified Blink.InputSpec as Input
 import qualified Blink.InteractionSpec as Interaction
 import qualified Blink.LayoutSpec as Layout
 import qualified Blink.PopupSpec as Popup
+import qualified Blink.StyleSpec as Style
 import qualified Blink.Style.DefaultsSpec as StyleDefaults
 import qualified Blink.View.AnimationSpec as ViewAnimation
 import qualified Blink.View.ContextSpec as ViewContext
@@ -62,6 +64,7 @@ main = hspec $ do
   Update.spec
   Element.spec
   Geometry.spec
+  RoundedRect.spec
   Layout.spec
   Popup.spec
   Input.spec
@@ -87,4 +90,5 @@ main = hspec $ do
   Image.spec
   TextInput.spec
   Interaction.spec
+  Style.spec
   StyleDefaults.spec

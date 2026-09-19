@@ -22,7 +22,7 @@ import Blink.Controls.Control
 import Blink.Controls.Divider.Style (dividerStyleKey)
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Size (..))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
-import Blink.Style (Style (..))
+import Blink.Style (styleBorderColour)
 import Blink.View
 import Blink.View.Drawing (fillRect)
 import Blink.Element (Element (..), HasLayoutConfig (..))

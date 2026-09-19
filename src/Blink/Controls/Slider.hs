@@ -27,11 +27,11 @@ import Data.Maybe (fromMaybe)
 
 import Blink.Controls.Control
 import Blink.Controls.Slider.Style (sliderStyleKey)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), uniformBorder)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..))
-import Blink.Style (Style (..))
+import Blink.Style (Style (..), soloBorder, styleBorderColour)
 import Blink.View
 import Blink.View.Drawing (fillRect, strokeRect)
 import Blink.Element (Element (..), HasLayoutConfig (..), noIntrinsicSize)
@@ -170,7 +170,7 @@ drawTrack s bounds focused hovered dragging v = do
   forM_ (styleBorderColour s) $ \c -> withBounds groove (fillRect c)
   withBounds track $ fillRect accent
   withBounds thumb $ fillRect (thumbColourFor dragging hovered accent)
-  when focused $ strokeRect accent (uniformBorder focusRingWidth)
+  when focused $ strokeRect (soloBorder accent focusRingWidth)
   where
     accent   = styleTextColour s
     tr       = trackRect bounds

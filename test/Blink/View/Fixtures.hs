@@ -25,10 +25,10 @@ module Blink.View.Fixtures
 
 import qualified Data.Map.Strict as Map
 
-import Blink.Geometry (Point (..), Rectangle (..), noBorder, uniform)
+import Blink.Geometry (Point (..), Rectangle (..), uniform)
 import Blink.Input (InputState (..), emptyInputState)
 import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), noBorder)
 import Blink.View
 
 data TwoElems = ElemA | ElemB deriving (Eq, Ord, Show)
@@ -59,14 +59,13 @@ emptyStyle = Style
   { styleBackground = RGBA 0 0 0 1
   , styleTextColour = RGBA 0 0 0 1
   , styleTextAlign = AlignCenter
-  , styleBorderColour = Nothing
+  , styleBorder = noBorder
   }
 
 emptyMetrics :: Metrics
 emptyMetrics = Metrics
   { metricsMargin = uniform 0
   , metricsPadding = uniform 0
-  , metricsBorderEdges = noBorder
   }
 
 emptyStyleSet :: StyleSet

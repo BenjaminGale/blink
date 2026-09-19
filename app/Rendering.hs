@@ -12,7 +12,7 @@ module Rendering
   ) where
 
 import Blink
-import Control.Monad (when)
+import Blink.Rendering.RoundedRect (ringRects)
 import SDL (($=))
 import qualified SDL
 import qualified SDL.Font as Font
@@ -188,8 +188,16 @@ loadSizedImageTexture renderer cache path (w, h)
 toWord8 :: Double -> Word8
 toWord8 c = round (c * 255)
 
+-- | @colour@'s own alpha, scaled by @coverage@ -- lets a caller draw a
+-- partially-covered pixel (e.g. a rounded border corner's antialiased
+-- fringe) by blending rather than rounding it to a hard edge. Requires
+-- the renderer's own blend mode to actually be alpha blending, set once
+-- at startup.
+toSDLColorWithCoverage :: Double -> Colour -> SDL.V4 Word8
+toSDLColorWithCoverage coverage (RGBA r g b a) = SDL.V4 (toWord8 r) (toWord8 g) (toWord8 b) (toWord8 (a * coverage))
+
 toSDLColor :: Colour -> SDL.V4 Word8
-toSDLColor (RGBA r g b _) = SDL.V4 (toWord8 r) (toWord8 g) (toWord8 b) 255
+toSDLColor = toSDLColorWithCoverage 1
 
 toSDLColor3 :: Colour -> SDL.V3 Word8
 toSDLColor3 (RGBA r g b _) = SDL.V3 (toWord8 r) (toWord8 g) (toWord8 b)
@@ -223,27 +231,30 @@ renderFill renderer r color = do
   SDL.rendererDrawColor renderer $= toSDLColor color
   SDL.fillRect renderer (Just (toSDLRect r))
 
--- | Draws each edge as its own filled rectangle, in the outer rect's own
--- rounded integer coordinate frame throughout — rounding @r@ just once and
--- deriving every edge from those integers, rather than rounding each edge
--- rectangle independently. Independent rounding let adjacent edges land on
--- different pixels for the same corner when @r@'s bounds were fractional
--- (routine after layout centring/flex math), leaving a 1px gap or overlap
--- at the corner; sharing one integer frame makes the four edges tile
--- exactly.
-renderBorder :: SDL.Renderer -> Rectangle -> Colour -> BorderEdges -> IO ()
-renderBorder renderer r color edges = do
-  SDL.rendererDrawColor renderer $= toSDLColor color
-  let SDL.Rectangle (SDL.P (SDL.V2 x y)) (SDL.V2 w h) = toSDLRect r
-      t  = round (edgeTop edges)
-      ri = round (edgeRight edges)
-      b  = round (edgeBottom edges)
-      l  = round (edgeLeft edges)
-      mkRect rx ry rw rh = SDL.Rectangle (SDL.P (SDL.V2 rx ry)) (SDL.V2 rw rh)
-  when (t > 0)  $ SDL.fillRect renderer (Just (mkRect x y w t))
-  when (b > 0)  $ SDL.fillRect renderer (Just (mkRect x (y + h - b) w b))
-  when (l > 0)  $ SDL.fillRect renderer (Just (mkRect x (y + t) l (h - t - b)))
-  when (ri > 0) $ SDL.fillRect renderer (Just (mkRect (x + w - ri) (y + t) ri (h - t - b)))
+-- | Draws every layer in the stack, back-to-front, each expanded outward
+-- from @r@ by its own 'layerOffset'.
+renderBorder :: SDL.Renderer -> Rectangle -> Border -> IO ()
+renderBorder renderer r = mapM_ (renderBorderLayer renderer r)
+
+-- | Draws one layer's ring -- its visible straight edges plus any rounded
+-- corners its 'CornerRadii' declare -- as the set of filled rectangles
+-- 'ringRects' computes for it, each blended at its own coverage so a
+-- rounded corner's edge antialiases instead of hard-rounding to a
+-- staircase.
+renderBorderLayer :: SDL.Renderer -> Rectangle -> BorderLayer -> IO ()
+renderBorderLayer renderer r layer = mapM_ drawPiece pieces
+  where
+    outer  = expandBy (layerOffset layer) r
+    pieces = ringRects outer (layerRadii layer) (layerWidth layer) (layerVisible layer)
+    drawPiece (rect, coverage) = do
+      SDL.rendererDrawColor renderer $= toSDLColorWithCoverage coverage (layerColour layer)
+      SDL.fillRect renderer (Just (toSDLRect rect))
+
+-- | Expands a rectangle outward by @o@ pixels on every side, for
+-- positioning a border layer at its 'layerOffset' from the control's own
+-- bounds.
+expandBy :: Double -> Rectangle -> Rectangle
+expandBy o r = Rectangle (rectX r - o) (rectY r - o) (rectWidth r + 2 * o) (rectHeight r + 2 * o)
 
 renderText :: SDL.Renderer -> Font.Font -> TextureCache -> Rectangle -> Text -> Colour -> TextAlign -> IO ()
 renderText renderer font cache r txt color textAlign = do
@@ -294,7 +305,7 @@ popClip renderer clipRef = do
 
 submitDrawCommand :: SDL.Renderer -> Font.Font -> TextureCache -> ImageCache -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
 submitDrawCommand renderer _ _ _ _          (FillRect r color)            = renderFill   renderer r color
-submitDrawCommand renderer _ _ _ _          (StrokeBorder r color edges)  = renderBorder renderer r color edges
+submitDrawCommand renderer _ _ _ _          (StrokeBorder r border)      = renderBorder renderer r border
 submitDrawCommand _ _ _ _ _                 (DrawText _ txt _ _) | T.null txt = pure ()
 submitDrawCommand renderer font cache _ _   (DrawText r txt color textAlign) = renderText renderer font cache r txt color textAlign
 submitDrawCommand renderer _ _ imgCache _   (DrawImage r path colour)     = renderImage  renderer imgCache r path colour

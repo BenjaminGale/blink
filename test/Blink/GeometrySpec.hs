@@ -7,20 +7,26 @@ import Test.Hspec.QuickCheck (prop)
 import Blink.Generators ()
 import Blink.Geometry
   ( Alignment (..)
+  , BorderLayer (..)
+  , Colour (..)
   , Insets (..)
   , Point (..)
   , Rectangle (..)
   , Size (..)
   , alignRect
+  , allEdgesVisible
+  , borderInsets
   , containsPoint
   , insetRect
   , intersectRect
   , leftInset
+  , noBorder
   , rectCentredAt
   , rectFromSize
   , resizeRect
   , topInset
   , uniform
+  , uniformRadii
   )
 
 spec :: Spec
@@ -138,3 +144,27 @@ spec = describe "geometry" $ do
       \alignment c r ->
         let result = alignRect alignment c r
         in rectWidth result == rectWidth r && rectHeight result == rectHeight r
+
+  describe "borderInsets" $ do
+    let baseLayer = BorderLayer
+          { layerColour  = RGBA 0 0 0 1
+          , layerWidth   = 0
+          , layerOffset  = 0
+          , layerRadii   = uniformRadii 0
+          , layerVisible = allEdgesVisible
+          }
+
+    it "is zero on every side for an empty stack" $
+      borderInsets noBorder `shouldBe` Insets 0 0 0 0
+
+    it "is uniform insets of the width for a single layer at offset 0" $
+      borderInsets [baseLayer { layerWidth = 3 }] `shouldBe` Insets 3 3 3 3
+
+    it "adds the offset to the width for a single layer at a positive offset" $
+      borderInsets [baseLayer { layerWidth = 2, layerOffset = 5 }]
+        `shouldBe` Insets 7 7 7 7
+
+    it "uses the layer that extends furthest out, not the sum of the layers" $
+      let inner = baseLayer { layerWidth = 2, layerOffset = 0 }
+          ring  = baseLayer { layerWidth = 1, layerOffset = 3 }
+      in borderInsets [inner, ring] `shouldBe` Insets 4 4 4 4

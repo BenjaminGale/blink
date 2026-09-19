@@ -59,7 +59,7 @@ import Blink.Geometry (Alignment (TopLeft), Orientation (..), Point (..), Rectan
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), ImagePath)
-import Blink.Style (Style (..))
+import Blink.Style (Style (..), styleBorderColour)
 import Blink.View
 import Blink.View.Drawing (drawImage, fillRect)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, height, noIntrinsicSize, runElement, width)

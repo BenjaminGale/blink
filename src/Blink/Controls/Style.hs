@@ -58,7 +58,6 @@ controlMetrics :: Metrics
 controlMetrics = Metrics
   { metricsMargin      = uniform 3
   , metricsPadding     = uniform 6
-  , metricsBorderEdges = uniformBorder 1
   }
 
 -- | Paired with 'flatRowStyle' -- a bordered row, tighter than
@@ -67,7 +66,6 @@ flatRowMetrics :: Metrics
 flatRowMetrics = Metrics
   { metricsMargin      = uniform 2
   , metricsPadding     = uniform 4
-  , metricsBorderEdges = uniformBorder 1
   }
 
 -- | Shared by 'Blink.Controls.ProgressBar.Style', 'Blink.Controls.Slider.Style',
@@ -77,7 +75,6 @@ progressBarMetrics :: Metrics
 progressBarMetrics = Metrics
   { metricsMargin      = uniform 3
   , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
   }
 
 -- | No margin\/padding\/border of its own -- a
@@ -90,7 +87,6 @@ toggleGroupMetrics :: Metrics
 toggleGroupMetrics = Metrics
   { metricsMargin      = uniform 0
   , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
   }
 
 -- | A bordered-box control style: background/border step through
@@ -104,13 +100,13 @@ buttonStyle align p = StyleSet
       { styleBackground   = paletteSurface p
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = align
-      , styleBorderColour = Just (paletteBorder p)
+      , styleBorder       = soloBorder (paletteBorder p) 1
       }
   , styleOverrides = Map.fromList
-      [ (CommonMouseOver, \s -> s { styleBackground = paletteSurfaceHover p, styleBorderColour = Just (paletteBorderHover p) })
-      , (CommonPressed,   \s -> s { styleBackground = paletteAccent p, styleTextColour = paletteTextOnAccent p, styleBorderColour = Just (paletteAccent p) })
-      , (CommonDisabled,  \s -> s { styleBackground = paletteSurfaceDisabled p, styleTextColour = paletteTextMuted p, styleBorderColour = Just (paletteBorder p) })
-      , (FocusFocused,    \s -> s { styleBorderColour = Just (paletteFocusRing p) })
+      [ (CommonMouseOver, \s -> s { styleBackground = paletteSurfaceHover p, styleBorder = withBorderColour (paletteBorderHover p) (styleBorder s) })
+      , (CommonPressed,   \s -> s { styleBackground = paletteAccent p, styleTextColour = paletteTextOnAccent p, styleBorder = withBorderColour (paletteAccent p) (styleBorder s) })
+      , (CommonDisabled,  \s -> s { styleBackground = paletteSurfaceDisabled p, styleTextColour = paletteTextMuted p, styleBorder = withBorderColour (paletteBorder p) (styleBorder s) })
+      , (FocusFocused,    \s -> s { styleBorder = withBorderColour (paletteFocusRing p) (styleBorder s) })
       ]
   }
 
@@ -126,13 +122,13 @@ flatRowStyle p = StyleSet
       { styleBackground   = transparent
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignLeft
-      , styleBorderColour = Just transparent
+      , styleBorder       = soloBorder transparent 1
       }
   , styleOverrides = Map.fromList
       [ (CommonMouseOver, \s -> s { styleBackground = paletteSurfaceHover p })
       , (CommonPressed,   \s -> s { styleBackground = paletteSurfaceHover p })
       , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
-      , (FocusFocused,    \s -> s { styleBorderColour = Just (paletteFocusRing p) })
+      , (FocusFocused,    \s -> s { styleBorder = withBorderColour (paletteFocusRing p) (styleBorder s) })
       ]
   }
 
@@ -149,7 +145,7 @@ sliderStyle p = StyleSet
       { styleBackground   = transparent
       , styleTextColour   = paletteAccent p
       , styleTextAlign    = AlignLeft
-      , styleBorderColour = Just (paletteBorder p)
+      , styleBorder       = soloBorder (paletteBorder p) 0
       }
   , styleOverrides = Map.fromList
       [ (CommonDisabled, \s -> s { styleTextColour = paletteTextMuted p }) ]
@@ -170,7 +166,7 @@ toggleGroupStyle p = StyleSet
       { styleBackground   = transparent
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignLeft
-      , styleBorderColour = Nothing
+      , styleBorder       = noBorder
       }
   , styleOverrides = Map.empty
   }
@@ -191,12 +187,12 @@ containerStyle p = StyleSet
       { styleBackground   = paletteSurface p
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignLeft
-      , styleBorderColour = Just (paletteBorder p)
+      , styleBorder       = soloBorder (paletteBorder p) 1
       }
   , styleOverrides = Map.fromList
-      [ (CommonMouseOver, \s -> s { styleBorderColour = Just (paletteBorderHover p) })
+      [ (CommonMouseOver, \s -> s { styleBorder = withBorderColour (paletteBorderHover p) (styleBorder s) })
       , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
-      , (FocusFocused,    \s -> s { styleBorderColour = Just (paletteFocusRing p) })
+      , (FocusFocused,    \s -> s { styleBorder = withBorderColour (paletteFocusRing p) (styleBorder s) })
       ]
   }
 
@@ -221,7 +217,7 @@ iconStyle p = StyleSet
       { styleBackground   = transparent
       , styleTextColour   = paletteIcon p
       , styleTextAlign    = AlignLeft
-      , styleBorderColour = Nothing
+      , styleBorder       = noBorder
       }
   , styleOverrides = Map.fromList
       [ (CommonMouseOver, \s -> s { styleTextColour = paletteIconHover p })

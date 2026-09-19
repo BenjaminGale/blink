@@ -9,8 +9,8 @@ The four core types are 'Point', 'Size', 'Rectangle', and 'Insets'.
 'Rectangle' is the central type: most of the library passes bounding
 rectangles around to describe where components are drawn. 'Insets'
 describes four-sided offsets and is used to derive margin and padding
-rectangles from a base 'Rectangle' via 'insetRect'. 'BorderEdges'
-describes per-side border widths; convert to 'Insets' with
+rectangles from a base 'Rectangle' via 'insetRect'. 'Border' describes a
+control's border as a stack of 'BorderLayer's; convert to 'Insets' with
 'borderInsets' to apply with 'insetRect'. 'Alignment' describes a 2D
 anchor position within a containing rectangle and is used with
 'alignRect' to place a child rectangle inside a parent.
@@ -21,15 +21,22 @@ module Blink.Geometry
   , Size (..)
   , Rectangle (..)
   , Orientation (..)
+    -- * Colour
+  , Colour (..)
+  , isVisible
     -- * Insets
   , Insets (..)
   , uniform
   , insetRect
   , inflate
-    -- * Border edges
-  , BorderEdges (..)
+    -- * Border layers
+  , CornerRadii (..)
+  , EdgeVisibility (..)
+  , BorderLayer (..)
+  , Border
   , noBorder
-  , uniformBorder
+  , uniformRadii
+  , allEdgesVisible
   , borderInsets
     -- * Rectangle operations
   , rectFromSize
@@ -97,25 +104,66 @@ inflate ins s = Size
   , sizeHeight = sizeHeight s + topInset ins + bottomInset ins
   }
 
--- | Per-side border widths in pixels.
-data BorderEdges = BorderEdges
-  { edgeTop    :: Double  -- ^ Width of the top border.
-  , edgeRight  :: Double  -- ^ Width of the right border.
-  , edgeBottom :: Double  -- ^ Width of the bottom border.
-  , edgeLeft   :: Double  -- ^ Width of the left border.
+-- | Per-corner radii for a rounded 'BorderLayer'. All four corners are
+-- independent so a layer can be rounded on some corners and square on
+-- others (e.g. squared off next to a hidden edge).
+data CornerRadii = CornerRadii
+  { radiusTopLeft :: Double
+  , radiusTopRight :: Double
+  , radiusBottomRight :: Double
+  , radiusBottomLeft :: Double
   } deriving (Eq, Show)
 
--- | No border on any side.
-noBorder :: BorderEdges
-noBorder = BorderEdges 0 0 0 0
+-- | Equal radius on all four corners.
+uniformRadii :: Double -> CornerRadii
+uniformRadii r = CornerRadii r r r r
 
--- | Equal border width on all four sides.
-uniformBorder :: Double -> BorderEdges
-uniformBorder w = BorderEdges w w w w
+-- | Which of the four edges a 'BorderLayer' draws. Lets a layer omit an
+-- edge entirely (e.g. a tab control's bottom edge) without needing
+-- per-edge width.
+data EdgeVisibility = EdgeVisibility
+  { edgeTopVisible :: Bool
+  , edgeRightVisible :: Bool
+  , edgeBottomVisible :: Bool
+  , edgeLeftVisible :: Bool
+  } deriving (Eq, Show)
 
--- | Converts 'BorderEdges' to 'Insets' so it can be applied with 'insetRect'.
-borderInsets :: BorderEdges -> Insets
-borderInsets be = Insets (edgeTop be) (edgeRight be) (edgeBottom be) (edgeLeft be)
+-- | Every edge drawn -- the usual case for a plain, unbroken border.
+allEdgesVisible :: EdgeVisibility
+allEdgesVisible = EdgeVisibility True True True True
+
+-- | One layer of a control's border: a uniform-thickness stroke, its own
+-- corner radii, which edges it draws, and how far outward from the
+-- control's bounds it sits. See 'Border' for how layers stack.
+data BorderLayer = BorderLayer
+  { layerColour :: Colour
+  , layerWidth :: Double
+    -- ^ Uniform thickness in pixels; not per-edge (see "Blink.Geometry"
+    -- module header for why).
+  , layerOffset :: Double
+    -- ^ Distance outward from the control's own bounds where this layer
+    -- starts, e.g. a focus ring drawn just outside the base border.
+  , layerRadii :: CornerRadii
+  , layerVisible :: EdgeVisibility
+  } deriving (Eq, Show)
+
+-- | A control's border as a stack of layers, drawn back-to-front in list
+-- order (the base border first, decorations like a focus ring after/on
+-- top of it).
+type Border = [BorderLayer]
+
+-- | No border layers at all.
+noBorder :: Border
+noBorder = []
+
+-- | The insets a 'Border' stack occupies, for use with 'insetRect'. Based
+-- on whichever layer extends furthest outward
+-- (@'layerOffset' + 'layerWidth'@), not the sum of all layers -- an outer
+-- decorative layer (e.g. a focus ring) does not push the content box in
+-- any further than the base border alone already does.
+borderInsets :: Border -> Insets
+borderInsets [] = mempty
+borderInsets layers = uniform (maximum [layerOffset l + layerWidth l | l <- layers])
 
 -- | Shrinks @r@ by @ins@ on each edge. Width and height are clamped to
 -- zero if the insets exceed the rectangle's dimensions.
@@ -138,6 +186,16 @@ data Alignment
 -- | The axis along which a component is laid out or oriented.
 data Orientation = Horizontal | Vertical
   deriving (Eq, Ord, Show)
+
+-- | An RGBA colour with components in @[0, 1]@.
+data Colour = RGBA Double Double Double Double
+  deriving (Eq, Show)
+
+-- | 'True' when the colour has a non-zero alpha component and will
+-- contribute visible output when rendered. Used to skip draw calls for
+-- fully transparent fills.
+isVisible :: Colour -> Bool
+isVisible (RGBA _ _ _ a) = a /= 0
 
 data Align1D = AlignStart | AlignCenter | AlignEnd
 

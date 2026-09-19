@@ -51,8 +51,12 @@ menuBarMetrics :: Metrics
 menuBarMetrics = Metrics
   { metricsMargin      = uniform 0
   , metricsPadding     = uniform 4
-  , metricsBorderEdges = BorderEdges { edgeTop = 0, edgeRight = 0, edgeBottom = 1, edgeLeft = 0 }
   }
+
+-- | Only the bottom edge visible -- the flat-strip, rule-only look
+-- described in the doc comment on 'menuBarStyleKey'.
+bottomOnly :: EdgeVisibility
+bottomOnly = allEdgesVisible { edgeTopVisible = False, edgeRightVisible = False, edgeLeftVisible = False }
 
 menuBarStyle :: Palette -> StyleSet
 menuBarStyle p = StyleSet
@@ -60,7 +64,7 @@ menuBarStyle p = StyleSet
       { styleBackground   = paletteSurface p
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignLeft
-      , styleBorderColour = Just (paletteBorder p)
+      , styleBorder       = map (\l -> l { layerVisible = bottomOnly }) (soloBorder (paletteBorder p) 1)
       }
   , styleOverrides = Map.empty
   }
@@ -71,13 +75,13 @@ menuBarLabelStyle p = StyleSet
       { styleBackground   = transparent
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignCenter
-      , styleBorderColour = Just transparent
+      , styleBorder       = soloBorder transparent 1
       }
   , styleOverrides = Map.fromList
       [ (CommonMouseOver, \s -> s { styleBackground = paletteSurfaceHover p })
       , (CommonPressed,   \s -> s { styleBackground = paletteSurfaceHover p })
       , (toggleChecked,   \s -> s { styleBackground = paletteSurfaceHover p })
-      , (FocusFocused,    \s -> s { styleBorderColour = Just (paletteFocusRing p) })
+      , (FocusFocused,    \s -> s { styleBorder = withBorderColour (paletteFocusRing p) (styleBorder s) })
       ]
   }
 

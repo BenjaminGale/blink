@@ -47,7 +47,7 @@ import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emp
 import Blink.Geometry (Alignment (TopLeft), Insets (..), Point (pointX), Rectangle (..), insetRect)
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), Length, exactly, fill)
-import Blink.Style (Style (..), StyleSet (..))
+import Blink.Style (styleBase, styleBorderColour)
 import Blink.View
   ( CursorShape (..), Effect, View, currentStyle, getBounds, getExtentState, getMousePos, getStyleSet, isDragging
   , requestCursor, requestExtentBy, withBounds

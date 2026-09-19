@@ -27,7 +27,6 @@ labelMetrics :: Metrics
 labelMetrics = Metrics
   { metricsMargin      = uniform 0
   , metricsPadding     = uniform 6
-  , metricsBorderEdges = noBorder
   }
 
 -- | A plain, transparent label style with no border.
@@ -37,7 +36,7 @@ labelStyle p = StyleSet
       { styleBackground   = transparent
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignLeft
-      , styleBorderColour = Nothing
+      , styleBorder       = noBorder
       }
   , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
   }

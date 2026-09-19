@@ -16,7 +16,7 @@ map:
 myButtonStyle :: StyleSet
 myButtonStyle = (buttonStyle AlignCenter myPalette)
   { styleOverrides = Map.insert CommonMouseOver
-      (\\s -> s { styleBorderColour = Just myColour })
+      (\\s -> s { styleBorder = withBorderColour myColour (styleBorder s) })
       (styleOverrides (buttonStyle AlignCenter myPalette))
   }
 @

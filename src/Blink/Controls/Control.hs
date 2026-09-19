@@ -612,29 +612,25 @@ renderStyled :: Metrics -> Style -> View e msg () -> View e msg ()
 renderStyled m s body = do
   r <- getBounds
   let bg          = insetRect (metricsMargin m) r
-      borderRect  = insetRect (borderContribution m s) bg
+      borderRect  = insetRect (borderContribution s) bg
       contentRect = insetRect (metricsPadding m) borderRect
       inner       = withBounds contentRect $ withClip (withMetrics m (withStyle s body))
   withBounds bg $
     withBackground (styleBackground s) $
-    case styleBorderColour s of
-      Just c  -> withBorder c (metricsBorderEdges m) inner
-      Nothing -> inner
+    withBorder (styleBorder s) inner
 
--- | The space a control's border occupies: its 'Metrics' edges when
--- 'styleBorderColour' is set, or none at all when it isn't -- an unset
--- border draws (and occupies) nothing. Shared by @renderStyled@ and
--- 'chromeInsets' so the two can never drift.
-borderContribution :: Metrics -> Style -> Insets
-borderContribution m s = case styleBorderColour s of
-  Just _  -> borderInsets (metricsBorderEdges m)
-  Nothing -> mempty
+-- | The space a control's border occupies: based on whichever of its
+-- layers extends furthest out (see 'borderInsets'), or none at all
+-- for an empty border. Shared by @renderStyled@ and 'chromeInsets' so
+-- the two can never drift.
+borderContribution :: Style -> Insets
+borderContribution s = borderInsets (styleBorder s)
 
 -- | The combined margin\/border\/padding a control's chrome occupies,
 -- outside-in. Shared by @renderStyled@ (which insets by it) and
 -- 'measureChrome' (which inflates by it), so the two can never drift.
 chromeInsets :: Metrics -> Style -> Insets
-chromeInsets m s = metricsMargin m <> borderContribution m s <> metricsPadding m
+chromeInsets m s = metricsMargin m <> borderContribution s <> metricsPadding m
 
 -- | Measures a control wrapping a single child: offers @child@ the
 -- interior left over after its chrome (so it wraps within the padding, not

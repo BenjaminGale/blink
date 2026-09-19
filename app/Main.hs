@@ -44,6 +44,11 @@ main = do
   _ <- SDL.setHintWithPriority SDL.OverridePriority SDL.HintRenderScaleQuality SDL.ScaleLinear
   window   <- SDL.createWindow "blink" SDL.defaultWindow { SDL.windowResizable = True }
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
+  -- Without this, every fill is forced fully opaque regardless of its
+  -- colour's own alpha -- needed for a rounded border corner's
+  -- anti-aliased fringe pixels to actually blend instead of being drawn
+  -- solid.
+  SDL.rendererDrawBlendMode renderer $= SDL.BlendAlphaBlend
   font     <- Font.load demoFontPath 14
   SDL.Raw.startTextInput
 

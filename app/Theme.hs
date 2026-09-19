@@ -18,6 +18,7 @@ import qualified Data.Map.Strict as Map
 
 import Data.Text (Text)
 import Blink.Geometry
+import Blink.Rendering (TextAlign (..))
 import Blink.Controls.List (ListPart)
 import Blink.Controls.MenuBar (MenuBarPart)
 import Blink.Controls.MenuButton (MenuButtonPart)
@@ -26,15 +27,15 @@ import Blink.Controls.ToggleGroup (ToggleGroupPart)
 import Blink.Controls.Table (TablePart)
 import Blink.Controls.Tree (TreePart)
 import Blink.Controls.TreeTable (TreeTablePart)
-import Blink.Rendering
 import Blink.Style
 import Blink.Style.Defaults (defaultTheme)
 import Blink.Controls.Divider.Style (dividerStyle)
+import Blink.Controls.Style (transparent)
 
 -- | Which of the demo's sidebar-selected pages is showing.
 data Page
   = ControlsPage | ScrollBarsPage | ListPage | TreePage | TablePage | TreeTablePage
-  | BackgroundPage | ImagePage
+  | BackgroundPage | ImagePage | BordersPage
   deriving (Eq, Ord, Show)
 
 data ControlId = Label
@@ -69,6 +70,10 @@ data ControlId = Label
              | ImageFitHeightCheckbox
              | ImageFitHeightSlider
              | ImagePreserveRatioCheckbox
+             | LayeredBorderSwatch
+             | RoundedBorderSwatch
+             | TabBorderSwatch
+             | LayeredRoundedButton
   deriving (Eq, Ord)
 
 -- | Colours sampled from a light-mode reference screenshot (an inspector
@@ -112,22 +117,107 @@ darkPalette = Palette
 
 statusBarMetrics :: Metrics
 statusBarMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 0
-  , metricsBorderEdges = BorderEdges { edgeTop = 1, edgeRight = 0, edgeBottom = 0, edgeLeft = 0 }
+  { metricsMargin  = uniform 0
+  , metricsPadding = uniform 0
   }
+
+-- | Only the top edge visible -- a status bar's own top rule.
+topOnly :: EdgeVisibility
+topOnly = allEdgesVisible { edgeRightVisible = False, edgeBottomVisible = False, edgeLeftVisible = False }
+
+-- | The colours from 'dividerStyle', with its width-0 border layer (see
+-- its doc comment for why) swapped for a real, visible, top-only one.
+statusBarStyle :: Palette -> StyleSet
+statusBarStyle p = base { styleBase = (styleBase base) { styleBorder = topRule } }
+  where
+    base    = dividerStyle p
+    topRule = map (\l -> l { layerVisible = topOnly }) (soloBorder (paletteBorder p) 1)
 
 -- | Inserts the status bar's look -- an 'ElementId'-keyed entry, not a
 -- built-in control class, so 'Blink.Style.Defaults.defaultTheme' doesn't
--- (and can't) register it itself. Reuses 'dividerStyle' for the look (a
--- plain line in 'paletteBorder' is exactly what a status bar's own top
--- rule wants), with its own 'Metrics' for the top-only border edge.
+-- (and can't) register it itself.
 withStatusBar :: Palette -> Theme ControlId -> Theme ControlId
 withStatusBar p thm = thm
-  { themeElementStyles = Map.insert (ElementId StatusBar) (statusBarMetrics, dividerStyle p) (themeElementStyles thm) }
+  { themeElementStyles = Map.insert (ElementId StatusBar) (statusBarMetrics, statusBarStyle p) (themeElementStyles thm) }
+
+swatchMetrics :: Metrics
+swatchMetrics = Metrics { metricsMargin = uniform 0, metricsPadding = uniform 0 }
+
+-- | A swatch's plain, borderless base look, before 'swatchStyle' gives it
+-- its own showcase border. Transparent background -- the background fill
+-- has no corner radius of its own, so an opaque one would square off
+-- behind a rounded border.
+swatchBase :: Palette -> StyleSet
+swatchBase p = StyleSet
+  { styleBase = Style
+      { styleBackground = transparent
+      , styleTextColour = paletteTextPrimary p
+      , styleTextAlign  = AlignCenter
+      , styleBorder     = noBorder
+      }
+  , styleOverrides = Map.empty
+  }
+
+swatchStyle :: Palette -> Border -> StyleSet
+swatchStyle p border = base { styleBase = (styleBase base) { styleBorder = border } }
+  where base = swatchBase p
+
+-- | Rounded top corners only, e.g. for a tab-like open-bottom look.
+topRounded :: Double -> CornerRadii
+topRounded r = CornerRadii { radiusTopLeft = r, radiusTopRight = r, radiusBottomRight = 0, radiusBottomLeft = 0 }
+
+-- | Paired with 'buttonShowcaseStyle' -- ordinary button padding, so its
+-- caption has room to breathe inside the outer ring.
+buttonShowcaseMetrics :: Metrics
+buttonShowcaseMetrics = Metrics { metricsMargin = uniform 8, metricsPadding = uniform 12 }
+
+-- | A real, interactive 'Blink.Controls.Button.button''s style, combining
+-- both showcase capabilities at once: two layers (base plus an outer
+-- ring, both rounded, the outer one's radius grown by its offset so the
+-- two read as concentric) recolouring together on hover\/press the same
+-- way 'Blink.Controls.Style.buttonStyle's single flat border would.
+buttonShowcaseStyle :: Palette -> StyleSet
+buttonShowcaseStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground = transparent
+      , styleTextColour = paletteTextPrimary p
+      , styleTextAlign  = AlignCenter
+      , styleBorder     = base
+      }
+  , styleOverrides = Map.fromList
+      [ (CommonMouseOver, \s -> s { styleTextColour = paletteAccent p, styleBorder = withBorderColour (paletteAccent p) (styleBorder s) })
+      , (CommonPressed,   \s -> s { styleTextColour = paletteAccent p, styleBorder = withBorderColour (paletteAccent p) (styleBorder s) })
+      ]
+  }
+  where
+    base =
+      [ BorderLayer (paletteBorder p) 2 0 (uniformRadii 16) allEdgesVisible
+      , BorderLayer (paletteAccent p) 2 4 (uniformRadii 20) allEdgesVisible
+      ]
+
+-- | Inserts the border-showcase page's entries -- three static swatches
+-- (a stacked layered border, one with rounded corners, one with its
+-- bottom edge open for a tab-like look) plus a real button combining
+-- layering and rounding together -- see "UI"'s @bordersPage@.
+withBorderShowcase :: Palette -> Theme ControlId -> Theme ControlId
+withBorderShowcase p thm = thm
+  { themeElementStyles = Map.union (Map.fromList
+      [ (ElementId LayeredBorderSwatch, (swatchMetrics, swatchStyle p layered))
+      , (ElementId RoundedBorderSwatch, (swatchMetrics, swatchStyle p rounded))
+      , (ElementId TabBorderSwatch,     (swatchMetrics, swatchStyle p tab))
+      , (ElementId LayeredRoundedButton, (buttonShowcaseMetrics, buttonShowcaseStyle p))
+      ]) (themeElementStyles thm)
+  }
+  where
+    layered =
+      [ BorderLayer (paletteBorder p) 2 0 (uniformRadii 0) allEdgesVisible
+      , BorderLayer (paletteAccent p) 2 4 (uniformRadii 0) allEdgesVisible
+      ]
+    rounded = [ BorderLayer (paletteBorder p) 3 0 (uniformRadii 24) allEdgesVisible ]
+    tab     = [ BorderLayer (paletteBorder p) 2 0 (topRounded 16) (allEdgesVisible { edgeBottomVisible = False }) ]
 
 lightTheme :: Theme ControlId
-lightTheme = withStatusBar lightPalette (defaultTheme lightPalette)
+lightTheme = withBorderShowcase lightPalette (withStatusBar lightPalette (defaultTheme lightPalette))
 
 darkTheme :: Theme ControlId
-darkTheme = withStatusBar darkPalette (defaultTheme darkPalette)
+darkTheme = withBorderShowcase darkPalette (withStatusBar darkPalette (defaultTheme darkPalette))
