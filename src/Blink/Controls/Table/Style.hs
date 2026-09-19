@@ -47,7 +47,7 @@ tableHeaderStyle p = StyleSet
       { styleBackground   = paletteSurface p
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignLeft
-      , styleBorderColour = Nothing
+      , styleBorder       = emptyBorder
       }
   , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleBackground = paletteSurfaceHover p })
   }
@@ -61,7 +61,6 @@ tableHeaderMetrics :: Metrics
 tableHeaderMetrics = Metrics
   { metricsMargin      = uniform 0
   , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
   }
 
 -- | No margin (unlike 'Blink.Controls.Divider.divider') -- the handle's
@@ -70,7 +69,6 @@ tableColumnDividerMetrics :: Metrics
 tableColumnDividerMetrics = Metrics
   { metricsMargin      = uniform 0
   , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
   }
 
 -- | A vertical line, 'paletteBorder' by default, tinted on hover the
@@ -81,9 +79,9 @@ tableColumnDividerStyle p = StyleSet
       { styleBackground   = transparent
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignLeft
-      , styleBorderColour = Just (paletteBorder p)
+      , styleBorder       = soloBorder (paletteBorder p) 0
       }
-  , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleBorderColour = Just (paletteSurfaceHover p) })
+  , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleBorder = withBorderColour (paletteSurfaceHover p) (styleBorder s) })
   }
 
 -- | This control's own entries in 'Blink.Style.Defaults.defaultTheme'.

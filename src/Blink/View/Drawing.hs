@@ -20,7 +20,7 @@ module Blink.View.Drawing
 
 import Control.Monad (when)
 import Data.Text (Text)
-import Blink.Geometry (Rectangle, BorderEdges, intersectRect)
+import Blink.Geometry (Rectangle, Border, BorderLayer (..), intersectRect)
 import Blink.View (View, draw, getBounds, getInteractionClip, withInteractionClip)
 import Blink.Rendering (Colour, TextAlign, ImagePath, DrawCommand (..), isVisible)
 
@@ -34,9 +34,9 @@ drawAt mkCmd = do
 fillRect :: Colour -> View e msg ()
 fillRect colour = drawAt (\r -> FillRect r colour)
 
--- | Strokes the border of the current bounds with the given colour and per-side widths.
-strokeRect :: Colour -> BorderEdges -> View e msg ()
-strokeRect colour edges = drawAt (\r -> StrokeBorder r colour edges)
+-- | Strokes the border of the current bounds with the given stack of layers.
+strokeRect :: Border -> View e msg ()
+strokeRect border = drawAt (\r -> StrokeBorder r border)
 
 -- | Renders text within the current bounds using the given colour and alignment.
 drawText :: Colour -> TextAlign -> Text -> View e msg ()
@@ -71,12 +71,12 @@ withBackground colour content = do
 
 -- | Runs @content@, then strokes a border around the current bounds on top.
 -- Drawing the border after content ensures it is always visible over children.
--- Skips the stroke when @colour@ is fully transparent, mirroring
--- 'withBackground' — a caller that reserves border space in every state via
--- @styleBorderColour@ but only wants it to actually render in some of them
--- (e.g. a resting-state border that becomes visible on focus) relies on this.
-withBorder :: Colour -> BorderEdges -> View e msg a -> View e msg a
-withBorder colour edges content = do
+-- Drops fully transparent layers first, mirroring 'withBackground' — a caller
+-- that reserves border space via @styleBorder@ but wants a layer visible only
+-- in some states (e.g. a focus ring) relies on this.
+withBorder :: Border -> View e msg a -> View e msg a
+withBorder border content = do
   result <- content
-  when (isVisible colour) $ strokeRect colour edges
+  let visible = filter (isVisible . layerColour) border
+  when (not (null visible)) $ strokeRect visible
   pure result

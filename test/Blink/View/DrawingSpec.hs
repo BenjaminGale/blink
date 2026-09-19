@@ -3,9 +3,10 @@ module Blink.View.DrawingSpec (spec) where
 
 import Test.Hspec
 
-import Blink.Geometry (Point (..), Rectangle (..), Size (..), uniformBorder)
+import Blink.Geometry (Point (..), Rectangle (..), Size (..))
 import Blink.Input (InputState (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
+import Blink.Style (soloBorder)
 import Blink.View
 import Blink.View.Drawing (drawImage, drawText, fillRect, strokeRect, withBackground, withBorder, withClip)
 import Blink.View.Fixtures
@@ -55,8 +56,9 @@ spec = describe "Blink.View.Drawing" $ do
 
     it "strokeRect emits a StrokeBorder command for the current bounds" $ do
       let colour = RGBA 0 1 0 1
-      (_, ctx) <- run0 (strokeRect colour (uniformBorder 2))
-      getDrawCommands ctx `shouldBe` [StrokeBorder testBounds colour (uniformBorder 2)]
+          border = soloBorder colour 2
+      (_, ctx) <- run0 (strokeRect border)
+      getDrawCommands ctx `shouldBe` [StrokeBorder testBounds border]
 
     it "drawText emits a DrawText command for the current bounds" $ do
       let colour = RGBA 0 0 1 1
@@ -98,10 +100,20 @@ spec = describe "Blink.View.Drawing" $ do
 
     describe "withBorder" $ do
       it "strokes the border after the content" $ do
-        let bgColour     = RGBA 1 0 0 1
-            borderColour = RGBA 0 0 1 1
-        (_, ctx) <- run0 (withBorder borderColour (uniformBorder 1) (fillRect bgColour))
+        let bgColour = RGBA 1 0 0 1
+            border   = soloBorder (RGBA 0 0 1 1) 1
+        (_, ctx) <- run0 (withBorder border (fillRect bgColour))
         getDrawCommands ctx `shouldBe`
           [ FillRect testBounds bgColour
-          , StrokeBorder testBounds borderColour (uniformBorder 1)
+          , StrokeBorder testBounds border
           ]
+
+      it "emits no StrokeBorder when every layer is fully transparent" $ do
+        (_, ctx) <- run0 (withBorder (soloBorder (RGBA 0 0 0 0) 1) (pure ()))
+        getDrawCommands ctx `shouldBe` []
+
+      it "drops only the transparent layers from a mixed stack" $ do
+        let visible     = soloBorder (RGBA 0 1 0 1) 1
+            transparent = soloBorder (RGBA 0 0 0 0) 2
+        (_, ctx) <- run0 (withBorder (transparent ++ visible) (pure ()))
+        getDrawCommands ctx `shouldBe` [StrokeBorder testBounds visible]

@@ -32,7 +32,7 @@ module Blink.Rendering
   ) where
 
 import Data.Text (Text)
-import Blink.Geometry (Rectangle, Size (..), BorderEdges, Colour (..), isVisible)
+import Blink.Geometry (Rectangle, Size (..), Colour (..), isVisible, Border)
 
 -- | Text measurement operations provided to the View for cursor positioning.
 -- Construct one from your platform's font API and pass it to
@@ -102,8 +102,9 @@ noOpMeasurers = Measurers
 data DrawCommand
   = FillRect Rectangle Colour
     -- ^ Fill the rectangle with a solid colour.
-  | StrokeBorder Rectangle Colour BorderEdges
-    -- ^ Stroke the border of the rectangle with the given colour and per-side widths in pixels.
+  | StrokeBorder Rectangle Border
+    -- ^ Stroke the rectangle's border with the given stack of layers,
+    -- drawn back-to-front.
   | DrawText Rectangle Text Colour TextAlign
     -- ^ Render text within the rectangle using the given colour and alignment.
   | DrawImage Rectangle ImagePath Colour

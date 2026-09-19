@@ -111,19 +111,28 @@ darkPalette = Palette
 
 statusBarMetrics :: Metrics
 statusBarMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 0
-  , metricsBorderEdges = BorderEdges { edgeTop = 1, edgeRight = 0, edgeBottom = 0, edgeLeft = 0 }
+  { metricsMargin  = uniform 0
+  , metricsPadding = uniform 0
   }
+
+-- | Only the top edge visible -- a status bar's own top rule.
+topOnly :: EdgeVisibility
+topOnly = allEdgesVisible { edgeRightVisible = False, edgeBottomVisible = False, edgeLeftVisible = False }
+
+-- | The colours from 'dividerStyle', with its width-0 border layer (see
+-- its doc comment for why) swapped for a real, visible, top-only one.
+statusBarStyle :: Palette -> StyleSet
+statusBarStyle p = base { styleBase = (styleBase base) { styleBorder = topRule } }
+  where
+    base    = dividerStyle p
+    topRule = map (\l -> l { layerVisible = topOnly }) (soloBorder (paletteBorder p) 1)
 
 -- | Inserts the status bar's look -- an 'ElementId'-keyed entry, not a
 -- built-in control class, so 'Blink.Style.Defaults.defaultTheme' doesn't
--- (and can't) register it itself. Reuses 'dividerStyle' for the look (a
--- plain line in 'paletteBorder' is exactly what a status bar's own top
--- rule wants), with its own 'Metrics' for the top-only border edge.
+-- (and can't) register it itself.
 withStatusBar :: Palette -> Theme ControlId -> Theme ControlId
 withStatusBar p thm = thm
-  { themeElementStyles = Map.insert (ElementId StatusBar) (statusBarMetrics, dividerStyle p) (themeElementStyles thm) }
+  { themeElementStyles = Map.insert (ElementId StatusBar) (statusBarMetrics, statusBarStyle p) (themeElementStyles thm) }
 
 lightTheme :: Theme ControlId
 lightTheme = withStatusBar lightPalette (defaultTheme lightPalette)

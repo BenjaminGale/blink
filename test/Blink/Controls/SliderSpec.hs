@@ -7,12 +7,12 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, FocusPolicy (..), focusPolicy, onFocusGained, onFocusLost, post, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.Fixtures (contentRectFor, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics)
-import Blink.Geometry (Point (..), Rectangle (..), uniformBorder)
+import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.Slider (SliderConfig, onValueChanged, slider, step, value)
 import Blink.Rendering (Colour (..), DrawCommand (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Style (..), StyleSet (..), Theme (..), soloBorder)
 import Blink.View
 import Blink.Element (runElement)
 
@@ -90,12 +90,12 @@ grooveColour = RGBA 0.5 0.5 0.5 1
 withGrooveColour :: Theme TestElement
 withGrooveColour = Theme
   { themeElementStyles = Map.empty
-  , themeDefaultStyle  = (standardMetrics, StyleSet (testStyle { styleBorderColour = Just grooveColour }) Map.empty)
+  , themeDefaultStyle  = (standardMetrics, StyleSet (testStyle { styleBorder = soloBorder grooveColour 0 }) Map.empty)
   }
 
 -- | The focus ring around the whole control.
 ringAt :: DrawCommand
-ringAt = StrokeBorder contentRect testColour (uniformBorder 1)
+ringAt = StrokeBorder contentRect (soloBorder testColour 1)
 
 type Attribute' = Attribute (SliderConfig TestElement String)
 

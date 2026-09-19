@@ -58,7 +58,7 @@ toggleUnchecked = Custom toggleStyleGroup "Unchecked"
 checkedStyle :: Colour -> Colour -> StyleSet -> StyleSet
 checkedStyle accent onAccent s = s
   { styleOverrides = Map.insert toggleChecked
-      (\st -> st { styleBackground = accent, styleTextColour = onAccent, styleBorderColour = Just accent })
+      (\st -> st { styleBackground = accent, styleTextColour = onAccent, styleBorder = withBorderColour accent (styleBorder st) })
       (styleOverrides s)
   }
 

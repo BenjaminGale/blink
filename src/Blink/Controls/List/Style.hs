@@ -82,7 +82,7 @@ listItemStyle p = (flatRowStyle p)
           , \s -> s { styleBackground = paletteAccent p, styleTextColour = paletteTextOnAccent p }
           )
         , ( listCursor
-          , \s -> s { styleBorderColour = Just (paletteFocusRing p) }
+          , \s -> s { styleBorder = withBorderColour (paletteFocusRing p) (styleBorder s) }
           )
         ])
       (styleOverrides (flatRowStyle p))

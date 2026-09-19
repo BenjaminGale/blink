@@ -14,7 +14,7 @@ import Blink.Geometry (Alignment (Center), Orientation (..), Point (..), Rectang
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (exactly)
 import Blink.Rendering (DrawCommand (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Style (..), StyleSet (..), Theme (..), emptyBorder, soloBorder)
 import Blink.View
 import Blink.Element (align, runElement, width)
 
@@ -27,7 +27,7 @@ testBounds = Rectangle 0 0 100 100
 -- line itself -- not some secondary decoration -- is what a divider's
 -- border colour means; see 'noLineTheme' for the "nothing set" case.
 testStyle :: Style
-testStyle = (plainStyle testColour) { styleBorderColour = Just testColour }
+testStyle = (plainStyle testColour) { styleBorder = soloBorder testColour 0 }
 
 testStyleSet :: StyleSet
 testStyleSet = plainStyleSet testStyle
@@ -41,7 +41,7 @@ testTheme = mkTestTheme standardMetrics testStyleSet
 noLineTheme :: Theme TestElement
 noLineTheme = Theme
   { themeElementStyles = Map.empty
-  , themeDefaultStyle  = (standardMetrics, testStyleSet { styleBase = testStyle { styleBorderColour = Nothing } })
+  , themeDefaultStyle  = (standardMetrics, testStyleSet { styleBase = testStyle { styleBorder = emptyBorder } })
   }
 
 -- | A horizontal divider's own resolved bounds at 'testBounds' with the

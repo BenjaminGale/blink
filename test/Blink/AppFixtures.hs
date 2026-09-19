@@ -15,9 +15,9 @@ module Blink.AppFixtures
 import Data.Text (Text)
 
 import Blink.App (FrameResult (..), MsgQueue (..))
-import Blink.Geometry (noBorder, uniform)
+import Blink.Geometry (uniform)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), emptyBorder)
 
 -- | A 'MsgQueue' that holds nothing -- fine for any test app that never
 -- requests a 'Cmd' via 'cmd'.
@@ -43,14 +43,13 @@ testStyle = Style
   { styleBackground   = RGBA 0 0 0 1
   , styleTextColour   = RGBA 0 0 0 1
   , styleTextAlign    = AlignLeft
-  , styleBorderColour = Nothing
+  , styleBorder       = emptyBorder
   }
 
 testMetrics :: Metrics
 testMetrics = Metrics
   { metricsMargin      = uniform 0
   , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
   }
 
 testStyleSet :: StyleSet

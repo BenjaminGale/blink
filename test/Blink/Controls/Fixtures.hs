@@ -19,11 +19,11 @@ module Blink.Controls.Fixtures
 import qualified Data.Map.Strict as Map
 
 import Blink.Element (Element, elLayout, runElement)
-import Blink.Geometry (Alignment (TopLeft), Insets, Point (..), Rectangle, insetRect, noBorder, uniform)
+import Blink.Geometry (Alignment (TopLeft), Insets, Point (..), Rectangle, insetRect, uniform)
 import Blink.Input (InputState (..), emptyInputState)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..))
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), emptyBorder)
 import Blink.View (View, ViewContext, runView)
 
 testColour :: Colour
@@ -37,14 +37,13 @@ plainStyle c = Style
   { styleBackground   = c
   , styleTextColour   = c
   , styleTextAlign    = AlignCenter
-  , styleBorderColour = Nothing
+  , styleBorder       = emptyBorder
   }
 
 plainMetrics :: Insets -> Insets -> Metrics
 plainMetrics margin padding = Metrics
   { metricsMargin      = margin
   , metricsPadding     = padding
-  , metricsBorderEdges = noBorder
   }
 
 -- | 10px margin, 5px padding, no border -- the convention most control

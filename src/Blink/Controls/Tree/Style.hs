@@ -34,7 +34,6 @@ treeChevronMetrics :: Metrics
 treeChevronMetrics = Metrics
   { metricsMargin      = uniform 0
   , metricsPadding     = uniform 0
-  , metricsBorderEdges = noBorder
   }
 
 -- | A plain, transparent, centred icon with no border -- the same shape
@@ -48,7 +47,7 @@ treeChevronStyle p = StyleSet
       { styleBackground   = transparent
       , styleTextColour   = paletteIcon p
       , styleTextAlign    = AlignCenter
-      , styleBorderColour = Nothing
+      , styleBorder       = emptyBorder
       }
   , styleOverrides = Map.fromList
       [ (CommonMouseOver, \s -> s { styleTextColour = paletteIconHover p })

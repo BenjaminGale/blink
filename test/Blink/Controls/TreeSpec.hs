@@ -18,7 +18,7 @@ import Blink.Controls.Tree
 import Blink.Controls.Tree.Style (treeChevronStyleKey)
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
 import Blink.Element (Element (..), height, runElement, width)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), noBorder, uniform)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
@@ -106,7 +106,6 @@ chromeTheme = testTheme
     chromeMetrics = Metrics
       { metricsMargin      = uniform 0
       , metricsPadding     = uniform 8
-      , metricsBorderEdges = noBorder
       }
 
 seedCtx :: ViewContext TestElem String
