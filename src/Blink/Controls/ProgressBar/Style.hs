@@ -31,7 +31,7 @@ progressBarStyle p = StyleSet
       { styleBackground   = paletteSurface p
       , styleTextColour   = paletteAccent p
       , styleTextAlign    = AlignLeft
-      , styleBorder       = emptyBorder
+      , styleBorder       = noBorder
       }
   , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
   }

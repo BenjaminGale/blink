@@ -23,7 +23,7 @@ import Blink.Geometry (Alignment (TopLeft), Insets, Point (..), Rectangle, inset
 import Blink.Input (InputState (..), emptyInputState)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), emptyBorder)
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), noBorder)
 import Blink.View (View, ViewContext, runView)
 
 testColour :: Colour
@@ -37,7 +37,7 @@ plainStyle c = Style
   { styleBackground   = c
   , styleTextColour   = c
   , styleTextAlign    = AlignCenter
-  , styleBorder       = emptyBorder
+  , styleBorder       = noBorder
   }
 
 plainMetrics :: Insets -> Insets -> Metrics

@@ -47,7 +47,7 @@ treeChevronStyle p = StyleSet
       { styleBackground   = transparent
       , styleTextColour   = paletteIcon p
       , styleTextAlign    = AlignCenter
-      , styleBorder       = emptyBorder
+      , styleBorder       = noBorder
       }
   , styleOverrides = Map.fromList
       [ (CommonMouseOver, \s -> s { styleTextColour = paletteIconHover p })

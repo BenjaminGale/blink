@@ -14,7 +14,7 @@ import Blink.Geometry (Alignment (Center), Orientation (..), Point (..), Rectang
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (exactly)
 import Blink.Rendering (DrawCommand (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..), emptyBorder, soloBorder)
+import Blink.Style (Style (..), StyleSet (..), Theme (..), noBorder, soloBorder)
 import Blink.View
 import Blink.Element (align, runElement, width)
 
@@ -41,7 +41,7 @@ testTheme = mkTestTheme standardMetrics testStyleSet
 noLineTheme :: Theme TestElement
 noLineTheme = Theme
   { themeElementStyles = Map.empty
-  , themeDefaultStyle  = (standardMetrics, testStyleSet { styleBase = testStyle { styleBorder = emptyBorder } })
+  , themeDefaultStyle  = (standardMetrics, testStyleSet { styleBase = testStyle { styleBorder = noBorder } })
   }
 
 -- | A horizontal divider's own resolved bounds at 'testBounds' with the

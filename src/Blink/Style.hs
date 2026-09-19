@@ -57,7 +57,7 @@ baseStyle = Style
   { styleBackground   = paletteSurface palette
   , styleTextColour   = paletteTextPrimary palette
   , styleTextAlign    = AlignCenter
-  , styleBorder       = emptyBorder
+  , styleBorder       = noBorder
   }
 
 baseMetrics :: Metrics
@@ -115,14 +115,11 @@ module Blink.Style
   , Theme (..)
   , emptyTheme
     -- * Re-exports
-  , BorderEdges (..)
-  , noBorder
-  , uniformBorder
   , CornerRadii (..)
   , EdgeVisibility (..)
   , BorderLayer (..)
   , Border
-  , emptyBorder
+  , noBorder
   , uniformRadii
   , allEdgesVisible
     -- * Border convenience
@@ -140,9 +137,9 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 
 import Blink.Geometry
-  ( BorderEdges (..), Insets, noBorder, uniformBorder
+  ( Insets
   , CornerRadii (..), EdgeVisibility (..), BorderLayer (..), Border
-  , emptyBorder, uniformRadii, allEdgesVisible
+  , noBorder, uniformRadii, allEdgesVisible
   )
 import Blink.Rendering (Colour (..), TextAlign (..))
 
@@ -230,7 +227,7 @@ data Style = Style
   { styleBackground :: Colour   -- ^ Fill colour for the background rectangle (inside the margin).
   , styleTextColour :: Colour   -- ^ Colour used for text and simple fill drawing.
   , styleTextAlign :: TextAlign -- ^ Horizontal text alignment within the content rectangle.
-  , styleBorder :: Border       -- ^ The border's layer stack, drawn back-to-front; 'emptyBorder' draws nothing.
+  , styleBorder :: Border       -- ^ The border's layer stack, drawn back-to-front; 'noBorder' draws nothing.
   } deriving (Eq, Show)
 
 -- | The colour of the outermost (first) layer in a 'Style' record's

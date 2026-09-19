@@ -47,7 +47,7 @@ tableHeaderStyle p = StyleSet
       { styleBackground   = paletteSurface p
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignLeft
-      , styleBorder       = emptyBorder
+      , styleBorder       = noBorder
       }
   , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleBackground = paletteSurfaceHover p })
   }

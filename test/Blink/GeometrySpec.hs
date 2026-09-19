@@ -15,12 +15,12 @@ import Blink.Geometry
   , Size (..)
   , alignRect
   , allEdgesVisible
+  , borderInsets
   , containsPoint
-  , emptyBorder
   , insetRect
   , intersectRect
-  , layeredBorderInsets
   , leftInset
+  , noBorder
   , rectCentredAt
   , rectFromSize
   , resizeRect
@@ -155,16 +155,16 @@ spec = describe "geometry" $ do
           }
 
     it "is zero on every side for an empty stack" $
-      layeredBorderInsets emptyBorder `shouldBe` Insets 0 0 0 0
+      borderInsets noBorder `shouldBe` Insets 0 0 0 0
 
     it "is uniform insets of the width for a single layer at offset 0" $
-      layeredBorderInsets [baseLayer { layerWidth = 3 }] `shouldBe` Insets 3 3 3 3
+      borderInsets [baseLayer { layerWidth = 3 }] `shouldBe` Insets 3 3 3 3
 
     it "adds the offset to the width for a single layer at a positive offset" $
-      layeredBorderInsets [baseLayer { layerWidth = 2, layerOffset = 5 }]
+      borderInsets [baseLayer { layerWidth = 2, layerOffset = 5 }]
         `shouldBe` Insets 7 7 7 7
 
     it "uses the layer that extends furthest out, not the sum of the layers" $
       let inner = baseLayer { layerWidth = 2, layerOffset = 0 }
           ring  = baseLayer { layerWidth = 1, layerOffset = 3 }
-      in layeredBorderInsets [inner, ring] `shouldBe` Insets 4 4 4 4
+      in borderInsets [inner, ring] `shouldBe` Insets 4 4 4 4

@@ -166,7 +166,7 @@ toggleGroupStyle p = StyleSet
       { styleBackground   = transparent
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignLeft
-      , styleBorder       = emptyBorder
+      , styleBorder       = noBorder
       }
   , styleOverrides = Map.empty
   }
@@ -217,7 +217,7 @@ iconStyle p = StyleSet
       { styleBackground   = transparent
       , styleTextColour   = paletteIcon p
       , styleTextAlign    = AlignLeft
-      , styleBorder       = emptyBorder
+      , styleBorder       = noBorder
       }
   , styleOverrides = Map.fromList
       [ (CommonMouseOver, \s -> s { styleTextColour = paletteIconHover p })

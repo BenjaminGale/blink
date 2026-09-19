@@ -86,7 +86,7 @@ import Data.List (find)
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import Blink.Geometry (Insets (..), Orientation (..), Rectangle, Size, layeredBorderInsets, inflate, insetRect)
+import Blink.Geometry (Insets (..), Orientation (..), Rectangle, Size, borderInsets, inflate, insetRect)
 import Blink.Input (ButtonState (..), InputState (..), Key, KeyEvent (..), Modifier, Mouse (..), captureOf)
 import Blink.Layout.Constraints (MeasureCtx (..), shrink)
 import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), VisualState (..), resolveStyle)
@@ -620,11 +620,11 @@ renderStyled m s body = do
     withBorder (styleBorder s) inner
 
 -- | The space a control's border occupies: based on whichever of its
--- layers extends furthest out (see 'layeredBorderInsets'), or none at all
+-- layers extends furthest out (see 'borderInsets'), or none at all
 -- for an empty border. Shared by @renderStyled@ and 'chromeInsets' so
 -- the two can never drift.
 borderContribution :: Style -> Insets
-borderContribution s = layeredBorderInsets (styleBorder s)
+borderContribution s = borderInsets (styleBorder s)
 
 -- | The combined margin\/border\/padding a control's chrome occupies,
 -- outside-in. Shared by @renderStyled@ (which insets by it) and

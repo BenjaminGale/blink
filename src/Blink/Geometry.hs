@@ -9,8 +9,8 @@ The four core types are 'Point', 'Size', 'Rectangle', and 'Insets'.
 'Rectangle' is the central type: most of the library passes bounding
 rectangles around to describe where components are drawn. 'Insets'
 describes four-sided offsets and is used to derive margin and padding
-rectangles from a base 'Rectangle' via 'insetRect'. 'BorderEdges'
-describes per-side border widths; convert to 'Insets' with
+rectangles from a base 'Rectangle' via 'insetRect'. 'Border' describes a
+control's border as a stack of 'BorderLayer's; convert to 'Insets' with
 'borderInsets' to apply with 'insetRect'. 'Alignment' describes a 2D
 anchor position within a containing rectangle and is used with
 'alignRect' to place a child rectangle inside a parent.
@@ -29,20 +29,15 @@ module Blink.Geometry
   , uniform
   , insetRect
   , inflate
-    -- * Border edges
-  , BorderEdges (..)
-  , noBorder
-  , uniformBorder
-  , borderInsets
     -- * Border layers
   , CornerRadii (..)
   , EdgeVisibility (..)
   , BorderLayer (..)
   , Border
-  , emptyBorder
+  , noBorder
   , uniformRadii
   , allEdgesVisible
-  , layeredBorderInsets
+  , borderInsets
     -- * Rectangle operations
   , rectFromSize
   , resizeRect
@@ -109,26 +104,6 @@ inflate ins s = Size
   , sizeHeight = sizeHeight s + topInset ins + bottomInset ins
   }
 
--- | Per-side border widths in pixels.
-data BorderEdges = BorderEdges
-  { edgeTop    :: Double  -- ^ Width of the top border.
-  , edgeRight  :: Double  -- ^ Width of the right border.
-  , edgeBottom :: Double  -- ^ Width of the bottom border.
-  , edgeLeft   :: Double  -- ^ Width of the left border.
-  } deriving (Eq, Show)
-
--- | No border on any side.
-noBorder :: BorderEdges
-noBorder = BorderEdges 0 0 0 0
-
--- | Equal border width on all four sides.
-uniformBorder :: Double -> BorderEdges
-uniformBorder w = BorderEdges w w w w
-
--- | Converts 'BorderEdges' to 'Insets' so it can be applied with 'insetRect'.
-borderInsets :: BorderEdges -> Insets
-borderInsets be = Insets (edgeTop be) (edgeRight be) (edgeBottom be) (edgeLeft be)
-
 -- | Per-corner radii for a rounded 'BorderLayer'. All four corners are
 -- independent so a layer can be rounded on some corners and square on
 -- others (e.g. squared off next to a hidden edge).
@@ -178,17 +153,17 @@ data BorderLayer = BorderLayer
 type Border = [BorderLayer]
 
 -- | No border layers at all.
-emptyBorder :: Border
-emptyBorder = []
+noBorder :: Border
+noBorder = []
 
 -- | The insets a 'Border' stack occupies, for use with 'insetRect'. Based
 -- on whichever layer extends furthest outward
 -- (@'layerOffset' + 'layerWidth'@), not the sum of all layers -- an outer
 -- decorative layer (e.g. a focus ring) does not push the content box in
 -- any further than the base border alone already does.
-layeredBorderInsets :: Border -> Insets
-layeredBorderInsets [] = mempty
-layeredBorderInsets layers = uniform (maximum [layerOffset l + layerWidth l | l <- layers])
+borderInsets :: Border -> Insets
+borderInsets [] = mempty
+borderInsets layers = uniform (maximum [layerOffset l + layerWidth l | l <- layers])
 
 -- | Shrinks @r@ by @ins@ on each edge. Width and height are clamped to
 -- zero if the insets exceed the rectangle's dimensions.
