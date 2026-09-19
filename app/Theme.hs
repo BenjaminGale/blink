@@ -73,6 +73,7 @@ data ControlId = Label
              | LayeredBorderSwatch
              | RoundedBorderSwatch
              | TabBorderSwatch
+             | LayeredRoundedButton
   deriving (Eq, Ord)
 
 -- | Colours sampled from a light-mode reference screenshot (an inspector
@@ -143,9 +144,9 @@ swatchMetrics :: Metrics
 swatchMetrics = Metrics { metricsMargin = uniform 0, metricsPadding = uniform 0 }
 
 -- | A swatch's plain, borderless base look, before 'swatchStyle' gives it
--- its own showcase border. Transparent background -- 'FillRect' has no
--- corner radius of its own (out of scope for the layered-border work),
--- so an opaque fill would square off behind a rounded border.
+-- its own showcase border. Transparent background -- the background fill
+-- has no corner radius of its own, so an opaque one would square off
+-- behind a rounded border.
 swatchBase :: Palette -> StyleSet
 swatchBase p = StyleSet
   { styleBase = Style
@@ -165,16 +166,46 @@ swatchStyle p border = base { styleBase = (styleBase base) { styleBorder = borde
 topRounded :: Double -> CornerRadii
 topRounded r = CornerRadii { radiusTopLeft = r, radiusTopRight = r, radiusBottomRight = 0, radiusBottomLeft = 0 }
 
--- | Inserts the border-showcase page's three swatches -- a stacked
--- layered border (base plus an outer ring), one with rounded corners, and
--- one with its bottom edge open (a tab-like look) -- see "UI"'s
--- @bordersPage@.
-withBorderSwatches :: Palette -> Theme ControlId -> Theme ControlId
-withBorderSwatches p thm = thm
+-- | Paired with 'buttonShowcaseStyle' -- ordinary button padding, so its
+-- caption has room to breathe inside the outer ring.
+buttonShowcaseMetrics :: Metrics
+buttonShowcaseMetrics = Metrics { metricsMargin = uniform 8, metricsPadding = uniform 12 }
+
+-- | A real, interactive 'Blink.Controls.Button.button''s style, combining
+-- both showcase capabilities at once: two layers (base plus an outer
+-- ring, both rounded, the outer one's radius grown by its offset so the
+-- two read as concentric) recolouring together on hover\/press the same
+-- way 'Blink.Controls.Style.buttonStyle's single flat border would.
+buttonShowcaseStyle :: Palette -> StyleSet
+buttonShowcaseStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground = transparent
+      , styleTextColour = paletteTextPrimary p
+      , styleTextAlign  = AlignCenter
+      , styleBorder     = base
+      }
+  , styleOverrides = Map.fromList
+      [ (CommonMouseOver, \s -> s { styleTextColour = paletteAccent p, styleBorder = withBorderColour (paletteAccent p) (styleBorder s) })
+      , (CommonPressed,   \s -> s { styleTextColour = paletteAccent p, styleBorder = withBorderColour (paletteAccent p) (styleBorder s) })
+      ]
+  }
+  where
+    base =
+      [ BorderLayer (paletteBorder p) 2 0 (uniformRadii 10) allEdgesVisible
+      , BorderLayer (paletteAccent p) 2 4 (uniformRadii 14) allEdgesVisible
+      ]
+
+-- | Inserts the border-showcase page's entries -- three static swatches
+-- (a stacked layered border, one with rounded corners, one with its
+-- bottom edge open for a tab-like look) plus a real button combining
+-- layering and rounding together -- see "UI"'s @bordersPage@.
+withBorderShowcase :: Palette -> Theme ControlId -> Theme ControlId
+withBorderShowcase p thm = thm
   { themeElementStyles = Map.union (Map.fromList
       [ (ElementId LayeredBorderSwatch, (swatchMetrics, swatchStyle p layered))
       , (ElementId RoundedBorderSwatch, (swatchMetrics, swatchStyle p rounded))
       , (ElementId TabBorderSwatch,     (swatchMetrics, swatchStyle p tab))
+      , (ElementId LayeredRoundedButton, (buttonShowcaseMetrics, buttonShowcaseStyle p))
       ]) (themeElementStyles thm)
   }
   where
@@ -186,7 +217,7 @@ withBorderSwatches p thm = thm
     tab     = [ BorderLayer (paletteBorder p) 2 0 (topRounded 10) (allEdgesVisible { edgeBottomVisible = False }) ]
 
 lightTheme :: Theme ControlId
-lightTheme = withBorderSwatches lightPalette (withStatusBar lightPalette (defaultTheme lightPalette))
+lightTheme = withBorderShowcase lightPalette (withStatusBar lightPalette (defaultTheme lightPalette))
 
 darkTheme :: Theme ControlId
-darkTheme = withBorderSwatches darkPalette (withStatusBar darkPalette (defaultTheme darkPalette))
+darkTheme = withBorderShowcase darkPalette (withStatusBar darkPalette (defaultTheme darkPalette))

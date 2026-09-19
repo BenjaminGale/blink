@@ -1079,9 +1079,10 @@ imagePage s =
 
 -- Borders page
 
--- | Three swatches, each an otherwise-plain 'label' whose 'style' points
--- at a theme entry "Theme"'s @withBorderSwatches@ registers -- no drawing
--- code here, the border stack is entirely the theme's doing.
+-- | Three static swatches plus a real, clickable button, each an
+-- otherwise-plain 'label'\/'button' whose 'style' points at a theme entry
+-- "Theme"'s @withBorderShowcase@ registers -- no drawing code here, the
+-- border stack is entirely the theme's doing.
 bordersPage :: AppState -> DemoUI ()
 bordersPage _ =
   runElement $ vBox
@@ -1097,12 +1098,20 @@ bordersPage _ =
                 , swatch TabBorderSwatch "Open edge"
                 ]
             ]
+        , caption buttonDescription [width fill, height (exactly 40), align TopLeft]
+        , button LayeredRoundedButton
+            [ text "Layered + rounded", style (ElementId LayeredRoundedButton)
+            , width (exactly 200), height (exactly 48)
+            ]
         ]
     ]
   where
     description =
       "Each box is one Border layer stack (base colour, thickness, \
       \offset, corner radii, edge visibility), set entirely in the theme."
+    buttonDescription =
+      "A real button can combine both at once: two rounded layers, \
+      \stacked concentrically, that recolour together on hover/press."
     swatch eid caption' =
       vBox
         [ spacing 16
