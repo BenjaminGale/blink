@@ -99,7 +99,7 @@ frame before exiting). `DrawCommand` is a small, backend-agnostic list:
 ```haskell
 data DrawCommand
   = FillRect Rectangle Colour
-  | StrokeBorder Rectangle Colour BorderEdges
+  | StrokeBorder Rectangle Border
   | DrawText Rectangle Text Colour TextAlign
   | PushClip Rectangle
   | PopClip

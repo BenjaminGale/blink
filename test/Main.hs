@@ -30,6 +30,7 @@ import qualified Blink.InputSpec as Input
 import qualified Blink.InteractionSpec as Interaction
 import qualified Blink.LayoutSpec as Layout
 import qualified Blink.PopupSpec as Popup
+import qualified Blink.StyleSpec as Style
 import qualified Blink.Style.DefaultsSpec as StyleDefaults
 import qualified Blink.View.AnimationSpec as ViewAnimation
 import qualified Blink.View.ContextSpec as ViewContext
@@ -89,4 +90,5 @@ main = hspec $ do
   Image.spec
   TextInput.spec
   Interaction.spec
+  Style.spec
   StyleDefaults.spec

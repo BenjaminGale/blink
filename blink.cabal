@@ -166,6 +166,7 @@ test-suite blink-tests
         Blink.Controls.TreeSpec
         Blink.Controls.TreeTableSpec
         Blink.LayoutSpec
+        Blink.StyleSpec
         Blink.Style.DefaultsSpec
         Blink.View.AnimationSpec
         Blink.View.ContextSpec

@@ -32,6 +32,14 @@ expectedOuterX :: Double -> Int -> Double
 expectedOuterX radius dy = radius - sqrt (radius * radius - fromCentre * fromCentre)
   where fromCentre = radius - (fromIntegral dy + 0.5)
 
+-- | The inner curve's continuous x-offset at row @dy@, for a corner
+-- whose thickness is thinner than its radius (so an inner circle of
+-- @innerRadius@ leaves a hole). Same construction as 'expectedOuterX',
+-- against the inner circle instead of the outer one.
+expectedInnerX :: Double -> Double -> Int -> Double
+expectedInnerX radius innerRadius dy = radius - sqrt (innerRadius * innerRadius - fromCentre * fromCentre)
+  where fromCentre = radius - (fromIntegral dy + 0.5)
+
 -- | Total coverage-weighted ring width at each row (summed across that
 -- row's pieces, since an antialiased row can split into an outer fringe,
 -- a core, and an inner fringe), ordered top to bottom. Weighting by
@@ -81,6 +89,23 @@ spec = describe "Blink.Rendering.RoundedRect" $ do
         -- 10 rows (radius 10), each just an outer fringe plus a core,
         -- no inner fringe: 20 pieces.
         length (topLeftArc 10 10) `shouldBe` 20
+
+    describe "a corner thinner than its radius (radius 10, thickness 4 -- leaves an inner hole)" $ do
+      let radius = 10
+          innerRadius = 6 -- radius - thickness
+
+      it "places the inner fringe pixel's column and coverage per the circle equation, once a row reaches the hole" $
+        mapM_
+          (\dy ->
+            let innerX = expectedInnerX radius innerRadius dy
+                col     = fromIntegral (floor innerX :: Int)
+                covered = innerX - col
+            in topLeftArc radius 4 `shouldContain` [(Rectangle col (fromIntegral dy) 1 1, covered)]
+          )
+          [4 .. floor radius - 1 :: Int]
+
+      it "emits no inner-hole piece for the rows above the hole" $
+        length [ () | (rect, _) <- topLeftArc radius 4, rectY rect < 4 ] `shouldBe` 2 * 4 -- outer fringe + core per row, no inner piece
 
     describe "antialiasing" $
       it "gives a boundary pixel partial coverage strictly between 0 and 1, not a hard edge" $ do
