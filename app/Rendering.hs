@@ -12,7 +12,7 @@ module Rendering
   ) where
 
 import Blink
-import Control.Monad (when)
+import Blink.Rendering.RoundedRect (ringRects)
 import SDL (($=))
 import qualified SDL
 import qualified SDL.Font as Font
@@ -224,29 +224,20 @@ renderFill renderer r color = do
   SDL.fillRect renderer (Just (toSDLRect r))
 
 -- | Draws every layer in the stack, back-to-front, each expanded outward
--- from @r@ by its own 'layerOffset', as a square with its 'layerVisible'
--- edges drawn.
+-- from @r@ by its own 'layerOffset'.
 renderBorder :: SDL.Renderer -> Rectangle -> Border -> IO ()
 renderBorder renderer r = mapM_ (renderBorderLayer renderer r)
 
--- | Draws one layer's four edges as filled rectangles, rounding the offset
--- rect's coordinates once and deriving every edge from those integers —
--- rounding each edge separately could round adjacent edges to different
--- pixels at a fractional corner, leaving a gap or overlap.
+-- | Draws one layer's ring -- its visible straight edges plus any rounded
+-- corners its 'CornerRadii' declare -- as the set of filled rectangles
+-- 'ringRects' computes for it.
 renderBorderLayer :: SDL.Renderer -> Rectangle -> BorderLayer -> IO ()
 renderBorderLayer renderer r layer = do
   SDL.rendererDrawColor renderer $= toSDLColor (layerColour layer)
-  let SDL.Rectangle (SDL.P (SDL.V2 x y)) (SDL.V2 w h) = toSDLRect (expandBy (layerOffset layer) r)
-      t  = round (layerWidth layer)
-      ri = t
-      b  = t
-      l  = t
-      visible = layerVisible layer
-      mkRect rx ry rw rh = SDL.Rectangle (SDL.P (SDL.V2 rx ry)) (SDL.V2 rw rh)
-  when (t > 0  && edgeTopVisible visible)    $ SDL.fillRect renderer (Just (mkRect x y w t))
-  when (b > 0  && edgeBottomVisible visible) $ SDL.fillRect renderer (Just (mkRect x (y + h - b) w b))
-  when (l > 0  && edgeLeftVisible visible)   $ SDL.fillRect renderer (Just (mkRect x (y + t) l (h - t - b)))
-  when (ri > 0 && edgeRightVisible visible)  $ SDL.fillRect renderer (Just (mkRect (x + w - ri) (y + t) ri (h - t - b)))
+  mapM_ (SDL.fillRect renderer . Just . toSDLRect) rects
+  where
+    outer = expandBy (layerOffset layer) r
+    rects = ringRects outer (layerRadii layer) (layerWidth layer) (layerVisible layer)
 
 -- | Expands a rectangle outward by @o@ pixels on every side, for
 -- positioning a border layer at its 'layerOffset' from the control's own
