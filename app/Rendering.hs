@@ -188,8 +188,16 @@ loadSizedImageTexture renderer cache path (w, h)
 toWord8 :: Double -> Word8
 toWord8 c = round (c * 255)
 
+-- | @colour@'s own alpha, scaled by @coverage@ -- lets a caller draw a
+-- partially-covered pixel (e.g. a rounded border corner's antialiased
+-- fringe) by blending rather than rounding it to a hard edge. Requires
+-- the renderer's own blend mode to actually be alpha blending, set once
+-- at startup.
+toSDLColorWithCoverage :: Double -> Colour -> SDL.V4 Word8
+toSDLColorWithCoverage coverage (RGBA r g b a) = SDL.V4 (toWord8 r) (toWord8 g) (toWord8 b) (toWord8 (a * coverage))
+
 toSDLColor :: Colour -> SDL.V4 Word8
-toSDLColor (RGBA r g b _) = SDL.V4 (toWord8 r) (toWord8 g) (toWord8 b) 255
+toSDLColor = toSDLColorWithCoverage 1
 
 toSDLColor3 :: Colour -> SDL.V3 Word8
 toSDLColor3 (RGBA r g b _) = SDL.V3 (toWord8 r) (toWord8 g) (toWord8 b)
@@ -230,14 +238,17 @@ renderBorder renderer r = mapM_ (renderBorderLayer renderer r)
 
 -- | Draws one layer's ring -- its visible straight edges plus any rounded
 -- corners its 'CornerRadii' declare -- as the set of filled rectangles
--- 'ringRects' computes for it.
+-- 'ringRects' computes for it, each blended at its own coverage so a
+-- rounded corner's edge antialiases instead of hard-rounding to a
+-- staircase.
 renderBorderLayer :: SDL.Renderer -> Rectangle -> BorderLayer -> IO ()
-renderBorderLayer renderer r layer = do
-  SDL.rendererDrawColor renderer $= toSDLColor (layerColour layer)
-  mapM_ (SDL.fillRect renderer . Just . toSDLRect) rects
+renderBorderLayer renderer r layer = mapM_ drawPiece pieces
   where
-    outer = expandBy (layerOffset layer) r
-    rects = ringRects outer (layerRadii layer) (layerWidth layer) (layerVisible layer)
+    outer  = expandBy (layerOffset layer) r
+    pieces = ringRects outer (layerRadii layer) (layerWidth layer) (layerVisible layer)
+    drawPiece (rect, coverage) = do
+      SDL.rendererDrawColor renderer $= toSDLColorWithCoverage coverage (layerColour layer)
+      SDL.fillRect renderer (Just (toSDLRect rect))
 
 -- | Expands a rectangle outward by @o@ pixels on every side, for
 -- positioning a border layer at its 'layerOffset' from the control's own

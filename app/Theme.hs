@@ -191,8 +191,8 @@ buttonShowcaseStyle p = StyleSet
   }
   where
     base =
-      [ BorderLayer (paletteBorder p) 2 0 (uniformRadii 10) allEdgesVisible
-      , BorderLayer (paletteAccent p) 2 4 (uniformRadii 14) allEdgesVisible
+      [ BorderLayer (paletteBorder p) 2 0 (uniformRadii 16) allEdgesVisible
+      , BorderLayer (paletteAccent p) 2 4 (uniformRadii 20) allEdgesVisible
       ]
 
 -- | Inserts the border-showcase page's entries -- three static swatches
@@ -213,8 +213,8 @@ withBorderShowcase p thm = thm
       [ BorderLayer (paletteBorder p) 2 0 (uniformRadii 0) allEdgesVisible
       , BorderLayer (paletteAccent p) 2 4 (uniformRadii 0) allEdgesVisible
       ]
-    rounded = [ BorderLayer (paletteBorder p) 3 0 (uniformRadii 16) allEdgesVisible ]
-    tab     = [ BorderLayer (paletteBorder p) 2 0 (topRounded 10) (allEdgesVisible { edgeBottomVisible = False }) ]
+    rounded = [ BorderLayer (paletteBorder p) 3 0 (uniformRadii 24) allEdgesVisible ]
+    tab     = [ BorderLayer (paletteBorder p) 2 0 (topRounded 16) (allEdgesVisible { edgeBottomVisible = False }) ]
 
 lightTheme :: Theme ControlId
 lightTheme = withBorderShowcase lightPalette (withStatusBar lightPalette (defaultTheme lightPalette))
