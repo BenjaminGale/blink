@@ -32,7 +32,7 @@ module Blink.Rendering
   ) where
 
 import Data.Text (Text)
-import Blink.Geometry (Rectangle, Size (..), BorderEdges)
+import Blink.Geometry (Rectangle, Size (..), BorderEdges, Colour (..), isVisible)
 
 -- | Text measurement operations provided to the View for cursor positioning.
 -- Construct one from your platform's font API and pass it to
@@ -54,16 +54,6 @@ noOpTextMeasurer = TextMeasurer
   , tmCharAtOffset = \_ _ -> pure 0
   , tmTextSize     = \_ -> pure (Size 0 0)
   }
-
--- | An RGBA colour with components in @[0, 1]@.
-data Colour = RGBA Double Double Double Double
-  deriving (Eq, Show)
-
--- | 'True' when the colour has a non-zero alpha component and will
--- contribute visible output when rendered. Used to skip draw calls for
--- fully transparent fills.
-isVisible :: Colour -> Bool
-isVisible (RGBA _ _ _ a) = a /= 0
 
 -- | Horizontal alignment of text within its bounding rectangle.
 data TextAlign = AlignLeft | AlignCenter | AlignRight

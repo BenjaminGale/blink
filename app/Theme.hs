@@ -26,7 +26,6 @@ import Blink.Controls.ToggleGroup (ToggleGroupPart)
 import Blink.Controls.Table (TablePart)
 import Blink.Controls.Tree (TreePart)
 import Blink.Controls.TreeTable (TreeTablePart)
-import Blink.Rendering
 import Blink.Style
 import Blink.Style.Defaults (defaultTheme)
 import Blink.Controls.Divider.Style (dividerStyle)
