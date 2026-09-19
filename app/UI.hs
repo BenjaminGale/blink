@@ -4,7 +4,9 @@ module UI (ControlId, AppState (..), demoApp) where
 import Blink.App hiding (Continue)
 import Blink.Controls hiding (rowHeight)
 import Blink.Controls.Control
-  (ControlConfig (..), FocusPolicy (..), control, defaultControlConfig, isEnabled, measureChrome, post, postWith)
+  ( ControlConfig (..), FocusPolicy (..), StyleKey (..), control, defaultControlConfig, isEnabled, measureChrome
+  , post, postWith, style
+  )
 import Blink.Controls.Label (LabelConfig)
 import Blink.Controls.List
   (ListPart (..), MultiSelection, SingleSelection, multiSelection, selectFirst, selectedItems, singleSelection)
@@ -583,6 +585,7 @@ pages =
   , (TreeTablePage,   "Tree table")
   , (BackgroundPage,  "Background")
   , (ImagePage,       "Image")
+  , (BordersPage,     "Borders")
   ]
 
 -- | A toggle button group of one item per 'Page' -- selecting a page is
@@ -618,6 +621,7 @@ pageContent s = case currentPage s of
   TreeTablePage  -> treeTablePage s
   BackgroundPage -> backgroundPage s
   ImagePage      -> imagePage s
+  BordersPage    -> bordersPage s
 
 -- List page
 --
@@ -1072,6 +1076,41 @@ imagePage s =
               ]
           ]
         )
+
+-- Borders page
+
+-- | Three swatches, each an otherwise-plain 'label' whose 'style' points
+-- at a theme entry "Theme"'s @withBorderSwatches@ registers -- no drawing
+-- code here, the border stack is entirely the theme's doing.
+bordersPage :: AppState -> DemoUI ()
+bordersPage _ =
+  runElement $ vBox
+    [ spacing 12, margin 12
+    , children
+        [ caption "Borders" [width fill, height (exactly 24), align TopLeft]
+        , caption description [width fill, height (exactly 40), align TopLeft]
+        , hBox
+            [ spacing 24
+            , children
+                [ swatch LayeredBorderSwatch "Stacked layers"
+                , swatch RoundedBorderSwatch "Rounded corners"
+                , swatch TabBorderSwatch "Open edge"
+                ]
+            ]
+        ]
+    ]
+  where
+    description =
+      "Each box is one Border layer stack (base colour, thickness, \
+      \offset, corner radii, edge visibility), set entirely in the theme."
+    swatch eid caption' =
+      vBox
+        [ spacing 16
+        , children
+            [ label eid [style (ElementId eid), width (exactly 140), height (exactly 100)]
+            , caption caption' [width (exactly 140), height (exactly 28), align TopCenter]
+            ]
+        ]
 
 -- Top-level view
 

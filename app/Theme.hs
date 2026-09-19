@@ -18,6 +18,7 @@ import qualified Data.Map.Strict as Map
 
 import Data.Text (Text)
 import Blink.Geometry
+import Blink.Rendering (TextAlign (..))
 import Blink.Controls.List (ListPart)
 import Blink.Controls.MenuBar (MenuBarPart)
 import Blink.Controls.MenuButton (MenuButtonPart)
@@ -29,11 +30,12 @@ import Blink.Controls.TreeTable (TreeTablePart)
 import Blink.Style
 import Blink.Style.Defaults (defaultTheme)
 import Blink.Controls.Divider.Style (dividerStyle)
+import Blink.Controls.Style (transparent)
 
 -- | Which of the demo's sidebar-selected pages is showing.
 data Page
   = ControlsPage | ScrollBarsPage | ListPage | TreePage | TablePage | TreeTablePage
-  | BackgroundPage | ImagePage
+  | BackgroundPage | ImagePage | BordersPage
   deriving (Eq, Ord, Show)
 
 data ControlId = Label
@@ -68,6 +70,9 @@ data ControlId = Label
              | ImageFitHeightCheckbox
              | ImageFitHeightSlider
              | ImagePreserveRatioCheckbox
+             | LayeredBorderSwatch
+             | RoundedBorderSwatch
+             | TabBorderSwatch
   deriving (Eq, Ord)
 
 -- | Colours sampled from a light-mode reference screenshot (an inspector
@@ -134,8 +139,54 @@ withStatusBar :: Palette -> Theme ControlId -> Theme ControlId
 withStatusBar p thm = thm
   { themeElementStyles = Map.insert (ElementId StatusBar) (statusBarMetrics, statusBarStyle p) (themeElementStyles thm) }
 
+swatchMetrics :: Metrics
+swatchMetrics = Metrics { metricsMargin = uniform 0, metricsPadding = uniform 0 }
+
+-- | A swatch's plain, borderless base look, before 'swatchStyle' gives it
+-- its own showcase border. Transparent background -- 'FillRect' has no
+-- corner radius of its own (out of scope for the layered-border work),
+-- so an opaque fill would square off behind a rounded border.
+swatchBase :: Palette -> StyleSet
+swatchBase p = StyleSet
+  { styleBase = Style
+      { styleBackground = transparent
+      , styleTextColour = paletteTextPrimary p
+      , styleTextAlign  = AlignCenter
+      , styleBorder     = noBorder
+      }
+  , styleOverrides = Map.empty
+  }
+
+swatchStyle :: Palette -> Border -> StyleSet
+swatchStyle p border = base { styleBase = (styleBase base) { styleBorder = border } }
+  where base = swatchBase p
+
+-- | Rounded top corners only, e.g. for a tab-like open-bottom look.
+topRounded :: Double -> CornerRadii
+topRounded r = CornerRadii { radiusTopLeft = r, radiusTopRight = r, radiusBottomRight = 0, radiusBottomLeft = 0 }
+
+-- | Inserts the border-showcase page's three swatches -- a stacked
+-- layered border (base plus an outer ring), one with rounded corners, and
+-- one with its bottom edge open (a tab-like look) -- see "UI"'s
+-- @bordersPage@.
+withBorderSwatches :: Palette -> Theme ControlId -> Theme ControlId
+withBorderSwatches p thm = thm
+  { themeElementStyles = Map.union (Map.fromList
+      [ (ElementId LayeredBorderSwatch, (swatchMetrics, swatchStyle p layered))
+      , (ElementId RoundedBorderSwatch, (swatchMetrics, swatchStyle p rounded))
+      , (ElementId TabBorderSwatch,     (swatchMetrics, swatchStyle p tab))
+      ]) (themeElementStyles thm)
+  }
+  where
+    layered =
+      [ BorderLayer (paletteBorder p) 2 0 (uniformRadii 0) allEdgesVisible
+      , BorderLayer (paletteAccent p) 2 4 (uniformRadii 0) allEdgesVisible
+      ]
+    rounded = [ BorderLayer (paletteBorder p) 3 0 (uniformRadii 16) allEdgesVisible ]
+    tab     = [ BorderLayer (paletteBorder p) 2 0 (topRounded 10) (allEdgesVisible { edgeBottomVisible = False }) ]
+
 lightTheme :: Theme ControlId
-lightTheme = withStatusBar lightPalette (defaultTheme lightPalette)
+lightTheme = withBorderSwatches lightPalette (withStatusBar lightPalette (defaultTheme lightPalette))
 
 darkTheme :: Theme ControlId
-darkTheme = withStatusBar darkPalette (defaultTheme darkPalette)
+darkTheme = withBorderSwatches darkPalette (withStatusBar darkPalette (defaultTheme darkPalette))
