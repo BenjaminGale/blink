@@ -224,7 +224,8 @@ renderFill renderer r color = do
   SDL.fillRect renderer (Just (toSDLRect r))
 
 -- | Draws every layer in the stack, back-to-front, each expanded outward
--- from @r@ by its own 'layerOffset', as a square with all four edges drawn.
+-- from @r@ by its own 'layerOffset', as a square with its 'layerVisible'
+-- edges drawn.
 renderBorder :: SDL.Renderer -> Rectangle -> Border -> IO ()
 renderBorder renderer r = mapM_ (renderBorderLayer renderer r)
 
@@ -240,11 +241,12 @@ renderBorderLayer renderer r layer = do
       ri = t
       b  = t
       l  = t
+      visible = layerVisible layer
       mkRect rx ry rw rh = SDL.Rectangle (SDL.P (SDL.V2 rx ry)) (SDL.V2 rw rh)
-  when (t > 0)  $ SDL.fillRect renderer (Just (mkRect x y w t))
-  when (b > 0)  $ SDL.fillRect renderer (Just (mkRect x (y + h - b) w b))
-  when (l > 0)  $ SDL.fillRect renderer (Just (mkRect x (y + t) l (h - t - b)))
-  when (ri > 0) $ SDL.fillRect renderer (Just (mkRect (x + w - ri) (y + t) ri (h - t - b)))
+  when (t > 0  && edgeTopVisible visible)    $ SDL.fillRect renderer (Just (mkRect x y w t))
+  when (b > 0  && edgeBottomVisible visible) $ SDL.fillRect renderer (Just (mkRect x (y + h - b) w b))
+  when (l > 0  && edgeLeftVisible visible)   $ SDL.fillRect renderer (Just (mkRect x (y + t) l (h - t - b)))
+  when (ri > 0 && edgeRightVisible visible)  $ SDL.fillRect renderer (Just (mkRect (x + w - ri) (y + t) ri (h - t - b)))
 
 -- | Expands a rectangle outward by @o@ pixels on every side, for
 -- positioning a border layer at its 'layerOffset' from the control's own
