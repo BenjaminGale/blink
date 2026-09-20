@@ -17,6 +17,7 @@ import qualified Blink.Controls.ProgressBarSpec as ProgressBar
 import qualified Blink.Controls.RadioButtonSpec as RadioButton
 import qualified Blink.Controls.RepeatButtonSpec as RepeatButton
 import qualified Blink.Controls.ScrollBarSpec as ScrollBar
+import qualified Blink.Controls.ScrollPanelSpec as ScrollPanel
 import qualified Blink.Controls.SliderSpec as Slider
 import qualified Blink.Controls.TextInputSpec as TextInput
 import qualified Blink.Controls.ToggleButtonSpec as ToggleButton
@@ -83,6 +84,7 @@ main = hspec $ do
   RadioButton.spec
   RepeatButton.spec
   ScrollBar.spec
+  ScrollPanel.spec
   Slider.spec
   Divider.spec
   Image.spec

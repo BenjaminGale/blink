@@ -17,6 +17,7 @@ import Blink.Controls.MenuButton.Style (menuButtonListStyleKey)
 import Blink.Controls.ProgressBar (progressBarStyleKey)
 import Blink.Controls.RadioButton (radioButtonStyleKey)
 import Blink.Controls.ScrollBar (scrollBarButtonStyleKey, scrollBarStyleKey, scrollBarTrackStyleKey)
+import Blink.Controls.ScrollPanel.Style (scrollPanelStyleKey)
 import Blink.Controls.Slider (sliderStyleKey)
 import Blink.Controls.TextInput (textInputStyleKey)
 import Blink.Controls.ToggleButton (toggleButtonStyleKey, toggleChecked)
@@ -66,6 +67,7 @@ spec = describe "Blink.Style.Defaults" $ do
           , progressBarStyleKey, sliderStyleKey, dividerStyleKey, imageStyleKey, labelStyleKey
           , toggleButtonGroupStyleKey, radioButtonGroupStyleKey
           , scrollBarStyleKey, scrollBarButtonStyleKey, scrollBarTrackStyleKey
+          , scrollPanelStyleKey
           , listStyleKey, listItemStyleKey
           , treeChevronStyleKey
           , tableHeaderStyleKey, tableColumnDividerStyleKey

@@ -71,6 +71,7 @@ import qualified Blink.Controls.MenuButton.Style as MenuButton
 import qualified Blink.Controls.ProgressBar.Style as ProgressBar
 import qualified Blink.Controls.RadioButton.Style as RadioButton
 import qualified Blink.Controls.ScrollBar.Style as ScrollBar
+import qualified Blink.Controls.ScrollPanel.Style as ScrollPanel
 import qualified Blink.Controls.Slider.Style as Slider
 import qualified Blink.Controls.TextInput.Style as TextInput
 import qualified Blink.Controls.ToggleButton.Style as ToggleButton
@@ -98,6 +99,7 @@ defaultTheme p = Theme
       , Label.defaultStyleEntries p
       , ToggleGroup.defaultStyleEntries p
       , ScrollBar.defaultStyleEntries p
+      , ScrollPanel.defaultStyleEntries p
       , List.defaultStyleEntries p
       , Tree.defaultStyleEntries p
       , Table.defaultStyleEntries p

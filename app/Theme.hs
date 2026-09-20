@@ -22,7 +22,7 @@ import Blink.Rendering (TextAlign (..))
 import Blink.Controls.List (ListPart)
 import Blink.Controls.MenuBar (MenuBarPart)
 import Blink.Controls.MenuButton (MenuButtonPart)
-import Blink.Controls.ScrollBar (ScrollBarPart)
+import Blink.Controls.ScrollPanel (ScrollPanelPart)
 import Blink.Controls.ToggleGroup (ToggleGroupPart)
 import Blink.Controls.Table (TablePart)
 import Blink.Controls.Tree (TreePart)
@@ -34,7 +34,7 @@ import Blink.Controls.Style (transparent)
 
 -- | Which of the demo's sidebar-selected pages is showing.
 data Page
-  = ControlsPage | ScrollBarsPage | ListPage | TreePage | TablePage | TreeTablePage
+  = ControlsPage | ListPage | TreePage | TablePage | TreeTablePage
   | BackgroundPage | ImagePage | BordersPage
   deriving (Eq, Ord, Show)
 
@@ -55,8 +55,7 @@ data ControlId = Label
              | PasswordInputCtl
              | AnimateCheckbox
              | SliderCtl
-             | VScrollCtl ScrollBarPart
-             | HScrollCtl ScrollBarPart
+             | MainListScroll ScrollPanelPart
              | FruitList (ListPart Text)
              | GroceryList (ListPart Text)
              | LongList (ListPart Int)

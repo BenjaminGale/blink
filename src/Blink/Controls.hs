@@ -23,6 +23,10 @@
 -- 'Blink.Controls.MenuButton.itemAttrs' (the latter stays in this
 -- umbrella, being here first) -- import "Blink.Controls.MenuBar" qualified
 -- for it.
+--
+-- 'Blink.Controls.ScrollPanel.content' clashes with 'Blink.Popup.content'
+-- and stays out of this umbrella -- import "Blink.Controls.ScrollPanel"
+-- qualified for it.
 module Blink.Controls
   ( -- * Button
     button
@@ -91,6 +95,11 @@ module Blink.Controls
   , scrollBar
   , scrollBarOrientation
   , visibleFraction
+    -- * ScrollPanel
+    -- | 'Blink.Controls.ScrollPanel.content' clashes with
+    -- 'Blink.Popup.content' and stays out of this umbrella -- import
+    -- "Blink.Controls.ScrollPanel" qualified for it.
+  , scrollPanel
     -- * ToggleGroup
   , toggleButtonGroup
   , radioButtonGroup
@@ -133,6 +142,7 @@ import Blink.Controls.ProgressBar (bandSpeed, bandWidth, progress, progressBar)
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.RepeatButton (initialDelay, repeatButton, repeatInterval)
 import Blink.Controls.ScrollBar (scrollBar, scrollBarOrientation, visibleFraction)
+import Blink.Controls.ScrollPanel (scrollPanel)
 import Blink.Controls.Slider (onValueChanged, slider, thumbColourFor)
 import Blink.Controls.TextInput (displayFilter, inputFilter, onInput, onSubmit, placeholder, textInput, value)
 import Blink.Controls.ToggleButton (isSelected, onSelectedChanged, toggleButton)
