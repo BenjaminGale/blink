@@ -246,8 +246,6 @@ fetchDemoFile = do
   threadDelay (round (seconds * 1000000))
   pure (FetchFinished ("config.json loaded after " <> T.pack (show (round seconds :: Int)) <> "s"))
 
-type DemoUI = View ControlId Msg
-
 -- Shell
 
 -- | Plain, non-interactive text under the shared 'Label' element ID.
@@ -415,8 +413,8 @@ rowSlider s =
 
 -- Footer
 
-footer :: AppState -> DemoUI ()
-footer s = do
+footer :: AppState -> Element ControlId Msg
+footer s = elementWithLayout (Layout fill fill TopLeft) $ do
   pos    <- getMousePos
   input  <- getInput
   win    <- getWindowSize
@@ -473,9 +471,9 @@ pages =
 -- whichever page is already showing" trick: clicking the already-selected
 -- page is simply a no-op (see 'Blink.Controls.ToggleGroup.allowDeselect'),
 -- and the selected item's own look already says "you are here".
-sidebar :: AppState -> DemoUI ()
+sidebar :: AppState -> Element ControlId Msg
 sidebar s =
-  runElement $ vBox
+  vBox
     [ width fill, height fill, margin 12
     , children
         [ toggleButtonGroup SidebarPageButton
@@ -490,7 +488,7 @@ sidebar s =
   where
     pageLabel page = maybe "" id (lookup page pages)
 
-pageContent :: AppState -> DemoUI ()
+pageContent :: AppState -> Element ControlId Msg
 pageContent s = case currentPage s of
   ControlsPage   -> mainList s
   ListPage       -> listPage s
@@ -620,9 +618,9 @@ longListSection s =
       [x] -> "Selected: Item " <> T.pack (show x)
       _   -> "Selected: none"
 
-listPage :: AppState -> DemoUI ()
+listPage :: AppState -> Element ControlId Msg
 listPage s =
-  runElement $ vBox
+  vBox
     [ spacing 12, margin 12
     , children
         [ caption "List" [width fill, height (exactly 24), align TopLeft]
@@ -680,9 +678,9 @@ fileTreeElem s =
     , width fill, height (exactly 200)
     ]
 
-treePage :: AppState -> DemoUI ()
+treePage :: AppState -> Element ControlId Msg
 treePage s =
-  runElement $ vBox
+  vBox
     [ spacing 12, margin 12
     , children
         [ caption "Tree" [width fill, height (exactly 24), align TopLeft]
@@ -742,9 +740,9 @@ groceryTableElem s =
     , width fill, height (exactly 200)
     ]
 
-tablePage :: AppState -> DemoUI ()
+tablePage :: AppState -> Element ControlId Msg
 tablePage s =
-  runElement $ vBox
+  vBox
     [ spacing 12, margin 12
     , children
         [ caption "Table" [width fill, height (exactly 24), align TopLeft]
@@ -825,9 +823,9 @@ fileSizeTreeTableElem s =
     , width fill, height (exactly 200)
     ]
 
-treeTablePage :: AppState -> DemoUI ()
+treeTablePage :: AppState -> Element ControlId Msg
 treeTablePage s =
-  runElement $ vBox
+  vBox
     [ spacing 12, margin 12
     , children
         [ caption "Tree table" [width fill, height (exactly 24), align TopLeft]
@@ -849,9 +847,9 @@ treeTablePage s =
 -- operation, shown as an indeterminate 'progressBar' while it's in flight,
 -- then replaced by its result once the 'Cmd' completes and its message
 -- reaches 'updateApp' on a later frame.
-backgroundPage :: AppState -> DemoUI ()
+backgroundPage :: AppState -> Element ControlId Msg
 backgroundPage s =
-  runElement $ vBox
+  vBox
     [ spacing 12, margin 12
     , children
         [ caption "Background" [width fill, height (exactly 24), align TopLeft]
@@ -903,9 +901,9 @@ fitSliderPixels frac = 10 + frac * 300
 -- 'fitWidth'\/'fitHeight' is enabled below, at which point it scales
 -- (preserving aspect ratio unless that's unchecked too) -- toggling the
 -- checkboxes and dragging the sliders shows the effect immediately.
-imagePage :: AppState -> DemoUI ()
+imagePage :: AppState -> Element ControlId Msg
 imagePage s =
-  runElement $ vBox
+  vBox
     [ spacing 12, margin 12
     , children
         [ caption "Image" [width fill, height (exactly 24), align TopLeft]
@@ -961,9 +959,9 @@ imagePage s =
 -- otherwise-plain 'label'\/'button' whose 'style' points at a theme entry
 -- "Theme"'s @withBorderShowcase@ registers -- no drawing code here, the
 -- border stack is entirely the theme's doing.
-bordersPage :: AppState -> DemoUI ()
+bordersPage :: AppState -> Element ControlId Msg
 bordersPage _ =
-  runElement $ vBox
+  vBox
     [ spacing 12, margin 12
     , children
         [ caption "Borders" [width fill, height (exactly 24), align TopLeft]
@@ -1031,9 +1029,9 @@ menuBarSubmenuItemsFor _      _        = []
 -- itself to fill the width it's given, so it can't share space with a
 -- sibling in the same box the way 'rowMenuButton' does; the last-activated
 -- item shows in 'footer' instead.
-topMenuBar :: AppState -> DemoUI ()
+topMenuBar :: AppState -> Element ControlId Msg
 topMenuBar s =
-  runElement $ menuBar DemoMenuBar
+  menuBar DemoMenuBar
     [ menus menuBarMenus
     , labelAttrs (\m -> [text m, mnemonic (menuBarLabelMnemonic m), height fill])
     , menuItems menuBarItemsFor
@@ -1062,9 +1060,9 @@ demoView s = elementWithLayout (Layout fill fill TopLeft) $ do
                    else keyName
   emit (FrameObserved anyHov newInput)
 
-mainList :: AppState -> DemoUI ()
+mainList :: AppState -> Element ControlId Msg
 mainList s =
-  runElement $ scrollPanel MainListScroll
+  scrollPanel MainListScroll
     [ ScrollPanel.content $ vBox
         [ spacing 8, margin 12
         , children

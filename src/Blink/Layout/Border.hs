@@ -16,15 +16,15 @@ import Blink.Geometry (Alignment (..))
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.View (View)
-import Blink.Element (Attribute (..), elementWithLayout, resolve, runElement)
+import Blink.Element (Attribute (..), Element (..), resolve, runElement)
 
 -- | Every capability 'borderLayout' resolves: its up to five named panels.
 data BorderContent e msg = BorderContent
-  { bcTop    :: Maybe (Double, View e msg ())
-  , bcBottom :: Maybe (Double, View e msg ())
-  , bcLeft   :: Maybe (Double, View e msg ())
-  , bcRight  :: Maybe (Double, View e msg ())
-  , bcCentre :: Maybe (View e msg ())
+  { bcTop    :: Maybe (Double, Element e msg)
+  , bcBottom :: Maybe (Double, Element e msg)
+  , bcLeft   :: Maybe (Double, Element e msg)
+  , bcRight  :: Maybe (Double, Element e msg)
+  , bcCentre :: Maybe (Element e msg)
   }
 
 -- | All panels absent. Override only the ones you need:
@@ -42,24 +42,24 @@ emptyBorderContent = BorderContent
   }
 
 -- | A fixed-height panel spanning the full width at the top.
-top :: Double -> View e msg () -> Attribute (BorderContent e msg)
-top h ui = Attribute (\bc -> bc { bcTop = Just (h, ui) })
+top :: Double -> Element e msg -> Attribute (BorderContent e msg)
+top h el = Attribute (\bc -> bc { bcTop = Just (h, el) })
 
 -- | A fixed-height panel spanning the full width at the bottom.
-bottom :: Double -> View e msg () -> Attribute (BorderContent e msg)
-bottom h ui = Attribute (\bc -> bc { bcBottom = Just (h, ui) })
+bottom :: Double -> Element e msg -> Attribute (BorderContent e msg)
+bottom h el = Attribute (\bc -> bc { bcBottom = Just (h, el) })
 
 -- | A fixed-width panel on the left of the middle row.
-left :: Double -> View e msg () -> Attribute (BorderContent e msg)
-left w ui = Attribute (\bc -> bc { bcLeft = Just (w, ui) })
+left :: Double -> Element e msg -> Attribute (BorderContent e msg)
+left w el = Attribute (\bc -> bc { bcLeft = Just (w, el) })
 
 -- | A fixed-width panel on the right of the middle row.
-right :: Double -> View e msg () -> Attribute (BorderContent e msg)
-right w ui = Attribute (\bc -> bc { bcRight = Just (w, ui) })
+right :: Double -> Element e msg -> Attribute (BorderContent e msg)
+right w el = Attribute (\bc -> bc { bcRight = Just (w, el) })
 
 -- | A panel filling whatever space is left in the middle row.
-centre :: View e msg () -> Attribute (BorderContent e msg)
-centre ui = Attribute (\bc -> bc { bcCentre = Just ui })
+centre :: Element e msg -> Attribute (BorderContent e msg)
+centre el = Attribute (\bc -> bc { bcCentre = Just el })
 
 -- | Divides the available space into up to five named regions.
 --
@@ -83,19 +83,24 @@ centre ui = Attribute (\bc -> bc { bcCentre = Just ui })
 -- group to the whole region, and within the middle row the left, centre, and
 -- right panels are further clipped as a group to that row. An oversized
 -- panel can still overlap its neighbours within the same row.
+--
+-- Each panel's own region dictates its size, so a passed-in element's own
+-- 'Layout' is overridden -- there's nothing to gain from asking it, since
+-- 'top'\/'bottom'\/'left'\/'right' fix one axis outright and 'centre' just
+-- fills whatever is left.
 borderLayout :: [Attribute (BorderContent e msg)] -> View e msg ()
 borderLayout attrs =
   runElement $ vBox [children (catMaybes [topRow, middleRow, bottomRow])]
   where
     bc = resolve emptyBorderContent attrs
 
-    topRow    = (\(h, ui) -> elementWithLayout (Layout fill (exactly h) TopLeft) ui) <$> bcTop bc
-    bottomRow = (\(h, ui) -> elementWithLayout (Layout fill (exactly h) TopLeft) ui) <$> bcBottom bc
+    topRow    = (\(h, el) -> el { elLayout = Layout fill (exactly h) TopLeft }) <$> bcTop bc
+    bottomRow = (\(h, el) -> el { elLayout = Layout fill (exactly h) TopLeft }) <$> bcBottom bc
 
     middleCells = catMaybes
-      [ (\(w, ui) -> elementWithLayout (Layout (exactly w) fill TopLeft) ui) <$> bcLeft bc
-      , (\ui      -> elementWithLayout (Layout fill        fill TopLeft) ui) <$> bcCentre bc
-      , (\(w, ui) -> elementWithLayout (Layout (exactly w) fill TopLeft) ui) <$> bcRight bc
+      [ (\(w, el) -> el { elLayout = Layout (exactly w) fill TopLeft }) <$> bcLeft bc
+      , (\el      -> el { elLayout = Layout fill        fill TopLeft }) <$> bcCentre bc
+      , (\(w, el) -> el { elLayout = Layout (exactly w) fill TopLeft }) <$> bcRight bc
       ]
 
     middleRow

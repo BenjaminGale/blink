@@ -13,13 +13,19 @@ import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.View
 import Blink.View.Fixtures (emptyTheme, noInput)
 import Blink.View.Drawing (fillRect)
-import Blink.Element (Attribute, elementWithLayout, runElement)
+import Blink.Element (Attribute, Element, elementWithLayout, runElement)
 
 testColour :: Colour
 testColour = RGBA 0 0 0 1
 
 paint :: View () () ()
 paint = fillRect testColour
+
+-- | 'paint' as an 'Element' -- 'borderLayout' overrides whatever 'Layout'
+-- is set here with its own region's shape, so this placeholder one is
+-- never actually used.
+paintEl :: Element () ()
+paintEl = elementWithLayout (Layout fill fill TopLeft) paint
 
 runLayout :: Rectangle -> View () () () -> IO [Rectangle]
 runLayout bounds ui = do
@@ -300,36 +306,36 @@ spec = describe "layout" $ do
       result `shouldBe` []
 
     it "top panel occupies the full width at the top" $ do
-      result <- runBorder [top 30 paint]
+      result <- runBorder [top 30 paintEl]
       result `shouldBe` [Rectangle 0 0 300 30]
 
     it "bottom panel occupies the full width at its fixed height" $ do
-      result <- runBorder [bottom 20 paint]
+      result <- runBorder [bottom 20 paintEl]
       result `shouldBe` [Rectangle 0 0 300 20]
 
     it "left panel occupies the full height on the left" $ do
-      result <- runBorder [left 50 paint]
+      result <- runBorder [left 50 paintEl]
       result `shouldBe` [Rectangle 0 0 50 200]
 
     it "right panel occupies the full height at its fixed width" $ do
-      result <- runBorder [right 40 paint]
+      result <- runBorder [right 40 paintEl]
       result `shouldBe` [Rectangle 0 0 40 200]
 
     it "centre panel fills all available space when alone" $ do
-      result <- runBorder [centre paint]
+      result <- runBorder [centre paintEl]
       result `shouldBe` [Rectangle 0 0 300 200]
 
     it "top and bottom panels stack when no middle content is present" $ do
-      result <- runBorder [top 30 paint, bottom 20 paint]
+      result <- runBorder [top 30 paintEl, bottom 20 paintEl]
       result `shouldBe` [Rectangle 0 0 300 30, Rectangle 0 30 300 20]
 
     it "all five panels occupy their correct regions" $ do
       result <- runBorder
-        [ top 30 paint
-        , bottom 20 paint
-        , left 50 paint
-        , right 40 paint
-        , centre paint
+        [ top 30 paintEl
+        , bottom 20 paintEl
+        , left 50 paintEl
+        , right 40 paintEl
+        , centre paintEl
         ]
       result `shouldBe`
         [ Rectangle 0   0   300  30   -- top
