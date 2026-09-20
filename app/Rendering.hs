@@ -12,9 +12,10 @@ module Rendering
   ) where
 
 import Blink
-import Blink.Rendering.RoundedRect (ringRects)
+import Blink.Rendering.RoundedRect (RingVertex (..), ringMesh)
 import SDL (($=))
 import qualified SDL
+import qualified SDL.Raw as Raw
 import qualified SDL.Font as Font
 import qualified SDL.Image as Image
 import Data.IORef
@@ -25,6 +26,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
+import qualified Data.Vector.Storable as VS
 import Data.Word (Word8, Word64)
 import Foreign.C.Types (CInt)
 
@@ -199,6 +201,12 @@ toSDLColorWithCoverage coverage (RGBA r g b a) = SDL.V4 (toWord8 r) (toWord8 g) 
 toSDLColor :: Colour -> SDL.V4 Word8
 toSDLColor = toSDLColorWithCoverage 1
 
+-- | Like 'toSDLColorWithCoverage', but as the 'Raw.Color' a 'SDL.Vertex'
+-- carries rather than the 'SDL.V4' 'SDL.rendererDrawColor' wants.
+toRawColorWithCoverage :: Double -> Colour -> Raw.Color
+toRawColorWithCoverage coverage (RGBA r g b a) =
+  Raw.Color (toWord8 r) (toWord8 g) (toWord8 b) (toWord8 (a * coverage))
+
 toSDLColor3 :: Colour -> SDL.V3 Word8
 toSDLColor3 (RGBA r g b _) = SDL.V3 (toWord8 r) (toWord8 g) (toWord8 b)
 
@@ -236,19 +244,26 @@ renderFill renderer r color = do
 renderBorder :: SDL.Renderer -> Rectangle -> Border -> IO ()
 renderBorder renderer r = mapM_ (renderBorderLayer renderer r)
 
--- | Draws one layer's ring -- its visible straight edges plus any rounded
--- corners its 'CornerRadii' declare -- as the set of filled rectangles
--- 'ringRects' computes for it, each blended at its own coverage so a
--- rounded corner's edge antialiases instead of hard-rounding to a
--- staircase.
+-- | Draws one layer's ring, its visible straight edges plus any rounded
+-- corners its 'CornerRadii' declare, as the single triangle mesh
+-- 'ringMesh' computes for it, submitted in one 'SDL.renderGeometry'
+-- call. Each vertex's coverage is folded into the layer's colour alpha,
+-- so SDL's own rasterizer interpolates a rounded corner's antialiased
+-- fringe between a feather vertex (coverage 0) and its neighbouring
+-- boundary vertex (coverage 1) instead of hard-rounding to a staircase.
 renderBorderLayer :: SDL.Renderer -> Rectangle -> BorderLayer -> IO ()
-renderBorderLayer renderer r layer = mapM_ drawPiece pieces
+renderBorderLayer renderer r layer
+  | null verts = pure ()
+  | otherwise  = SDL.renderGeometry renderer Nothing vertices indices
   where
-    outer  = expandBy (layerOffset layer) r
-    pieces = ringRects outer (layerRadii layer) (layerWidth layer) (layerVisible layer)
-    drawPiece (rect, coverage) = do
-      SDL.rendererDrawColor renderer $= toSDLColorWithCoverage coverage (layerColour layer)
-      SDL.fillRect renderer (Just (toSDLRect rect))
+    outer = expandBy (layerOffset layer) r
+    (verts, idxs) = ringMesh outer (layerRadii layer) (layerWidth layer) (layerVisible layer)
+    vertices = VS.fromList (map toVertex verts)
+    indices  = VS.fromList (map fromIntegral idxs)
+    toVertex v = SDL.Vertex
+      (Raw.FPoint (realToFrac (ringVertexX v)) (realToFrac (ringVertexY v)))
+      (toRawColorWithCoverage (ringVertexCoverage v) (layerColour layer))
+      (Raw.FPoint 0 0)
 
 -- | Expands a rectangle outward by @o@ pixels on every side, for
 -- positioning a border layer at its 'layerOffset' from the control's own

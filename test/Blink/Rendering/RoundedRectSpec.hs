@@ -1,113 +1,140 @@
 module Blink.Rendering.RoundedRectSpec (spec) where
 
-import qualified Data.Map.Strict as Map
-import Data.List (sortOn)
 import Test.Hspec
 
 import Blink.Geometry (Rectangle (..), CornerRadii (..), EdgeVisibility (..), allEdgesVisible, uniformRadii)
-import Blink.Rendering.RoundedRect (ringRects)
+import Blink.Rendering.RoundedRect (RingVertex (..), ringMesh)
 
 r :: Rectangle
 r = Rectangle 0 0 20 20
 
--- | Only the top-left corner rounded -- isolates that corner's own arc
--- rows from the other three corners' (empty) and the straight edges,
--- which stay inset away from the rounded corner and so never land
--- inside its @radius x radius@ box.
+-- | Only the top-left corner rounded, isolating that corner's own mesh
+-- from the other three corners' (empty, at radius 0) and the straight
+-- edges.
 topLeftOnly :: Double -> CornerRadii
 topLeftOnly radius = (uniformRadii 0) { radiusTopLeft = radius }
 
--- | The pieces 'ringRects' produced for the top-left corner's own
--- @radius x radius@ box, ordered top to bottom.
-topLeftArc :: Double -> Double -> [(Rectangle, Double)]
-topLeftArc radius thickness =
-  sortOn (rectY . fst) [ p | p@(rect, _) <- ringRects r (topLeftOnly radius) thickness allEdgesVisible, rectX rect < radius, rectY rect < radius ]
+-- | No edges visible, isolating a corner's own mesh from the straight
+-- edge bands 'ringMesh' would otherwise add alongside it (edge
+-- visibility has no bearing on the corner meshes themselves).
+noEdges :: EdgeVisibility
+noEdges = EdgeVisibility False False False False
 
--- | The outer curve's continuous x-offset from the corner's own tip at
--- row @dy@, per the circle equation, sampling at the row's vertical
--- centre (@dy + 0.5@) the same way 'Blink.Rendering.RoundedRect' does --
--- the independent definition the implementation is checked against, not
--- a call into it.
-expectedOuterX :: Double -> Int -> Double
-expectedOuterX radius dy = radius - sqrt (radius * radius - fromCentre * fromCentre)
-  where fromCentre = radius - (fromIntegral dy + 0.5)
+-- | The triangles a mesh's flat index list describes, resolved to their
+-- three actual vertices, three indices at a time.
+triangles :: ([RingVertex], [Int]) -> [(RingVertex, RingVertex, RingVertex)]
+triangles (verts, idx) = go idx
+  where
+    at i = verts !! i
+    go (a : b : c : rest) = (at a, at b, at c) : go rest
+    go _                  = []
 
--- | The inner curve's continuous x-offset at row @dy@, for a corner
--- whose thickness is thinner than its radius (so an inner circle of
--- @innerRadius@ leaves a hole). Same construction as 'expectedOuterX',
--- against the inner circle instead of the outer one.
-expectedInnerX :: Double -> Double -> Int -> Double
-expectedInnerX radius innerRadius dy = radius - sqrt (innerRadius * innerRadius - fromCentre * fromCentre)
-  where fromCentre = radius - (fromIntegral dy + 0.5)
+-- | A triangle's area via the shoelace formula, independent of the
+-- mesh-building code under test.
+triangleArea :: RingVertex -> RingVertex -> RingVertex -> Double
+triangleArea a b c =
+  abs ((ringVertexX b - ringVertexX a) * (ringVertexY c - ringVertexY a)
+     - (ringVertexX c - ringVertexX a) * (ringVertexY b - ringVertexY a)) / 2
 
--- | Total coverage-weighted ring width at each row (summed across that
--- row's pieces, since an antialiased row can split into an outer fringe,
--- a core, and an inner fringe), ordered top to bottom. Weighting by
--- coverage matters here: a fringe pixel's physical width is always 1
--- regardless of how much of it the curve actually covers, so an
--- unweighted sum plateaus at the box edge instead of tracking the true
--- (still-growing) analytic span.
-rowWidths :: Double -> Double -> [Double]
-rowWidths radius thickness =
-  map snd $ Map.toAscList $ Map.fromListWith (+) [ (rectY rect, rectWidth rect * coverage) | (rect, coverage) <- topLeftArc radius thickness ]
+distance :: (Double, Double) -> (Double, Double) -> Double
+distance (x1, y1) (x2, y2) = sqrt ((x1 - x2) ^ (2 :: Int) + (y1 - y2) ^ (2 :: Int))
+
+-- | Fully covered ("coverage 1") vertices are the ones that actually
+-- describe the ring's shape; feathered ("coverage 0") vertices exist
+-- only so the rasterizer can interpolate a fade between the two.
+onlyCoverage :: Double -> [RingVertex] -> [RingVertex]
+onlyCoverage c = filter ((== c) . ringVertexCoverage)
+
+-- | Total area of every triangle whose three vertices are all fully
+-- covered -- the solid part of the mesh a viewer actually sees as
+-- opaque, independent of how many feather bands surround it.
+solidArea :: ([RingVertex], [Int]) -> Double
+solidArea mesh = sum
+  [ triangleArea a b c
+  | (a, b, c) <- triangles mesh
+  , all ((== 1) . ringVertexCoverage) [a, b, c]
+  ]
 
 spec :: Spec
 spec = describe "Blink.Rendering.RoundedRect" $ do
-  describe "ringRects" $ do
-    it "produces the four full-coverage straight edges and no corner pieces when every radius is 0" $
-      ringRects r (uniformRadii 0) 2 allEdgesVisible `shouldMatchList`
-        [ (Rectangle 0 0 20 2, 1)   -- top
-        , (Rectangle 0 18 20 2, 1)  -- bottom
-        , (Rectangle 0 0 2 20, 1)   -- left
-        , (Rectangle 18 0 2 20, 1)  -- right
-        ]
+  describe "ringMesh" $ do
+    it "gives a straight edge (radius 0) a solid area matching (thickness - featherWidth) x length -- the feather straddles the true edge rather than padding outside its full thickness" $ do
+      let mesh = ringMesh r (uniformRadii 0) 2 allEdgesVisible
+          -- Four edges of length 20, each with a 1px-narrower-than-thickness solid core: 4 * 20 * (2 - 1).
+          expected = 4 * 20 * 1
+      abs (solidArea mesh - expected) / expected `shouldSatisfy` (< 1e-9)
 
-    it "omits a hidden edge, squared off, when its radius is 0" $
-      ringRects r (uniformRadii 0) 2 (allEdgesVisible { edgeBottomVisible = False }) `shouldMatchList`
-        [ (Rectangle 0 0 20 2, 1)
-        , (Rectangle 0 0 2 20, 1)
-        , (Rectangle 18 0 2 20, 1)
-        ]
+    it "omits a hidden edge's contribution to the solid area" $ do
+      let full   = solidArea (ringMesh r (uniformRadii 0) 2 allEdgesVisible)
+          hidden = solidArea (ringMesh r (uniformRadii 0) 2 (allEdgesVisible { edgeBottomVisible = False }))
+      abs (full - hidden - 20 * 1) / (20 * 1) `shouldSatisfy` (< 1e-9)
 
-    describe "a rounded corner (radius 10, thickness 10 -- fully solid, no inner hole)" $ do
-      it "places the outer fringe pixel's column and coverage per the circle equation, for every row" $ do
-        let radius = 10
-        mapM_
-          (\dy ->
-            let outerX = expectedOuterX radius dy
-                col    = fromIntegral (floor outerX :: Int)
-                covered = col + 1 - outerX
-            in topLeftArc radius radius `shouldContain` [(Rectangle col (fromIntegral dy) 1 1, covered)]
-          )
-          [0 .. floor radius - 1 :: Int]
+    it "feathers a straight edge symmetrically: a coverage-0 vertex sits exactly as far outside the true edge as a coverage-1 one sits inside it" $ do
+      let (verts, _) = ringMesh r (uniformRadii 0) 2 (EdgeVisibility True False False False)
+          topEdgeYs c = [ ringVertexY v | v <- verts, ringVertexCoverage v == c ]
+      -- True outer edge is y=0: the coverage-1 sample should be at +0.5, the
+      -- coverage-0 sample at -0.5 -- equidistant from the true boundary.
+      minimum (topEdgeYs 0) `shouldBe` (-0.5)
+      minimum (topEdgeYs 1) `shouldBe` 0.5
 
-      it "widens row by row, moving away from the tip toward the straight edge" $
-        let widths = rowWidths 10 10
-        in zipWith (<) widths (tail widths) `shouldSatisfy` and
+    it "produces no geometry at all when the layer has no thickness" $
+      ringMesh r (uniformRadii 5) 0 allEdgesVisible `shouldBe` ([], [])
 
-      it "never emits a third, inner-hole piece when the layer is thick enough to leave no hole" $
-        -- 10 rows (radius 10), each just an outer fringe plus a core,
-        -- no inner fringe: 20 pieces.
-        length (topLeftArc 10 10) `shouldBe` 20
-
-    describe "a corner thinner than its radius (radius 10, thickness 4 -- leaves an inner hole)" $ do
+    describe "a rounded corner (radius 10, thickness 10, fully solid, no inner hole)" $ do
       let radius = 10
-          innerRadius = 6 -- radius - thickness
+          mesh@(verts, _) = ringMesh r (topLeftOnly radius) radius noEdges
+          center = (radius, radius)
+          fullyCovered = onlyCoverage 1 verts
+          feathered    = onlyCoverage 0 verts
 
-      it "places the inner fringe pixel's column and coverage per the circle equation, once a row reaches the hole" $
-        mapM_
-          (\dy ->
-            let innerX = expectedInnerX radius innerRadius dy
-                col     = fromIntegral (floor innerX :: Int)
-                covered = innerX - col
-            in topLeftArc radius 4 `shouldContain` [(Rectangle col (fromIntegral dy) 1 1, covered)]
-          )
-          [4 .. floor radius - 1 :: Int]
+      it "every fully-covered vertex sits at the centre or half a pixel inside the outer circle" $
+        all (\v -> let d = distance center (ringVertexX v, ringVertexY v)
+                   in d < 1e-9 || abs (d - (radius - 0.5)) < 1e-9) fullyCovered
+          `shouldBe` True
 
-      it "emits no inner-hole piece for the rows above the hole" $
-        length [ () | (rect, _) <- topLeftArc radius 4, rectY rect < 4 ] `shouldBe` 2 * 4 -- outer fringe + core per row, no inner piece
+      it "has feathered vertices, each half a pixel outside the outer circle" $ do
+        feathered `shouldNotSatisfy` null
+        all (\v -> abs (distance center (ringVertexX v, ringVertexY v) - (radius + 0.5)) < 1e-9) feathered
+          `shouldBe` True
 
-    describe "antialiasing" $
-      it "gives a boundary pixel partial coverage strictly between 0 and 1, not a hard edge" $ do
-        let coverages = [ c | (rect, c) <- topLeftArc 10 10, rectWidth rect == 1 ]
-        coverages `shouldSatisfy` any (\c -> c > 0 && c < 1)
+      it "meets the (equally feathered) straight top edge at exactly the same point, so there's no gap or overlap at the seam" $ do
+        -- The corner's own outer-core ring reaches the tangent (local (radius, 0))
+        -- at exactly the top edge's own outer-core offset (see 'bandOffsets'),
+        -- since both are the same true boundary (y = rectY r) feathered the same way.
+        let tangentPt = (rectX r + radius, rectY r + 0.5)
+            cornerHasPoint = any (\v -> distance (ringVertexX v, ringVertexY v) tangentPt < 1e-9 && ringVertexCoverage v == 1) fullyCovered
+        cornerHasPoint `shouldBe` True
+
+      it "the solid, fully-covered triangles cover approximately a quarter circle's worth of area" $ do
+        let expected = pi * (radius - 0.5) * (radius - 0.5) / 4
+        abs (solidArea mesh - expected) / expected `shouldSatisfy` (< 0.02)
+
+    describe "a corner thinner than its radius (radius 10, thickness 4, leaves an inner hole)" $ do
+      let radius = 10
+          thickness = 4
+          innerRadius = radius - thickness
+          mesh@(verts, _) = ringMesh r (topLeftOnly radius) thickness noEdges
+          center = (radius, radius)
+          fullyCovered = onlyCoverage 1 verts
+
+      it "every fully-covered vertex sits half a pixel inside the outer circle or half a pixel outside the inner one" $
+        all (\v -> let d = distance center (ringVertexX v, ringVertexY v)
+                   in abs (d - (radius - 0.5)) < 1e-9 || abs (d - (innerRadius + 0.5)) < 1e-9) fullyCovered
+          `shouldBe` True
+
+      it "the ring's core covers approximately the analytic annulus area, shrunk by the feather on each side" $ do
+        let outerCoreR = radius - 0.5
+            innerCoreR = innerRadius + 0.5
+            expected = pi * (outerCoreR * outerCoreR - innerCoreR * innerCoreR) / 4
+        abs (solidArea mesh - expected) / expected `shouldSatisfy` (< 0.02)
+
+    describe "mesh validity" $ do
+      let mesh@(verts, idx) = ringMesh r (uniformRadii 8) 3 allEdgesVisible
+
+      it "gives every vertex exactly 0 or 1 coverage, since antialiasing comes from interpolating across a triangle edge rather than a fractional vertex" $
+        all (\v -> ringVertexCoverage v == 0 || ringVertexCoverage v == 1) verts `shouldBe` True
+
+      it "gives an index list that is whole triangles, all referring to real vertices" $ do
+        length idx `mod` 3 `shouldBe` 0
+        all (\i -> i >= 0 && i < length verts) idx `shouldBe` True
+        length (triangles mesh) `shouldBe` length idx `div` 3
