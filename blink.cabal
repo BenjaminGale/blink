@@ -82,7 +82,6 @@ library
         Blink.Layout.Box
         Blink.Layout.Constraints
         Blink.Rendering
-        Blink.Rendering.RoundedRect
         Blink.Style
         Blink.Controls.Button.Style
         Blink.Controls.Checkbox.Style
@@ -133,7 +132,6 @@ test-suite blink-tests
         Blink.ElementSpec
         Blink.Generators
         Blink.GeometrySpec
-        Blink.Rendering.RoundedRectSpec
         Blink.InputSpec
         Blink.Interaction
         Blink.InteractionSpec

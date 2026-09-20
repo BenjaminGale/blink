@@ -73,7 +73,7 @@ data ControlId = Label
              | LayeredBorderSwatch
              | RoundedBorderSwatch
              | TabBorderSwatch
-             | LayeredRoundedButton
+             | SaveChangesButton
   deriving (Eq, Ord)
 
 -- | Colours sampled from a light-mode reference screenshot (an inspector
@@ -144,9 +144,8 @@ swatchMetrics :: Metrics
 swatchMetrics = Metrics { metricsMargin = uniform 0, metricsPadding = uniform 0 }
 
 -- | A swatch's plain, borderless base look, before 'swatchStyle' gives it
--- its own showcase border. Transparent background -- the background fill
--- has no corner radius of its own, so an opaque one would square off
--- behind a rounded border.
+-- its own showcase border. Transparent background -- these are meant to
+-- read as an outline sitting on the page, not a filled tile.
 swatchBase :: Palette -> StyleSet
 swatchBase p = StyleSet
   { styleBase = Style
@@ -167,45 +166,73 @@ topRounded :: Double -> CornerRadii
 topRounded r = CornerRadii { radiusTopLeft = r, radiusTopRight = r, radiusBottomRight = 0, radiusBottomLeft = 0 }
 
 -- | Paired with 'buttonShowcaseStyle' -- ordinary button padding, so its
--- caption has room to breathe inside the outer ring.
+-- caption has room to breathe inside the outer ring. Margin is exactly
+-- the outer border layer's own reach (its 3px offset plus 2px width),
+-- the minimum that keeps the focus ring inside the control's own
+-- allocated bounds; padding is kept small since, at this control's
+-- 48px height, margin and the border's own space already claim most of
+-- it, leaving little room to spare before the caption's own box
+-- disappears.
 buttonShowcaseMetrics :: Metrics
-buttonShowcaseMetrics = Metrics { metricsMargin = uniform 8, metricsPadding = uniform 12 }
+buttonShowcaseMetrics = Metrics { metricsMargin = uniform 6, metricsPadding = uniform 4 }
 
--- | A real, interactive 'Blink.Controls.Button.button''s style, combining
--- both showcase capabilities at once: two layers (base plus an outer
--- ring, both rounded, the outer one's radius grown by its offset so the
--- two read as concentric) recolouring together on hover\/press the same
--- way 'Blink.Controls.Style.buttonStyle's single flat border would.
+-- | Recolours a single layer of a 'Border' stack by its index (outside in),
+-- leaving every other layer untouched -- unlike 'withBorderColour', which
+-- recolours the whole stack at once. This is what lets
+-- 'buttonShowcaseStyle' give its focus ring a layer of its own: a hover\/
+-- press override that only ever touches layer 0 can never stomp on
+-- whatever a later 'FocusFocused' override wrote to layer 1, regardless of
+-- the fixed Common-then-Focus-then-Custom fold order 'resolveStyle' uses.
+-- (A single shared border, recoloured wholesale by every state as
+-- 'Blink.Controls.Style.buttonStyle' and
+-- 'Blink.Controls.ToggleButton.Style.toggleButtonStyleKey' both do, is
+-- exactly how a checked-and-focused toggle button loses its focus ring:
+-- whichever override runs last -- here, the checked state -- overwrites
+-- the colour focus already set.)
+recolourLayer :: Int -> Colour -> Border -> Border
+recolourLayer i c = zipWith (\j l -> if j == i then l { layerColour = c } else l) [0 ..]
+
+-- | A real, interactive 'Blink.Controls.Button.button''s style: a solid
+-- inner border that carries the button's resting\/hover\/pressed look, plus
+-- a second, wider-spaced outer layer reserved purely for the focus ring --
+-- transparent at rest, so it takes no width in the metrics, and recoloured
+-- to 'paletteFocusRing' only by 'FocusFocused'. Keeping that layer
+-- dedicated to focus (via 'recolourLayer' rather than 'withBorderColour')
+-- means hover\/press can never mask it, which is the fix the demo's
+-- button\/description this style backs calls out.
 buttonShowcaseStyle :: Palette -> StyleSet
 buttonShowcaseStyle p = StyleSet
   { styleBase = Style
-      { styleBackground = transparent
+      { styleBackground = paletteSurface p
       , styleTextColour = paletteTextPrimary p
       , styleTextAlign  = AlignCenter
       , styleBorder     = base
       }
   , styleOverrides = Map.fromList
-      [ (CommonMouseOver, \s -> s { styleTextColour = paletteAccent p, styleBorder = withBorderColour (paletteAccent p) (styleBorder s) })
-      , (CommonPressed,   \s -> s { styleTextColour = paletteAccent p, styleBorder = withBorderColour (paletteAccent p) (styleBorder s) })
+      [ (CommonMouseOver, \s -> s { styleBackground = paletteSurfaceHover p, styleBorder = recolourLayer 0 (paletteBorderHover p) (styleBorder s) })
+      , (CommonPressed,   \s -> s { styleBackground = paletteAccent p, styleTextColour = paletteTextOnAccent p, styleBorder = recolourLayer 0 (paletteAccent p) (styleBorder s) })
+      , (CommonDisabled,  \s -> s { styleBackground = paletteSurfaceDisabled p, styleTextColour = paletteTextMuted p, styleBorder = recolourLayer 0 (paletteBorder p) (styleBorder s) })
+      , (FocusFocused,    \s -> s { styleBorder = recolourLayer 1 (paletteFocusRing p) (styleBorder s) })
       ]
   }
   where
     base =
-      [ BorderLayer (paletteBorder p) 2 0 (uniformRadii 16) allEdgesVisible
-      , BorderLayer (paletteAccent p) 2 4 (uniformRadii 20) allEdgesVisible
+      [ BorderLayer (paletteBorder p) 1 0 (uniformRadii 8) allEdgesVisible
+      , BorderLayer transparent       2 3 (uniformRadii 11) allEdgesVisible
       ]
 
 -- | Inserts the border-showcase page's entries -- three static swatches
 -- (a stacked layered border, one with rounded corners, one with its
--- bottom edge open for a tab-like look) plus a real button combining
--- layering and rounding together -- see "UI"'s @bordersPage@.
+-- bottom edge open for a tab-like look) plus a real, styled button that
+-- puts the same layering technique to work as a dedicated focus ring --
+-- see "UI"'s @bordersPage@.
 withBorderShowcase :: Palette -> Theme ControlId -> Theme ControlId
 withBorderShowcase p thm = thm
   { themeElementStyles = Map.union (Map.fromList
       [ (ElementId LayeredBorderSwatch, (swatchMetrics, swatchStyle p layered))
       , (ElementId RoundedBorderSwatch, (swatchMetrics, swatchStyle p rounded))
       , (ElementId TabBorderSwatch,     (swatchMetrics, swatchStyle p tab))
-      , (ElementId LayeredRoundedButton, (buttonShowcaseMetrics, buttonShowcaseStyle p))
+      , (ElementId SaveChangesButton, (buttonShowcaseMetrics, buttonShowcaseStyle p))
       ]) (themeElementStyles thm)
   }
   where

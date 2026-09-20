@@ -86,7 +86,10 @@ import Data.List (find)
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import Blink.Geometry (Insets (..), Orientation (..), Rectangle, Size, borderInsets, inflate, insetRect)
+import Blink.Geometry
+  ( Insets (..), Orientation (..), Rectangle, Size, CornerRadii, Border, BorderLayer (..)
+  , borderInsets, inflate, insetRect, uniformRadii
+  )
 import Blink.Input (ButtonState (..), InputState (..), Key, KeyEvent (..), Modifier, Mouse (..), captureOf)
 import Blink.Layout.Constraints (MeasureCtx (..), shrink)
 import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), VisualState (..), resolveStyle)
@@ -616,8 +619,20 @@ renderStyled m s body = do
       contentRect = insetRect (metricsPadding m) borderRect
       inner       = withBounds contentRect $ withClip (withMetrics m (withStyle s body))
   withBounds bg $
-    withBackground (styleBackground s) $
+    withBackground (backgroundRadii (styleBorder s)) (styleBackground s) $
     withBorder (styleBorder s) inner
+
+-- | The corner radii a control's background fill should be clipped to --
+-- whichever border layer sits flush with the control's own edge
+-- ('layerOffset' 0), since @bg@ (what the fill actually draws into) is
+-- exactly that layer's rectangle; an outer decorative layer offset
+-- further out (e.g. a focus ring) has no bearing on where the background
+-- itself should round off. A plain square fill (no radius) when there's
+-- no border, or no layer sits at offset 0.
+backgroundRadii :: Border -> CornerRadii
+backgroundRadii border = case [ layerRadii l | l <- border, layerOffset l == 0 ] of
+  (radii : _) -> radii
+  []          -> uniformRadii 0
 
 -- | The space a control's border occupies: based on whichever of its
 -- layers extends furthest out (see 'borderInsets'), or none at all

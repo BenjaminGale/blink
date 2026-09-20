@@ -1098,10 +1098,10 @@ bordersPage _ =
                 , swatch TabBorderSwatch "Open edge"
                 ]
             ]
-        , caption buttonDescription [width fill, height (exactly 40), align TopLeft]
-        , button LayeredRoundedButton
-            [ text "Layered + rounded", style (ElementId LayeredRoundedButton)
-            , width (exactly 200), height (exactly 48)
+        , caption buttonDescription [width fill, height (exactly 56), align TopLeft]
+        , button SaveChangesButton
+            [ text "Save changes", style (ElementId SaveChangesButton)
+            , width (exactly 160), height (exactly 48)
             ]
         ]
     ]
@@ -1110,8 +1110,10 @@ bordersPage _ =
       "Each box is one Border layer stack (base colour, thickness, \
       \offset, corner radii, edge visibility), set entirely in the theme."
     buttonDescription =
-      "A real button can combine both at once: two rounded layers, \
-      \stacked concentrically, that recolour together on hover/press."
+      "A real button, styled with the same two-layer technique but put to \
+      \a different use: an inner border for its resting/hover/pressed look, \
+      \and an outer layer left transparent until focused, so the focus \
+      \ring has a layer of its own that hover/press can never paint over."
     swatch eid caption' =
       vBox
         [ spacing 16

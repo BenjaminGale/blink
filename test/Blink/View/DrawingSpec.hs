@@ -3,7 +3,7 @@ module Blink.View.DrawingSpec (spec) where
 
 import Test.Hspec
 
-import Blink.Geometry (Point (..), Rectangle (..), Size (..))
+import Blink.Geometry (Point (..), Rectangle (..), Size (..), uniformRadii)
 import Blink.Input (InputState (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (soloBorder)
@@ -89,14 +89,20 @@ spec = describe "Blink.View.Drawing" $ do
       getDrawCommands ctx' `shouldBe` []
 
     describe "withBackground" $ do
-      it "emits a FillRect when the colour is opaque" $ do
+      it "emits a FillRect when the colour is opaque and the radii are all zero" $ do
         let colour = RGBA 1 0 0 1
-        (_, ctx) <- run0 (withBackground colour (pure ()))
+        (_, ctx) <- run0 (withBackground (uniformRadii 0) colour (pure ()))
         getDrawCommands ctx `shouldBe` [FillRect testBounds colour]
 
-      it "emits no FillRect when the colour is fully transparent" $ do
-        (_, ctx) <- run0 (withBackground (RGBA 0 0 0 0) (pure ()))
+      it "emits no fill when the colour is fully transparent" $ do
+        (_, ctx) <- run0 (withBackground (uniformRadii 0) (RGBA 0 0 0 0) (pure ()))
         getDrawCommands ctx `shouldBe` []
+
+      it "emits a FillRoundedRect, not a FillRect, when the radii aren't all zero" $ do
+        let colour = RGBA 1 0 0 1
+            radii  = uniformRadii 8
+        (_, ctx) <- run0 (withBackground radii colour (pure ()))
+        getDrawCommands ctx `shouldBe` [FillRoundedRect testBounds radii colour]
 
     describe "withBorder" $ do
       it "strokes the border after the content" $ do

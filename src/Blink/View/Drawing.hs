@@ -20,7 +20,7 @@ module Blink.View.Drawing
 
 import Control.Monad (when)
 import Data.Text (Text)
-import Blink.Geometry (Rectangle, Border, BorderLayer (..), intersectRect)
+import Blink.Geometry (Rectangle, Border, BorderLayer (..), CornerRadii, intersectRect, uniformRadii)
 import Blink.View (View, draw, getBounds, getInteractionClip, withInteractionClip)
 import Blink.Rendering (Colour, TextAlign, ImagePath, DrawCommand (..), isVisible)
 
@@ -30,9 +30,19 @@ drawAt mkCmd = do
   r <- getBounds
   draw (mkCmd r)
 
--- | Fills the current bounds with a solid colour.
+-- | Fills the current bounds with a solid, square-cornered colour.
 fillRect :: Colour -> View e msg ()
 fillRect colour = drawAt (\r -> FillRect r colour)
+
+-- | Fills the current bounds with a solid colour, clipped to the given
+-- corner radii. Emits the plain, square 'FillRect' when @radii@ is
+-- actually all zero -- the overwhelming majority of calls, since most
+-- controls aren't rounded -- so only a genuinely rounded background
+-- takes the 'FillRoundedRect' path at all.
+fillRoundedRect :: CornerRadii -> Colour -> View e msg ()
+fillRoundedRect radii colour
+  | radii == uniformRadii 0 = fillRect colour
+  | otherwise                = drawAt (\r -> FillRoundedRect r radii colour)
 
 -- | Strokes the border of the current bounds with the given stack of layers.
 strokeRect :: Border -> View e msg ()
@@ -62,11 +72,11 @@ withClip action = do
   draw PopClip
   pure a
 
--- | Fills the current bounds with @colour@ then runs @content@ on top.
--- Skips the fill when @colour@ is fully transparent.
-withBackground :: Colour -> View e msg a -> View e msg a
-withBackground colour content = do
-  when (isVisible colour) $ fillRect colour
+-- | Fills the current bounds with @colour@, clipped to @radii@, then runs
+-- @content@ on top. Skips the fill when @colour@ is fully transparent.
+withBackground :: CornerRadii -> Colour -> View e msg a -> View e msg a
+withBackground radii colour content = do
+  when (isVisible colour) $ fillRoundedRect radii colour
   content
 
 -- | Runs @content@, then strokes a border around the current bounds on top.

@@ -32,7 +32,7 @@ module Blink.Rendering
   ) where
 
 import Data.Text (Text)
-import Blink.Geometry (Rectangle, Size (..), Colour (..), isVisible, Border)
+import Blink.Geometry (Rectangle, Size (..), Colour (..), isVisible, Border, CornerRadii)
 
 -- | Text measurement operations provided to the View for cursor positioning.
 -- Construct one from your platform's font API and pass it to
@@ -101,7 +101,17 @@ noOpMeasurers = Measurers
 -- the 'Blink.View' drawing primitives and consumed by the backend renderer.
 data DrawCommand
   = FillRect Rectangle Colour
-    -- ^ Fill the rectangle with a solid colour.
+    -- ^ Fill the rectangle with a solid, square-cornered colour.
+  | FillRoundedRect Rectangle CornerRadii Colour
+    -- ^ Fill the rectangle with a solid colour, clipped to the given
+    -- corner radii -- always the same radii as whatever border the
+    -- control drawing this fill is about to stroke over it (see
+    -- 'Blink.View.Drawing.withBackground'), so a themed background can
+    -- never square off behind a rounded border the way 'FillRect' would.
+    -- Kept as its own command, rather than folding a radii field into
+    -- 'FillRect' itself, so the overwhelming majority of fills (every
+    -- unrounded control there is) keep emitting the exact same command
+    -- they always have.
   | StrokeBorder Rectangle Border
     -- ^ Stroke the rectangle's border with the given stack of layers,
     -- drawn back-to-front.
