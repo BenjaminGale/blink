@@ -133,10 +133,11 @@ isAnyMouseOver = gets (not . Map.null . mouseHoverNext . ctxMouse)
 -- the whole view.
 registerHitRect :: Ord e => e -> View e msg ()
 registerHitRect eid = do
-  r <- getBounds
+  r      <- getBounds
+  popId  <- getCurrentPopupId
   modifyMouse $ \m ->
     let idx = Map.size (mouseHitRectsNext m)
-    in m { mouseHitRectsNext = Map.insert eid (HitRect r idx) (mouseHitRectsNext m) }
+    in m { mouseHitRectsNext = Map.insert eid (HitRect r idx popId) (mouseHitRectsNext m) }
 
 -- | 'True' when, per last frame's 'registerHitRect' calls, some other
 -- element was hit at the current mouse position with a higher registration
@@ -159,10 +160,10 @@ isOccludedFor eid = do
   p    <- getMousePos
   prev <- gets (mouseHitRectsPrev . ctxMouse)
   case Map.lookup eid prev of
-    Nothing               -> pure False
-    Just (HitRect _ myIdx) -> pure $ any (occludes myIdx p) (Map.toList (Map.delete eid prev))
+    Nothing                 -> pure False
+    Just (HitRect _ myIdx _) -> pure $ any (occludes myIdx p) (Map.toList (Map.delete eid prev))
   where
-    occludes myIdx p (_, HitRect r idx) = idx > myIdx && containsPoint p r
+    occludes myIdx p (_, HitRect r idx _) = idx > myIdx && containsPoint p r
 
 -- | Records the current hit-rect registration count as the boundary between
 -- the main view tree's hit-rects and a popup's -- called once per frame by
@@ -188,6 +189,13 @@ markPopupFloor = modifyMouse $ \m -> m { mousePopupFloor = Map.size (mouseHitRec
 -- items -- only a rect registered after @eid@'s own counts, the same "idx
 -- > myIdx" test 'isOccludedFor' uses; otherwise a popup's own background
 -- panel, registered before its items, would occlude every item in it.
+--
+-- A rect tagged with @eid@ itself as its owning popup id (see
+-- 'hitRectPopupId') never counts as occluding, regardless of index -- a
+-- popup's own trigger control (e.g. 'Blink.Controls.MenuButton') is opened
+-- and closed by the same id as the popup it owns, and should never read as
+-- covered by content it is itself responsible for, even when that
+-- content's previous-frame footprint overlaps the trigger's own bounds.
 isOccludedByPopupFor :: Ord e => e -> View e msg Bool
 isOccludedByPopupFor eid = do
   p     <- getMousePos
@@ -195,11 +203,12 @@ isOccludedByPopupFor eid = do
   let prev      = mouseHitRectsPrev mouse
       floorIdx  = mousePopupFloor mouse
       ownIdx    = case Map.lookup eid prev of
-        Just (HitRect _ i) | i >= floorIdx -> i
-        _                                  -> floorIdx - 1
+        Just (HitRect _ i _) | i >= floorIdx -> i
+        _                                    -> floorIdx - 1
   pure $ any (occludesByPopup ownIdx p) (Map.toList (Map.delete eid prev))
   where
-    occludesByPopup ownIdx p (_, HitRect r idx) = idx > ownIdx && containsPoint p r
+    occludesByPopup ownIdx p (_, HitRect r idx ownerId)
+      = idx > ownIdx && ownerId /= Just eid && containsPoint p r
 
 -- | 'True' when the left button is currently held, whether this is the
 -- first frame of the press or a later one -- callers that only care whether

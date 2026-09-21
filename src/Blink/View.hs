@@ -400,6 +400,8 @@ module Blink.View
   , getNavigationKeys
   , withNavigationKeys
   , getCurrentScope
+  , getCurrentPopupId
+  , withCurrentPopup
     -- * Styles
   , getStyleSet
   , getMetrics

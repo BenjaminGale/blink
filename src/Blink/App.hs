@@ -142,11 +142,12 @@ import Blink.View
   , runView, getDrawCommands, getCursorShape, getMessages, hasPendingUiEffects
   , UiEffect, queueUiEffects
   , contextAnimation, contextRequiresAnimation
-  , PendingPopup (popupAnchor, popupSize, popupPlacement, popupOffset, popupRun, popupOriginScope)
+  , PendingPopup (popupId, popupAnchor, popupSize, popupPlacement, popupOffset, popupRun, popupOriginScope)
   , getPendingPopups, clearPendingPopups
   , getWindowSize, withBounds
   , markPopupFloor
   , withFocusScope
+  , withCurrentPopup
   )
 import Blink.Element (Element, runElement)
 import Blink.Update (Update, runUpdateEffects)
@@ -328,7 +329,9 @@ drainPopups ctx0 = do
     place p = do
       window <- getWindowSize
       let rect = placePopup (popupAnchor p) window (popupSize p) (popupPlacement p) (popupOffset p)
-          run  = withBounds rect (popupRun p)
+          -- Tags this popup's own hit-rects with its id -- see
+          -- 'Blink.View.Mouse.isOccludedByPopupFor'.
+          run  = withCurrentPopup (popupId p) (withBounds rect (popupRun p))
       -- Re-enters the scope this popup was queued from, so it runs with
       -- the focus ambient it would have had inline (see PendingPopup.popupOriginScope).
       maybe run (`withFocusScope` run) (popupOriginScope p)

@@ -246,10 +246,13 @@ nextHoverState prev isOverNow = case (wasHit prev, isOverNow) of
   (False, False) -> NotOver
 
 -- | One identified control's hit-tested bounds for a frame, together with a
--- per-frame registration index -- see 'mouseHitRectsNext'.
-data HitRect = HitRect
-  { hitRectBounds :: Rectangle
-  , hitRectIndex  :: Int
+-- per-frame registration index -- see 'mouseHitRectsNext' -- and, if it was
+-- registered while draining a popup, that popup's own id ('Nothing' for a
+-- main-tree rect). See 'Blink.View.Mouse.isOccludedByPopupFor'.
+data HitRect e = HitRect
+  { hitRectBounds  :: Rectangle
+  , hitRectIndex   :: Int
+  , hitRectPopupId :: Maybe e
   } deriving (Eq, Show)
 
 -- | All mouse state for the current frame: the button/capture state, plus
@@ -273,8 +276,8 @@ data Mouse e = Mouse
   { mouseButton     :: ButtonState e
   , mouseHoverPrev  :: Map.Map e HoverState
   , mouseHoverNext  :: Map.Map e HoverState
-  , mouseHitRectsPrev :: Map.Map e HitRect
-  , mouseHitRectsNext :: Map.Map e HitRect
+  , mouseHitRectsPrev :: Map.Map e (HitRect e)
+  , mouseHitRectsNext :: Map.Map e (HitRect e)
   , mousePopupFloor :: Int
     -- ^ The lowest 'hitRectIndex' in 'mouseHitRectsPrev' that belongs to a
     -- popup rather than the main view tree. 'Blink.View.Mouse.markPopupFloor'

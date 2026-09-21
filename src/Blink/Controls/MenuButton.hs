@@ -147,6 +147,13 @@ menuButton tag attrs = Element
 -- 'menuButton' nested inside another composite's focus scope still hands
 -- off correctly, exactly as a click redirecting focus elsewhere already
 -- does for any control.
+--
+-- While already open, the trigger's own click-to-focus is suppressed (see
+-- @ctrl@ below): a mouse-down there is ambiguous between reopening and
+-- closing the menu until the release resolves it, so focus only returns
+-- to the trigger once a close actually happens (@justClosed@ below), the
+-- same gated way every other closing path refocuses it (see 'itemsElement's
+-- @close@).
 runMenuButton :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg (ToggleInteraction e msg)
 runMenuButton tag cfg = do
   enclosingScope <- getCurrentScope
@@ -154,17 +161,28 @@ runMenuButton tag cfg = do
   onTrigger <- isRegionHit
   let wasOpen    = tgcSelected (mbToggle cfg)
       justOpened = tgiSelected r && not wasOpen
-      close      = do
-        runHandlers (tgcOnSelectedChanged (mbToggle cfg)) False
+      justClosed = wasOpen && not (tgiSelected r)
+      refocusTrigger = do
         alreadyClaimed <- hasQueuedFocus enclosingScope
         when (not alreadyClaimed) $ requestFocus enclosingScope triggerId
+      close      = do
+        runHandlers (tgcOnSelectedChanged (mbToggle cfg)) False
+        refocusTrigger
   when justOpened $ requestFocus enclosingScope (tag MenuButtonList)
+  when justClosed refocusTrigger
   when (tgiSelected r) $ popup triggerId [content (itemsElement tag cfg close onTrigger)]
   pure r
   where
     triggerId = tag MenuButtonTrigger
     btn       = tgcButton (mbToggle cfg)
-    ctrl      = (bcControl btn) { ccContent = const (renderLabelledContent (bcLabelled btn)) }
+    wasOpen'  = tgcSelected (mbToggle cfg)
+    suppressClickToFocus policy = case policy of
+      Focusable opts | wasOpen' -> Focusable opts { focusIsClickToFocus = False }
+      _                         -> policy
+    ctrl = (bcControl btn)
+      { ccContent     = const (renderLabelledContent (bcLabelled btn))
+      , ccFocusPolicy = suppressClickToFocus (ccFocusPolicy (bcControl btn))
+      }
 
 -- | The dropdown itself -- see 'Blink.Controls.Menu.menuList' for the
 -- shared engine: Up\/Down move the keyboard highlight between items

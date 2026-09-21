@@ -215,6 +215,14 @@ menuBar tag attrs = Element
 -- standard menu-bar convention of "sweeping" across the bar once one menu
 -- has been opened. Never fires while nothing is open, so idle hovering
 -- across the bar never opens anything.
+--
+-- While this label's own menu is already open, its click-to-focus is
+-- suppressed (see @labelCtrl@ below), the same as
+-- 'Blink.Controls.MenuButton.runMenuButton': a mouse-down there is
+-- ambiguous between reopening and closing until the release resolves it,
+-- so focus only returns to the label once a close actually happens
+-- (@justClosed@ below), the same gated way every other closing path here
+-- refocuses it.
 runMenuBarLabel
   :: (Ord e, Ord a, Ord b)
   => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> ButtonConfig e msg -> Rectangle
@@ -225,23 +233,32 @@ runMenuBarLabel tag cfg menuKey labelCfg rowBounds = do
   onBar <- withBounds rowBounds isRegionHit
   let wasOpen      = mbrOpenMenu cfg == Just menuKey
       justOpened   = tgiSelected r && not wasOpen
+      justClosed   = wasOpen && not (tgiSelected r)
       someOtherOpen = maybe False (/= menuKey) (mbrOpenMenu cfg)
       hoveredIn    = ciMouseEntered (biControl (tgiButton r))
       open         = openMenuFor tag cfg enclosingScope
-      close        = do
-        runHandlers (mbrOnOpenChanged cfg) Nothing
+      refocusLabel = do
         alreadyClaimed <- hasQueuedFocus enclosingScope
         when (not alreadyClaimed) $ requestFocus enclosingScope labelId
+      close        = do
+        runHandlers (mbrOnOpenChanged cfg) Nothing
+        refocusLabel
       switchByKey dir = forM_ (adjacentMenu (mbrMenus cfg) menuKey dir) open
   when (hoveredIn && someOtherOpen) (open menuKey)
   when justOpened $ requestFocus enclosingScope (tag (MenuBarList menuKey))
+  when justClosed refocusLabel
   when (tgiSelected r) $ popup labelId [content (itemsElement tag cfg menuKey close onBar switchByKey)]
   pure r
   where
     labelId   = tag (MenuBarLabel menuKey)
+    wasOpen'  = mbrOpenMenu cfg == Just menuKey
+    suppressClickToFocus policy = case policy of
+      Focusable opts | wasOpen' -> Focusable opts { focusIsClickToFocus = False }
+      _                         -> policy
     labelCtrl = (bcControl labelCfg)
-      { ccStyleKey = menuBarLabelStyleKey
-      , ccContent  = const (renderLabelledContent (bcLabelled labelCfg))
+      { ccStyleKey    = menuBarLabelStyleKey
+      , ccContent     = const (renderLabelledContent (bcLabelled labelCfg))
+      , ccFocusPolicy = suppressClickToFocus (ccFocusPolicy (bcControl labelCfg))
       }
     toggleCfg = defaultToggleButtonConfig
       { tgcButton            = labelCfg { bcControl = labelCtrl }

@@ -66,6 +66,8 @@ module Blink.View.Context
   , withoutKeyEvents
     -- * Focus scope (raw)
   , getCurrentScope
+  , getCurrentPopupId
+  , withCurrentPopup
     -- * Styles
   , getStyleSet
   , getMetrics
@@ -730,6 +732,10 @@ data ViewContext e msg = ViewContext
     -- deep inside a scope (a Shift-Tab retreat, a click redirecting focus
     -- to a different element) address /that/ scope instead of always root.
     -- See 'getCurrentScope'.
+  , ctxCurrentPopupId  :: Maybe e
+    -- ^ The id of the popup currently being drained -- 'Nothing' outside
+    -- 'Blink.App.drainPopups', @'Just' popupId@ while running that popup's
+    -- own content. See 'getCurrentPopupId'.
   , ctxMouse           :: Mouse e
     -- ^ The left mouse button's state this frame (and which element, if
     -- any, holds mouse capture), plus per-element hover state. See
@@ -801,6 +807,7 @@ emptyViewContext bounds input thm = ViewContext
   , ctxFocus           = emptyFocusTracker
   , ctxNavigationKeys  = defaultNavigationKeys
   , ctxCurrentScope    = Nothing
+  , ctxCurrentPopupId  = Nothing
   , ctxMouse           = advanceButton False (inputLeftButtonDown input) emptyMouse
   , ctxElements        = ElementState
       { elmScrollStates  = Map.empty
@@ -950,6 +957,22 @@ withoutKeyEvents keys (View f) = View $ \ctx ->
 -- called from inside one.
 getCurrentScope :: View e msg (Maybe e)
 getCurrentScope = gets ctxCurrentScope
+
+-- | The id of the popup currently being drained -- 'Nothing' outside
+-- 'Blink.App.drainPopups', @'Just' popupId@ while running that popup's own
+-- content (set by 'withCurrentPopup'). See 'ctxCurrentPopupId'.
+getCurrentPopupId :: View e msg (Maybe e)
+getCurrentPopupId = gets ctxCurrentPopupId
+
+-- | Runs @action@ with 'ctxCurrentPopupId' set to @'Just' popId@, restoring
+-- whatever it was before once @action@ finishes -- the same restore-after
+-- shape as focus-scope nesting, but without any of its claim/persistence
+-- logic, since a popup's identity while draining is purely a read-only
+-- ambient value.
+withCurrentPopup :: e -> View e msg a -> View e msg a
+withCurrentPopup popId (View f) = View $ \ctx -> do
+  (a, ctx') <- f (ctx { ctxCurrentPopupId = Just popId })
+  pure (a, ctx' { ctxCurrentPopupId = ctxCurrentPopupId ctx })
 
 getTheme :: View e msg (Theme e)
 getTheme = gets contextTheme
