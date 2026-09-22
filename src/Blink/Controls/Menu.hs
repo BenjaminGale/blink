@@ -4,7 +4,7 @@
 -- drawn on a panel background\/border, running in its own focus scope, with
 -- Up\/Down moving the keyboard highlight between items (wrapping at either
 -- end), Enter or a click on an item activating it and closing the menu,
--- Escape closing it without activating anything, a completed click outside
+-- Escape closing it without activating anything, a mouse press outside
 -- both the menu's own trigger area and this list closing it too, and so
 -- does Tab or Shift-Tab.
 --
@@ -100,11 +100,11 @@ menuListCore
   -> Element e msg
 menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour onOutsideTrigger = Element
   { elLayout  = Layout fitContent fitContent TopLeft
-  , elMeasure = measureChrome styleKey box
+  , elMeasure = measureChrome styleKey (box False)
   , elRun     = void (control panelCfg)
   }
   where
-    box = vBox [ width fitContent, height fitContent, children (map toItemElement items) ]
+    box onList = vBox [ width fitContent, height fitContent, children (map (toItemElement onList) items) ]
 
     -- ccElementId matters beyond styling: without one this never registers
     -- a hit-rect, so a click on the panel background (not an item) would
@@ -120,14 +120,15 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
     -- handling is skipped; the submenu (its own deferred popup) owns it.
     scopedRun = withFocusScope listId $ do
       openSubmenu <- anySubmenuFocused
+      onList      <- isRegionHit
       when (not openSubmenu) $ do
         handleEscape
         handleTabOut
-        handleOutsideClick
+        handleOutsideClick onList
         handleArrowKeys
         handleLeftArrow
         handleMnemonics
-      elRun box
+      elRun (box onList)
 
     anySubmenuFocused = do
       cur <- getFocus
@@ -159,16 +160,15 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
         Just e  -> consumeKey (key e) >> cbCloseAll closeBehaviour
         Nothing -> pure ()
 
-    -- Closes on a completed click (mirroring 'ActivateOnClick's own
-    -- release-based timing, the only discrete click edge the public API
-    -- exposes) that lands neither on @onOutsideTrigger@'s own region nor
-    -- anywhere in this list -- an item click is itself within this list's
-    -- own bounds, so it never reads as "outside" here; it closes via its
+    -- Closes on the press, not the release: a control pressed outside
+    -- takes focus on the press, so waiting would leave this list drawn
+    -- without focus until the release. The press's own focus request is
+    -- already queued by the time this popup runs, so closing leaves it be.
+    -- A click on an item is within this list, so it closes via the item's
     -- own activation instead (see 'toItemElement').
-    handleOutsideClick = do
-      released <- isButtonReleased
-      onList   <- isRegionHit
-      when (released && not onOutsideTrigger && not onList) (cbCloseAll closeBehaviour)
+    handleOutsideClick onList = do
+      pressed <- isButtonPressed
+      when (pressed && not onOutsideTrigger && not onList) (cbCloseAll closeBehaviour)
 
     -- Moves the highlight to the next/previous item on Down\/Up, wrapping
     -- from the last item to the first (and back) in a single keypress --
@@ -216,14 +216,14 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
               runHandlers (bcOnActivated (resolve defaultButtonConfig (itemAttrsFor item))) ()
               cbCloseAll closeBehaviour
 
-    toItemElement item = Element
+    toItemElement onList item = Element
       { elLayout  = bcLayout itemCfg
       , elMeasure = measureChrome (ccStyleKey (bcControl itemCfg)) (captionElement (lcText (bcLabelled itemCfg)))
       , elRun     = do
           r <- buttonBase (itemId item) itemCfg { bcControl = itemCtrl }
           case submenuFor item of
             Nothing                -> when (biActivated r) (cbCloseAll closeBehaviour)
-            Just (subId, subItems) -> runSubmenu item subId subItems r
+            Just (subId, subItems) -> runSubmenu item subId subItems r onList
       }
       where
         itemCfg  = resolve defaultButtonConfig (width fitContent : height fitContent : itemAttrsFor item)
@@ -232,7 +232,7 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
     -- While another item's submenu is open, hovering this one doesn't open
     -- its submenu straight away; the delayed switch below does, so a
     -- diagonal move towards the open submenu can cross this item safely.
-    runSubmenu item subId subItems r = do
+    runSubmenu item subId subItems r onList = do
       opened      <- isFocused subId
       siblingOpen <- anySubmenuFocused
       when (not opened) $ do
@@ -245,10 +245,9 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
       when (heldFor >= submenuSwitchDelay) $ do
         sibling <- hoveredSibling item
         forM_ sibling $ \it -> requestFocus (Just listId) (maybe (itemId it) fst (submenuFor it))
-      when opened $ do
-        onItem <- isRegionHit
+      when opened $
         popup (itemId item)
-          [ content (submenuElement item subId subItems onItem)
+          [ content (submenuElement item subId subItems (onList || onOutsideTrigger))
           , placement SideRight Start
           ]
 
@@ -271,16 +270,17 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
         Just e  -> consumeKey (key e) >> pure True
         Nothing -> pure False
 
-    -- @onItem@ is whether the click landed on @item@'s own bounds, so a
-    -- click back on it isn't treated as outside the submenu too.
-    submenuElement item subId subItems onItem =
+    -- @onParent@ is whether the click landed on this list or anywhere this
+    -- list itself doesn't count as outside, so a click there (e.g. on
+    -- another item, to activate it) doesn't close the whole menu first.
+    submenuElement item subId subItems onParent =
       menuListCore styleKey subId itemId subItems itemAttrsFor submenuFor
         CloseBehaviour
           { cbCloseAll  = cbCloseAll closeBehaviour
           , cbCloseThis = requestFocus (Just listId) (itemId item)
           , cbNested    = True
           }
-        onItem
+        onParent
 
 -- | 'True' when @listId@'s own current highlight is an item with a submenu,
 -- or that item's own open submenu -- i.e. whether Left\/Right belongs to

@@ -138,6 +138,14 @@ openExportByHover handle = do
   _ <- stepFrame handle (mkInput exportPoint False)
   stepFrame handle (mkInput exportPoint False)
 
+-- | Settles, moves the highlight to 'Export', then opens its submenu with
+-- Right-arrow, focusing 'Csv'.
+openExportByKeyboard :: BlinkHandle [Text] -> IO (FrameResult [Text])
+openExportByKeyboard handle = do
+  _ <- settle handle
+  _ <- downTimes handle 2
+  stepFrame handle (keyInput KeyRight)
+
 -- | Presses Down @n@ times, moving the highlight from 'Open' (the first
 -- item, focused by 'settle') onto the @n@th item after it.
 downTimes :: BlinkHandle [Text] -> Int -> IO (FrameResult [Text])
@@ -185,9 +193,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
   describe "closing a submenu back to its parent list" $ do
     it "Escape closes the submenu without closing the whole menu, and returns the highlight to Export" $ do
       handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- settle handle
-      _      <- downTimes handle 2
-      _      <- stepFrame handle (keyInput KeyRight) -- opens, focuses Csv
+      _      <- openExportByKeyboard handle
       result <- stepFrame handle (keyInput KeyEscape)
       drawnTexts result `shouldNotContain` ["Csv", "Pdf", "Json"]
       drawnTexts result `shouldContain` ["Open", "Save", "Export"]
@@ -196,9 +202,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
 
     it "Left-arrow closes the submenu without closing the whole menu, and returns the highlight to Export" $ do
       handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- settle handle
-      _      <- downTimes handle 2
-      _      <- stepFrame handle (keyInput KeyRight) -- opens, focuses Csv
+      _      <- openExportByKeyboard handle
       result <- stepFrame handle (keyInput KeyLeft)
       drawnTexts result `shouldNotContain` ["Csv", "Pdf", "Json"]
       resultState result `shouldNotContain` ["Closed"]
@@ -214,9 +218,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
   describe "the submenu's own independent arrow-key wraparound" $ do
     it "Down on the last submenu item wraps to the first, in a single keypress" $ do
       handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- settle handle
-      _      <- downTimes handle 2
-      _      <- stepFrame handle (keyInput KeyRight) -- opens, focuses Csv
+      _      <- openExportByKeyboard handle
       _      <- stepFrame handle (keyInput KeyDown)  -- Csv -> Pdf
       result <- stepFrame handle (keyInput KeyDown)  -- Pdf -> Json
       last (resultState result) `shouldBe` "Json focused"
@@ -225,17 +227,13 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
 
     it "Up on the first submenu item wraps to the last, in a single keypress" $ do
       handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- settle handle
-      _      <- downTimes handle 2
-      _      <- stepFrame handle (keyInput KeyRight) -- opens, focuses Csv
+      _      <- openExportByKeyboard handle
       result <- stepFrame handle (keyInput KeyUp)    -- Csv -> Json, wraps
       last (resultState result) `shouldBe` "Json focused"
 
     it "does not move the parent list's own highlight while navigating within the submenu" $ do
       handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- settle handle
-      _      <- downTimes handle 2
-      _      <- stepFrame handle (keyInput KeyRight) -- opens, focuses Csv
+      _      <- openExportByKeyboard handle
       result <- stepFrame handle (keyInput KeyDown)  -- Csv -> Pdf
       -- Everything logged since the submenu opened (dropping the initial
       -- Open\/Save\/Export highlight-nav entries) is the submenu's own, not
@@ -245,9 +243,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
   describe "activating a submenu item" $ do
     it "closes the whole menu (every level), not just the submenu" $ do
       handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- settle handle
-      _      <- downTimes handle 2
-      _      <- stepFrame handle (keyInput KeyRight) -- opens, focuses Csv
+      _      <- openExportByKeyboard handle
       result <- stepFrame handle (keyInput KeyReturn)
       let log' = resultState result
       log' `shouldContain` ["Csv activated"]
@@ -255,9 +251,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
 
     it "still activates the item clicked, rather than being treated as outside" $ do
       handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- settle handle
-      _      <- downTimes handle 2
-      _      <- stepFrame handle (keyInput KeyRight) -- opens, focuses Csv
+      _      <- openExportByKeyboard handle
       _      <- stepFrame handle (mkInput pdfPoint False) -- hovers Pdf first, as a real click would
       _      <- stepFrame handle (mkInput pdfPoint True)
       result <- stepFrame handle (mkInput pdfPoint False)
@@ -283,34 +277,42 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
 
     it "Alt+letter for a submenu item activates it once its submenu is open" $ do
       handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- settle handle
-      _      <- downTimes handle 2
-      _      <- stepFrame handle (keyInput KeyRight) -- opens, focuses Csv
+      _      <- openExportByKeyboard handle
       result <- stepFrame handle (altKeyInput 'P')
       let log' = resultState result
       log' `shouldContain` ["Pdf activated"]
       last log' `shouldBe` "Closed"
 
-  describe "clicking the parent item while its submenu is open" $
-    it "does not treat the click as outside and close everything" $ do
+  describe "clicking the parent list while a submenu is open" $ do
+    it "does not treat a click on the submenu's own item as outside and close everything" $ do
       handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
-      _      <- settle handle
-      _      <- downTimes handle 2
-      _      <- stepFrame handle (keyInput KeyRight) -- opens, focuses Csv
+      _      <- openExportByKeyboard handle
       _      <- stepFrame handle (mkInput exportPoint False)
       _      <- stepFrame handle (mkInput exportPoint True)
       result <- stepFrame handle (mkInput exportPoint False)
       resultState result `shouldNotContain` ["Closed"]
 
-  describe "outside-click dismissal" $
+    it "activates another item of the parent list" $ do
+      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- openExportByKeyboard handle
+      _      <- stepFrame handle (mkInput savePoint False)
+      _      <- stepFrame handle (mkInput savePoint True)
+      result <- stepFrame handle (mkInput savePoint False)
+      resultState result `shouldContain` ["Save activated"]
+
+  describe "outside-click dismissal" $ do
     it "a click completing outside every level closes the whole menu" $ do
       handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- openExportByKeyboard handle
+      _      <- stepFrame handle (mkInput offMenuPoint False)
+      _      <- stepFrame handle (mkInput offMenuPoint True)
+      result <- stepFrame handle (mkInput offMenuPoint False)
+      resultState result `shouldContain` ["Closed"]
+
+    it "closes on the press, before the button is released" $ do
+      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
       _      <- settle handle
-      _      <- downTimes handle 2
-      _      <- stepFrame handle (keyInput KeyRight) -- opens, focuses Csv
-      _      <- stepFrame handle (mkInput (Point 250 250) False)
-      _      <- stepFrame handle (mkInput (Point 250 250) True)
-      result <- stepFrame handle (mkInput (Point 250 250) False)
+      result <- stepFrame handle (mkInput offMenuPoint True)
       resultState result `shouldContain` ["Closed"]
 
   describe "at the top level, unaffected by submenu support" $

@@ -17,9 +17,10 @@
 -- "Blink.Controls.MenuButton" applies within it: Up\/Down move the
 -- keyboard highlight between items, wrapping at either end, Enter or a
 -- click on an item activates it and closes the menu, Escape closes it
--- without activating anything, a completed click outside both the open
--- label and its item list closes it too, and so does Tab or Shift-Tab.
--- Every closing path returns focus to the label that was open.
+-- without activating anything, a mouse press outside both the open label
+-- and its item list closes it too, and so does Tab or Shift-Tab. Closing
+-- returns focus to the label that was open, unless the press that closed
+-- it landed on a control that takes focus itself.
 module Blink.Controls.MenuBar
   ( MenuBarConfig
   , MenuBarPart (..)

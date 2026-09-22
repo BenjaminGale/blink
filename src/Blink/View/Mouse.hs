@@ -20,6 +20,7 @@ module Blink.View.Mouse
   , isOccludedByPopupFor
   , isButtonDown
   , contextButtonDown
+  , isButtonPressed
   , isButtonReleased
   , contextButtonReleased
   , isDragging
@@ -230,6 +231,12 @@ contextButtonDown :: ViewContext e msg -> Bool
 contextButtonDown ctx = case mouseButton (ctxMouse ctx) of
   ButtonDown _ -> True
   ButtonHeld _ -> True
+  _            -> False
+
+-- | 'True' on the one frame the left button transitions from up to held.
+isButtonPressed :: View e msg Bool
+isButtonPressed = gets $ \ctx -> case mouseButton (ctxMouse ctx) of
+  ButtonDown _ -> True
   _            -> False
 
 -- | 'True' on the one frame the left button transitions from held to up.

@@ -15,9 +15,10 @@
 -- While open, Up\/Down move the keyboard highlight between items, wrapping
 -- from the last item back to the first (and back), Enter or a click on an
 -- item activates it and closes the menu, Escape closes it without
--- activating anything, a completed click outside both the trigger and the
--- item list closes it too, and so does Tab or Shift-Tab. Every closing path
--- returns focus to the trigger.
+-- activating anything, a mouse press outside both the trigger and the item
+-- list closes it too, and so does Tab or Shift-Tab. Closing returns focus
+-- to the trigger, unless the press that closed it landed on a control that
+-- takes focus itself.
 module Blink.Controls.MenuButton
   ( MenuButtonConfig
   , MenuButtonPart (..)

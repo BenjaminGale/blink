@@ -7,6 +7,7 @@ module Blink.AppFixtures
   , resultState
   , resultDraws
   , drawnTexts
+  , logAddedBetween
   , testStyle
   , testMetrics
   , testStyleSet
@@ -34,6 +35,11 @@ resultDraws (Quit ds _ _)     = ds
 
 drawnTexts :: FrameResult s -> [Text]
 drawnTexts r = [t | DrawText _ t _ _ <- resultDraws r]
+
+-- | The log entries added between two frames of an app whose state pairs
+-- some value with an append-only log.
+logAddedBetween :: FrameResult (a, [Text]) -> FrameResult (a, [Text]) -> [Text]
+logAddedBetween earlier later = drop (length (snd (resultState earlier))) (snd (resultState later))
 
 -- | The plain black, left-aligned, chrome-less style/metrics nearly every
 -- 'App'-driven test theme here starts from, via

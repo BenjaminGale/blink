@@ -1,26 +1,28 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls.MenuBarSpec (spec) where
 
+import Control.Monad (void)
 import Data.Char (toUpper)
 import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
-import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultState, testMetrics, testStyleSet)
-import Blink.Controls.Control (Attribute, postWith)
+import Blink.AppFixtures (drawnTexts, logAddedBetween, nullMsgQueue, resultState, testMetrics, testStyleSet)
+import Blink.Controls.Button (ButtonConfig)
+import Blink.Controls.Control (Attribute, control, defaultControlConfig, elementId, onFocusGained, onFocusLost, post, postWith, resolve)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.Label (mnemonic, text)
 import Blink.Controls.MenuBar (MenuBarConfig, MenuBarPart (..), itemAttrs, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu, submenuItems)
-import Blink.Element (elLayout, height, runElement, width)
+import Blink.Element (Element, elLayout, elementWithLayout, height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (KeyChar, KeyLeft, KeyRight), KeyEvent (..), Modifier (Alt))
-import Blink.Layout.Constraints (Layout (..), exactly)
+import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (noOpMeasurers)
 import Blink.Style (Theme, emptyTheme)
-import Blink.Update (put)
-import Blink.View (View, ViewContext, emptyViewContext)
+import Blink.Update (modify, put)
+import Blink.View (View, ViewContext, emptyViewContext, withBounds)
 
 data TopMenu = FileMenu | EditMenu deriving (Eq, Ord, Show)
 
@@ -42,7 +44,23 @@ itemsFor EditMenu = [Cut, Copy]
 -- each label a fixed 40x20, laid out left to right, so File sits at
 -- (0,0)-(40,20) and Edit at (40,0)-(80,20). Each menu's own dropdown,
 -- placed below its label by default, spans (0,20)-(40,60) for File and
--- (40,20)-(80,60) for Edit (two 40x20 items stacked).
+-- (40,20)-(80,60) for Edit (two 40x20 items stacked). @tag@ builds the
+-- bar's element ids, @extraLabelAttrs@ adds to each label's own
+-- attributes, @extraAttrs@ to the bar's.
+testMenuBar
+  :: Ord e
+  => (MenuBarPart TopMenu Item -> e)
+  -> (TopMenu -> [Attribute (ButtonConfig e msg)])
+  -> [Attribute (MenuBarConfig e TopMenu Item msg)]
+  -> Element e msg
+testMenuBar tag extraLabelAttrs extraAttrs =
+  (menuBar tag (
+    [ menus [FileMenu, EditMenu]
+    , labelAttrs (\m -> [text (labelText m), mnemonic (labelMnemonic m), width (exactly 40), height (exactly 20)] ++ extraLabelAttrs m)
+    , menuItems itemsFor
+    , itemAttrs (\_ i -> [text (T.pack (show i)), width (exactly 40), height (exactly 20)])
+    ] ++ extraAttrs)) { elLayout = Layout (exactly 80) (exactly 20) TopLeft }
+
 menuBarApp :: App (MenuBarPart TopMenu Item) (Maybe TopMenu) (Maybe TopMenu)
 menuBarApp = menuBarAppWith []
 
@@ -53,16 +71,32 @@ menuBarAppWith
 menuBarAppWith extraAttrs = App
   { startUp = pure Nothing
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
-  , view    = \open ->
-      (menuBar id (
-        [ menus [FileMenu, EditMenu]
-        , labelAttrs (\m -> [text (labelText m), mnemonic (labelMnemonic m), width (exactly 40), height (exactly 20)])
-        , menuItems itemsFor
-        , itemAttrs (\_ i -> [text (T.pack (show i)), width (exactly 40), height (exactly 20)])
-        , openMenu open
-        , onOpenMenuChanged (postWith id)
-        ] ++ extraAttrs)) { elLayout = Layout (exactly 80) (exactly 20) TopLeft }
+  , view    = \open -> testMenuBar id (const []) ([openMenu open, onOpenMenuChanged (postWith id)] ++ extraAttrs)
   , update  = put
+  }
+
+data BarEvent = SetOpen (Maybe TopMenu) | Logged T.Text
+
+data FocusElem = BarPart (MenuBarPart TopMenu Item) | Sibling deriving (Eq, Ord, Show)
+
+-- | 'menuBarApp' that logs each label gaining focus, plus a focusable
+-- control below both dropdowns at (0,70)-(40,90) that logs its own focus
+-- changes.
+focusLoggingApp :: App FocusElem BarEvent (Maybe TopMenu, [T.Text])
+focusLoggingApp = App
+  { startUp = pure (Nothing, [])
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \(open, _) -> elementWithLayout (Layout fill fill TopLeft) $ do
+      runElement $ testMenuBar BarPart (\m -> [onFocusGained (post (Logged (labelText m <> " focused")))])
+        [openMenu open, onOpenMenuChanged (postWith SetOpen)]
+      withBounds (Rectangle 0 70 40 20) $ void $ control $ resolve defaultControlConfig
+        [ elementId Sibling
+        , onFocusGained (post (Logged "Sibling focused"))
+        , onFocusLost   (post (Logged "Sibling lost"))
+        ]
+  , update  = \msg -> modify $ \(open, log') -> case msg of
+      SetOpen m -> (m, log')
+      Logged t  -> (open, log' ++ [t])
   }
 
 -- | 'menuBarApp' with File's Save item carrying a submenu of Cut and Copy.
@@ -76,10 +110,11 @@ mkInput p down = emptyFrameInput
   , windowSize      = Size 100 100
   }
 
-fileTriggerPoint, editTriggerPoint, fileItemPoint, saveItemPoint :: Point
+fileTriggerPoint, editTriggerPoint, fileItemPoint, siblingPoint, saveItemPoint :: Point
 fileTriggerPoint = Point 20 10
 editTriggerPoint = Point 60 10
 fileItemPoint    = Point 20 30 -- within File's first item, (0,20)-(40,40)
+siblingPoint     = Point 20 80 -- within 'focusLoggingApp's sibling control
 saveItemPoint    = Point 20 50 -- within File's second item, (0,40)-(40,60)
 
 -- | Hovers @p@ for a frame before pressing -- as a real click would --
@@ -216,6 +251,40 @@ spec = describe "Blink.Controls.MenuBar.menuBar" $ do
       result <- stepFrame handle (altKeyInput 'F')
       resultState result `shouldBe` Just FileMenu
 
+  describe "re-clicking an open menu's label" $ do
+    it "does not focus the label while the closing press is still held" $ do
+      handle  <- configureEventDriven focusLoggingApp nullMsgQueue (pure ()) noOpMeasurers
+      opened  <- click handle fileTriggerPoint
+      pressed <- stepFrame handle (mkInput fileTriggerPoint True)
+      let logSinceOpen = logAddedBetween opened pressed
+      logSinceOpen `shouldNotContain` ["File focused"]
+
+    it "closes the menu and focuses the label on release" $ do
+      handle <- configureEventDriven focusLoggingApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- click handle fileTriggerPoint
+      _      <- stepFrame handle (mkInput fileTriggerPoint True)
+      result <- stepFrame handle (mkInput fileTriggerPoint False)
+      let (open, log') = resultState result
+      open `shouldBe` Nothing
+      last log' `shouldBe` "File focused"
+
+  describe "pressing another control while a dropdown is open" $ do
+    it "closes the dropdown on the press" $ do
+      handle <- configureEventDriven focusLoggingApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- click handle fileTriggerPoint
+      _      <- stepFrame handle (mkInput siblingPoint False)
+      result <- stepFrame handle (mkInput siblingPoint True)
+      fst (resultState result) `shouldBe` Nothing
+      drawnTexts result `shouldNotContain` ["Open", "Save"]
+
+    it "leaves focus on the pressed control" $ do
+      handle <- configureEventDriven focusLoggingApp nullMsgQueue (pure ()) noOpMeasurers
+      opened <- click handle fileTriggerPoint
+      result <- click handle siblingPoint
+      let logSinceOpen = logAddedBetween opened result
+      logSinceOpen `shouldContain` ["Sibling focused"]
+      logSinceOpen `shouldNotContain` ["Sibling lost"]
+
   describe "hover-to-switch while a dropdown is open" $ do
     it "hovering a different label switches to its dropdown without a click" $ do
       handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
@@ -244,4 +313,5 @@ spec = describe "Blink.Controls.MenuBar.menuBar" $ do
       _      <- stepFrame handle (mkInput saveItemPoint False)
       result <- stepFrame handle (mkInput saveItemPoint False)
       drawnTexts result `shouldContain` ["Cut", "Copy"]
+
 
