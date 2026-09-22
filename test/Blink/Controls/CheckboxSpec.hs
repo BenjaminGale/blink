@@ -6,12 +6,13 @@ import Test.Hspec
 
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Control (Attribute)
-import Blink.Controls.Fixtures (fullSizeAt, hitRectFor, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
+import Blink.Controls.Fixtures (fullSizeAt, hitRectFor, monospaceTextMeasurer, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
 import Blink.Controls.Label (text)
 import Blink.Controls.Style (iconStyleKey)
 import Blink.Controls.ToggleButton (ToggleConfig, isSelected)
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
-import Blink.Geometry (Point (..), Rectangle (..))
+import Blink.Element (measureElement)
+import Blink.Geometry (Point (..), Rectangle (..), Size (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (StyleSet (..), Theme (..), VisualState (CommonMouseOver), styleTextColour)
@@ -63,6 +64,11 @@ start attrs = startAt seedCtx (fullSize attrs)
 spec :: Spec
 spec = describe "Blink.Controls.Checkbox" $ do
   toggleBehaviourSpec not testBounds seedCtx Remember (Point 5 5) hitRect (Point 200 200) fullSize
+
+  it "is as wide as its glyph, the gap, its caption and the space after it, plus chrome, by default" $ do
+    let ctx = withMeasurers (noOpMeasurers { msrText = monospaceTextMeasurer 10 12 }) seedCtx
+    (size, _) <- runView (measureElement testBounds (checkbox Remember [text "Dark"])) ctx
+    sizeWidth size `shouldBe` 2 * (10 + 5) + 28 + 6 + 40 + 5 -- margin and padding, glyph, gap, caption, space after
 
   it "draws the empty-box icon and its caption while not selected" $ do
     ctx <- start [text "Remember me"]

@@ -7,8 +7,8 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute, post, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Controls.Fixtures (contentRectFor, fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
-import Blink.Geometry (Point (..), Rectangle (..), Size (..))
+import Blink.Controls.Fixtures (contentRectFor, fullSizeAt, hitRectFor, mkTestTheme, monospaceTextMeasurer, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Input (Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
@@ -31,14 +31,10 @@ testStyle = (plainStyle testColour) { styleBackground = testBackground, styleTex
 testTheme :: Theme TestElement
 testTheme = mkTestTheme standardMetrics (plainStyleSet testStyle)
 
--- | Every character is a fixed 20px wide, for tests that need real
--- character-offset math (click placement, scrolling).
+-- | For tests that need real character-offset math (click placement,
+-- scrolling).
 fixedCharWidth :: TextMeasurer
-fixedCharWidth = TextMeasurer
-  { tmCharOffset   = \_ n -> pure (fromIntegral n * 20)
-  , tmCharAtOffset = \_ x -> pure (round (x / 20))
-  , tmTextSize     = \t -> pure (Size (fromIntegral (T.length t) * 20) 20)
-  }
+fixedCharWidth = monospaceTextMeasurer 20 20
 
 focusPt :: Point
 focusPt = Point 50 50

@@ -14,15 +14,17 @@ module Blink.Controls.Fixtures
   , contentRectFor
   , fullSizeAt
   , startAt
+  , monospaceTextMeasurer
   ) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
 
 import Blink.Element (Element, elLayout, runElement)
-import Blink.Geometry (Alignment (TopLeft), Insets, Point (..), Rectangle, insetRect, uniform)
+import Blink.Geometry (Alignment (TopLeft), Insets, Point (..), Rectangle, Size (..), insetRect, uniform)
 import Blink.Input (InputState (..), emptyInputState)
 import Blink.Layout.Constraints (Layout (..), fill)
-import Blink.Rendering (Colour (..), TextAlign (..))
+import Blink.Rendering (Colour (..), TextAlign (..), TextMeasurer (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), noBorder)
 import Blink.View (View, ViewContext, runView)
 
@@ -87,3 +89,11 @@ fullSizeAt el = runElement el { elLayout = Layout fill fill TopLeft }
 
 startAt :: ViewContext e msg -> View e msg () -> IO (ViewContext e msg)
 startAt ctx v = snd <$> runView v ctx
+
+-- | Every character @charWidth@ wide, every line @lineHeight@ high.
+monospaceTextMeasurer :: Double -> Double -> TextMeasurer
+monospaceTextMeasurer charWidth lineHeight = TextMeasurer
+  { tmCharOffset   = \_ n -> pure (fromIntegral n * realToFrac charWidth)
+  , tmCharAtOffset = \_ x -> pure (round (x / realToFrac charWidth))
+  , tmTextSize     = \t -> pure (Size (fromIntegral (T.length t) * charWidth) lineHeight)
+  }

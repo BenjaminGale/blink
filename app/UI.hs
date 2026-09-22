@@ -285,12 +285,12 @@ rowLayout = [width fill, height rowHeight, align TopLeft]
 
 rowDarkMode :: AppState -> Element ControlId Msg
 rowDarkMode s =
-  checkbox DarkModeCheckbox (rowLayout ++ [text "Dark mode", isSelected (darkMode s), onSelectedChanged (postWith SetDarkMode)])
+  checkbox DarkModeCheckbox [height rowHeight, text "Dark mode", isSelected (darkMode s), onSelectedChanged (postWith SetDarkMode)]
 
 rowEditing :: AppState -> Element ControlId Msg
 rowEditing s =
   checkbox EditingCheckbox
-    (rowLayout ++ [text "Enable editing", isSelected (editingEnabled s), onSelectedChanged (postWith SetEditingEnabled)])
+    [height rowHeight, text "Enable editing", isSelected (editingEnabled s), onSelectedChanged (postWith SetEditingEnabled)]
 
 -- | A plain full-width separator between the settings checkboxes above and
 -- the interactive controls below -- 'divider's own default orientation and
@@ -389,7 +389,7 @@ rowPasswordInput s =
 rowAnimate :: AppState -> Element ControlId Msg
 rowAnimate s =
   checkbox AnimateCheckbox
-    (rowLayout ++ [text "Animate progress bar", isSelected (animating s), onSelectedChanged (postWith SetAnimating), isEnabled (editingEnabled s)])
+    [height rowHeight, text "Animate progress bar", isSelected (animating s), onSelectedChanged (postWith SetAnimating), isEnabled (editingEnabled s)]
 
 rowProgress :: AppState -> Element ControlId Msg
 rowProgress s =
@@ -913,11 +913,9 @@ imagePage s =
         , fitRow ImageFitHeightCheckbox "Fit height" (imageFitHeightEnabled s) SetImageFitHeightEnabled
             ImageFitHeightSlider (imageFitHeight s) SetImageFitHeight
         , checkbox ImagePreserveRatioCheckbox
-            ( rowLayout ++
-              [ text "Preserve ratio", isSelected (imagePreserveRatio s)
-              , onSelectedChanged (postWith SetImagePreserveRatio)
-              ]
-            )
+            [ height rowHeight, text "Preserve ratio", isSelected (imagePreserveRatio s)
+            , onSelectedChanged (postWith SetImagePreserveRatio)
+            ]
         , image (imageAttrs ++ [align TopLeft])
         ]
     ]
@@ -939,9 +937,14 @@ imagePage s =
         ( rowLayout ++
           [ spacing 8
           , children
-              [ checkbox checkboxId
-                  [ text caption', isSelected enabled, onSelectedChanged (postWith onEnabled)
-                  , width (exactly 140), height fill
+              [ vBox
+                  [ width (exactly 140), height fill
+                  , children
+                      [ checkbox checkboxId
+                          [ text caption', isSelected enabled, onSelectedChanged (postWith onEnabled)
+                          , height fill
+                          ]
+                      ]
                   ]
               , slider sliderId
                   [ Slider.value frac, onValueChanged (postWith onFrac)

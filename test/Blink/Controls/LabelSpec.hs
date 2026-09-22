@@ -1,15 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls.LabelSpec (spec) where
 
-import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Controls.Fixtures
-  (fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
-import Blink.Geometry (Point (..), Rectangle (..), Size (..))
+  (fullSizeAt, hitRectFor, mkTestTheme, monospaceTextMeasurer, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
+import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.Label (LabelConfig, label, mnemonic, target, text)
@@ -57,18 +56,10 @@ startWithAltHeld attrs = startAt altHeldCtx (fullSize attrs)
 mnemonicUnderline :: DrawCommand
 mnemonicUnderline = FillRect (Rectangle 50 50 0 1) testColour
 
--- | 10px per character, 20px tall, regardless of the string -- enough to
--- tell a glyph-relative underline (correct) apart from a bounds-relative
--- one (the bug the underline's own y once had: it used the bottom of
--- @bounds@, correct only when @bounds@ happens to be glyph-height, which a
--- real "Blink.Controls.MenuBar" label filling its bar's full height never
--- is).
+-- | Text shorter than 'tallBounds', so an underline placed under the text
+-- can be told apart from one placed at the bottom of the bounds.
 fakeTextMeasurer :: TextMeasurer
-fakeTextMeasurer = TextMeasurer
-  { tmCharOffset   = \_ n -> pure (fromIntegral n * 10)
-  , tmCharAtOffset = \_ x -> pure (round (x / 10))
-  , tmTextSize     = \t -> pure (Size (fromIntegral (T.length t) * 10) 20)
-  }
+fakeTextMeasurer = monospaceTextMeasurer 10 20
 
 -- | Much taller than the text it holds -- a 200x200 box under 'testMetrics'
 -- (10px margin, 5px padding) leaves a 170x170 content rect for 20px-tall
@@ -84,11 +75,10 @@ tallAltHeldCtx =
 startTall :: [Attribute'] -> IO (ViewContext TestElement String)
 startTall attrs = startAt tallAltHeldCtx (fullSize attrs)
 
--- | Same shape as 'fakeTextMeasurer', but 40px tall -- taller than
--- 'shortBounds'\'s own content rect, standing in for a real font whose
--- line height exceeds a tightly-sized menu-bar row.
+-- | Text taller than the content rect of 'shortBounds', like a real font
+-- in a tightly sized menu-bar row.
 fakeOverflowingTextMeasurer :: TextMeasurer
-fakeOverflowingTextMeasurer = fakeTextMeasurer { tmTextSize = \t -> pure (Size (fromIntegral (T.length t) * 10) 40) }
+fakeOverflowingTextMeasurer = monospaceTextMeasurer 10 40
 
 -- | A 200x50 box under 'testMetrics' leaves a 170x20 content rect --
 -- shorter than 'fakeOverflowingTextMeasurer'\'s 40px text, so the glyph

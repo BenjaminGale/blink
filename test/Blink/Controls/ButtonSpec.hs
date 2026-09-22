@@ -7,7 +7,7 @@ import Blink.Controls.Button (ButtonActivation (..), ButtonConfig, activation, b
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec, defaultButtonBehaviourConfig)
 import Blink.Controls.Control (Attribute, post)
 import Blink.Controls.Fixtures
-  ( contentRectFor, fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics
+  ( contentRectFor, fullSizeAt, hitRectFor, mkTestTheme, monospaceTextMeasurer, noInput, plainStyle, plainStyleSet, standardMetrics
   , startAt, testColour
   )
 import Blink.Controls.Label (text)
@@ -85,13 +85,10 @@ spec = describe "Blink.Controls.Button" $ do
     -- attribute for controls yet) sizes itself to its own chrome-wrapped
     -- caption. Verified against a manually computed 'Exactly' from the same
     -- style, to the pixel, per invariant 5 (chrome insets defined once).
-    let fixedWidthMeasurer :: TextMeasurer
-        fixedWidthMeasurer = noOpTextMeasurer
-          { tmTextSize = \t -> pure (Size (fromIntegral (T.length t) * 10) 12) }
-        chromeWidth  = 2 * (10 + 5)  -- margin + padding, both sides; no border
+    let chromeWidth  = 2 * (10 + 5)  -- margin + padding, both sides; no border
         chromeHeight = 2 * (10 + 5)
         fitContentEl attrs = runElement (button Ok attrs) { elLayout = Layout fitContent fitContent TopLeft }
-        fitCtx = withMeasurers (noOpMeasurers { msrText = fixedWidthMeasurer })
+        fitCtx = withMeasurers (noOpMeasurers { msrText = monospaceTextMeasurer 10 12 })
                    (emptyViewContext (Rectangle 0 0 500 500) noInput testTheme)
         -- The background rect 'renderStyled' fills is the outer bounds inset
         -- by margin (10px each side) -- not the outer bounds themselves.

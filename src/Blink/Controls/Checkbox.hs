@@ -20,7 +20,7 @@ import Blink.Controls.ToggleButton
   (ToggleConfig (..), defaultGlyphToggleConfig, glyphCaptionContent, glyphCaptionElement, toggleBase)
 import Blink.Controls.Checkbox.Style (checkboxStyleKey)
 import Blink.Controls.Style (iconStyleKey)
-import Blink.Geometry (Rectangle (..))
+import Blink.Geometry (Rectangle (..), Size (..))
 import Blink.Rendering (ImagePath)
 import Blink.Style (Style (..), VisualState (..), resolveStyle)
 import Blink.View (getBounds, getStyleSet, isDisabled, isRegionHit, withBounds)
@@ -34,6 +34,12 @@ glyphWidth = 28
 -- | The gap between the glyph and the caption beside it.
 labelGap :: Double
 labelGap = 6
+
+-- | Space after the caption, matching the space the box icon leaves on its
+-- left (the column's centring plus the icon's own transparent margin), so
+-- the control looks evenly padded.
+captionTrailingSpace :: Double
+captionTrailingSpace = 5
 
 -- | The margin left between the glyph column's edges and the drawn box
 -- icon, so it doesn't touch the caption or the control's own bounds.
@@ -52,17 +58,20 @@ checkBoxOutlineIcon = "assets/icons/check_box_outline_blank.svg"
 -- together as one control -- clicking either the box or the caption
 -- activates it, the same as 'Blink.Controls.ToggleButton.toggleButton'. Flips
 -- every time it's activated; see 'Blink.Controls.ToggleButton.onSelectedChanged' for reacting to it.
--- Defaults to sizing itself to its own glyph-plus-caption content on both
--- axes, the same as 'Blink.Controls.Label.label'; override with
+-- Defaults to sizing itself to its glyph, caption and the space after it
+-- on both axes, the same as 'Blink.Controls.Label.label'; override with
 -- 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 checkbox :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> Element e msg
 checkbox eid attrs = Element
   { elLayout  = bcLayout btn
-  , elMeasure = measureChrome (ccStyleKey ctrl) (glyphCaptionElement glyphWidth labelGap (lcText (bcLabelled btn)))
+  , elMeasure = measureChrome (ccStyleKey ctrl) content
   , elRun     = void (toggleBase eid cfg')
   }
   where
     cfg      = resolve (defaultGlyphToggleConfig checkboxStyleKey) attrs
+    content  = withTrailingSpace (glyphCaptionElement glyphWidth labelGap (lcText (bcLabelled btn)))
+    withTrailingSpace el =
+      el { elMeasure = fmap (\sz -> sz { sizeWidth = sizeWidth sz + captionTrailingSpace }) . elMeasure el }
     btn      = tgcButton cfg
     selected = tgcSelected cfg
     -- | The box-plus-tick icon, centred within the glyph column's own
