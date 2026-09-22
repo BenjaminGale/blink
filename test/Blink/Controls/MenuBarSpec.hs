@@ -7,7 +7,7 @@ import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
-import Blink.AppFixtures (drawnTexts, logAddedBetween, nullMsgQueue, resultState, testMetrics, testStyleSet)
+import Blink.AppFixtures (drawnTexts, logAddedBetween, resultState, startApp, testMetrics, testStyleSet)
 import Blink.Controls.Button (ButtonConfig)
 import Blink.Controls.Control (Attribute, control, defaultControlConfig, elementId, onFocusGained, onFocusLost, post, postWith, resolve)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
@@ -19,7 +19,6 @@ import Blink.Element (Element, elLayout, elementWithLayout, height, runElement, 
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (KeyChar, KeyLeft, KeyRight), KeyEvent (..), Modifier (Alt))
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (noOpMeasurers)
 import Blink.Style (Theme, emptyTheme)
 import Blink.Update (modify, put)
 import Blink.View (View, ViewContext, emptyViewContext, withBounds)
@@ -173,25 +172,25 @@ spec = describe "Blink.Controls.MenuBar.menuBar" $ do
   contractSpec
 
   it "opens a menu's dropdown on click, drawing its items' text" $ do
-    handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+    handle <- startApp menuBarApp
     result <- click handle fileTriggerPoint
     resultState result `shouldBe` Just FileMenu
     drawnTexts result `shouldContain` ["Open", "Save"]
 
   it "does not draw any dropdown before a label is clicked" $ do
-    handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+    handle <- startApp menuBarApp
     result <- click handle (Point 90 90)
     drawnTexts result `shouldNotContain` ["Open", "Save"]
     drawnTexts result `shouldNotContain` ["Cut", "Copy"]
 
   it "closes a menu's dropdown on a second click of the same label" $ do
-    handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+    handle <- startApp menuBarApp
     _      <- click handle fileTriggerPoint -- opens File
     result <- click handle fileTriggerPoint -- closes it
     drawnTexts result `shouldNotContain` ["Open", "Save"]
 
   it "moving the pointer to a different label switches which dropdown is open, before any click completes" $ do
-    handle  <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+    handle  <- startApp menuBarApp
     _       <- click handle fileTriggerPoint -- opens File
     -- hovering Edit already switches to it (see hover-to-switch below); the
     -- click that follows lands on a label already open, so it closes it
@@ -205,62 +204,62 @@ spec = describe "Blink.Controls.MenuBar.menuBar" $ do
     resultState final `shouldBe` Nothing
 
   it "clicking an item activates it and closes the menu" $ do
-    handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+    handle <- startApp menuBarApp
     _      <- click handle fileTriggerPoint -- opens File
     result <- click handle fileItemPoint
     resultState result `shouldBe` Nothing
 
   describe "left/right menu-switching while a dropdown is open" $ do
     it "Right moves to the next menu" $ do
-      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuBarApp
       _      <- click handle fileTriggerPoint -- opens File
       result <- stepFrame handle (keyInput KeyRight)
       resultState result `shouldBe` Just EditMenu
       drawnTexts result `shouldContain` ["Cut", "Copy"]
 
     it "Right on the last menu wraps to the first, in a single keypress" $ do
-      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuBarApp
       _      <- click handle fileTriggerPoint      -- opens File
       _      <- stepFrame handle (keyInput KeyRight) -- File -> Edit
       result <- stepFrame handle (keyInput KeyRight) -- Edit -> File
       resultState result `shouldBe` Just FileMenu
 
     it "Left moves to the previous menu, wrapping from the first to the last" $ do
-      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuBarApp
       _      <- click handle fileTriggerPoint -- opens File
       result <- stepFrame handle (keyInput KeyLeft) -- File -> Edit (wraps backward)
       resultState result `shouldBe` Just EditMenu
 
   describe "mnemonics" $ do
     it "Alt+letter opens the matching top-level menu" $ do
-      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuBarApp
       result <- stepFrame handle (altKeyInput 'F')
       resultState result `shouldBe` Just FileMenu
       drawnTexts result `shouldContain` ["Open", "Save"]
 
     it "Alt+letter switches to a different menu while one is already open" $ do
-      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuBarApp
       _      <- click handle fileTriggerPoint -- opens File
       result <- stepFrame handle (altKeyInput 'E')
       resultState result `shouldBe` Just EditMenu
       drawnTexts result `shouldContain` ["Cut", "Copy"]
 
     it "Alt+letter of the already-open menu leaves it open rather than closing it" $ do
-      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuBarApp
       _      <- click handle fileTriggerPoint -- opens File
       result <- stepFrame handle (altKeyInput 'F')
       resultState result `shouldBe` Just FileMenu
 
   describe "re-clicking an open menu's label" $ do
     it "does not focus the label while the closing press is still held" $ do
-      handle  <- configureEventDriven focusLoggingApp nullMsgQueue (pure ()) noOpMeasurers
+      handle  <- startApp focusLoggingApp
       opened  <- click handle fileTriggerPoint
       pressed <- stepFrame handle (mkInput fileTriggerPoint True)
       let logSinceOpen = logAddedBetween opened pressed
       logSinceOpen `shouldNotContain` ["File focused"]
 
     it "closes the menu and focuses the label on release" $ do
-      handle <- configureEventDriven focusLoggingApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp focusLoggingApp
       _      <- click handle fileTriggerPoint
       _      <- stepFrame handle (mkInput fileTriggerPoint True)
       result <- stepFrame handle (mkInput fileTriggerPoint False)
@@ -270,7 +269,7 @@ spec = describe "Blink.Controls.MenuBar.menuBar" $ do
 
   describe "pressing another control while a dropdown is open" $ do
     it "closes the dropdown on the press" $ do
-      handle <- configureEventDriven focusLoggingApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp focusLoggingApp
       _      <- click handle fileTriggerPoint
       _      <- stepFrame handle (mkInput siblingPoint False)
       result <- stepFrame handle (mkInput siblingPoint True)
@@ -278,7 +277,7 @@ spec = describe "Blink.Controls.MenuBar.menuBar" $ do
       drawnTexts result `shouldNotContain` ["Open", "Save"]
 
     it "leaves focus on the pressed control" $ do
-      handle <- configureEventDriven focusLoggingApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp focusLoggingApp
       opened <- click handle fileTriggerPoint
       result <- click handle siblingPoint
       let logSinceOpen = logAddedBetween opened result
@@ -287,20 +286,20 @@ spec = describe "Blink.Controls.MenuBar.menuBar" $ do
 
   describe "hover-to-switch while a dropdown is open" $ do
     it "hovering a different label switches to its dropdown without a click" $ do
-      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuBarApp
       _      <- click handle fileTriggerPoint -- opens File
       result <- stepFrame handle (mkInput editTriggerPoint False) -- hovers Edit, no click
       resultState result `shouldBe` Just EditMenu
       drawnTexts result `shouldContain` ["Cut", "Copy"]
 
     it "hovering a label does nothing while no dropdown is open" $ do
-      handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuBarApp
       result <- stepFrame handle (mkInput editTriggerPoint False) -- just hovering, nothing open
       resultState result `shouldBe` Nothing
 
   describe "submenus" $ do
     it "hovering an item with a submenu opens it when the pointer arrives from another item" $ do
-      handle <- configureEventDriven submenuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp submenuApp
       _      <- click handle fileTriggerPoint
       _      <- stepFrame handle (mkInput fileItemPoint False)
       _      <- stepFrame handle (mkInput saveItemPoint False)
@@ -308,7 +307,7 @@ spec = describe "Blink.Controls.MenuBar.menuBar" $ do
       drawnTexts result `shouldContain` ["Cut", "Copy"]
 
     it "hovering an item with a submenu opens it when the pointer arrives from the bar" $ do
-      handle <- configureEventDriven submenuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp submenuApp
       _      <- click handle fileTriggerPoint
       _      <- stepFrame handle (mkInput saveItemPoint False)
       result <- stepFrame handle (mkInput saveItemPoint False)

@@ -26,20 +26,23 @@ import Data.Maybe (listToMaybe)
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement, lcMnemonic, lcText, renderLabelledContent)
+import Blink.Controls.Menu.Style (menuItemStyleKey)
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input
   ( InputState (inputKeyEvents), Key (KeyChar, KeyDown, KeyEscape, KeyLeft, KeyRight, KeyTab, KeyUp)
   , KeyEvent (key), mnemonicActivated
   )
 import Blink.Layout.Box (children, vBox)
-import Blink.Layout.Constraints (Layout (..), fitContent)
+import Blink.Layout.Constraints (Layout (..), atLeast, fill, fitContent)
 import Blink.Popup (Edge (Start), Side (SideRight), content, placement, popup)
 import Blink.View
 import Blink.Element (Element (..), height, width)
 
 -- | A vertical list of buttons, one per item, on a panel styled by
--- @styleKey@. @listId@ is the list's element id and focus scope; @itemId@
--- builds each item's id from its data, so reordering keeps per-item state.
+-- @styleKey@. The list has a minimum width, grows if an item needs more,
+-- and every item spans its full width. @listId@ is the list's element id
+-- and focus scope; @itemId@ builds each item's id from its data, so
+-- reordering keeps per-item state.
 --
 -- @onOutsideTrigger@ is whether the pointer is somewhere outside this list
 -- that still shouldn't close it, such as the trigger that opened it, or
@@ -68,6 +71,9 @@ menuListWithSubmenus styleKey listId itemId items itemAttrsFor submenuFor close 
     CloseBehaviour { cbCloseAll = close, cbCloseThis = close, cbNested = False }
     onOutsideTrigger
 
+menuMinWidth :: Double
+menuMinWidth = 160
+
 -- | Seconds the pointer must spend on the rest of the parent list, while a
 -- submenu is open, before the submenu closes and the item under the
 -- pointer takes the highlight (opening its own submenu, if it has one).
@@ -91,12 +97,15 @@ menuListCore
   -> CloseBehaviour e msg -> Bool
   -> Element e msg
 menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour onOutsideTrigger = Element
-  { elLayout  = Layout fitContent fitContent TopLeft
-  , elMeasure = measureChrome styleKey (box False)
+  { elLayout  = Layout (atLeast menuMinWidth) fitContent TopLeft
+  , elMeasure = measureChrome styleKey (itemBox (map (toItemElement False) items))
   , elRun     = void (control panelCfg)
   }
   where
-    box onList = vBox [ width fitContent, height fitContent, children (map (toItemElement onList) items) ]
+    itemBox kids = vBox [ width fitContent, height fitContent, children kids ]
+
+    -- A 'fill' item measures as zero, so only stretch items when laying out.
+    fillWidth el = el { elLayout = (elLayout el) { layoutWidth = fill } }
 
     -- ccElementId matters beyond styling: without one this never registers
     -- a hit-rect, so a click on the panel background (not an item) would
@@ -120,7 +129,7 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
         handleArrowKeys
         handleLeftArrow
         handleMnemonics
-      elRun (box onList)
+      elRun (itemBox (map (fillWidth . toItemElement onList) items))
 
     anySubmenuFocused = do
       cur <- getFocus
@@ -200,7 +209,7 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
             Just (subId, subItems) -> runSubmenu item subId subItems r onList
       }
       where
-        itemCfg  = resolve defaultButtonConfig (width fitContent : height fitContent : itemAttrsFor item)
+        itemCfg  = resolve defaultButtonConfig (style menuItemStyleKey : width fitContent : height fitContent : itemAttrsFor item)
         itemCtrl = (bcControl itemCfg) { ccContent = const (renderLabelledContent (bcLabelled itemCfg)) }
 
     -- While another item's submenu is open, hovering this one doesn't open

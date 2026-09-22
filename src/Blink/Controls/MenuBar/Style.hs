@@ -15,9 +15,10 @@ module Blink.Controls.MenuBar.Style
 
 import qualified Data.Map.Strict as Map
 
-import Blink.Controls.Style (containerStyle, controlMetrics, flatRowMetrics, transparent)
+import Blink.Controls.Menu.Style (menuListMetrics)
+import Blink.Controls.Style (containerStyle, transparent)
 import Blink.Controls.ToggleButton.Style (toggleChecked)
-import Blink.Geometry (uniform)
+import Blink.Geometry (Insets (..), uniform)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style
 
@@ -50,7 +51,13 @@ menuBarListStyleKey = Class "menuBarList"
 menuBarMetrics :: Metrics
 menuBarMetrics = Metrics
   { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 4
+  , metricsPadding     = Insets { topInset = 0, rightInset = 4, bottomInset = 0, leftInset = 4 }
+  }
+
+menuBarLabelMetrics :: Metrics
+menuBarLabelMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = Insets { topInset = 3, rightInset = 8, bottomInset = 3, leftInset = 8 }
   }
 
 -- | Only the bottom edge visible -- the flat-strip, rule-only look
@@ -89,6 +96,6 @@ menuBarLabelStyle p = StyleSet
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
   [ (menuBarStyleKey,      (menuBarMetrics, menuBarStyle p))
-  , (menuBarLabelStyleKey, (flatRowMetrics, menuBarLabelStyle p))
-  , (menuBarListStyleKey,  (controlMetrics, containerStyle p))
+  , (menuBarLabelStyleKey, (menuBarLabelMetrics, menuBarLabelStyle p))
+  , (menuBarListStyleKey,  (menuListMetrics, containerStyle p))
   ]

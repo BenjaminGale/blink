@@ -38,22 +38,20 @@ import Blink.Element (elementWithLayout)
 settingsView :: AppState -> Element ScreenId Msg
 settingsView s = elementWithLayout (Layout fill fill TopLeft) $
   borderLayout
-    [ top 48 (headerBar s)
-    , left 200 (sidebar s)
+    [ top (headerBar s)
+    , left (sidebar s)
     , centre (content s)
     ]
 ```
 
-`top`/`left`/`centre` each take a plain `View e msg ()` action, not an
-`Element` — unlike `hBox`/`vBox`'s `children`, which take `[Element e
-msg]` directly — because a border panel's size is fixed up front (or
-"whatever's left," for `centre`); there's nothing for its content to
-negotiate the way a box's children do. `borderLayout` itself returns a
-bare `View e msg ()` too, for the same reason: it already knows its own
-size from the panels' fixed dimensions, so there's no size request left
-to report. `headerBar`, `sidebar`, and `content` below are written to
-return `View e msg ()` directly for exactly this reason — see the next
-section.
+Each panel takes an `Element` and keeps its size on one axis: `top` and
+`bottom` are as tall as their element asks and span the full width;
+`left` and `right` are as wide as their element asks and fill the middle
+row's height. `centre` fills whatever is left. So `headerBar` sets its
+own height, either `height (exactly 48)` or `height fitContent` to fit
+its content, and `sidebar` sets its own width. `borderLayout` itself
+returns a bare `View e msg ()`, because it fills whatever space it's
+given.
 
 Since a view must return an `Element` (not a bare `View` action),
 `elementWithLayout` wraps `settingsView`'s `borderLayout` back into one at
@@ -61,23 +59,18 @@ the top, declaring "fill whatever space the caller gives me" as its size
 request — the only sensible request for something that's the whole
 screen.
 
-`top`/`left`/`right`/`bottom` take a fixed size (`48`, `200`); leave a
-panel out of the list entirely and its neighbours expand to cover the
-gap — there's no need to pass an empty placeholder for a region you don't
-use.
+Leave a panel out of the list entirely and its neighbours expand to cover
+the gap. You don't need an empty placeholder for a region you don't use.
 
 ## Filling the sidebar and content panels
 
-Inside `sidebar`, use `vBox` the way the README's example does, but now
-sizing children relative to the space the parent region actually has,
-rather than assuming the child's natural size is fine — and convert the
-resulting `Element` back to the bare `View e msg ()` a border panel expects
-with `runElement`:
+Inside `sidebar`, use `vBox` the way the README's example does, giving the
+box its own width and sizing its children relative to it:
 
 ```haskell
-sidebar :: AppState -> View ScreenId Msg ()
-sidebar s = runElement $ vBox
-  [ spacing 4, margin 8
+sidebar :: AppState -> Element ScreenId Msg
+sidebar s = vBox
+  [ width (exactly 200), spacing 4, margin 8
   , children
       [ button (SectionButton i) [text label, height (exactly 32), width fill]
       | (i, label) <- zip [0 ..] (sectionNames s)
@@ -120,22 +113,20 @@ space it has, and it's worth being able to tell them apart:
 
 ## Converting between `Element` and a bare `View` action
 
-The pattern above — `runElement` to go from `Element` to a bare `View`
-action, `elementWithLayout` to go the other way — comes up any time you
-mix containers that expect one with containers that expect the other:
+`runElement` goes from an `Element` to a bare `View` action, and
+`elementWithLayout` goes the other way. You need them whenever you mix
+code that expects one with code that expects the other:
 
 * **`Element` → `View e msg ()`**: `runElement`. Use this when something
   that already has a size request (a ready-made widget, or `hBox`/`vBox`)
-  needs to go somewhere that only wants a plain action — a border panel,
-  as above, or any hand-written `View` code that just needs to run a widget
-  without placing it in another sized slot.
+  needs to run inside hand-written `View` code, without placing it in
+  another sized slot.
 * **`View e msg ()` → `Element`**: `elementWithLayout layout action`. Use
   this when a plain `View` action (hand-written primitives, or the result of
   `runElement`/`borderLayout`) needs to report a size request to a parent
   that expects one — a box's `children` list, or, as in `settingsView`
   above, the `Element` a view function itself must return.
 
-Neither direction loses information: an `Element` already carrying a real
-size request still has one after `runElement` throws it away for the
-panel that doesn't need it; `elementWithLayout` just supplies the size
-request explicitly for an action that never had one to begin with.
+Neither direction loses information: `runElement` runs the element in the
+space it's given, and `elementWithLayout` supplies a size request for an
+action that never had one.

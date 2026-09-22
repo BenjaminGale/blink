@@ -102,6 +102,7 @@ library
         Blink.Controls.ToggleGroup.Style
         Blink.Controls.Table.Style
         Blink.Controls.Tree.Style
+        Blink.Controls.Menu.Style
         Blink.Controls.MenuButton.Style
         Blink.Controls.MenuBar.Style
     hs-source-dirs: src

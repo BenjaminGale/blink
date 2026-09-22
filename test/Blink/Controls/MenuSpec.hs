@@ -6,7 +6,7 @@ import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
-import Blink.AppFixtures (drawnTexts, nullMsgQueue, resultState, testMetrics, testStyleSet)
+import Blink.AppFixtures (drawnTexts, resultState, startApp, testMetrics, testStyleSet)
 import Blink.Controls.Button (ButtonConfig, onActivated)
 import Blink.Controls.Control (onFocusGained, post)
 import Blink.Controls.Label (mnemonic, text)
@@ -15,7 +15,6 @@ import Blink.Element (Attribute, elLayout, elementWithLayout, height, runElement
 import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Alt))
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (noOpMeasurers)
 import Blink.Style (StyleKey (..), emptyTheme)
 import Blink.Update (modify)
 import Blink.View (emit, getFocus, requestFocus)
@@ -47,13 +46,12 @@ submenuFor _       = Nothing
 -- top-level 'close'.
 data Event = Logged Text
 
--- | Renders 'Open'\/'Save'\/'Export' stacked from (0,0), each 40x20 -- the
--- same geometry 'Blink.Controls.MenuButtonSpec.navApp' uses, so a
--- click\/hover point lands unambiguously on one of them:
--- @Open (0,0)-(40,20)@, @Save (0,20)-(40,40)@, @Export (0,40)-(40,60)@.
--- 'Export's own submenu, once open, renders via 'Blink.Popup.popup'
--- side-anchored to 'Export's own bounds, so its items sit at
--- @Csv (40,40)-(80,60)@, @Pdf (40,60)-(80,80)@, @Json (40,80)-(80,100)@.
+-- | Renders 'Open'\/'Save'\/'Export' stacked from (0,0) in a list 100 wide
+-- that fills the window's height. Items stretch across the list, so
+-- @Open (0,0)-(100,20)@, @Save (0,20)-(100,40)@, @Export (0,40)-(100,60)@.
+-- The submenu of 'Export' opens against its right edge at the menu's
+-- minimum width of 160, so its items sit at @Csv (100,40)-(260,60)@,
+-- @Pdf (100,60)-(260,80)@, @Json (100,80)-(260,100)@.
 --
 -- Nothing here plays the role 'Blink.Controls.MenuButton.menuButton's own
 -- trigger does -- moving root's own focus onto the list's scope the moment
@@ -72,7 +70,7 @@ menuApp = App
       runElement $
         (menuListWithSubmenus testStyleKey TopList ItemPart [Open, Save, Export] itemAttrsFor submenuFor
           (emit (Logged "Closed")) False)
-          { elLayout = Layout fill fill TopLeft }
+          { elLayout = Layout (exactly 100) fill TopLeft }
   , update  = \(Logged t) -> modify (++ [t])
   }
   where
@@ -119,9 +117,9 @@ altKeyInput :: Char -> FrameInput
 altKeyInput c = (mkInput (Point 200 200) False) { keyEvents = [KeyEvent (KeyChar c) [Alt] False] }
 
 savePoint, exportPoint, pdfPoint, betweenItemsPoint, offMenuPoint :: Point
-savePoint   = Point 20 30   -- within Save's own (0,20)-(40,40)
-exportPoint = Point 20 50   -- within Export's own (0,40)-(40,60)
-pdfPoint    = Point 60 70   -- within Pdf's own (40,60)-(80,80)
+savePoint   = Point 20 30   -- within Save's own (0,20)-(100,40)
+exportPoint = Point 20 50   -- within Export's own (0,40)-(100,60)
+pdfPoint    = Point 150 70  -- within Pdf's own (100,60)-(260,80)
 betweenItemsPoint = Point 20 150 -- on the list's own panel, below every item
 offMenuPoint      = Point 400 400 -- outside the list's own panel, which fills the window
 
@@ -157,19 +155,19 @@ downTimes handle n = go n
 spec :: Spec
 spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
   it "opens the first item's highlight on its own, with no trigger control involved" $ do
-    handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+    handle <- startApp menuApp
     result <- settle handle
     last (resultState result) `shouldBe` "Open focused"
 
   describe "opening a submenu" $ do
     it "does not draw a submenu item before its parent item's submenu opens" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- settle handle
       result <- stepFrame handle (mkInput (Point 200 200) False)
       drawnTexts result `shouldNotContain` ["Csv", "Pdf", "Json"]
 
     it "opens on Right-arrow while the item holding a submenu is highlighted, focusing its first item" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- settle handle
       _      <- downTimes handle 2 -- Open -> Save -> Export
       _      <- stepFrame handle (keyInput KeyRight)
@@ -178,13 +176,13 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       last (resultState result) `shouldBe` "Csv focused"
 
     it "does not open on Right-arrow while a different item is highlighted" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- settle handle -- Open highlighted, not Export
       result <- stepFrame handle (keyInput KeyRight)
       drawnTexts result `shouldNotContain` ["Csv", "Pdf", "Json"]
 
     it "opens on hovering the item, without needing it highlighted or Right-arrow first" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- settle handle -- Open highlighted, not Export
       _      <- stepFrame handle (mkInput exportPoint False)
       result <- stepFrame handle (mkInput exportPoint False)
@@ -192,7 +190,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
 
   describe "closing a submenu back to its parent list" $ do
     it "Escape closes the submenu without closing the whole menu, and returns the highlight to Export" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByKeyboard handle
       result <- stepFrame handle (keyInput KeyEscape)
       drawnTexts result `shouldNotContain` ["Csv", "Pdf", "Json"]
@@ -201,7 +199,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       last (resultState result) `shouldBe` "Export focused"
 
     it "Left-arrow closes the submenu without closing the whole menu, and returns the highlight to Export" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByKeyboard handle
       result <- stepFrame handle (keyInput KeyLeft)
       drawnTexts result `shouldNotContain` ["Csv", "Pdf", "Json"]
@@ -209,7 +207,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       last (resultState result) `shouldBe` "Export focused"
 
     it "Left-arrow does nothing at the top level, which has no parent to back out to" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- settle handle
       result <- stepFrame handle (keyInput KeyLeft)
       drawnTexts result `shouldContain` ["Open", "Save", "Export"]
@@ -217,7 +215,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
 
   describe "the submenu's own independent arrow-key wraparound" $ do
     it "Down on the last submenu item wraps to the first, in a single keypress" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByKeyboard handle
       _      <- stepFrame handle (keyInput KeyDown)  -- Csv -> Pdf
       result <- stepFrame handle (keyInput KeyDown)  -- Pdf -> Json
@@ -226,13 +224,13 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       last (resultState result2) `shouldBe` "Csv focused"
 
     it "Up on the first submenu item wraps to the last, in a single keypress" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByKeyboard handle
       result <- stepFrame handle (keyInput KeyUp)    -- Csv -> Json, wraps
       last (resultState result) `shouldBe` "Json focused"
 
     it "does not move the parent list's own highlight while navigating within the submenu" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByKeyboard handle
       result <- stepFrame handle (keyInput KeyDown)  -- Csv -> Pdf
       -- Everything logged since the submenu opened (dropping the initial
@@ -242,7 +240,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
 
   describe "activating a submenu item" $ do
     it "closes the whole menu (every level), not just the submenu" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByKeyboard handle
       result <- stepFrame handle (keyInput KeyReturn)
       let log' = resultState result
@@ -250,7 +248,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       last log' `shouldBe` "Closed"
 
     it "still activates the item clicked, rather than being treated as outside" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByKeyboard handle
       _      <- stepFrame handle (mkInput pdfPoint False) -- hovers Pdf first, as a real click would
       _      <- stepFrame handle (mkInput pdfPoint True)
@@ -259,7 +257,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
 
   describe "mnemonics" $ do
     it "Alt+letter activates a plain item and closes the whole menu, without needing it highlighted first" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- settle handle -- Open highlighted, not Save
       result <- stepFrame handle (altKeyInput 'S')
       let log' = resultState result
@@ -267,7 +265,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       last log' `shouldBe` "Closed"
 
     it "Alt+letter on an item with a submenu opens it instead of activating it" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- settle handle -- Open highlighted, not Export
       _      <- stepFrame handle (altKeyInput 'E')
       result <- stepFrame handle (mkInput (Point 200 200) False)
@@ -276,7 +274,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       resultState result `shouldNotContain` ["Closed"]
 
     it "Alt+letter for a submenu item activates it once its submenu is open" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByKeyboard handle
       result <- stepFrame handle (altKeyInput 'P')
       let log' = resultState result
@@ -285,7 +283,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
 
   describe "clicking the parent list while a submenu is open" $ do
     it "does not treat a click on the submenu's own item as outside and close everything" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByKeyboard handle
       _      <- stepFrame handle (mkInput exportPoint False)
       _      <- stepFrame handle (mkInput exportPoint True)
@@ -293,7 +291,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       resultState result `shouldNotContain` ["Closed"]
 
     it "activates another item of the parent list" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByKeyboard handle
       _      <- stepFrame handle (mkInput savePoint False)
       _      <- stepFrame handle (mkInput savePoint True)
@@ -302,7 +300,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
 
   describe "outside-click dismissal" $ do
     it "a click completing outside every level closes the whole menu" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByKeyboard handle
       _      <- stepFrame handle (mkInput offMenuPoint False)
       _      <- stepFrame handle (mkInput offMenuPoint True)
@@ -310,21 +308,21 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       resultState result `shouldContain` ["Closed"]
 
     it "closes on the press, before the button is released" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- settle handle
       result <- stepFrame handle (mkInput offMenuPoint True)
       resultState result `shouldContain` ["Closed"]
 
   describe "at the top level, unaffected by submenu support" $
     it "Escape still closes the whole menu" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- settle handle
       result <- stepFrame handle (keyInput KeyEscape)
       resultState result `shouldContain` ["Closed"]
 
   describe "switching away from an open submenu by hovering another item" $ do
     it "closes the submenu and highlights the hovered item once the pointer rests there past the delay" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByHover handle
       _      <- stepFrame handle (mkInput savePoint False)
       _      <- restOn handle savePoint
@@ -333,21 +331,21 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       last (resultState result) `shouldBe` "Save focused"
 
     it "keeps the submenu open while the pointer crosses another item quicker than the delay" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByHover handle
       _      <- stepFrame handle (mkInput savePoint False)
       result <- stepFrame handle (mkInput savePoint False)
       drawnTexts result `shouldContain` ["Csv", "Pdf", "Json"]
 
     it "keeps the submenu open when the pointer leaves the menu entirely" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByHover handle
       _      <- restOn handle offMenuPoint
       result <- stepFrame handle (mkInputAt restTime offMenuPoint)
       drawnTexts result `shouldContain` ["Csv", "Pdf", "Json"]
 
     it "counts time spent on the list between items towards the delay" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByHover handle
       _      <- restOn handle betweenItemsPoint
       _      <- stepFrame handle (mkInputAt restTime savePoint)
@@ -356,7 +354,7 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       last (resultState result) `shouldBe` "Save focused"
 
     it "restarts the delay when the pointer returns to the item that owns the submenu" $ do
-      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      handle <- startApp menuApp
       _      <- openExportByHover handle
       _      <- restOn handle betweenItemsPoint
       _      <- stepFrame handle (mkInputAt restTime exportPoint)

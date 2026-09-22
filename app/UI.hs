@@ -414,7 +414,7 @@ rowSlider s =
 -- Footer
 
 footer :: AppState -> Element ControlId Msg
-footer s = elementWithLayout (Layout fill fill TopLeft) $ do
+footer s = elementWithLayout (Layout fill (exactly 36) TopLeft) $ do
   pos    <- getMousePos
   input  <- getInput
   win    <- getWindowSize
@@ -474,7 +474,7 @@ pages =
 sidebar :: AppState -> Element ControlId Msg
 sidebar s =
   vBox
-    [ width fill, height fill, margin 12
+    [ width (exactly sidebarWidth), height fill, margin 12
     , children
         [ toggleButtonGroup SidebarPageButton
             [ width fill, height fill, groupOrientation Vertical, itemSpacing 4
@@ -1033,13 +1033,12 @@ topMenuBar :: AppState -> Element ControlId Msg
 topMenuBar s =
   menuBar DemoMenuBar
     [ menus menuBarMenus
-    , labelAttrs (\m -> [text m, mnemonic (menuBarLabelMnemonic m), height fill])
+    , labelAttrs (\m -> [text m, mnemonic (menuBarLabelMnemonic m)])
     , menuItems menuBarItemsFor
     , MenuBar.itemAttrs (\_ i -> [text i, onActivated (post (MenuBarItemActivated i))])
     , MenuBar.submenuItems menuBarSubmenuItemsFor
     , openMenu (menuBarOpenMenu s)
     , onOpenMenuChanged (postWith SetMenuBarOpenMenu)
-    , height fill
     ]
 
 demoView :: AppState -> Element ControlId Msg
@@ -1047,8 +1046,8 @@ demoView s = elementWithLayout (Layout fill fill TopLeft) $ do
   input <- getInput
   when (darkMode s) $ fillRect (RGBA 0.082 0.102 0.129 1)
   borderLayout
-    [ top 36 (topMenuBar s)
-    , left sidebarWidth (sidebar s), centre (pageContent s), bottom 36 (footer s)
+    [ top (topMenuBar s)
+    , left (sidebar s), centre (pageContent s), bottom (footer s)
     ]
   anyHov <- isAnyMouseOver
   let typed   = T.concat (inputTypedText input)

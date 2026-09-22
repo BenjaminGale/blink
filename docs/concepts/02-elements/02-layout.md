@@ -24,23 +24,22 @@ through this with worked diagrams, now that you have the
 ## `borderLayout`: named regions instead of a single axis
 
 `borderLayout` solves a different, more specific shape: a header, footer,
-sidebars, and a content area, rather than a single row or column. Its
-panels (`top`/`bottom`/`left`/`right`/`centre`) each take a fixed size (or,
-for `centre`, whatever's left) rather than negotiating through
-`elMeasure` the way a box child does — there's nothing to measure when a
-panel's size is already decided up front. See `Blink.Layout.Border`'s
-Haddocks for the exact region diagram and clipping behaviour.
+sidebars, and a content area, rather than a single row or column. Each
+panel takes an `Element`. `top` and `bottom` are as tall as their element
+asks, including `fitContent`, which measures it through `elMeasure` like
+a box child; `left` and `right` are as wide as their element asks; and
+`centre` fills whatever is left. See `Blink.Layout.Border`'s Haddocks for
+the exact region diagram and clipping behaviour.
 
 ## Converting between `Element` and a bare `View` action
 
-Because a box's children need to report a size request and a border
-panel's content doesn't, they take different things: `children` wants
-`[Element e msg]`, while `top`/`left`/`centre` want a bare `View e msg ()`.
+Box children and border panels both take `Element`s, but hand-written
+`View` code and `borderLayout` itself are bare `View e msg ()` actions.
 Composing the two together means converting between them at the boundary:
 
 * **`Element` → `View e msg ()`**: `runElement`. Needed when something that
-  already has a size request (a widget, or another `hBox`/`vBox`) goes
-  into a border panel, or anywhere else that only wants a plain action.
+  already has a size request (a widget, or another `hBox`/`vBox`) runs
+  inside code that only wants a plain action.
 * **`View e msg ()` → `Element`**: `elementWithLayout`. Needed when a plain
   action needs to report a size request to a parent that expects one — a
   box's `children` list, or the `Element` a view function itself must

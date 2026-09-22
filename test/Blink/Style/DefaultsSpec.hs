@@ -8,10 +8,11 @@ import Test.Hspec
 import Blink.Controls.Button (buttonStyleKey)
 import Blink.Controls.Checkbox (checkboxStyleKey)
 import Blink.Controls.Divider (dividerStyleKey)
-import Blink.Controls.Style (iconStyleKey)
+import Blink.Controls.Style (iconStyleKey, transparent)
 import Blink.Controls.Image (imageStyleKey)
 import Blink.Controls.Label (labelStyleKey)
 import Blink.Controls.List.Style (listItemStyleKey, listStyleKey)
+import Blink.Controls.Menu.Style (menuItemStyleKey)
 import Blink.Controls.MenuBar.Style (menuBarLabelStyleKey, menuBarListStyleKey, menuBarStyleKey)
 import Blink.Controls.MenuButton.Style (menuButtonListStyleKey)
 import Blink.Controls.ProgressBar (progressBarStyleKey)
@@ -72,6 +73,7 @@ spec = describe "Blink.Style.Defaults" $ do
           , treeChevronStyleKey
           , tableHeaderStyleKey, tableColumnDividerStyleKey
           , iconStyleKey
+          , menuItemStyleKey
           , menuButtonListStyleKey
           , menuBarStyleKey, menuBarLabelStyleKey, menuBarListStyleKey
           ]
@@ -94,6 +96,14 @@ spec = describe "Blink.Style.Defaults" $ do
 
     it "keeps a checkbox transparent at rest, tinted on hover" $ do
       style <- resolvedAt checkboxStyleKey (Set.singleton CommonMouseOver)
+      styleBackground style `shouldBe` paletteSurfaceHover testPalette
+
+    it "keeps a menu item transparent and borderless at rest" $ do
+      style <- resolvedAt menuItemStyleKey Set.empty
+      (styleBackground style, styleBorder style) `shouldBe` (transparent, [])
+
+    it "tints a menu item while it holds the keyboard highlight" $ do
+      style <- resolvedAt menuItemStyleKey (Set.singleton FocusFocused)
       styleBackground style `shouldBe` paletteSurfaceHover testPalette
 
     it "mutes a disabled label's text" $ do

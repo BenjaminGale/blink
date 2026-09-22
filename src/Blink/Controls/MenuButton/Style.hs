@@ -14,7 +14,8 @@ module Blink.Controls.MenuButton.Style
   ) where
 
 import Blink.Style
-import Blink.Controls.Style (containerStyle, controlMetrics)
+import Blink.Controls.Menu.Style (menuListMetrics)
+import Blink.Controls.Style (containerStyle)
 
 -- | The 'StyleKey' the item list resolves its own panel background\/border
 -- from unless overridden via 'Blink.Controls.Control.style'. Uses
@@ -26,4 +27,4 @@ menuButtonListStyleKey = Class "menuButtonList"
 
 -- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
-defaultStyleEntries p = [ (menuButtonListStyleKey, (controlMetrics, containerStyle p)) ]
+defaultStyleEntries p = [ (menuButtonListStyleKey, (menuListMetrics, containerStyle p)) ]

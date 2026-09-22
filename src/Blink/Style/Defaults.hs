@@ -66,6 +66,7 @@ import qualified Blink.Controls.Divider.Style as Divider
 import qualified Blink.Controls.Image.Style as Image
 import qualified Blink.Controls.Label.Style as Label
 import qualified Blink.Controls.List.Style as List
+import qualified Blink.Controls.Menu.Style as Menu
 import qualified Blink.Controls.MenuBar.Style as MenuBar
 import qualified Blink.Controls.MenuButton.Style as MenuButton
 import qualified Blink.Controls.ProgressBar.Style as ProgressBar
@@ -103,6 +104,7 @@ defaultTheme p = Theme
       , List.defaultStyleEntries p
       , Tree.defaultStyleEntries p
       , Table.defaultStyleEntries p
+      , Menu.defaultStyleEntries p
       , MenuButton.defaultStyleEntries p
       , MenuBar.defaultStyleEntries p
       , [ (iconStyleKey, (toggleGroupMetrics, iconStyle p)) ]
