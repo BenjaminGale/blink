@@ -321,6 +321,7 @@ module Blink.View
   , setCursorIndex
     -- * Repeat-press ("hold") state
   , resolveHoldRepeats
+  , resolveHeldFor
     -- * Selection
     -- | 'Selection' itself, and the pure helpers built on it
     -- ('Blink.View.Selection.selectionLow', 'Blink.View.Selection.cursor',

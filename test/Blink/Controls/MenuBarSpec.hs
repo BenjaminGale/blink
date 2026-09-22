@@ -44,20 +44,30 @@ itemsFor EditMenu = [Cut, Copy]
 -- placed below its label by default, spans (0,20)-(40,60) for File and
 -- (40,20)-(80,60) for Edit (two 40x20 items stacked).
 menuBarApp :: App (MenuBarPart TopMenu Item) (Maybe TopMenu) (Maybe TopMenu)
-menuBarApp = App
+menuBarApp = menuBarAppWith []
+
+-- | 'menuBarApp' with @extraAttrs@ appended to the bar's own attributes.
+menuBarAppWith
+  :: [Attribute (MenuBarConfig (MenuBarPart TopMenu Item) TopMenu Item (Maybe TopMenu))]
+  -> App (MenuBarPart TopMenu Item) (Maybe TopMenu) (Maybe TopMenu)
+menuBarAppWith extraAttrs = App
   { startUp = pure Nothing
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
   , view    = \open ->
-      (menuBar id
+      (menuBar id (
         [ menus [FileMenu, EditMenu]
         , labelAttrs (\m -> [text (labelText m), mnemonic (labelMnemonic m), width (exactly 40), height (exactly 20)])
         , menuItems itemsFor
         , itemAttrs (\_ i -> [text (T.pack (show i)), width (exactly 40), height (exactly 20)])
         , openMenu open
         , onOpenMenuChanged (postWith id)
-        ]) { elLayout = Layout (exactly 80) (exactly 20) TopLeft }
+        ] ++ extraAttrs)) { elLayout = Layout (exactly 80) (exactly 20) TopLeft }
   , update  = put
   }
+
+-- | 'menuBarApp' with File's Save item carrying a submenu of Cut and Copy.
+submenuApp :: App (MenuBarPart TopMenu Item) (Maybe TopMenu) (Maybe TopMenu)
+submenuApp = menuBarAppWith [submenuItems (\m i -> if m == FileMenu && i == Save then [Cut, Copy] else [])]
 
 mkInput :: Point -> Bool -> FrameInput
 mkInput p down = emptyFrameInput
@@ -235,17 +245,3 @@ spec = describe "Blink.Controls.MenuBar.menuBar" $ do
       result <- stepFrame handle (mkInput saveItemPoint False)
       drawnTexts result `shouldContain` ["Cut", "Copy"]
 
--- | 'menuBarApp' with File's Save item carrying a submenu of Cut and Copy.
-submenuApp :: App (MenuBarPart TopMenu Item) (Maybe TopMenu) (Maybe TopMenu)
-submenuApp = menuBarApp
-  { view = \open ->
-      (menuBar id
-        [ menus [FileMenu, EditMenu]
-        , labelAttrs (\m -> [text (labelText m), mnemonic (labelMnemonic m), width (exactly 40), height (exactly 20)])
-        , menuItems itemsFor
-        , submenuItems (\m i -> if m == FileMenu && i == Save then [Cut, Copy] else [])
-        , itemAttrs (\_ i -> [text (T.pack (show i)), width (exactly 40), height (exactly 20)])
-        , openMenu open
-        , onOpenMenuChanged (postWith id)
-        ]) { elLayout = Layout (exactly 80) (exactly 20) TopLeft }
-  }

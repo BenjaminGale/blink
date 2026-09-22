@@ -26,10 +26,11 @@ import Blink.View (emit, getFocus, requestFocus)
 data Item = Open | Save | Export | Csv | Pdf | Json deriving (Eq, Ord, Show)
 
 -- | Every item's own element id ('ItemPart'), plus 'Export's own submenu
--- list\/focus scope id ('ExportSubmenu') -- 'itemId' below builds the
+-- list\/focus scope id ('ExportSubmenu') and the top-level list's own
+-- ('TopList') -- 'itemId' below builds the
 -- former for every item regardless of nesting depth, since 'Item' is a
 -- single flat type with one constructor per item.
-data Part = ItemPart Item | ExportSubmenu deriving (Eq, Ord, Show)
+data Part = ItemPart Item | ExportSubmenu | TopList deriving (Eq, Ord, Show)
 
 testStyleKey :: StyleKey Part
 testStyleKey = Class "testMenu"
@@ -66,10 +67,10 @@ menuApp = App
   , view    = \_ -> elementWithLayout (Layout fill fill TopLeft) $ do
       cur <- getFocus
       case cur of
-        Nothing -> requestFocus Nothing (ItemPart Open)
+        Nothing -> requestFocus Nothing TopList
         Just _  -> pure ()
       runElement $
-        (menuListWithSubmenus testStyleKey (ItemPart Open) ItemPart [Open, Save, Export] itemAttrsFor submenuFor
+        (menuListWithSubmenus testStyleKey TopList ItemPart [Open, Save, Export] itemAttrsFor submenuFor
           (emit (Logged "Closed")) False)
           { elLayout = Layout fill fill TopLeft }
   , update  = \(Logged t) -> modify (++ [t])
@@ -93,12 +94,19 @@ itemMnemonic Csv    = 'C'
 itemMnemonic Pdf    = 'P'
 itemMnemonic Json   = 'J'
 
+-- | Holds the app clock at 0, so no time passes between frames unless a
+-- test uses 'mkInputAt'.
 mkInput :: Point -> Bool -> FrameInput
 mkInput p down = emptyFrameInput
   { mousePosition   = p
   , mouseButtonDown = down
   , windowSize      = Size 300 300
+  , frameTime       = Just 0
   }
+
+-- | The pointer resting at @p@, @seconds@ into the app clock.
+mkInputAt :: Double -> Point -> FrameInput
+mkInputAt seconds p = (mkInput p False) { frameTime = Just (round (seconds * 1.0e9)) }
 
 -- | A single key press, mouse left resting off every item so it never
 -- spuriously reclicks anything.
@@ -110,15 +118,25 @@ keyInput k = (mkInput (Point 200 200) False) { keyEvents = [KeyEvent k [] False]
 altKeyInput :: Char -> FrameInput
 altKeyInput c = (mkInput (Point 200 200) False) { keyEvents = [KeyEvent (KeyChar c) [Alt] False] }
 
-exportPoint, pdfPoint :: Point
+savePoint, exportPoint, pdfPoint, betweenItemsPoint, offMenuPoint :: Point
+savePoint   = Point 20 30   -- within Save's own (0,20)-(40,40)
 exportPoint = Point 20 50   -- within Export's own (0,40)-(40,60)
 pdfPoint    = Point 60 70   -- within Pdf's own (40,60)-(80,80)
+betweenItemsPoint = Point 20 150 -- on the list's own panel, below every item
+offMenuPoint      = Point 400 400 -- outside the list's own panel, which fills the window
 
 -- | Frame 1 always just settles the initial auto-focus (see 'menuApp');
 -- every test below runs it first, off any item, before doing anything the
 -- test itself cares about.
 settle :: BlinkHandle [Text] -> IO (FrameResult [Text])
 settle handle = stepFrame handle (mkInput (Point 200 200) False)
+
+-- | Settles, then hovers 'Export' until its submenu is open.
+openExportByHover :: BlinkHandle [Text] -> IO (FrameResult [Text])
+openExportByHover handle = do
+  _ <- settle handle
+  _ <- stepFrame handle (mkInput exportPoint False)
+  stepFrame handle (mkInput exportPoint False)
 
 -- | Presses Down @n@ times, moving the highlight from 'Open' (the first
 -- item, focused by 'settle') onto the @n@th item after it.
@@ -301,3 +319,54 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       _      <- settle handle
       result <- stepFrame handle (keyInput KeyEscape)
       resultState result `shouldContain` ["Closed"]
+
+  describe "switching away from an open submenu by hovering another item" $ do
+    it "closes the submenu and highlights the hovered item once the pointer rests there past the delay" $ do
+      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- openExportByHover handle
+      _      <- stepFrame handle (mkInput savePoint False)
+      _      <- restOn handle savePoint
+      result <- stepFrame handle (mkInputAt restTime savePoint)
+      drawnTexts result `shouldNotContain` ["Csv", "Pdf", "Json"]
+      last (resultState result) `shouldBe` "Save focused"
+
+    it "keeps the submenu open while the pointer crosses another item quicker than the delay" $ do
+      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- openExportByHover handle
+      _      <- stepFrame handle (mkInput savePoint False)
+      result <- stepFrame handle (mkInput savePoint False)
+      drawnTexts result `shouldContain` ["Csv", "Pdf", "Json"]
+
+    it "keeps the submenu open when the pointer leaves the menu entirely" $ do
+      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- openExportByHover handle
+      _      <- restOn handle offMenuPoint
+      result <- stepFrame handle (mkInputAt restTime offMenuPoint)
+      drawnTexts result `shouldContain` ["Csv", "Pdf", "Json"]
+
+    it "counts time spent on the list between items towards the delay" $ do
+      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- openExportByHover handle
+      _      <- restOn handle betweenItemsPoint
+      _      <- stepFrame handle (mkInputAt restTime savePoint)
+      result <- stepFrame handle (mkInputAt restTime savePoint)
+      drawnTexts result `shouldNotContain` ["Csv", "Pdf", "Json"]
+      last (resultState result) `shouldBe` "Save focused"
+
+    it "restarts the delay when the pointer returns to the item that owns the submenu" $ do
+      handle <- configureEventDriven menuApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- openExportByHover handle
+      _      <- restOn handle betweenItemsPoint
+      _      <- stepFrame handle (mkInputAt restTime exportPoint)
+      _      <- stepFrame handle (mkInputAt restTime savePoint)
+      result <- stepFrame handle (mkInputAt restTime savePoint)
+      drawnTexts result `shouldContain` ["Csv", "Pdf", "Json"]
+
+-- | Holds the pointer at @p@ from 0.1s to 'restTime' on the app clock,
+-- long enough to pass the menu's submenu-switch delay. Steps 0.1s at a
+-- time because the app clock advances by at most 0.1s per frame.
+restOn :: BlinkHandle [Text] -> Point -> IO ()
+restOn handle p = mapM_ (\t -> stepFrame handle (mkInputAt t p)) [0.1, 0.2, 0.3, 0.4, restTime]
+
+restTime :: Double
+restTime = 0.5

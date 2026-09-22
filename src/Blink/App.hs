@@ -249,9 +249,14 @@ data FrameInput = FrameInput
     -- rather than a platform input event. Blink's ticker calls the @notify@
     -- callback passed to 'configureEventDriven'; backends should detect that
     -- wake-up and set this field accordingly.
+  , frameTime :: Maybe Word64
+    -- ^ This frame's time in nanoseconds on a monotonic clock, used to
+    -- advance animation time. 'Nothing' makes 'stepFrame' read
+    -- 'GHC.Clock.getMonotonicTimeNSec' itself.
   }
 
--- | Nothing held or pressed, a 0x0 window, not quitting, not a tick. Build
+-- | Nothing held or pressed, a 0x0 window, not quitting, not a tick, and
+-- no frame time (read from the system clock). Build
 -- a specific frame's input by record update on this, never by listing
 -- every field.
 emptyFrameInput :: FrameInput
@@ -265,6 +270,7 @@ emptyFrameInput = FrameInput
   , windowSize      = Size 0 0
   , quitRequested   = False
   , isAnimationTick = False
+  , frameTime       = Nothing
   }
 
 -- | The result of processing a single frame.
@@ -289,7 +295,7 @@ data AppRefs e msg s = AppRefs
     -- causes a new ticker thread to be forked.
   , refsLastFrame  :: IORef (Maybe Word64)
     -- Monotonic nanosecond timestamp of the previous frame, used to compute
-    -- the wall-clock delta. Only accessed inside 'runFrame', which is called
+    -- the frame delta. Only accessed inside 'runFrame', which is called
     -- sequentially, so no concurrent access concerns.
   }
 
@@ -371,7 +377,7 @@ runFrame app refs queue notify input = do
 
   state <- readIORef (refsState refs)
 
-  delta <- sampleDelta (refsLastFrame refs)
+  delta <- sampleDelta (frameTime input) (refsLastFrame refs)
 
   prevCtx <- readIORef (refsCtx refs)
   let ctx = buildCtx app winRect inputState delta (isAnimationTick input) state prevCtx
@@ -491,15 +497,16 @@ toInputState fi = InputState
 clearKeyEvents :: InputState -> InputState
 clearKeyEvents is = is { inputKeyEvents = [], inputTypedText = [], inputWheelDelta = 0 }
 
--- | Wall-clock seconds since the previous frame, of either kind -- sampled
--- on every frame (not just animation ticks) so a run of input-only frames
+-- | Seconds since the previous frame, of either kind, from the frame's own
+-- 'frameTime' or else the system clock -- sampled on every frame (not just
+-- animation ticks) so a run of input-only frames
 -- (e.g. a live window resize) doesn't freeze 'animElapsed' and then jump it
 -- forward all at once on the next tick. Capped at 0.1s so a long pause
 -- between frames (app backgrounded, a slow Cmd) can't produce a huge single
 -- step.
-sampleDelta :: IORef (Maybe Word64) -> IO Float
-sampleDelta lastFrameRef = do
-  now   <- getMonotonicTimeNSec
+sampleDelta :: Maybe Word64 -> IORef (Maybe Word64) -> IO Float
+sampleDelta given lastFrameRef = do
+  now   <- maybe getMonotonicTimeNSec pure given
   mLast <- readIORef lastFrameRef
   writeIORef lastFrameRef (Just now)
   pure $ case mLast of

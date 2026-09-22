@@ -65,6 +65,7 @@ data FrameInput = FrameInput
   , windowSize      :: Size
   , quitRequested   :: Bool
   , isAnimationTick :: Bool
+  , frameTime       :: Maybe Word64
   }
 ```
 
@@ -84,6 +85,10 @@ signalled a close request. Two fields need more care:
   this as an ordinary input frame. The SDL2 backend does this by
   registering a distinct SDL event type for `notify` and checking each
   polled event against it (`checkAnimTick` in `app/Main.hs`).
+* **`frameTime`** is the frame's time in nanoseconds on a monotonic clock.
+  Leave it `Nothing` and `stepFrame` reads the system clock itself; set it
+  when your platform timestamps its events, or in tests that need to
+  control how much time passes between frames.
 
 Text entry is separate from `keyEvents`: `typedText` carries the actual
 Unicode text your platform's input method produced (composed characters,

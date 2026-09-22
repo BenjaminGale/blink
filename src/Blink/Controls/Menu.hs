@@ -10,16 +10,18 @@
 --
 -- 'menuListWithSubmenus' adds optional per-item submenus, opened on hover,
 -- a click, or Right-arrow, closing back to their own parent (not the whole
--- menu) on Left-arrow or Escape.
+-- menu) on Left-arrow or Escape, or once the pointer has been on another
+-- part of the parent list for a short delay.
 module Blink.Controls.Menu
   ( menuList
   , menuListWithSubmenus
   , submenuInPlay
   ) where
 
-import Control.Monad (forM_, void, when)
+import Control.Monad (filterM, forM_, void, when)
 import Data.Char (toUpper)
 import Data.List (find)
+import Data.Maybe (listToMaybe)
 
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig)
 import Blink.Controls.Control
@@ -73,6 +75,12 @@ menuListWithSubmenus styleKey listId itemId items itemAttrsFor submenuFor close 
   menuListCore styleKey listId itemId items itemAttrsFor submenuFor
     CloseBehaviour { cbCloseAll = close, cbCloseThis = close, cbNested = False }
     onOutsideTrigger
+
+-- | Seconds the pointer must spend on the rest of the parent list, while a
+-- submenu is open, before the submenu closes and the item under the
+-- pointer takes the highlight (opening its own submenu, if it has one).
+submenuSwitchDelay :: Double
+submenuSwitchDelay = 0.25
 
 -- | A flat, top-level list uses the same action for both fields; a
 -- submenu, opened recursively, pops back to its own parent on
@@ -221,19 +229,41 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
         itemCfg  = resolve defaultButtonConfig (width fitContent : height fitContent : itemAttrsFor item)
         itemCtrl = (bcControl itemCfg) { ccContent = const (renderLabelledContent (bcLabelled itemCfg)) }
 
+    -- While another item's submenu is open, hovering this one doesn't open
+    -- its submenu straight away; the delayed switch below does, so a
+    -- diagonal move towards the open submenu can cross this item safely.
     runSubmenu item subId subItems r = do
-      opened <- isFocused subId
+      opened      <- isFocused subId
+      siblingOpen <- anySubmenuFocused
       when (not opened) $ do
         highlighted  <- isFocused (itemId item)
         rightPressed <- if highlighted then keyPressed KeyRight else pure False
-        when (ciMouseEntered (biControl r) || biActivated r || rightPressed) $
+        when ((ciMouseEntered (biControl r) && not siblingOpen) || biActivated r || rightPressed) $
           requestFocus (Just listId) subId
+      leaving <- if opened then leavingSubmenu item subId else pure False
+      heldFor <- resolveHeldFor subId leaving
+      when (heldFor >= submenuSwitchDelay) $ do
+        sibling <- hoveredSibling item
+        forM_ sibling $ \it -> requestFocus (Just listId) (maybe (itemId it) fst (submenuFor it))
       when opened $ do
         onItem <- isRegionHit
         popup (itemId item)
           [ content (submenuElement item subId subItems onItem)
           , placement SideRight Start
           ]
+
+    -- Anywhere on this list other than @item@ counts, including the gaps
+    -- between items, so sweeping across several items doesn't restart the
+    -- delay. Uses last frame's hover because items later in the list
+    -- haven't run yet this frame.
+    leavingSubmenu item subId = do
+      overList    <- wasMouseOverLastFrame listId
+      overItem    <- wasMouseOverLastFrame (itemId item)
+      overSubmenu <- wasMouseOverLastFrame subId
+      pure (overList && not overItem && not overSubmenu)
+
+    hoveredSibling item =
+      listToMaybe <$> filterM (wasMouseOverLastFrame . itemId) (filter ((/= itemId item) . itemId) items)
 
     keyPressed k = do
       evs <- inputKeyEvents <$> getInput

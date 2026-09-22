@@ -10,10 +10,11 @@ module Blink.View.Hold
   ( HoldState (..)
   , repeatsDueBy
   , resolveHoldRepeats
+  , resolveHeldFor
   ) where
 
 import Control.Monad (when)
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromMaybe, isJust, isNothing)
 import qualified Data.Map.Strict as Map
 import Blink.View.Context
 import Blink.View.Animation (requiresAnimation, getAnimElapsed)
@@ -23,15 +24,32 @@ import Blink.View.Animation (requiresAnimation, getAnimElapsed)
 contextHoldState :: Ord e => e -> ViewContext e msg -> Maybe HoldState
 contextHoldState eid ctx = Map.lookup eid (elmHoldStates (ctxElements ctx))
 
+-- | Seconds the element has been continuously held, or 0 while it isn't.
+-- Unlike 'resolveHoldRepeats', which reports only what became due this
+-- frame, this lets a caller act on any later frame once a threshold has
+-- passed. Requires animation while held.
+resolveHeldFor :: Ord e => e -> Bool -> View e msg Double
+resolveHeldFor eid held
+  | not held = clearHold eid >> pure 0
+  | otherwise = do
+      requiresAnimation
+      now <- realToFrac <$> getAnimElapsed
+      mHold <- gets (contextHoldState eid)
+      let hold = fromMaybe (HoldState now 0) mHold
+      when (isNothing mHold) $ emitUi (SetHoldState eid (Just hold))
+      pure (now - holdStartedAt hold)
+
+clearHold :: Ord e => e -> View e msg ()
+clearHold eid = do
+  mHold <- gets (contextHoldState eid)
+  when (isJust mHold) $ emitUi (SetHoldState eid Nothing)
+
 -- | Given whether an element is held, and its initial-delay\/interval
 -- cadence, returns how many repeats are due this frame. Requires animation
 -- while held.
 resolveHoldRepeats :: Ord e => e -> Bool -> Double -> Double -> View e msg Int
 resolveHoldRepeats eid held initialDelay interval
-  | not held = do
-      mHold <- gets (contextHoldState eid)
-      when (isJust mHold) $ emitUi (SetHoldState eid Nothing)
-      pure 0
+  | not held = clearHold eid >> pure 0
   | otherwise = do
       requiresAnimation
       now <- realToFrac <$> getAnimElapsed

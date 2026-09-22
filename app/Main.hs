@@ -146,6 +146,7 @@ loop handle btnDown applyCursor renderFrame window checkAnimTick = do
                    , windowSize      = winSize
                    , quitRequested   = SDL.eventPayload event == SDL.QuitEvent
                    , isAnimationTick = isAnimTick
+                   , frameTime       = Nothing
                    }
       result <- stepFrame handle fi
       pure (btn', Just result)
