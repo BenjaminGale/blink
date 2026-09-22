@@ -189,6 +189,10 @@ markPopupFloor = modifyMouse $ \m -> m { mousePopupFloor = Map.size (mouseHitRec
 -- items -- only a rect registered after @eid@'s own counts, the same "idx
 -- > myIdx" test 'isOccludedFor' uses; otherwise a popup's own background
 -- panel, registered before its items, would occlude every item in it.
+-- When @eid@ wasn't registered last frame (the first frame the pointer is
+-- over it) but is running inside a popup that was, it's placed after that
+-- popup's own last rect, so only a popup drawn later can occlude it; the
+-- popup's own panel otherwise swallows the item's mouse-enter edge.
 --
 -- A rect tagged with @eid@ itself as its owning popup id (see
 -- 'hitRectPopupId') never counts as occluding, regardless of index -- a
@@ -200,11 +204,14 @@ isOccludedByPopupFor :: Ord e => e -> View e msg Bool
 isOccludedByPopupFor eid = do
   p     <- getMousePos
   mouse <- gets ctxMouse
+  popId <- getCurrentPopupId
   let prev      = mouseHitRectsPrev mouse
       floorIdx  = mousePopupFloor mouse
+      ownPopupIdxs = [ i | Just _ <- [popId], HitRect _ i o <- Map.elems prev, o == popId ]
       ownIdx    = case Map.lookup eid prev of
         Just (HitRect _ i _) | i >= floorIdx -> i
-        _                                    -> floorIdx - 1
+        _ | not (null ownPopupIdxs)          -> maximum ownPopupIdxs
+          | otherwise                        -> floorIdx - 1
   pure $ any (occludesByPopup ownIdx p) (Map.toList (Map.delete eid prev))
   where
     occludesByPopup ownIdx p (_, HitRect r idx ownerId)

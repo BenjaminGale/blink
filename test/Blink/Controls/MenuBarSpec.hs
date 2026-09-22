@@ -12,7 +12,7 @@ import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBeha
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.Label (mnemonic, text)
-import Blink.Controls.MenuBar (MenuBarConfig, MenuBarPart (..), itemAttrs, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu)
+import Blink.Controls.MenuBar (MenuBarConfig, MenuBarPart (..), itemAttrs, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu, submenuItems)
 import Blink.Element (elLayout, height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (KeyChar, KeyLeft, KeyRight), KeyEvent (..), Modifier (Alt))
@@ -66,10 +66,11 @@ mkInput p down = emptyFrameInput
   , windowSize      = Size 100 100
   }
 
-fileTriggerPoint, editTriggerPoint, fileItemPoint :: Point
+fileTriggerPoint, editTriggerPoint, fileItemPoint, saveItemPoint :: Point
 fileTriggerPoint = Point 20 10
 editTriggerPoint = Point 60 10
 fileItemPoint    = Point 20 30 -- within File's first item, (0,20)-(40,40)
+saveItemPoint    = Point 20 50 -- within File's second item, (0,40)-(40,60)
 
 -- | Hovers @p@ for a frame before pressing -- as a real click would --
 -- so the occlusion tracking (based on the *previous* frame's registered
@@ -217,3 +218,34 @@ spec = describe "Blink.Controls.MenuBar.menuBar" $ do
       handle <- configureEventDriven menuBarApp nullMsgQueue (pure ()) noOpMeasurers
       result <- stepFrame handle (mkInput editTriggerPoint False) -- just hovering, nothing open
       resultState result `shouldBe` Nothing
+
+  describe "submenus" $ do
+    it "hovering an item with a submenu opens it when the pointer arrives from another item" $ do
+      handle <- configureEventDriven submenuApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- click handle fileTriggerPoint
+      _      <- stepFrame handle (mkInput fileItemPoint False)
+      _      <- stepFrame handle (mkInput saveItemPoint False)
+      result <- stepFrame handle (mkInput saveItemPoint False)
+      drawnTexts result `shouldContain` ["Cut", "Copy"]
+
+    it "hovering an item with a submenu opens it when the pointer arrives from the bar" $ do
+      handle <- configureEventDriven submenuApp nullMsgQueue (pure ()) noOpMeasurers
+      _      <- click handle fileTriggerPoint
+      _      <- stepFrame handle (mkInput saveItemPoint False)
+      result <- stepFrame handle (mkInput saveItemPoint False)
+      drawnTexts result `shouldContain` ["Cut", "Copy"]
+
+-- | 'menuBarApp' with File's Save item carrying a submenu of Cut and Copy.
+submenuApp :: App (MenuBarPart TopMenu Item) (Maybe TopMenu) (Maybe TopMenu)
+submenuApp = menuBarApp
+  { view = \open ->
+      (menuBar id
+        [ menus [FileMenu, EditMenu]
+        , labelAttrs (\m -> [text (labelText m), mnemonic (labelMnemonic m), width (exactly 40), height (exactly 20)])
+        , menuItems itemsFor
+        , submenuItems (\m i -> if m == FileMenu && i == Save then [Cut, Copy] else [])
+        , itemAttrs (\_ i -> [text (T.pack (show i)), width (exactly 40), height (exactly 20)])
+        , openMenu open
+        , onOpenMenuChanged (postWith id)
+        ]) { elLayout = Layout (exactly 80) (exactly 20) TopLeft }
+  }
