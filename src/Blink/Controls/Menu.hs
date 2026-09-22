@@ -37,22 +37,14 @@ import Blink.Popup (Edge (Start), Side (SideRight), content, placement, popup)
 import Blink.View
 import Blink.Element (Element (..), height, width)
 
--- | A top-to-bottom list of buttons, one per item of @items@, sized to fit
--- its own content on both axes, drawn on a panel background\/border (per
--- @styleKey@) -- a plain, non-focusable 'Blink.Controls.Control.control'
--- wrapping it, purely for that chrome. No item carries a submenu; see
--- 'menuListWithSubmenus' for that. @listId@ is this list's own element id,
--- used both for its hit-rect registration (so a click on the panel
--- background, not an item, never reaches through to whatever's behind the
--- popup) and its own focus scope. @itemId@ builds one item's own element id
--- from its data, so reordering items never disturbs another item's own
--- hover\/focus\/capture state.
+-- | A vertical list of buttons, one per item, on a panel styled by
+-- @styleKey@. @listId@ is the list's element id and focus scope; @itemId@
+-- builds each item's id from its data, so reordering keeps per-item state.
 --
--- @onOutsideTrigger@ is whether the click landed somewhere that, despite
--- not being this list itself, should still count as "not outside" -- e.g.
--- the trigger that opened it, or (for 'Blink.Controls.MenuBar.menuBar')
--- anywhere on the bar's own row, so switching to a different top-level menu
--- is never also treated as an outside click on this one.
+-- @onOutsideTrigger@ is whether the pointer is somewhere outside this list
+-- that still shouldn't close it, such as the trigger that opened it, or
+-- anywhere on the row of a 'Blink.Controls.MenuBar.menuBar', so switching
+-- menus isn't also treated as an outside press.
 menuList
   :: (Ord e, Ord b)
   => StyleKey e -> e -> (b -> e) -> [b] -> (b -> [Attribute (ButtonConfig e msg)]) -> View e msg () -> Bool
@@ -89,7 +81,7 @@ data CloseBehaviour e msg = CloseBehaviour
   { cbCloseAll  :: View e msg ()
   , cbCloseThis :: View e msg ()
   , cbNested    :: Bool
-    -- ^ Whether Left-arrow backs out a level -- only for a submenu.
+    -- ^ Whether Left-arrow backs out a level, which only a submenu does.
   }
 
 -- | The shared engine behind both 'menuList' and 'menuListWithSubmenus'.
@@ -136,10 +128,6 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
                             Just (subId, _) -> Just subId == cur
                             Nothing         -> False) items
 
-    -- Closes on Escape whenever this list is open, regardless of which
-    -- item (if any) currently holds focus within it -- matching a native
-    -- menu, which closes on Escape without needing a specific item
-    -- highlighted.
     handleEscape = do
       evs <- inputKeyEvents <$> getInput
       case find ((== KeyEscape) . key) evs of
@@ -160,23 +148,14 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
         Just e  -> consumeKey (key e) >> cbCloseAll closeBehaviour
         Nothing -> pure ()
 
-    -- Closes on the press, not the release: a control pressed outside
-    -- takes focus on the press, so waiting would leave this list drawn
-    -- without focus until the release. The press's own focus request is
-    -- already queued by the time this popup runs, so closing leaves it be.
-    -- A click on an item is within this list, so it closes via the item's
-    -- own activation instead (see 'toItemElement').
+    -- Closes on the press: the pressed control takes focus then, and waiting
+    -- for the release would show this list without focus until it came.
     handleOutsideClick onList = do
       pressed <- isButtonPressed
       when (pressed && not onOutsideTrigger && not onList) (cbCloseAll closeBehaviour)
 
-    -- Moves the highlight to the next/previous item on Down\/Up, wrapping
-    -- from the last item to the first (and back) in a single keypress --
-    -- unlike Tab\/Shift-Tab's own traversal, a menu's items are expected to
-    -- cycle, matching every native menu\/dropdown. Redirects focus
-    -- explicitly by position rather than reusing Tab\/Shift-Tab's own
-    -- give-up-and-let-the-neighbour-auto-claim mechanism, which has no
-    -- wraparound of its own.
+    -- Moves focus by index because Tab traversal doesn't wrap, and menu
+    -- items should.
     handleArrowKeys = case items of
       [] -> pure ()
       is -> do
@@ -199,11 +178,6 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
 
     itemMnemonic item = lcMnemonic (bcLabelled (resolve defaultButtonConfig (itemAttrsFor item)))
 
-    -- Alt+letter, matched against each item's own 'mnemonic' (see
-    -- 'Blink.Controls.Label.mnemonic'), activates it the same way a click
-    -- would, without needing it highlighted first -- or, for an item with a
-    -- submenu, opens the submenu instead, the same target 'runSubmenu'
-    -- reaches via Right-arrow.
     handleMnemonics = case items of
       [] -> pure ()
       is -> do
@@ -282,10 +256,10 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
           }
         onParent
 
--- | 'True' when @listId@'s own current highlight is an item with a submenu,
--- or that item's own open submenu -- i.e. whether Left\/Right belongs to
--- this list rather than an enclosing composite (see
--- 'Blink.Controls.MenuBar.menuBar's own top-level Left\/Right switching).
+-- | 'True' when @listId@'s highlight is on an item with a submenu, or in
+-- that submenu. Left\/Right then belongs to this list rather than to an
+-- enclosing control, such as 'Blink.Controls.MenuBar.menuBar' switching
+-- menus.
 submenuInPlay :: (Ord e, Ord b) => e -> (b -> e) -> [b] -> (b -> Maybe (e, [b])) -> View e msg Bool
 submenuInPlay listId itemId items submenuFor = withFocusScope listId $ do
   cur <- getFocus

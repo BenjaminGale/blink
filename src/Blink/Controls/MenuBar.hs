@@ -58,10 +58,10 @@ import Blink.Element (Element (..), HasLayoutConfig (..), height, runElement, wi
 
 -- | Identifies one part of a 'menuBar': its own container ('MenuBar'), one
 -- top-level menu's own label ('MenuBarLabel'), its item list's own focus
--- scope ('MenuBarList'), or one of its items ('MenuBarItem') -- each tagged
--- by the owning menu's own data value and, for an item, the item's own
--- data value, rather than either's position in its list -- the same
--- rationale as 'Blink.Controls.ToggleGroup.ToggleGroupPart'.
+-- scope ('MenuBarList'), one of its items ('MenuBarItem'), or an item's
+-- submenu ('MenuBarSubmenu'). Each is tagged by the menu's data and, for an
+-- item, the item's data, so reordering keeps per-part state, as with
+-- 'Blink.Controls.ToggleGroup.ToggleGroupPart'.
 data MenuBarPart a b
   = MenuBar
   | MenuBarLabel a
@@ -116,9 +116,8 @@ instance HasLayoutConfig (MenuBarConfig e a b msg) where
 menus :: [a] -> Attribute (MenuBarConfig e a b msg)
 menus xs = Attribute (\c -> c { mbrMenus = xs })
 
--- | Attributes for the button built from one top-level menu's own label
--- (e.g. 'Blink.Controls.Label.text'), computed once per menu rather than
--- written out by hand for each -- the same shape as
+-- | Attributes for each top-level menu's label button (e.g.
+-- 'Blink.Controls.Label.text'), given the menu. The same shape as
 -- 'Blink.Controls.ToggleGroup.toggleAttributes'.
 labelAttrs :: (a -> [Attribute (ButtonConfig e msg)]) -> Attribute (MenuBarConfig e a b msg)
 labelAttrs f = Attribute (\c -> c { mbrLabelAttrs = f })
@@ -132,9 +131,8 @@ menuItems f = Attribute (\c -> c { mbrItemsFor = f })
 -- data (e.g. 'Blink.Controls.Label.text', 'Blink.Controls.Button.onActivated').
 -- An item's own 'Blink.Controls.Button.onActivated' fires (if set) in
 -- addition to, not instead of, 'menuBar' closing the menu on that same
--- activation. Named the same as 'Blink.Controls.MenuButton.itemAttrs' --
--- import "Blink.Controls.MenuBar" qualified if using both in the same
--- module.
+-- activation. Import "Blink.Controls.MenuBar" qualified if also using
+-- 'Blink.Controls.MenuButton.itemAttrs', which has the same name.
 itemAttrs :: (a -> b -> [Attribute (ButtonConfig e msg)]) -> Attribute (MenuBarConfig e a b msg)
 itemAttrs f = Attribute (\c -> c { mbrItemAttrs = f })
 
@@ -149,12 +147,9 @@ submenuItems f = Attribute (\c -> c { mbrSubmenuItemsFor = f })
 openMenu :: Maybe a -> Attribute (MenuBarConfig e a b msg)
 openMenu m = Attribute (\c -> c { mbrOpenMenu = m })
 
--- | Reacts when clicking a label would open, close, or switch which menu
--- is open, with the menu (if any) it changed to. Also fires (with
--- 'Nothing') when an item is activated or Escape is pressed while a menu
--- is open, closing it the same way. It's up to the reaction to actually
--- store the new value and pass it back in via 'openMenu' next frame --
--- the same contract as 'Blink.Controls.MenuButton.onOpenChanged'.
+-- | Reacts when the open menu should change, with the new value: from a
+-- label click, or 'Nothing' whenever the open menu closes for any other
+-- reason. Store it and pass it back via 'openMenu'.
 onOpenMenuChanged :: (Maybe a -> [Effect e msg]) -> Attribute (MenuBarConfig e a b msg)
 onOpenMenuChanged f = Attribute (\c -> c { mbrOnOpenChanged = mbrOnOpenChanged c ++ [f] })
 
@@ -162,13 +157,12 @@ onOpenMenuChanged f = Attribute (\c -> c { mbrOnOpenChanged = mbrOnOpenChanged c
 -- items (built from 'menuItems') when clicked. @tag@ builds every part's
 -- element id from a 'MenuBarPart': the bar's own container id from
 -- 'MenuBar', each label's own id from 'MenuBarLabel', each open dropdown's
--- own focus scope id from 'MenuBarList', and each item's id from
--- 'MenuBarItem' -- both applied to the owning menu's own data.
+-- own focus scope id from 'MenuBarList', each item's id from
+-- 'MenuBarItem', and each submenu's own scope id from 'MenuBarSubmenu'.
 menuBar :: (Ord e, Ord a, Ord b) => (MenuBarPart a b -> e) -> [Attribute (MenuBarConfig e a b msg)] -> Element e msg
 menuBar tag attrs = Element
   { elLayout  = mbrLayout cfg
-  -- rowBounds only matters to a label's own 'elRun' (see 'runMenuBarLabel'),
-  -- never its 'elMeasure' -- an unused placeholder here is never forced.
+  -- Measuring never reads rowBounds, so a placeholder is safe here.
   , elMeasure = measureChrome (ccStyleKey (mbrControl cfg)) (rowBox (Rectangle 0 0 0 0))
   , elRun     = void (control ccfg)
   }
@@ -187,10 +181,7 @@ menuBar tag attrs = Element
       , ccContent     = const (handleMnemonics >> getBounds >>= runElement . rowBox)
       }
 
-    -- Alt+letter, matched against each top-level label's own 'mnemonic'
-    -- (see 'Blink.Controls.Label.mnemonic'), opens that menu -- same as
-    -- clicking the label, except idempotent while it's already open,
-    -- rather than toggling it closed.
+    -- Unlike a label click, never toggles an already-open menu closed.
     handleMnemonics = do
       scope <- getCurrentScope
       evs   <- inputKeyEvents <$> getInput
@@ -200,30 +191,10 @@ menuBar tag attrs = Element
 
     labelMnemonic m = lcMnemonic (bcLabelled (resolve defaultButtonConfig (mbrLabelAttrs cfg m)))
 
--- | Runs one top-level label as 'toggleBase' (its "selected" state
--- standing in for its own dropdown being open), toggling whenever it's
--- activated regardless of what any other label is doing -- since
--- 'mbrOpenMenu' is a single shared value, opening this label's menu
--- naturally reads as closing whichever other one was open, with no extra
--- arbitration needed. While open, queues the item list through
--- 'Blink.Popup.popup', anchored to this label's own just-rendered bounds;
--- the very frame it opens, moves focus into the item list's own scope (see
--- 'itemsElement'). @rowBounds@ is the whole bar's own resolved rectangle
--- (captured once, before any label runs) -- see 'itemsElement's @onBar@.
---
--- Also switches to this label's own menu, without a click, the moment the
--- pointer enters it while some *other* menu is already open -- the
--- standard menu-bar convention of "sweeping" across the bar once one menu
--- has been opened. Never fires while nothing is open, so idle hovering
--- across the bar never opens anything.
---
--- While this label's own menu is already open, its click-to-focus is
--- suppressed (see @labelCtrl@ below), the same as
--- 'Blink.Controls.MenuButton.runMenuButton': a mouse-down there is
--- ambiguous between reopening and closing until the release resolves it,
--- so focus only returns to the label once a close actually happens
--- (@justClosed@ below), the same gated way every other closing path here
--- refocuses it.
+-- | One top-level label and, while its menu is open, its dropdown.
+-- Hovering a label while another menu is open switches to it, as native
+-- menu bars do. While open, the label doesn't take focus on a press:
+-- the press may be closing the menu, and the close refocuses it anyway.
 runMenuBarLabel
   :: (Ord e, Ord a, Ord b)
   => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> ButtonConfig e msg -> Rectangle
@@ -268,20 +239,14 @@ runMenuBarLabel tag cfg menuKey labelCfg rowBounds = do
           [ \opened -> concatMap ($ (if opened then Just menuKey else Nothing)) (mbrOnOpenChanged cfg) ]
       }
 
--- | Opens @newKey@'s own dropdown: fires 'mbrOnOpenChanged' with it, and
--- moves focus into its item list's own scope. Shared by a label's own
--- click-driven open ('runMenuBarLabel') and the bar-level Alt+letter
--- mnemonic handler ('menuBar').
+-- | Opens @newKey@'s dropdown and focuses its item list.
 openMenuFor :: (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> Maybe e -> a -> View e msg ()
 openMenuFor tag cfg enclosingScope newKey = do
   runHandlers (mbrOnOpenChanged cfg) (Just newKey)
   requestFocus enclosingScope (tag (MenuBarList newKey))
 
--- | The menu adjacent to @menuKey@ in @allMenus@, wrapping from the last
--- back to the first (and back) -- 'KeyRight' moves forward, any other key
--- (only ever 'KeyLeft', see 'itemsElement') moves backward. 'Nothing' if
--- @menuKey@ isn't in @allMenus@, which cannot happen in practice since
--- every 'runMenuBarLabel' call is for a menu drawn from 'mbrMenus'.
+-- | The menu after @menuKey@ for 'KeyRight', or before it for any other
+-- key, wrapping at either end. 'Nothing' if @menuKey@ isn't in @allMenus@.
 adjacentMenu :: Eq a => [a] -> a -> Key -> Maybe a
 adjacentMenu allMenus menuKey dir = do
   i <- elemIndex menuKey allMenus
@@ -293,19 +258,10 @@ adjacentMenu allMenus menuKey dir = do
     (x : _) -> Just x
     []      -> Nothing
 
--- | The dropdown itself -- see 'Blink.Controls.Menu.menuListWithSubmenus'
--- for the shared engine. @onBar@ is whether the click landed anywhere on the bar's
--- own row (any label, not just @menuKey@'s), captured by 'runMenuBarLabel'
--- before this list (a separate 'Element', run later, at a different
--- ambient bounds) is even queued -- so clicking a *different* label, which
--- already handles switching via its own activation, is never also treated
--- as "outside" here and closed a second time with a conflicting value.
---
--- Wraps 'Blink.Controls.Menu.menuList' with Left\/Right handling on top: since
--- this list only ever runs while its own menu is the open one, any
--- Left\/Right pressed this frame is unambiguously meant for switching to the
--- adjacent menu (see 'adjacentMenu'), the same reasoning
--- 'Blink.Controls.Menu.menuList' already applies to Escape and Tab.
+-- | The open dropdown. Left\/Right switch to the adjacent menu unless a
+-- submenu is highlighted or open. @onBar@ is whether the pointer is on
+-- the bar's row, so pressing another label switches menus rather than
+-- also closing this one as an outside press.
 itemsElement
   :: (Ord e, Ord a, Ord b)
   => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> View e msg () -> Bool -> (Key -> View e msg ())
