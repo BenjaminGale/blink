@@ -409,6 +409,7 @@ module Blink.View
   , getStyleSet
   , getMetrics
   , contextTheme
+  , withTheme
   , currentStyle
   , withStyle
   , currentMetrics

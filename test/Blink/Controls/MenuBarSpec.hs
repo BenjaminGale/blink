@@ -10,9 +10,9 @@ import Blink.App
 import Blink.AppFixtures (drawnTexts, logAddedBetween, resultState, startApp, testMetrics, testStyleSet)
 import Blink.Controls.Button (ButtonConfig)
 import Blink.Controls.Control (Attribute, control, defaultControlConfig, elementId, onFocusGained, onFocusLost, post, postWith, resolve)
-import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
+import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec, styleAttributeSpec)
 import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
-import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
+import Blink.Controls.Fixtures (contentRectFor, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.Label (mnemonic, text)
 import Blink.Controls.MenuBar (MenuBarConfig, MenuBarPart (..), itemAttrs, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu, submenuItems)
 import Blink.Element (Element, elLayout, elementWithLayout, height, runElement, width)
@@ -160,12 +160,25 @@ contractHitRect = hitRectFor contractBounds
 renderEmptyMenuBar :: [Attribute (MenuBarConfig ContractElem Int Int String)] -> View ContractElem String ()
 renderEmptyMenuBar attrs = runElement $ menuBar ContractPart (menus [] : height (exactly 40) : attrs)
 
+-- | Tall enough that a single label filling the bar's content area keeps
+-- a non-empty hit area inside its own margin.
+labelContractBounds :: Rectangle
+labelContractBounds = Rectangle 0 0 100 100
+
+-- | A single label filling the bar's content area, with @attrs@ passed to
+-- it through 'labelAttrs'.
+renderSingleLabel :: [Attribute (ButtonConfig ContractElem String)] -> View ContractElem String ()
+renderSingleLabel attrs = runElement $ menuBar ContractPart
+  [menus [0], height fill, labelAttrs (const (width fill : height fill : attrs))]
+
 -- | The bar's own container is fixed 'NotFocusable'.
 contractSpec :: Spec
 contractSpec = do
   controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
     contractBounds contractCtx (ContractPart MenuBar) (Point 5 5) contractHitRect (Point 200 200) renderEmptyMenuBar
   fixedNotFocusableSpec contractBounds contractCtx renderEmptyMenuBar
+  describe "label" $
+    styleAttributeSpec labelContractBounds contractCtx (hitRectFor (contentRectFor labelContractBounds)) renderSingleLabel
 
 spec :: Spec
 spec = describe "Blink.Controls.MenuBar.menuBar" $ do

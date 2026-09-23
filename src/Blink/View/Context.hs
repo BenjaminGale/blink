@@ -72,6 +72,7 @@ module Blink.View.Context
   , getStyleSet
   , getMetrics
   , contextTheme
+  , withTheme
   , currentStyle
   , withStyle
   , currentMetrics
@@ -983,6 +984,11 @@ getTheme = gets contextTheme
 -- into the next 'nextFrameContext' call.
 contextTheme :: ViewContext e msg -> Theme e
 contextTheme = ctxTheme
+
+-- | Overrides a context's 'Theme', keeping everything else it carries
+-- (input, focus, measurers) unchanged.
+withTheme :: Theme e -> ViewContext e msg -> ViewContext e msg
+withTheme thm ctx = ctx { ctxTheme = thm }
 
 -- | Returns the @('Metrics', 'StyleSet')@ pair registered for the given
 -- 'StyleKey'. Falls back to the theme's default when nothing is

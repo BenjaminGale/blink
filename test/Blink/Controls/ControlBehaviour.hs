@@ -14,17 +14,22 @@ module Blink.Controls.ControlBehaviour
   ( ControlBehaviourConfig (..)
   , defaultControlBehaviourConfig
   , controlBehaviourSpec
+  , styleAttributeSpec
   ) where
 
 import Control.Monad (when)
+import qualified Data.Map.Strict as Map
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Controls.Control (Attribute, FocusPolicy (..), HasControlConfig, isEnabled, focusPolicy)
+import Blink.Controls.Control (Attribute, FocusPolicy (..), HasControlConfig, isEnabled, focusPolicy, style)
 import Blink.Controls.ElementBehaviour (elementBehaviourSpec, tagged)
+import Blink.Controls.Fixtures (plainStyle, plainStyleSet)
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
+import Blink.Rendering (Colour (..), DrawCommand (..))
+import Blink.Style (StyleKey (..), Theme (..))
 import Blink.View
 
 -- | The focus behaviour that varies between an ordinary control and a
@@ -69,6 +74,7 @@ controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint rend
   -- checks, not about this control's own focus-claiming behaviour (covered
   -- below).
   elementBehaviourSpec bounds ctx eid insideRect outsidePoint (\attrs -> render (focusPolicy NotFocusable : attrs))
+  styleAttributeSpec bounds ctx insideRect render
 
   describe "focus claiming" $ do
     it "claims focus by rendering first when nothing else is focused, exactly when it auto-claims" $ do
@@ -128,3 +134,30 @@ controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint rend
       p <- pick (genPointIn insideRect)
       result <- run (runInteractions bounds ctx (render tagged) [] [ClickAt p])
       assert ("Clicked" `elem` resultMessages result)
+
+-- | Checks that the control draws its background from a style key passed
+-- via 'style', so the key the caller chooses wins over the control's own
+-- default. Run directly for a part a widget builds from caller-supplied
+-- attributes, such as a menu bar's label.
+styleAttributeSpec
+  :: (Ord e, HasControlConfig e String cfg)
+  => Rectangle                              -- ^ bounds the control renders at
+  -> ViewContext e String                   -- ^ starting context (theme\/measurer already set up)
+  -> Rectangle                              -- ^ the region making up its margin-inset hit area
+  -> ([Attribute cfg] -> View e String ())  -- ^ render the control under test with these attrs
+  -> Spec
+styleAttributeSpec bounds ctx insideRect render =
+  describe "style attribute" $
+    it "fills its hit area with the background of the style key it is given" $ do
+      result <- runInteractions bounds (withTheme themeWithKey ctx) (render [style key]) [] []
+      resultDraws result `shouldContain` [FillRect insideRect keyColour]
+  where
+    key         = Class "styleAttributeSpec"
+    keyColour   = RGBA 1 0 0 1
+    thm         = contextTheme ctx
+    -- The default metrics keep the fill on @insideRect@; only the colour
+    -- distinguishes this key from the control's own.
+    themeWithKey = thm
+      { themeElementStyles = Map.insert key (fst (themeDefaultStyle thm), plainStyleSet (plainStyle keyColour))
+          (themeElementStyles thm)
+      }

@@ -169,11 +169,13 @@ menuBar tag attrs = Element
     rowBox onBar = hBox [ width fill, height fill, children (map (toLabel onBar) (mbrMenus cfg)) ]
     toLabel onBar menuKey = Element
       { elLayout  = bcLayout labelCfg
-      , elMeasure = measureChrome menuBarLabelStyleKey (captionElement (lcText (bcLabelled labelCfg)))
+      , elMeasure = measureChrome (ccStyleKey (bcControl labelCfg)) (captionElement (lcText (bcLabelled labelCfg)))
       , elRun     = void (runMenuBarLabel tag cfg menuKey labelCfg onBar)
       }
       where labelCfg = labelConfigFor menuKey
-    labelConfigFor m = resolve defaultButtonConfig (width fitContent : height fitContent : mbrLabelAttrs cfg m)
+    labelConfigFor m = resolve labelDefaults (width fitContent : height fitContent : mbrLabelAttrs cfg m)
+    labelDefaults = defaultButtonConfig
+      { bcControl = (bcControl defaultButtonConfig) { ccStyleKey = menuBarLabelStyleKey } }
     ccfg = (mbrControl cfg)
       { ccElementId   = Just (tag MenuBar)
       , ccFocusPolicy = NotFocusable
@@ -209,7 +211,7 @@ runMenuBarLabel tag cfg menuKey labelCfg onBar = do
   pure r
   where
     toggleCfg = defaultToggleButtonConfig
-      { tgcButton            = labelCfg { bcControl = (bcControl labelCfg) { ccStyleKey = menuBarLabelStyleKey } }
+      { tgcButton            = labelCfg
       , tgcSelected          = mbrOpenMenu cfg == Just menuKey
       , tgcOnSelectedChanged =
           [ \opened -> concatMap ($ (if opened then Just menuKey else Nothing)) (mbrOnOpenMenuChanged cfg) ]
