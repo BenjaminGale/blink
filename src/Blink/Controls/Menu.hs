@@ -20,6 +20,7 @@ module Blink.Controls.Menu
   , menuList
   , menuListWithSubmenus
   , submenuInPlay
+  , takeMnemonic
   ) where
 
 import Control.Monad (filterM, forM_, void, when)
@@ -229,17 +230,13 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
 
     itemMnemonic item = lcMnemonic (bcLabelled (resolve defaultButtonConfig (itemAttrsFor item)))
 
-    handleMnemonics = case items of
-      [] -> pure ()
-      is -> do
-        evs <- inputKeyEvents <$> getInput
-        forM_ (find (\it -> maybe False (`mnemonicActivated` evs) (itemMnemonic it)) is) $ \item -> do
-          forM_ (itemMnemonic item) (consumeKey . KeyChar . toUpper)
-          case submenuFor item of
-            Just (subId, _) -> requestFocus (Just listId) subId
-            Nothing         -> do
-              runHandlers (bcOnActivated (resolve defaultButtonConfig (itemAttrsFor item))) ()
-              cbCloseAll closeBehaviour
+    handleMnemonics =
+      takeMnemonic itemMnemonic items >>= mapM_ (\item ->
+        case submenuFor item of
+          Just (subId, _) -> requestFocus (Just listId) subId
+          Nothing         -> do
+            runHandlers (bcOnActivated (resolve defaultButtonConfig (itemAttrsFor item))) ()
+            cbCloseAll closeBehaviour)
 
     toItemElement onList item = Element
       { elLayout  = bcLayout itemCfg
@@ -334,3 +331,12 @@ submenuInPlay listId itemId items submenuFor = withFocusScope listId $ do
   pure $ any (\it -> case submenuFor it of
                         Just (subId, _) -> cur == Just (itemId it) || cur == Just subId
                         Nothing         -> False) items
+
+-- | The first of @xs@ whose mnemonic this frame's key events activate,
+-- consuming that key so nothing else also reacts to it.
+takeMnemonic :: (x -> Maybe Char) -> [x] -> View e msg (Maybe x)
+takeMnemonic mnemonicOf xs = do
+  evs <- inputKeyEvents <$> getInput
+  let hit = find (maybe False (`mnemonicActivated` evs) . mnemonicOf) xs
+  forM_ (hit >>= mnemonicOf) (consumeKey . KeyChar . toUpper)
+  pure hit

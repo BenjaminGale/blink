@@ -37,19 +37,17 @@ module Blink.Controls.MenuBar
 
 import Control.Monad (forM_, void, when)
 
-import Data.Char (toUpper)
 import Data.List (elemIndex, find)
 import Data.Maybe (isJust, listToMaybe)
 
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement, lcMnemonic, lcText)
-import Blink.Controls.Menu (menuListWithSubmenus, menuTrigger, submenuInPlay)
+import Blink.Controls.Menu (menuListWithSubmenus, menuTrigger, submenuInPlay, takeMnemonic)
 import Blink.Controls.MenuBar.Style (menuBarLabelStyleKey, menuBarListStyleKey, menuBarStyleKey)
 import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig)
 import Blink.Geometry (Alignment (TopLeft))
-import Blink.Input
-  (InputState (inputKeyEvents), Key (KeyChar, KeyLeft, KeyRight), KeyEvent (key), mnemonicActivated)
+import Blink.Input (InputState (inputKeyEvents), Key (KeyLeft, KeyRight), KeyEvent (key))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.View
@@ -185,10 +183,8 @@ menuBar tag attrs = Element
     -- Unlike a label click, never toggles an already-open menu closed.
     handleMnemonics = do
       scope <- getCurrentScope
-      evs   <- inputKeyEvents <$> getInput
-      forM_ (find (\m -> maybe False (`mnemonicActivated` evs) (labelMnemonic m)) (mbrMenus cfg)) $ \menuKey -> do
-        forM_ (labelMnemonic menuKey) (consumeKey . KeyChar . toUpper)
-        when (mbrOpenMenu cfg /= Just menuKey) (openMenuFor tag cfg scope menuKey)
+      takeMnemonic labelMnemonic (mbrMenus cfg) >>= mapM_ (\menuKey ->
+        when (mbrOpenMenu cfg /= Just menuKey) (openMenuFor tag cfg scope menuKey))
 
     labelMnemonic = lcMnemonic . bcLabelled . labelConfigFor
 
