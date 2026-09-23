@@ -75,15 +75,15 @@ data MenuBarPart a b
 -- how to configure each item's own button, which menu (if any) is open,
 -- and its reactions to that changing.
 data MenuBarConfig e a b msg = MenuBarConfig
-  { mbrControl       :: ControlConfig e msg
-  , mbrLayout        :: Layout
-  , mbrMenus         :: [a]
-  , mbrLabelAttrs    :: a -> [Attribute (ButtonConfig e msg)]
-  , mbrItemsFor      :: a -> [b]
-  , mbrItemAttrs     :: a -> b -> [Attribute (ButtonConfig e msg)]
-  , mbrSubmenuItemsFor :: a -> b -> [b]
-  , mbrOpenMenu      :: Maybe a
-  , mbrOnOpenChanged :: [Maybe a -> [Effect e msg]]
+  { mbrControl           :: ControlConfig e msg
+  , mbrLayout            :: Layout
+  , mbrMenus             :: [a]
+  , mbrLabelAttrs        :: a -> [Attribute (ButtonConfig e msg)]
+  , mbrMenuItems         :: a -> [b]
+  , mbrItemAttrs         :: a -> b -> [Attribute (ButtonConfig e msg)]
+  , mbrSubmenuItems      :: a -> b -> [b]
+  , mbrOpenMenu          :: Maybe a
+  , mbrOnOpenMenuChanged :: [Maybe a -> [Effect e msg]]
   }
 
 -- | 'defaultControlConfig' (styled via 'menuBarStyleKey'), filling the
@@ -92,15 +92,15 @@ data MenuBarConfig e a b msg = MenuBarConfig
 -- 'onOpenMenuChanged' reactions.
 defaultMenuBarConfig :: MenuBarConfig e a b msg
 defaultMenuBarConfig = MenuBarConfig
-  { mbrControl       = defaultControlConfig { ccStyleKey = menuBarStyleKey }
-  , mbrLayout        = Layout fill fitContent TopLeft
-  , mbrMenus         = []
-  , mbrLabelAttrs    = const []
-  , mbrItemsFor      = const []
-  , mbrItemAttrs     = \_ _ -> []
-  , mbrSubmenuItemsFor = \_ _ -> []
-  , mbrOpenMenu      = Nothing
-  , mbrOnOpenChanged = []
+  { mbrControl           = defaultControlConfig { ccStyleKey = menuBarStyleKey }
+  , mbrLayout            = Layout fill fitContent TopLeft
+  , mbrMenus             = []
+  , mbrLabelAttrs        = const []
+  , mbrMenuItems         = const []
+  , mbrItemAttrs         = \_ _ -> []
+  , mbrSubmenuItems      = \_ _ -> []
+  , mbrOpenMenu          = Nothing
+  , mbrOnOpenMenuChanged = []
   }
 
 instance HasControlConfig e msg (MenuBarConfig e a b msg) where
@@ -124,7 +124,7 @@ labelAttrs f = Attribute (\c -> c { mbrLabelAttrs = f })
 -- | The data to build one menu's dropdown items from, given the menu.
 -- Defaults to @const []@.
 menuItems :: (a -> [b]) -> Attribute (MenuBarConfig e a b msg)
-menuItems f = Attribute (\c -> c { mbrItemsFor = f })
+menuItems f = Attribute (\c -> c { mbrMenuItems = f })
 
 -- | Attributes for the button built from one item, given its own menu and
 -- data (e.g. 'Blink.Controls.Label.text', 'Blink.Controls.Button.onActivated').
@@ -138,7 +138,7 @@ itemAttrs f = Attribute (\c -> c { mbrItemAttrs = f })
 -- | The data to build one item's own submenu from, given its menu and
 -- itself. Defaults to @\\_ _ -> []@ (no submenu).
 submenuItems :: (a -> b -> [b]) -> Attribute (MenuBarConfig e a b msg)
-submenuItems f = Attribute (\c -> c { mbrSubmenuItemsFor = f })
+submenuItems f = Attribute (\c -> c { mbrSubmenuItems = f })
 
 -- | Which top-level menu, if any, currently has its dropdown open.
 -- External state the caller owns and re-supplies every frame, the same as
@@ -150,7 +150,7 @@ openMenu m = Attribute (\c -> c { mbrOpenMenu = m })
 -- label click, or 'Nothing' whenever the open menu closes for any other
 -- reason. Store it and pass it back via 'openMenu'.
 onOpenMenuChanged :: (Maybe a -> [Effect e msg]) -> Attribute (MenuBarConfig e a b msg)
-onOpenMenuChanged f = Attribute (\c -> c { mbrOnOpenChanged = mbrOnOpenChanged c ++ [f] })
+onOpenMenuChanged f = Attribute (\c -> c { mbrOnOpenMenuChanged = mbrOnOpenMenuChanged c ++ [f] })
 
 -- | A row of labels, one per 'menus', each opening a dropdown list of
 -- items (built from 'menuItems') when clicked. @tag@ builds every part's
@@ -212,13 +212,13 @@ runMenuBarLabel tag cfg menuKey labelCfg onBar = do
       { tgcButton            = labelCfg { bcControl = (bcControl labelCfg) { ccStyleKey = menuBarLabelStyleKey } }
       , tgcSelected          = mbrOpenMenu cfg == Just menuKey
       , tgcOnSelectedChanged =
-          [ \opened -> concatMap ($ (if opened then Just menuKey else Nothing)) (mbrOnOpenChanged cfg) ]
+          [ \opened -> concatMap ($ (if opened then Just menuKey else Nothing)) (mbrOnOpenMenuChanged cfg) ]
       }
 
 -- | Opens @newKey@'s dropdown and focuses its item list.
 openMenuFor :: (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> Maybe e -> a -> View e msg ()
 openMenuFor tag cfg enclosingScope newKey = do
-  runHandlers (mbrOnOpenChanged cfg) (Just newKey)
+  runHandlers (mbrOnOpenMenuChanged cfg) (Just newKey)
   requestFocus enclosingScope (tag (MenuBarList newKey))
 
 -- | The menu @step@ places after @menuKey@ (before it, if negative),
@@ -240,8 +240,8 @@ itemsElement tag cfg menuKey close onBar switchMenu = base { elRun = handleMenuS
   where
     listId  = tag (MenuBarList menuKey)
     itemId  = tag . MenuBarItem menuKey
-    items   = mbrItemsFor cfg menuKey
-    submenuFor item = case mbrSubmenuItemsFor cfg menuKey item of
+    items   = mbrMenuItems cfg menuKey
+    submenuFor item = case mbrSubmenuItems cfg menuKey item of
       [] -> Nothing
       xs -> Just (tag (MenuBarSubmenu menuKey item), xs)
 
