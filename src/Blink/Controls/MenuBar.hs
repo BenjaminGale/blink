@@ -171,7 +171,8 @@ menuBar tag attrs = Element
       , elMeasure = measureChrome menuBarLabelStyleKey (captionElement (lcText (bcLabelled labelCfg)))
       , elRun     = void (runMenuBarLabel tag cfg menuKey labelCfg onBar)
       }
-      where labelCfg = resolve defaultButtonConfig (width fitContent : height fitContent : mbrLabelAttrs cfg menuKey)
+      where labelCfg = labelConfigFor menuKey
+    labelConfigFor m = resolve defaultButtonConfig (width fitContent : height fitContent : mbrLabelAttrs cfg m)
     ccfg = (mbrControl cfg)
       { ccElementId   = Just (tag MenuBar)
       , ccFocusPolicy = NotFocusable
@@ -186,7 +187,7 @@ menuBar tag attrs = Element
         forM_ (labelMnemonic menuKey) (consumeKey . KeyChar . toUpper)
         when (mbrOpenMenu cfg /= Just menuKey) (openMenuFor tag cfg scope menuKey)
 
-    labelMnemonic m = lcMnemonic (bcLabelled (resolve defaultButtonConfig (mbrLabelAttrs cfg m)))
+    labelMnemonic = lcMnemonic . bcLabelled . labelConfigFor
 
 -- | One top-level label and, while its menu is open, its dropdown.
 -- Hovering a label while another menu is open switches to it, as native
