@@ -46,7 +46,7 @@ import Blink.Controls.Label (captionElement, lcMnemonic, lcText)
 import Blink.Controls.Menu (menuListWithSubmenus, menuTrigger, submenuInPlay)
 import Blink.Controls.MenuBar.Style (menuBarLabelStyleKey, menuBarListStyleKey, menuBarStyleKey)
 import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig)
-import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
+import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input
   (InputState (inputKeyEvents), Key (KeyChar, KeyLeft, KeyRight), KeyEvent (key), mnemonicActivated)
 import Blink.Layout.Box (children, hBox)
@@ -160,23 +160,22 @@ onOpenMenuChanged f = Attribute (\c -> c { mbrOnOpenChanged = mbrOnOpenChanged c
 menuBar :: (Ord e, Ord a, Ord b) => (MenuBarPart a b -> e) -> [Attribute (MenuBarConfig e a b msg)] -> Element e msg
 menuBar tag attrs = Element
   { elLayout  = mbrLayout cfg
-  -- Measuring never reads rowBounds, so a placeholder is safe here.
-  , elMeasure = measureChrome (ccStyleKey (mbrControl cfg)) (rowBox (Rectangle 0 0 0 0))
+  , elMeasure = measureChrome (ccStyleKey (mbrControl cfg)) (rowBox False)
   , elRun     = void (control ccfg)
   }
   where
     cfg = resolve defaultMenuBarConfig attrs
-    rowBox rowBounds = hBox [ width fill, height fill, children (map (toLabel rowBounds) (mbrMenus cfg)) ]
-    toLabel rowBounds menuKey = Element
+    rowBox onBar = hBox [ width fill, height fill, children (map (toLabel onBar) (mbrMenus cfg)) ]
+    toLabel onBar menuKey = Element
       { elLayout  = bcLayout labelCfg
       , elMeasure = measureChrome menuBarLabelStyleKey (captionElement (lcText (bcLabelled labelCfg)))
-      , elRun     = void (runMenuBarLabel tag cfg menuKey labelCfg rowBounds)
+      , elRun     = void (runMenuBarLabel tag cfg menuKey labelCfg onBar)
       }
       where labelCfg = resolve defaultButtonConfig (width fitContent : height fitContent : mbrLabelAttrs cfg menuKey)
     ccfg = (mbrControl cfg)
       { ccElementId   = Just (tag MenuBar)
       , ccFocusPolicy = NotFocusable
-      , ccContent     = const (handleMnemonics >> getBounds >>= runElement . rowBox)
+      , ccContent     = const (handleMnemonics >> isRegionHit >>= runElement . rowBox)
       }
 
     -- Unlike a label click, never toggles an already-open menu closed.
@@ -191,14 +190,13 @@ menuBar tag attrs = Element
 
 -- | One top-level label and, while its menu is open, its dropdown.
 -- Hovering a label while another menu is open switches to it, as native
--- menu bars do.
+-- menu bars do. @onBar@ is whether the pointer is on the bar's row.
 runMenuBarLabel
   :: (Ord e, Ord a, Ord b)
-  => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> ButtonConfig e msg -> Rectangle
+  => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> ButtonConfig e msg -> Bool
   -> View e msg (ToggleInteraction e msg)
-runMenuBarLabel tag cfg menuKey labelCfg rowBounds = do
+runMenuBarLabel tag cfg menuKey labelCfg onBar = do
   enclosingScope <- getCurrentScope
-  onBar <- withBounds rowBounds isRegionHit
   let open            = openMenuFor tag cfg enclosingScope
       switchByKey dir = forM_ (adjacentMenu (mbrMenus cfg) menuKey dir) open
   r <- menuTrigger (tag (MenuBarLabel menuKey)) (tag (MenuBarList menuKey)) toggleCfg
