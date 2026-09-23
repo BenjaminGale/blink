@@ -8,7 +8,7 @@ import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
-import Blink.AppFixtures (drawnTexts, logAddedBetween, resultDraws, resultLog, resultState, startApp, testMetrics, testStyleSet)
+import Blink.AppFixtures (drawnTexts, logAddedBetween, resultDraws, resultLog, resultState, solidPalette, startApp, testMetrics, testStyleSet)
 import Blink.Controls.Button (onActivated)
 import Blink.Controls.Control
   ( Attribute, ControlInteraction (ciMouseDown)
@@ -106,12 +106,7 @@ data ClickThroughElem = Background | Menu (MenuButtonPart Item) deriving (Eq, Or
 -- popup's panel actually has the padding\/border\/margin
 -- 'menuButtonListStyleKey' resolves to in real use (see 'clickThroughApp').
 testPalette :: Palette
-testPalette = Palette
-  { paletteAccent = c, paletteFocusRing = c, paletteSurface = c, paletteSurfaceHover = c
-  , paletteSurfaceDisabled = c, paletteTextPrimary = c, paletteTextMuted = c, paletteTextOnAccent = c
-  , paletteBorder = c, paletteBorderHover = c, paletteIcon = c, paletteIconHover = c
-  }
-  where c = RGBA 0 0 0 1
+testPalette = solidPalette (RGBA 0 0 0 1)
 
 -- | A window-filling background control behind an always-open menu, whose
 -- item list is anchored at (0,20)-(60,80) (a 40x20 trigger, two 40x20

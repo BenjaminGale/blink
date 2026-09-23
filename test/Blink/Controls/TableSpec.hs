@@ -16,7 +16,8 @@ import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..))
-import Blink.Style (Palette (..), Theme)
+import Blink.AppFixtures (solidPalette)
+import Blink.Style (Palette, Theme)
 import Blink.Style.Defaults (defaultTheme)
 import Blink.View
 
@@ -166,13 +167,7 @@ widgetSpec = describe "table" $
 -- so this is the only test here that would catch that kind of
 -- regression.
 chromePalette :: Palette
-chromePalette = Palette
-  { paletteAccent = RGBA 0 0 0 1, paletteFocusRing = RGBA 0 0 0 1
-  , paletteSurface = RGBA 0 0 0 1, paletteSurfaceHover = RGBA 0 0 0 1, paletteSurfaceDisabled = RGBA 0 0 0 1
-  , paletteTextPrimary = RGBA 0 0 0 1, paletteTextMuted = RGBA 0 0 0 1, paletteTextOnAccent = RGBA 0 0 0 1
-  , paletteBorder = RGBA 0 0 0 1, paletteBorderHover = RGBA 0 0 0 1
-  , paletteIcon = RGBA 0 0 0 1, paletteIconHover = RGBA 0 0 0 1
-  }
+chromePalette = solidPalette (RGBA 0 0 0 1)
 
 chromeAlignmentSpec :: Spec
 chromeAlignmentSpec = describe "table header/row chrome" $

@@ -22,11 +22,12 @@ import Control.Monad (filterM, forM_, void, when)
 import Data.Char (toUpper)
 import Data.List (find)
 import Data.Maybe (listToMaybe)
+import qualified Data.Set as Set
 
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement, lcMnemonic, lcText, renderLabelledContent)
-import Blink.Controls.Menu.Style (menuItemStyleKey)
+import Blink.Controls.Menu.Style (menuItemStyleKey, menuItemSubmenuOpen)
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input
   ( InputState (inputKeyEvents), Key (KeyChar, KeyDown, KeyEscape, KeyLeft, KeyRight, KeyTab, KeyUp)
@@ -203,25 +204,42 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
       { elLayout  = bcLayout itemCfg
       , elMeasure = measureChrome (ccStyleKey (bcControl itemCfg)) (captionElement (lcText (bcLabelled itemCfg)))
       , elRun     = do
-          r <- buttonBase (itemId item) itemCfg { bcControl = itemCtrl }
+          opened <- maybe (pure False) (isFocused . fst) (submenuFor item)
+          let states = if opened then Set.singleton menuItemSubmenuOpen else Set.empty
+          r <- buttonBase (itemId item) itemCfg { bcControl = itemCtrl { ccActiveStates = states } }
           case submenuFor item of
-            Nothing                -> when (biActivated r) (cbCloseAll closeBehaviour)
+            Nothing                -> do
+              highlightOnHover item r
+              when (biActivated r) (cbCloseAll closeBehaviour)
             Just (subId, subItems) -> runSubmenu item subId subItems r onList
       }
       where
         itemCfg  = resolve defaultButtonConfig (style menuItemStyleKey : width fitContent : height fitContent : itemAttrsFor item)
         itemCtrl = (bcControl itemCfg) { ccContent = const (renderLabelledContent (bcLabelled itemCfg)) }
 
+    -- Keeps a single highlight shared by mouse and keyboard.
+    highlightOnHover item r = do
+      pointed <- pointerMovedOver r
+      when pointed $ requestFocus (Just listId) (itemId item)
+
+    -- Movement rather than entry, so the pointer takes the highlight back
+    -- from the keyboard without first leaving the item. While a sibling's
+    -- submenu is open, the delayed switch in 'runSubmenu' moves it instead.
+    pointerMovedOver r = do
+      moved       <- hasMouseMoved
+      siblingOpen <- anySubmenuFocused
+      pure (moved && ciHovered (biControl r) && not siblingOpen)
+
     -- While another item's submenu is open, hovering this one doesn't open
     -- its submenu straight away; the delayed switch below does, so a
     -- diagonal move towards the open submenu can cross this item safely.
     runSubmenu item subId subItems r onList = do
-      opened      <- isFocused subId
-      siblingOpen <- anySubmenuFocused
+      opened <- isFocused subId
       when (not opened) $ do
+        pointed      <- pointerMovedOver r
         highlighted  <- isFocused (itemId item)
         rightPressed <- if highlighted then keyPressed KeyRight else pure False
-        when ((ciMouseEntered (biControl r) && not siblingOpen) || biActivated r || rightPressed) $
+        when (pointed || biActivated r || rightPressed) $
           requestFocus (Just listId) subId
       leaving <- if opened then leavingSubmenu item subId else pure False
       heldFor <- resolveHeldFor subId leaving

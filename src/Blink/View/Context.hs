@@ -834,12 +834,13 @@ emptyViewContext bounds input thm = ViewContext
 -- it, in turn, becomes "last frame".
 nextFrameContext :: Ord e => Rectangle -> InputState -> Theme e -> AnimationState -> ViewContext e msg -> ViewContext e msg
 nextFrameContext bounds input thm anim ctx0 =
-  fctx { ctxMouse = advanceButton wasDown isDown (ctxMouse fctx) }
+  fctx { ctxMouse = (advanceButton wasDown isDown (ctxMouse fctx)) { mouseMoved = moved } }
   where
     ctx     = settleEffects ctx0
     fctx    = finishFrame bounds input thm anim ctx
     wasDown = inputLeftButtonDown (ctxInput ctx)
     isDown  = inputLeftButtonDown input
+    moved   = inputMousePosition (ctxInput ctx) /= inputMousePosition input
 
 -- | Rebuilds the context to re-render the current frame rather than advance
 -- to a new one: refreshes bounds\/theme\/animation, applies queued

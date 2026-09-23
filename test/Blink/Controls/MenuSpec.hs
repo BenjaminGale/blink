@@ -1,21 +1,24 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blink.Controls.MenuSpec (spec) where
 
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import Test.Hspec
 
 import Blink.App
-import Blink.AppFixtures (drawnTexts, resultState, startApp, testMetrics, testStyleSet)
+import Blink.AppFixtures (drawnTexts, resultDraws, resultState, solidPalette, startApp, testMetrics, testStyleSet)
 import Blink.Controls.Button (ButtonConfig, onActivated)
 import Blink.Controls.Control (onFocusGained, post)
 import Blink.Controls.Label (mnemonic, text)
 import Blink.Controls.Menu (menuListWithSubmenus)
+import qualified Blink.Controls.Menu.Style as MenuStyle
 import Blink.Element (Attribute, elLayout, elementWithLayout, height, runElement, width)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Size (..))
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Alt))
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Style (StyleKey (..), emptyTheme)
+import Blink.Rendering (Colour (..), DrawCommand (..))
+import Blink.Style (Palette (..), StyleKey (..), Theme (..), emptyTheme)
 import Blink.Update (modify)
 import Blink.View (emit, getFocus, requestFocus)
 
@@ -61,7 +64,7 @@ data Event = Logged Text
 menuApp :: App Part Event [Text]
 menuApp = App
   { startUp = pure []
-  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , theme   = const menuTheme
   , view    = \_ -> elementWithLayout (Layout fill fill TopLeft) $ do
       cur <- getFocus
       case cur of
@@ -80,6 +83,29 @@ menuApp = App
       , onFocusGained (post (Logged (T.pack (show item) <> " focused")))
       , onActivated    (post (Logged (T.pack (show item) <> " activated")))
       ]
+
+-- | The chrome-less test style for everything but the items, which get the
+-- library's real menu item style so its highlight can be observed.
+menuTheme :: Theme Part
+menuTheme = (emptyTheme (testMetrics, testStyleSet))
+  { themeElementStyles = Map.fromList (MenuStyle.defaultStyleEntries highlightPalette) }
+
+-- | Black everywhere except 'highlightColour', so an item's highlight fill
+-- is the only thing drawn in that colour.
+highlightPalette :: Palette
+highlightPalette = (solidPalette (RGBA 0 0 0 1)) { paletteSurfaceHover = highlightColour }
+
+highlightColour :: Colour
+highlightColour = RGBA 1 0 0 1
+
+-- | The highlight fill over an item occupying the given rectangle of
+-- 'menuApp's layout.
+highlightOver :: Rectangle -> DrawCommand
+highlightOver r = FillRect r highlightColour
+
+saveRect, exportRect :: Rectangle
+saveRect   = Rectangle 0 20 100 20
+exportRect = Rectangle 0 40 100 20
 
 -- | Each item's own mnemonic letter -- the initial of its name, distinct
 -- across the whole set (top-level and submenu alike) so a test can target
@@ -109,7 +135,11 @@ mkInputAt seconds p = (mkInput p False) { frameTime = Just (round (seconds * 1.0
 -- | A single key press, mouse left resting off every item so it never
 -- spuriously reclicks anything.
 keyInput :: Key -> FrameInput
-keyInput k = (mkInput (Point 200 200) False) { keyEvents = [KeyEvent k [] False] }
+keyInput = keyInputAt (Point 200 200)
+
+-- | A single key press with the pointer resting at @p@.
+keyInputAt :: Point -> Key -> FrameInput
+keyInputAt p k = (mkInput p False) { keyEvents = [KeyEvent k [] False] }
 
 -- | Alt held with a mnemonic letter (as the backend would report it, always
 -- uppercase -- see 'Blink.Input.KeyChar'), mouse resting off every item.
@@ -143,6 +173,14 @@ openExportByKeyboard handle = do
   _ <- settle handle
   _ <- downTimes handle 2
   stepFrame handle (keyInput KeyRight)
+
+-- | Settles, hovers 'Save' so it takes the highlight, then presses Down
+-- without moving the pointer, moving the highlight to 'Export'.
+downWithPointerOnSave :: BlinkHandle [Text] -> IO (FrameResult [Text])
+downWithPointerOnSave handle = do
+  _ <- settle handle
+  _ <- stepFrame handle (mkInput savePoint False)
+  stepFrame handle (keyInputAt savePoint KeyDown)
 
 -- | Presses Down @n@ times, moving the highlight from 'Open' (the first
 -- item, focused by 'settle') onto the @n@th item after it.
@@ -312,6 +350,43 @@ spec = describe "Blink.Controls.Menu.menuListWithSubmenus" $ do
       _      <- settle handle
       result <- stepFrame handle (mkInput offMenuPoint True)
       resultState result `shouldContain` ["Closed"]
+
+  describe "the single highlight shared by pointer and keyboard" $ do
+    it "moves onto an item when the pointer enters it" $ do
+      handle <- startApp menuApp
+      _      <- settle handle
+      result <- stepFrame handle (mkInput savePoint False)
+      last (resultState result) `shouldBe` "Save focused"
+
+    context "when Down-arrow is pressed with the pointer resting on an item" $ do
+      it "leaves the item under the pointer unhighlighted" $ do
+        handle <- startApp menuApp
+        result <- downWithPointerOnSave handle
+        resultDraws result `shouldNotContain` [highlightOver saveRect]
+
+      it "highlights the next item" $ do
+        handle <- startApp menuApp
+        _      <- downWithPointerOnSave handle
+        result <- stepFrame handle (mkInput savePoint False)
+        resultDraws result `shouldContain` [highlightOver exportRect]
+
+      it "stays on the next item while the pointer rests without moving" $ do
+        handle <- startApp menuApp
+        _      <- downWithPointerOnSave handle
+        result <- stepFrame handle (mkInput savePoint False)
+        last (resultState result) `shouldBe` "Export focused"
+
+      it "moves back onto the item under the pointer when the pointer moves within it" $ do
+        handle <- startApp menuApp
+        _      <- downWithPointerOnSave handle
+        result <- stepFrame handle (mkInput (Point 21 30) False)
+        last (resultState result) `shouldBe` "Save focused"
+
+    it "keeps the item that owns an open submenu highlighted while the highlight is inside that submenu" $ do
+      handle <- startApp menuApp
+      _      <- openExportByKeyboard handle
+      result <- stepFrame handle (mkInput (Point 200 200) False)
+      resultDraws result `shouldContain` [highlightOver exportRect]
 
   describe "at the top level, unaffected by submenu support" $
     it "Escape still closes the whole menu" $ do

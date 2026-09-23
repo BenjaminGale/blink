@@ -130,7 +130,7 @@ import GHC.Clock (getMonotonicTimeNSec)
 
 import Blink.Cmd (Cmd, runCmd)
 import Blink.Geometry (Point (..), Rectangle, Size (..), placePopup, rectFromSize)
-import Blink.Input (KeyEvent, InputState (..), advanceButton, emptyInputState)
+import Blink.Input (KeyEvent, InputState (..), Mouse (..), advanceButton, emptyInputState)
 import Blink.View.Context (ctxMouse)
 import Blink.Rendering (DrawCommand, CursorShape, TextMeasurer (..), ImageMeasurer (..), Measurers (..))
 import Blink.Style (Theme)
@@ -447,7 +447,7 @@ rerenderPass app queue notify input firstPassCtx state1 = do
       inputState  = toInputState input
       rerendered  = rerenderContext winRect (clearKeyEvents inputState)
                       (theme app state1) (contextAnimation firstPassCtx) firstPassCtx
-      freshCtx    = suppressFreshButtonEdge inputState rerendered
+      freshCtx    = suppressFreshMouseEdges inputState rerendered
   (_, ctx2) <- runViewAndPopups (view app state1) freshCtx
   -- No third pass: re-running an already-settled focus change through
   -- rerenderContext re-emits the same gained/lost messages, so looping
@@ -469,9 +469,11 @@ rerenderPass app queue notify input firstPassCtx state1 = do
 -- leaves level state (is the button currently down, is something still
 -- captured) untouched, so drag/hover rendering is unaffected -- only the
 -- "this is a fresh press/release" fact is suppressed for this rerender.
-suppressFreshButtonEdge :: InputState -> ViewContext e msg -> ViewContext e msg
-suppressFreshButtonEdge input ctx =
-  ctx { ctxMouse = advanceButton isDown isDown (ctxMouse ctx) }
+-- The same goes for the cursor having moved, so a control that reacts to
+-- movement doesn't react twice.
+suppressFreshMouseEdges :: InputState -> ViewContext e msg -> ViewContext e msg
+suppressFreshMouseEdges input ctx =
+  ctx { ctxMouse = (advanceButton isDown isDown (ctxMouse ctx)) { mouseMoved = False } }
   where
     isDown = inputLeftButtonDown input
 

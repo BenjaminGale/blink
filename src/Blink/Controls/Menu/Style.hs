@@ -9,6 +9,7 @@ and "Blink.Controls.MenuBar".
 -}
 module Blink.Controls.Menu.Style
   ( menuItemStyleKey
+  , menuItemSubmenuOpen
   , menuListMetrics
   , defaultStyleEntries
   ) where
@@ -25,6 +26,12 @@ import Blink.Style
 menuItemStyleKey :: StyleKey e
 menuItemStyleKey = Class "menuItem"
 
+-- | Present in an item's 'Blink.Controls.Control.ccActiveStates' while its
+-- submenu is open, so the item stays highlighted after the highlight moves
+-- into that submenu.
+menuItemSubmenuOpen :: VisualState
+menuItemSubmenuOpen = Custom "MenuItem" "SubmenuOpen"
+
 -- | The spacing of a dropdown menu's panel.
 menuListMetrics :: Metrics
 menuListMetrics = Metrics
@@ -38,6 +45,8 @@ menuItemMetrics = Metrics
   , metricsPadding = Insets { topInset = 4, rightInset = 12, bottomInset = 4, leftInset = 12 }
   }
 
+-- | No 'CommonMouseOver' look: hovering an item moves the highlight onto
+-- it, so 'FocusFocused' alone marks the one highlighted item.
 menuItemStyle :: Palette -> StyleSet
 menuItemStyle p = StyleSet
   { styleBase = Style
@@ -47,10 +56,9 @@ menuItemStyle p = StyleSet
       , styleBorder     = []
       }
   , styleOverrides = Map.fromList
-      [ (CommonMouseOver, \s -> s { styleBackground = paletteSurfaceHover p })
-      , (CommonPressed,   \s -> s { styleBackground = paletteSurfaceHover p })
-      , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
-      , (FocusFocused,    \s -> s { styleBackground = paletteSurfaceHover p })
+      [ (CommonDisabled,      \s -> s { styleTextColour = paletteTextMuted p })
+      , (FocusFocused,        \s -> s { styleBackground = paletteSurfaceHover p })
+      , (menuItemSubmenuOpen, \s -> s { styleBackground = paletteSurfaceHover p })
       ]
   }
 

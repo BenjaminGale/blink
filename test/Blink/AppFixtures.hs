@@ -13,6 +13,7 @@ module Blink.AppFixtures
   , testStyle
   , testMetrics
   , testStyleSet
+  , solidPalette
   ) where
 
 import Data.Text (Text)
@@ -20,7 +21,7 @@ import Data.Text (Text)
 import Blink.App (App, BlinkHandle, FrameResult (..), MsgQueue (..), configureEventDriven)
 import Blink.Geometry (uniform)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), noOpMeasurers)
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), noBorder)
+import Blink.Style (Metrics (..), Palette (..), Style (..), StyleSet (..), noBorder)
 
 -- | A 'MsgQueue' that holds nothing -- fine for any test app that never
 -- requests a 'Cmd' via 'cmd'.
@@ -70,3 +71,13 @@ testMetrics = Metrics
 
 testStyleSet :: StyleSet
 testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = mempty }
+
+-- | Every colour set to @c@, for a test that needs the library's real
+-- 'Blink.Style.Defaults.defaultTheme' but not any particular colours.
+-- Record-update the fields a test needs to tell apart.
+solidPalette :: Colour -> Palette
+solidPalette c = Palette
+  { paletteAccent = c, paletteFocusRing = c, paletteSurface = c, paletteSurfaceHover = c
+  , paletteSurfaceDisabled = c, paletteTextPrimary = c, paletteTextMuted = c, paletteTextOnAccent = c
+  , paletteBorder = c, paletteBorderHover = c, paletteIcon = c, paletteIconHover = c
+  }

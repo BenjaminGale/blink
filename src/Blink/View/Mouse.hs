@@ -18,6 +18,7 @@ module Blink.View.Mouse
   , isOccludedFor
   , markPopupFloor
   , isOccludedByPopupFor
+  , hasMouseMoved
   , isButtonDown
   , contextButtonDown
   , isButtonPressed
@@ -232,6 +233,10 @@ contextButtonDown ctx = case mouseButton (ctxMouse ctx) of
   ButtonDown _ -> True
   ButtonHeld _ -> True
   _            -> False
+
+-- | 'True' when the cursor position differs from the previous frame's.
+hasMouseMoved :: View e msg Bool
+hasMouseMoved = gets (mouseMoved . ctxMouse)
 
 -- | 'True' on the one frame the left button transitions from up to held.
 isButtonPressed :: View e msg Bool

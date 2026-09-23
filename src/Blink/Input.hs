@@ -288,6 +288,8 @@ data Mouse e = Mouse
     -- never drains popups (most tests, built on "Blink.Interaction") never
     -- misreads an ordinary hit-rect as a popup's. See
     -- @isOccludedByPopupFor@ in "Blink.View.Mouse".
+  , mouseMoved      :: Bool
+    -- ^ Whether the cursor position differs from the previous frame's.
   }
 
 -- | No button held, nothing hovered -- the starting state for a fresh
@@ -300,6 +302,7 @@ emptyMouse = Mouse
   , mouseHitRectsPrev = Map.empty
   , mouseHitRectsNext = Map.empty
   , mousePopupFloor   = maxBound
+  , mouseMoved        = False
   }
 
 -- | Rolls 'mouseHoverNext'\/'mouseHitRectsNext' (this completed frame's
