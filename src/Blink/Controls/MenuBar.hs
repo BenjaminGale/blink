@@ -39,6 +39,7 @@ import Control.Monad (forM_, void, when)
 
 import Data.Char (toUpper)
 import Data.List (elemIndex, find)
+import Data.Maybe (isJust, listToMaybe)
 
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), defaultButtonConfig)
 import Blink.Controls.Control
@@ -199,9 +200,9 @@ runMenuBarLabel
 runMenuBarLabel tag cfg menuKey labelCfg onBar = do
   enclosingScope <- getCurrentScope
   let open            = openMenuFor tag cfg enclosingScope
-      switchByKey dir = forM_ (adjacentMenu (mbrMenus cfg) menuKey dir) open
+      switchMenu step = forM_ (adjacentMenu (mbrMenus cfg) menuKey step) open
   r <- menuTrigger (tag (MenuBarLabel menuKey)) (tag (MenuBarList menuKey)) toggleCfg
-         (\close -> itemsElement tag cfg menuKey close onBar switchByKey)
+         (\close -> itemsElement tag cfg menuKey close onBar switchMenu)
   let someOtherOpen = maybe False (/= menuKey) (mbrOpenMenu cfg)
       hoveredIn     = ciMouseEntered (biControl (tgiButton r))
   when (hoveredIn && someOtherOpen) (open menuKey)
@@ -220,18 +221,12 @@ openMenuFor tag cfg enclosingScope newKey = do
   runHandlers (mbrOnOpenChanged cfg) (Just newKey)
   requestFocus enclosingScope (tag (MenuBarList newKey))
 
--- | The menu after @menuKey@ for 'KeyRight', or before it for any other
--- key, wrapping at either end. 'Nothing' if @menuKey@ isn't in @allMenus@.
-adjacentMenu :: Eq a => [a] -> a -> Key -> Maybe a
-adjacentMenu allMenus menuKey dir = do
+-- | The menu @step@ places after @menuKey@ (before it, if negative),
+-- wrapping at either end. 'Nothing' if @menuKey@ isn't in @allMenus@.
+adjacentMenu :: Eq a => [a] -> a -> Int -> Maybe a
+adjacentMenu allMenus menuKey step = do
   i <- elemIndex menuKey allMenus
-  let count = length allMenus
-      next  = case dir of
-        KeyRight -> (i + 1) `mod` count
-        _        -> (i - 1) `mod` count
-  case drop next allMenus of
-    (x : _) -> Just x
-    []      -> Nothing
+  listToMaybe (drop ((i + step) `mod` length allMenus) allMenus)
 
 -- | The open dropdown. Left\/Right switch to the adjacent menu unless a
 -- submenu is highlighted or open. @onBar@ is whether the pointer is on
@@ -239,9 +234,9 @@ adjacentMenu allMenus menuKey dir = do
 -- also closing this one as an outside press.
 itemsElement
   :: (Ord e, Ord a, Ord b)
-  => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> View e msg () -> Bool -> (Key -> View e msg ())
+  => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> View e msg () -> Bool -> (Int -> View e msg ())
   -> Element e msg
-itemsElement tag cfg menuKey close onBar switchByKey = base { elRun = handleMenuSwitchKeys >> elRun base }
+itemsElement tag cfg menuKey close onBar switchMenu = base { elRun = handleMenuSwitchKeys >> elRun base }
   where
     listId  = tag (MenuBarList menuKey)
     itemId  = tag . MenuBarItem menuKey
@@ -258,6 +253,11 @@ itemsElement tag cfg menuKey close onBar switchByKey = base { elRun = handleMenu
     handleMenuSwitchKeys = do
       inPlay <- submenuInPlay listId itemId items submenuFor
       evs    <- inputKeyEvents <$> getInput
-      when (not inPlay) $ forM_ (find ((`elem` [KeyLeft, KeyRight]) . key) evs) $ \e -> do
+      when (not inPlay) $ forM_ (find (isJust . menuStep . key) evs) $ \e -> do
         consumeKey (key e)
-        switchByKey (key e)
+        forM_ (menuStep (key e)) switchMenu
+
+    menuStep :: Key -> Maybe Int
+    menuStep KeyLeft  = Just (-1)
+    menuStep KeyRight = Just 1
+    menuStep _        = Nothing
