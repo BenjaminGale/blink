@@ -209,9 +209,9 @@ runMenuBarLabel tag cfg menuKey labelCfg onBar = do
     toggleCfg = defaultToggleButtonConfig
       { tgcButton            = labelCfg
       , tgcSelected          = mbrOpenMenu cfg == Just menuKey
-      , tgcOnSelectedChanged =
-          [ \opened -> concatMap ($ (if opened then Just menuKey else Nothing)) (mbrOnOpenMenuChanged cfg) ]
+      , tgcOnSelectedChanged = map (. toOpenMenu) (mbrOnOpenMenuChanged cfg)
       }
+    toOpenMenu opened = if opened then Just menuKey else Nothing
 
 -- | Opens @newKey@'s dropdown and focuses its item list.
 openMenuFor :: (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> Maybe e -> a -> View e msg ()
