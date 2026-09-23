@@ -42,17 +42,15 @@ import Data.List (elemIndex, find)
 
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), defaultButtonConfig)
 import Blink.Controls.Control
-import Blink.Controls.Label (captionElement, lcMnemonic, lcText, renderLabelledContent)
-import Blink.Controls.Menu (menuListWithSubmenus, submenuInPlay)
+import Blink.Controls.Label (captionElement, lcMnemonic, lcText)
+import Blink.Controls.Menu (menuListWithSubmenus, menuTrigger, submenuInPlay)
 import Blink.Controls.MenuBar.Style (menuBarLabelStyleKey, menuBarListStyleKey, menuBarStyleKey)
-import Blink.Controls.ToggleButton
-  (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleBase)
+import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
 import Blink.Input
   (InputState (inputKeyEvents), Key (KeyChar, KeyLeft, KeyRight), KeyEvent (key), mnemonicActivated)
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
-import Blink.Popup (content, popup)
 import Blink.View
 import Blink.Element (Element (..), HasLayoutConfig (..), height, runElement, width)
 
@@ -193,47 +191,25 @@ menuBar tag attrs = Element
 
 -- | One top-level label and, while its menu is open, its dropdown.
 -- Hovering a label while another menu is open switches to it, as native
--- menu bars do. While open, the label doesn't take focus on a press:
--- the press may be closing the menu, and the close refocuses it anyway.
+-- menu bars do.
 runMenuBarLabel
   :: (Ord e, Ord a, Ord b)
   => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> ButtonConfig e msg -> Rectangle
   -> View e msg (ToggleInteraction e msg)
 runMenuBarLabel tag cfg menuKey labelCfg rowBounds = do
   enclosingScope <- getCurrentScope
-  r <- toggleBase labelId toggleCfg
   onBar <- withBounds rowBounds isRegionHit
-  let wasOpen      = mbrOpenMenu cfg == Just menuKey
-      justOpened   = tgiSelected r && not wasOpen
-      justClosed   = wasOpen && not (tgiSelected r)
-      someOtherOpen = maybe False (/= menuKey) (mbrOpenMenu cfg)
-      hoveredIn    = ciMouseEntered (biControl (tgiButton r))
-      open         = openMenuFor tag cfg enclosingScope
-      refocusLabel = do
-        alreadyClaimed <- hasQueuedFocus enclosingScope
-        when (not alreadyClaimed) $ requestFocus enclosingScope labelId
-      close        = do
-        runHandlers (mbrOnOpenChanged cfg) Nothing
-        refocusLabel
+  let open            = openMenuFor tag cfg enclosingScope
       switchByKey dir = forM_ (adjacentMenu (mbrMenus cfg) menuKey dir) open
+  r <- menuTrigger (tag (MenuBarLabel menuKey)) (tag (MenuBarList menuKey)) toggleCfg
+         (\close -> itemsElement tag cfg menuKey close onBar switchByKey)
+  let someOtherOpen = maybe False (/= menuKey) (mbrOpenMenu cfg)
+      hoveredIn     = ciMouseEntered (biControl (tgiButton r))
   when (hoveredIn && someOtherOpen) (open menuKey)
-  when justOpened $ requestFocus enclosingScope (tag (MenuBarList menuKey))
-  when justClosed refocusLabel
-  when (tgiSelected r) $ popup labelId [content (itemsElement tag cfg menuKey close onBar switchByKey)]
   pure r
   where
-    labelId   = tag (MenuBarLabel menuKey)
-    wasOpen'  = mbrOpenMenu cfg == Just menuKey
-    suppressClickToFocus policy = case policy of
-      Focusable opts | wasOpen' -> Focusable opts { focusIsClickToFocus = False }
-      _                         -> policy
-    labelCtrl = (bcControl labelCfg)
-      { ccStyleKey    = menuBarLabelStyleKey
-      , ccContent     = const (renderLabelledContent (bcLabelled labelCfg))
-      , ccFocusPolicy = suppressClickToFocus (ccFocusPolicy (bcControl labelCfg))
-      }
     toggleCfg = defaultToggleButtonConfig
-      { tgcButton            = labelCfg { bcControl = labelCtrl }
+      { tgcButton            = labelCfg { bcControl = (bcControl labelCfg) { ccStyleKey = menuBarLabelStyleKey } }
       , tgcSelected          = mbrOpenMenu cfg == Just menuKey
       , tgcOnSelectedChanged =
           [ \opened -> concatMap ($ (if opened then Just menuKey else Nothing)) (mbrOnOpenChanged cfg) ]

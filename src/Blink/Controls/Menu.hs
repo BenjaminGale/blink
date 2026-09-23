@@ -12,8 +12,12 @@
 -- a click, or Right-arrow, closing back to their own parent (not the whole
 -- menu) on Left-arrow or Escape, or once the pointer has been on another
 -- part of the parent list for a short delay.
+--
+-- 'menuTrigger' is the toggle that opens such a list and returns focus to
+-- itself when the list closes.
 module Blink.Controls.Menu
-  ( menuList
+  ( menuTrigger
+  , menuList
   , menuListWithSubmenus
   , submenuInPlay
   ) where
@@ -28,6 +32,7 @@ import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonB
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement, lcMnemonic, lcText, renderLabelledContent)
 import Blink.Controls.Menu.Style (menuItemStyleKey, menuItemSubmenuOpen)
+import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), toggleBase)
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input
   ( InputState (inputKeyEvents), Key (KeyChar, KeyDown, KeyEscape, KeyLeft, KeyRight, KeyTab, KeyUp)
@@ -38,6 +43,42 @@ import Blink.Layout.Constraints (Layout (..), atLeast, fill, fitContent)
 import Blink.Popup (Edge (Start), Side (SideRight), content, placement, popup)
 import Blink.View
 import Blink.Element (Element (..), height, width)
+
+-- | Runs @toggleCfg@ as a menu's trigger, with 'tgcSelected' as whether
+-- the menu is open. While open, shows @listFor close@ in a popup anchored
+-- to the trigger, where @close@ closes the menu. Opening focuses
+-- @listId@; closing refocuses the trigger unless the press that closed it
+-- landed on a control that takes focus itself.
+menuTrigger
+  :: Ord e
+  => e -> e -> ToggleConfig e msg -> (View e msg () -> Element e msg)
+  -> View e msg (ToggleInteraction e msg)
+menuTrigger triggerId listId toggleCfg listFor = do
+  enclosingScope <- getCurrentScope
+  r <- toggleBase triggerId toggleCfg { tgcButton = btn { bcControl = ctrl } }
+  let justOpened = tgiSelected r && not wasOpen
+      justClosed = wasOpen && not (tgiSelected r)
+      refocusTrigger = do
+        alreadyClaimed <- hasQueuedFocus enclosingScope
+        when (not alreadyClaimed) $ requestFocus enclosingScope triggerId
+      close = do
+        runHandlers (tgcOnSelectedChanged toggleCfg) False
+        refocusTrigger
+  when justOpened $ requestFocus enclosingScope listId
+  when justClosed refocusTrigger
+  when (tgiSelected r) $ popup triggerId [content (listFor close)]
+  pure r
+  where
+    wasOpen = tgcSelected toggleCfg
+    btn     = tgcButton toggleCfg
+    -- The press may be closing the menu, and closing refocuses the trigger anyway.
+    suppressClickToFocus policy = case policy of
+      Focusable opts | wasOpen -> Focusable opts { focusIsClickToFocus = False }
+      _                        -> policy
+    ctrl = (bcControl btn)
+      { ccContent     = const (renderLabelledContent (bcLabelled btn))
+      , ccFocusPolicy = suppressClickToFocus (ccFocusPolicy (bcControl btn))
+      }
 
 -- | A vertical list of buttons, one per item, on a panel styled by
 -- @styleKey@. The list has a minimum width, grows if an item needs more,

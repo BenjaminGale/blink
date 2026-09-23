@@ -28,16 +28,14 @@ module Blink.Controls.MenuButton
   , onOpenChanged
   ) where
 
-import Control.Monad (void, when)
+import Control.Monad (void)
 
 import Blink.Controls.Button (ButtonConfig (..))
 import Blink.Controls.Control
-import Blink.Controls.Label (HasLabelledConfig (..), LabelledConfig (..), captionElement, lcText, renderLabelledContent)
-import Blink.Controls.Menu (menuList)
+import Blink.Controls.Label (HasLabelledConfig (..), LabelledConfig (..), captionElement, lcText)
+import Blink.Controls.Menu (menuList, menuTrigger)
 import Blink.Controls.MenuButton.Style (menuButtonListStyleKey)
-import Blink.Controls.ToggleButton
-  (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleBase)
-import Blink.Popup (content, popup)
+import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction, defaultToggleButtonConfig)
 import Blink.View
 import Blink.Element (Element (..), HasLayoutConfig (..))
 
@@ -133,38 +131,10 @@ menuButton tag attrs = Element
     cfg = resolve defaultMenuButtonConfig attrs
     btn = tgcButton (mbToggle cfg)
 
--- | The trigger and, while open, its item list. While open, the trigger
--- doesn't take focus on a press: the press may be closing the menu, and
--- the close refocuses it anyway.
 runMenuButton :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg (ToggleInteraction e msg)
 runMenuButton tag cfg = do
-  enclosingScope <- getCurrentScope
-  r <- toggleBase triggerId (mbToggle cfg) { tgcButton = btn { bcControl = ctrl } }
   onTrigger <- isRegionHit
-  let wasOpen    = tgcSelected (mbToggle cfg)
-      justOpened = tgiSelected r && not wasOpen
-      justClosed = wasOpen && not (tgiSelected r)
-      refocusTrigger = do
-        alreadyClaimed <- hasQueuedFocus enclosingScope
-        when (not alreadyClaimed) $ requestFocus enclosingScope triggerId
-      close      = do
-        runHandlers (tgcOnSelectedChanged (mbToggle cfg)) False
-        refocusTrigger
-  when justOpened $ requestFocus enclosingScope (tag MenuButtonList)
-  when justClosed refocusTrigger
-  when (tgiSelected r) $ popup triggerId [content (itemsElement tag cfg close onTrigger)]
-  pure r
-  where
-    triggerId = tag MenuButtonTrigger
-    btn       = tgcButton (mbToggle cfg)
-    wasOpen'  = tgcSelected (mbToggle cfg)
-    suppressClickToFocus policy = case policy of
-      Focusable opts | wasOpen' -> Focusable opts { focusIsClickToFocus = False }
-      _                         -> policy
-    ctrl = (bcControl btn)
-      { ccContent     = const (renderLabelledContent (bcLabelled btn))
-      , ccFocusPolicy = suppressClickToFocus (ccFocusPolicy (bcControl btn))
-      }
+  menuTrigger (tag MenuButtonTrigger) (tag MenuButtonList) (mbToggle cfg) (\close -> itemsElement tag cfg close onTrigger)
 
 -- | The open item list. @onTrigger@ is whether the pointer is on the
 -- trigger, so a press there toggles the menu rather than counting as an
