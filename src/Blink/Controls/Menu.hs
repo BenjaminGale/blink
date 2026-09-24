@@ -108,7 +108,7 @@ menuList
   => StyleKey e -> MenuItems e b msg -> View e msg () -> Bool -> Element e msg
 menuList styleKey menu close onOutsideTrigger =
   menuListCore styleKey menu { miSubmenu = const Nothing }
-    CloseBehaviour { cbCloseAll = close, cbCloseThis = close, cbNested = False }
+    (TopLevel close)
     onOutsideTrigger
 
 -- | 'menuList' with the optional per-item submenus from 'miSubmenu'.
@@ -117,7 +117,7 @@ menuListWithSubmenus
   => StyleKey e -> MenuItems e b msg -> View e msg () -> Bool -> Element e msg
 menuListWithSubmenus styleKey menu close onOutsideTrigger =
   menuListCore styleKey menu
-    CloseBehaviour { cbCloseAll = close, cbCloseThis = close, cbNested = False }
+    (TopLevel close)
     onOutsideTrigger
 
 menuMinWidth :: Double
@@ -129,15 +129,21 @@ menuMinWidth = 160
 submenuSwitchDelay :: Double
 submenuSwitchDelay = 0.25
 
--- | A flat, top-level list uses the same action for both fields; a
--- submenu, opened recursively, pops back to its own parent on
--- 'cbCloseThis' and only unwinds every level on 'cbCloseAll'.
-data CloseBehaviour e msg = CloseBehaviour
-  { cbCloseAll  :: View e msg ()
-  , cbCloseThis :: View e msg ()
-  , cbNested    :: Bool
-    -- ^ Whether Left-arrow backs out a level, which only a submenu does.
-  }
+-- | How a list closes. A submenu can close back to its parent (on Escape
+-- or Left-arrow) or close every level; a top-level list has one way.
+data CloseBehaviour e msg
+  = TopLevel (View e msg ())
+  | Nested
+      (View e msg ()) -- ^ Closes every level.
+      (View e msg ()) -- ^ Closes back to the parent list.
+
+closeAll :: CloseBehaviour e msg -> View e msg ()
+closeAll (TopLevel close) = close
+closeAll (Nested close _) = close
+
+closeThis :: CloseBehaviour e msg -> View e msg ()
+closeThis (TopLevel close)    = close
+closeThis (Nested _ toParent) = toParent
 
 -- | The shared engine behind both 'menuList' and 'menuListWithSubmenus'.
 menuListCore
@@ -182,19 +188,21 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
 
     onKey k act = keyPressed k >>= (`when` act)
 
-    handleEscape = onKey KeyEscape (cbCloseThis closeBehaviour)
+    handleEscape = onKey KeyEscape (closeThis closeBehaviour)
 
-    handleLeftArrow = when (cbNested closeBehaviour) $ onKey KeyLeft (cbCloseThis closeBehaviour)
+    handleLeftArrow = case closeBehaviour of
+      Nested _ toParent -> onKey KeyLeft toParent
+      TopLevel _        -> pure ()
 
     -- Closes on Tab\/Shift-Tab too: this list renders after its trigger's
     -- own siblings, so a plain handoff can't reach them.
-    handleTabOut = onKey KeyTab (cbCloseAll closeBehaviour)
+    handleTabOut = onKey KeyTab (closeAll closeBehaviour)
 
     -- Closes on the press: the pressed control takes focus then, and waiting
     -- for the release would show this list without focus until it came.
     handleOutsideClick onList = do
       pressed <- isButtonPressed
-      when (pressed && not onOutsideTrigger && not onList) (cbCloseAll closeBehaviour)
+      when (pressed && not onOutsideTrigger && not onList) (closeAll closeBehaviour)
 
     toItemElement onList item = Element
       { elLayout  = bcLayout itemCfg
@@ -206,7 +214,7 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
           case submenuFor item of
             Nothing                -> do
               highlightOnHover item r
-              when (biActivated r) (cbCloseAll closeBehaviour)
+              when (biActivated r) (closeAll closeBehaviour)
             Just (subId, subItems) ->
               runSubmenu menu item subId r $
                 popup (itemId item)
@@ -228,11 +236,7 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
     -- another item, to activate it) doesn't close the whole menu first.
     submenuElement item subId subItems onParent =
       menuListCore styleKey menu { miListId = subId, miItems = subItems }
-        CloseBehaviour
-          { cbCloseAll  = cbCloseAll closeBehaviour
-          , cbCloseThis = requestFocus (Just listId) (itemId item)
-          , cbNested    = True
-          }
+        (Nested (closeAll closeBehaviour) (requestFocus (Just listId) (itemId item)))
         onParent
 
 anySubmenuFocused :: Eq e => MenuItems e b msg -> View e msg Bool
@@ -270,7 +274,7 @@ handleMnemonics menu closeBehaviour =
       Just (subId, _) -> requestFocus (Just (miListId menu)) subId
       Nothing         -> do
         runHandlers (bcOnActivated (resolve defaultButtonConfig (miItemAttrs menu item))) ()
-        cbCloseAll closeBehaviour)
+        closeAll closeBehaviour)
   where
     itemMnemonic item = lcMnemonic (bcLabelled (resolve defaultButtonConfig (miItemAttrs menu item)))
 
