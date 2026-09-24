@@ -17,7 +17,7 @@ import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (StyleSet (..), Theme, styleTextColour)
 import Blink.View
 
-data TestElement = Ok deriving (Eq, Ord, Show)
+data TestElement = Ok | FocusHolder deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -50,7 +50,7 @@ start attrs = startAt seedCtx (fullSize attrs)
 spec :: Spec
 spec = describe "Blink.Controls.ToggleButton" $ do
   describe "toggleButton" $ do
-    toggleBehaviourSpec not testBounds seedCtx Ok (Point 5 5) hitRect (Point 200 200) fullSize
+    toggleBehaviourSpec not testBounds seedCtx Ok FocusHolder (Point 5 5) hitRect (Point 200 200) fullSize
 
     it "draws in its normal style while not selected" $ do
       ctx <- start []

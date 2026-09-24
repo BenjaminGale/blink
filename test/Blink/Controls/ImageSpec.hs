@@ -3,12 +3,10 @@ module Blink.Controls.ImageSpec (spec) where
 
 import Test.Hspec
 
-import Blink.Controls.Control (elementId)
-import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
-import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
+import Blink.Controls.ControlBehaviour (styleAttributeSpec)
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainMetrics, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.Image (ImageConfig, fitHeight, fitWidth, image, preserveRatio, source)
-import Blink.Geometry (Point (..), Rectangle (..), Size (..), uniform)
+import Blink.Geometry (Rectangle (..), Size (..), uniform)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Theme, styleTextAlign)
 import Blink.View
@@ -61,20 +59,17 @@ contractMeasurers = noOpMeasurers
 contractCtx :: ViewContext TestElement String
 contractCtx = withMeasurers contractMeasurers (emptyViewContext testBounds noInput contractTheme)
 
--- | 'renderWithId's rendered 70x70 rect, inset by 'standardMetrics'.
+-- | The 70x70 rect 'renderContract' renders at, inset by 'standardMetrics'.
 contractHitRect :: Rectangle
 contractHitRect = hitRectFor (Rectangle 0 0 70 70)
 
--- | 'image' with a real id, for the shared behaviour contracts below.
-renderWithId :: [Attribute (ImageConfig TestElement String)] -> View TestElement String ()
-renderWithId attrs = runElement (image (elementId Pic : source "test.svg" : attrs))
+-- | 'image' with a source, for the shared style contract below.
+renderContract :: [Attribute (ImageConfig TestElement String)] -> View TestElement String ()
+renderContract attrs = runElement (image (source "test.svg" : attrs))
 
 spec :: Spec
 spec = describe "Blink.Controls.Image" $ do
-  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    testBounds contractCtx Pic (Point 5 5) contractHitRect (Point 200 200) renderWithId
-
-  fixedNotFocusableSpec testBounds contractCtx renderWithId
+  styleAttributeSpec testBounds contractCtx contractHitRect renderContract
 
   it "sizes to the image's natural size when no fit dimension is set" $ do
     draws <- run []

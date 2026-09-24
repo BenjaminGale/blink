@@ -21,7 +21,7 @@ import Blink.Style (Palette, Theme)
 import Blink.Style.Defaults (defaultTheme)
 import Blink.View
 
-newtype TestElem = Part (TablePart Int) deriving (Eq, Ord, Show)
+data TestElem = Part (TablePart Int) | FocusHolder deriving (Eq, Ord, Show)
 
 -- | Three 20px rows (60px content), a 30px header -- 90px total, so an
 -- 80px-tall scene forces scrolling (see 'scrollingSpec') while a 90px
@@ -88,7 +88,7 @@ renderEmptyTable attrs = renderTable (columns [] : selection (unselected []) : h
 -- | 'table' discards any elementId in favour of its own root id.
 contractSpec :: Spec
 contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
-  testBounds contractCtx (Part (TableRow List)) (Point 5 5) contractHitRect (Point 200 200) renderEmptyTable
+  testBounds contractCtx (Part (TableRow List)) FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyTable
 
 silentColumns :: [ColumnConfig TestElem String Int]
 silentColumns =

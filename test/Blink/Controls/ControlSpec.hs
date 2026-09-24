@@ -11,7 +11,7 @@ import Blink.Controls.Control
   , onClicked, onFocusGained, onFocusLost, onKeyPressed
   , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, post, postWith, resolve
   )
-import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
+import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig, focusPolicyAttributeSpec)
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Geometry (Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Input (Key (..), KeyEvent (..))
@@ -24,7 +24,7 @@ import Blink.Style
 import Blink.View
 
 data TestElement
-  = ElemA | ElemB | ElemC
+  = ElemA | ElemB | ElemC | FocusHolder
   deriving (Eq, Ord, Show)
 
 rectA, rectB, rectC :: Rectangle
@@ -122,7 +122,8 @@ tagged e = [onFocusGained (post (show e ++ " gained")), onFocusLost (post (show 
 
 spec :: Spec
 spec = describe "Blink.Controls.Control.control" $ do
-  controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx ElemA (Point 5 5) hitRect (Point 200 200) renderControl
+  controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx ElemA FocusHolder (Point 5 5) hitRect (Point 200 200) renderControl
+  focusPolicyAttributeSpec testBounds seedCtx hitRect renderControl
 
   describe "chrome" $ do
     it "draws background via renderStyled, inset by margin" $ do

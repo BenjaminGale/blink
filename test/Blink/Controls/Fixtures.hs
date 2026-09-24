@@ -15,18 +15,22 @@ module Blink.Controls.Fixtures
   , fullSizeAt
   , startAt
   , monospaceTextMeasurer
+  , focusHeldBy
   ) where
+
+import Control.Monad (void)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 
+import Blink.Controls.Control (control, defaultControlConfig, elementId, resolve)
 import Blink.Element (Element, elLayout, runElement)
-import Blink.Geometry (Alignment (TopLeft), Insets, Point (..), Rectangle, Size (..), insetRect, uniform)
+import Blink.Geometry (Alignment (TopLeft), Insets, Point (..), Rectangle (..), Size (..), insetRect, uniform)
 import Blink.Input (InputState (..), emptyInputState)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), TextAlign (..), TextMeasurer (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), noBorder)
-import Blink.View (View, ViewContext, runView)
+import Blink.View (View, ViewContext, runView, withBounds)
 
 testColour :: Colour
 testColour = RGBA 0 0 0 1
@@ -97,3 +101,11 @@ monospaceTextMeasurer charWidth lineHeight = TextMeasurer
   , tmCharAtOffset = \_ x -> pure (round (x / realToFrac charWidth))
   , tmTextSize     = \t -> pure (Size (fromIntegral (T.length t) * charWidth) lineHeight)
   }
+
+-- | A plain control identified by @holder@, placed off-screen. Rendered
+-- before the control under test, it takes focus by rendering first while
+-- nothing else holds it, so the control under test starts unfocused
+-- without needing an attribute that turns its focus off.
+focusHeldBy :: Ord e => e -> View e msg ()
+focusHeldBy holder =
+  withBounds (Rectangle (-100) (-100) 10 10) (void (control (resolve defaultControlConfig [elementId holder])))

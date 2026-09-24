@@ -91,6 +91,8 @@ defaultToggleButtonConfig = ToggleConfig
 instance HasControlConfig e msg (ToggleConfig e msg) where
   overControl attr = Attribute (\tc -> tc { tgcButton = runAttribute (overControl attr) (tgcButton tc) })
 
+instance HasEventHandlers (ToggleConfig e msg)
+
 instance HasLabelledConfig e msg (ToggleConfig e msg) where
   overLabelled attr = Attribute (\tc -> tc { tgcButton = runAttribute (overLabelled attr) (tgcButton tc) })
 

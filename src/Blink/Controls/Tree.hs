@@ -111,6 +111,8 @@ data TreeConfig sel e msg a = TreeConfig
 instance HasControlConfig e msg (TreeConfig sel e msg a) where
   overControl attr = Attribute (\tc -> tc { tcList = runAttribute (overControl attr) (tcList tc) })
 
+instance HasEventHandlers (TreeConfig sel e msg a)
+
 instance HasLayoutConfig (TreeConfig sel e msg a) where
   overLayout attr = Attribute (\tc -> tc { tcList = runAttribute (overLayout attr) (tcList tc) })
 

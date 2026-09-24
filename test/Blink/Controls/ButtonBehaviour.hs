@@ -20,9 +20,10 @@ module Blink.Controls.ButtonBehaviour
 import Test.Hspec
 
 import Blink.Controls.Button (HasButtonConfig, onActivated)
-import Blink.Controls.Control (Attribute, FocusPolicy (..), HasControlConfig, focusPolicy, post)
+import Blink.Controls.Control (Attribute, HasControlConfig, HasEventHandlers, post)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.ElementBehaviour (tagged)
+import Blink.Controls.Fixtures (focusHeldBy)
 import Blink.Geometry (Point, Rectangle)
 import Blink.Input (InputState (..), Key (KeyReturn), KeyEvent (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -30,7 +31,7 @@ import Blink.View
 
 -- | Every raw\/focus reaction (including 'Blink.Controls.Control.onClicked',
 -- via 'tagged'), plus a tagged reaction to 'onActivated'.
-taggedActivated :: (HasControlConfig e String cfg, HasButtonConfig e String cfg) => [Attribute cfg]
+taggedActivated :: (HasControlConfig e String cfg, HasEventHandlers cfg, HasButtonConfig e String cfg) => [Attribute cfg]
 taggedActivated = onActivated (post "Activated") : tagged
 
 -- | How a control's Enter-activation deviates from the plain
@@ -60,18 +61,19 @@ defaultButtonBehaviourConfig = ButtonBehaviourConfig { bbcRepeatsOnHeldEnter = F
 -- 'Blink.Controls.Control.onClicked' (mouse-only, per the split between the
 -- two).
 buttonBehaviourSpec
-  :: (Ord e, Show e, HasControlConfig e String cfg, HasButtonConfig e String cfg)
+  :: (Ord e, Show e, HasControlConfig e String cfg, HasEventHandlers cfg, HasButtonConfig e String cfg)
   => ButtonBehaviourConfig                       -- ^ how this control's Enter-repeat behaviour deviates, if at all
   -> Rectangle                                   -- ^ bounds the control renders at
   -> ViewContext e String                          -- ^ starting context (theme\/measurer already set up)
   -> e                                             -- ^ element id under test
+  -> e                                             -- ^ an unused id, for a control that holds focus away from it
   -> Point                                         -- ^ a point inside its margin (not part of its hit area)
   -> Rectangle                                     -- ^ the region making up its margin-inset hit area
   -> Point                                         -- ^ a point outside its bounds entirely
   -> ([Attribute cfg] -> View e String ())                -- ^ render the control under test with these attrs
   -> Spec
-buttonBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint render = do
-  controlBehaviourSpec defaultControlBehaviourConfig bounds ctx eid marginPoint insideRect outsidePoint render
+buttonBehaviourSpec cfg bounds ctx eid holder marginPoint insideRect outsidePoint render = do
+  controlBehaviourSpec defaultControlBehaviourConfig bounds ctx eid holder marginPoint insideRect outsidePoint render
 
   describe "keyboard activation" $ do
     it "raises Activated when Enter is pressed while focused" $ do
@@ -83,7 +85,7 @@ buttonBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint rende
       resultMessages result `shouldNotContain` ["Clicked"]
 
     it "raises no Activated event from Enter while it doesn't hold focus" $ do
-      result <- runInteractions bounds ctx (render (focusPolicy NotFocusable : taggedActivated)) [] [PressKey KeyReturn []]
+      result <- runInteractions bounds ctx (focusHeldBy holder >> render taggedActivated) [] [PressKey KeyReturn []]
       resultMessages result `shouldBe` []
 
     it "raises no Activated event from Enter while disabled, even while already focused" $ do

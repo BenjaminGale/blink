@@ -120,6 +120,8 @@ defaultSliderConfig = SliderConfig
 instance HasControlConfig e msg (SliderConfig e msg) where
   overControl attr = Attribute (\sc -> sc { scControl = runAttribute attr (scControl sc) })
 
+instance HasEventHandlers (SliderConfig e msg)
+
 instance HasLayoutConfig (SliderConfig e msg) where
   overLayout attr = Attribute (\sc -> sc { scLayout = runAttribute attr (scLayout sc) })
 

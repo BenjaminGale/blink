@@ -260,7 +260,7 @@ rangeSpec = describe "RangeSelection" $ do
 -- | Rows are plain 20px-tall, full-width slots with no chrome (see
 -- 'testTheme'), so three items give exactly a 100x60 list with rows at
 -- y 0-20\/20-40\/40-60.
-newtype TestElem = Part (ListPart Int) deriving (Eq, Ord, Show)
+data TestElem = Part (ListPart Int) | FocusHolder deriving (Eq, Ord, Show)
 
 testItems :: [Int]
 testItems = [1, 2, 3]
@@ -327,7 +327,7 @@ renderEmptyList attrs = renderList (height (exactly 40) : selection (unselected 
 -- | 'list' discards any elementId in favour of its own root id.
 contractSpec :: Spec
 contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
-  testBounds contractCtx (Part List) (Point 5 5) contractHitRect (Point 200 200) renderEmptyList
+  testBounds contractCtx (Part List) FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyList
 
 widgetSpec :: Spec
 widgetSpec = describe "list" $ do

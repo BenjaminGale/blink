@@ -74,6 +74,8 @@ defaultTextInputConfig = TextInputConfig
 instance HasControlConfig e msg (TextInputConfig e msg) where
   overControl attr = Attribute (\tc -> tc { ticControl = runAttribute attr (ticControl tc) })
 
+instance HasEventHandlers (TextInputConfig e msg)
+
 instance HasLayoutConfig (TextInputConfig e msg) where
   overLayout attr = Attribute (\tc -> tc { ticLayout = runAttribute attr (ticLayout tc) })
 

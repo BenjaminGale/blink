@@ -5,8 +5,7 @@
 -- whichever axis it's not thin on. A leaf, built directly on
 -- 'control' -- nothing derives from it, it displays no label, and
 -- it's never a tab stop (see 'divider'). The simplest control in
--- "Blink.Controls": no value, and -- unlike every other control -- no id
--- required.
+-- "Blink.Controls": no value, no id, and no events.
 module Blink.Controls.Divider
   ( DividerConfig (..)
   , defaultDividerConfig
@@ -85,14 +84,10 @@ orientation o = Attribute (\dc -> dc { dcOrientation = o, dcLayout = layoutFor o
 thickness :: Double -> Attribute (DividerConfig e msg)
 thickness t = Attribute (\dc -> dc { dcThickness = t })
 
--- | A plain visual separator (see the module header). Never focusable and
--- never claims focus on click, regardless of 'focusPolicy'\/'style' --
--- fixed behaviour, not a default, the same way 'Blink.Controls.ProgressBar.progressBar'
--- fixes 'focusPolicy' to 'NotFocusable' itself. Draws nothing when the resolved
--- style's border colour is 'Nothing', the same as a control with no
--- border drawing no chrome border. Takes no id by default -- pass
--- 'elementId' to give one instance a stable identity and react to its
--- hover\/click\/focus events. Defaults to filling the space it's given
+-- | A plain visual separator (see the module header). Display-only: it
+-- takes no id, raises no events, and is never focusable. Draws nothing
+-- when the resolved style's border colour is 'Nothing', the same as a
+-- control with no border drawing no chrome border. Defaults to filling the space it's given
 -- along 'orientation' and sizing to 'thickness' (plus the current theme's
 -- margin\/border\/padding, same as every other control) across it --
 -- override with 'Blink.Element.width'\/'Blink.Element.height'\/

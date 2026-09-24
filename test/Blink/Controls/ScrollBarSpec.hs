@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Control
-  (Attribute, FocusPolicy (..), control, defaultControlConfig, defaultFocusOptions, elementId, focusPolicy, resolve)
+  (Attribute, control, defaultControlConfig, elementId, resolve)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.ScrollBar
   (ScrollBarConfig, ScrollBarPart (..), scrollBar, scrollBarButtonStyleKey, scrollBarOrientation, step)
@@ -242,10 +242,6 @@ spec = describe "Blink.Controls.ScrollBar" $ do
             withBounds rectBar    (render [])
       result <- runInteractions sceneBounds seedCtx renderScene [Wait 1] [Tab, Wait 1]
       contextFocusChain (resultContext result) `shouldBe` [Before]
-
-    it "focusPolicy on the composite itself is fixed regardless of any attempt to override it" $ do
-      result <- runInteractions barBounds seedCtx (render (focusPolicy (Focusable defaultFocusOptions) : tagged)) [] [Wait 1]
-      resultMessages result `shouldBe` []
 
     it "neither arrow button is a focus target" $ do
       result <- runInteractions barBounds seedCtx (render []) [MoveTo decrementPoint]

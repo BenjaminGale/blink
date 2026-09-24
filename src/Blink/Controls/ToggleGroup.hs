@@ -98,6 +98,8 @@ defaultToggleGroupConfig styleKey = ToggleGroupConfig
 instance HasControlConfig e msg (ToggleGroupConfig e a msg) where
   overControl attr = Attribute (\c -> c { tggControl = runAttribute (overControl attr) (tggControl c) })
 
+instance HasEventHandlers (ToggleGroupConfig e a msg)
+
 instance HasLayoutConfig (ToggleGroupConfig e a msg) where
   overLayout attr = Attribute (\c -> c { tggLayout = runAttribute attr (tggLayout c) })
 

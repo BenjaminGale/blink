@@ -8,7 +8,7 @@ import Test.QuickCheck.Monadic (assert, monadicIO, run)
 
 import Blink.Controls.Button (onActivated)
 import Blink.Controls.ButtonBehaviour (ButtonBehaviourConfig (..), buttonBehaviourSpec, defaultButtonBehaviourConfig)
-import Blink.Controls.Control (Attribute, elementId, post)
+import Blink.Controls.Control (Attribute, post)
 import Blink.Controls.Fixtures (fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.RepeatButton (RepeatButtonConfig, initialDelay, repeatButton, repeatInterval)
 import Blink.Geometry (Point (..), Rectangle (..))
@@ -17,7 +17,7 @@ import Blink.Interaction (Interaction (..), InteractionResult (..), runInteracti
 import Blink.Style (Theme)
 import Blink.View
 
-data TestElement = Ok deriving (Eq, Ord, Show)
+data TestElement = Ok | FocusHolder deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -90,7 +90,7 @@ pressed = snd <$> runView action (nextFrameContext testBounds mouseDownInside te
 spec :: Spec
 spec = describe "Blink.Controls.RepeatButton" $ do
   buttonBehaviourSpec (defaultButtonBehaviourConfig { bbcRepeatsOnHeldEnter = True })
-    testBounds seedCtx Ok (Point 5 5) hitRect (Point 200 200) (\attrs -> renderWithId (elementId Ok : attrs))
+    testBounds seedCtx Ok FocusHolder (Point 5 5) hitRect (Point 200 200) renderWithId
 
   describe "mouse activation" $ do
     it "fires onActivated immediately on press, not on release" $ do

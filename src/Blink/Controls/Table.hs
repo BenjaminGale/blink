@@ -141,6 +141,8 @@ data TableConfig sel e msg a = TableConfig
 instance HasControlConfig e msg (TableConfig sel e msg a) where
   overControl attr = Attribute (\tc -> tc { tbList = runAttribute (overControl attr) (tbList tc) })
 
+instance HasEventHandlers (TableConfig sel e msg a)
+
 instance HasLayoutConfig (TableConfig sel e msg a) where
   overLayout attr = Attribute (\tc -> tc { tbList = runAttribute (overLayout attr) (tbList tc) })
 

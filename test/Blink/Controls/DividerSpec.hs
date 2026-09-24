@@ -4,14 +4,11 @@ module Blink.Controls.DividerSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute, elementId)
-import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
+import Blink.Controls.Control (Attribute)
+import Blink.Controls.ControlBehaviour (styleAttributeSpec)
 import Blink.Controls.Divider (DividerConfig, divider, orientation, thickness)
-import Blink.Controls.ElementBehaviour (tagged)
-import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
-import Blink.Geometry (Alignment (Center), Orientation (..), Point (..), Rectangle (..))
-import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
+import Blink.Geometry (Alignment (Center), Orientation (..), Rectangle (..))
 import Blink.Layout.Constraints (exactly)
 import Blink.Rendering (DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..), noBorder, soloBorder)
@@ -72,26 +69,11 @@ run attrs = snd <$> runView (runElement (divider attrs)) seedCtx
 runWith :: Theme TestElement -> [Attribute'] -> IO (ViewContext TestElement String)
 runWith theme attrs = snd <$> runView (runElement (divider attrs)) (emptyViewContext testBounds noInput theme)
 
--- | 'divider' with 'elementId' 'Bar' set -- for the shared behaviour
--- contracts below, which need a real identity to track hover\/click\/focus
--- against.
-renderWithId :: [Attribute'] -> View TestElement String ()
-renderWithId attrs = runElement (divider (elementId Bar : attrs))
-
 spec :: Spec
 spec = describe "Blink.Controls.Divider" $ do
-  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    testBounds seedCtx Bar (Point 5 5) hitRect (Point 200 200) renderWithId
-
-  fixedNotFocusableSpec testBounds seedCtx renderWithId
+  styleAttributeSpec testBounds seedCtx hitRect (runElement . divider)
 
   describe "no id" $ do
-    -- No 'elementId' at all -- 'run' never adds one, unlike 'renderWithId'.
-    it "raises no events at all, even with every handler attached and the cursor pressed and released over it" $ do
-      result <- runInteractions testBounds seedCtx (runElement (divider tagged)) []
-                  [MouseDown (Point 50 15), MouseUp (Point 50 15)]
-      resultMessages result `shouldBe` []
-
     it "still draws the line (in its resting style), just like it does with an id" $ do
       ctx <- run []
       getDrawCommands ctx `shouldContain` [FillRect contentRect testColour]

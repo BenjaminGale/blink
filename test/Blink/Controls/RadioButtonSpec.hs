@@ -17,7 +17,7 @@ import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (StyleSet (..), Theme (..), VisualState (CommonMouseOver), styleTextColour)
 import Blink.View
 
-data TestElement = OptionA deriving (Eq, Ord, Show)
+data TestElement = OptionA | FocusHolder deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -65,7 +65,7 @@ spec = describe "Blink.Controls.RadioButton" $ do
   -- Unlike a flipping toggle, a radio button only ever moves from
   -- unselected to selected -- activating it while already selected leaves
   -- it selected, so it reports nothing.
-  toggleBehaviourSpec (const True) testBounds seedCtx OptionA (Point 5 5) hitRect (Point 200 200) fullSize
+  toggleBehaviourSpec (const True) testBounds seedCtx OptionA FocusHolder (Point 5 5) hitRect (Point 200 200) fullSize
 
   it "draws the unselected-bullet icon and its caption while not selected" $ do
     ctx <- start [text "Option A"]

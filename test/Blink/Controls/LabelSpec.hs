@@ -5,7 +5,6 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
-import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Controls.Fixtures
   (fullSizeAt, hitRectFor, mkTestTheme, monospaceTextMeasurer, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
 import Blink.Geometry (Point (..), Rectangle (..))
@@ -16,7 +15,7 @@ import Blink.Rendering (DrawCommand (..), TextAlign (..))
 import Blink.Style (Theme)
 import Blink.View
 
-data TestElement = Caption | Target deriving (Eq, Ord, Show)
+data TestElement = Caption | Target | FocusHolder deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -97,9 +96,8 @@ startShortOverflowing attrs =
 spec :: Spec
 spec = describe "Blink.Controls.Label" $ do
   controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    testBounds seedCtx Caption (Point 5 5) hitRect (Point 200 200) fullSize
+    testBounds seedCtx Caption FocusHolder (Point 5 5) hitRect (Point 200 200) fullSize
 
-  fixedNotFocusableSpec testBounds seedCtx fullSize
 
   it "draws its text in the resolved style" $ do
     ctx <- start [text "Hello"]

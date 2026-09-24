@@ -17,7 +17,7 @@ import Blink.Controls.TextInput
   (TextInputConfig, displayFilter, inputFilter, onInput, onSubmit, placeholder, value, textInput)
 import Blink.View
 
-data TestElement = Field | Other | Second deriving (Eq, Ord, Show)
+data TestElement = Field | Other | Second | FocusHolder deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -73,7 +73,7 @@ unfocused attrs = setFocus Other >> fullSizeTextInput Field attrs
 
 spec :: Spec
 spec = describe "Blink.Controls.TextInput" $ do
-  controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx Field (Point 5 5) hitRect (Point 200 200) (fullSizeTextInput Field)
+  controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx Field FocusHolder (Point 5 5) hitRect (Point 200 200) (fullSizeTextInput Field)
 
   describe "rendering" $ do
     it "displays the value without a cursor when unfocused" $ do

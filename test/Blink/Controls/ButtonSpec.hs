@@ -21,7 +21,7 @@ import Blink.Style (Theme)
 import Blink.View
 import Blink.Element (elLayout, runElement)
 
-data TestElement = Ok deriving (Eq, Ord, Show)
+data TestElement = Ok | FocusHolder deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -48,7 +48,7 @@ start attrs = startAt seedCtx (fullSize attrs)
 
 spec :: Spec
 spec = describe "Blink.Controls.Button" $ do
-  buttonBehaviourSpec defaultButtonBehaviourConfig testBounds seedCtx Ok (Point 5 5) hitRect (Point 200 200) fullSize
+  buttonBehaviourSpec defaultButtonBehaviourConfig testBounds seedCtx Ok FocusHolder (Point 5 5) hitRect (Point 200 200) fullSize
 
   it "draws its text in the resolved style" $ do
     ctx <- start [text "OK"]

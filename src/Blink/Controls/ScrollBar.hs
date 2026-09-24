@@ -122,6 +122,8 @@ defaultScrollBarConfig = ScrollBarConfig
 instance HasControlConfig e msg (ScrollBarConfig e msg) where
   overControl attr = Attribute (\sc -> sc { sbControl = runAttribute attr (sbControl sc) })
 
+instance HasEventHandlers (ScrollBarConfig e msg)
+
 instance HasLayoutConfig (ScrollBarConfig e msg) where
   overLayout attr = Attribute (\sc -> sc { sbLayout = runAttribute attr (sbLayout sc) })
 
@@ -302,7 +304,7 @@ scrollBar tag attrs = Element
     decrementBtn = arrowButton (tag ScrollBarDecrement)
       (if o == Horizontal then "assets/icons/arrow_left.svg" else "assets/icons/arrow_drop_up.svg")
       ( [ style scrollBarButtonStyleKey
-        , focusPolicy NotFocusable
+        , overControl (focusPolicy NotFocusable)
         , onActivated (postScrollBy scrollEid (negate (sbStep cfg)))
         ] ++ arrowLayoutAttrs o
       )
@@ -310,7 +312,7 @@ scrollBar tag attrs = Element
     incrementBtn = arrowButton (tag ScrollBarIncrement)
       (if o == Horizontal then "assets/icons/arrow_right.svg" else "assets/icons/arrow_drop_down.svg")
       ( [ style scrollBarButtonStyleKey
-        , focusPolicy NotFocusable
+        , overControl (focusPolicy NotFocusable)
         , onActivated (postScrollBy scrollEid (sbStep cfg))
         ] ++ arrowLayoutAttrs o
       )

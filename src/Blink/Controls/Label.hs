@@ -162,6 +162,8 @@ defaultLabelConfig = LabelConfig
 instance HasControlConfig e msg (LabelConfig e msg) where
   overControl attr = Attribute (\c -> c { lblControl = runAttribute attr (lblControl c) })
 
+instance HasEventHandlers (LabelConfig e msg)
+
 instance HasLabelledConfig e msg (LabelConfig e msg) where
   overLabelled attr = Attribute (\c -> c { lblLabelled = runAttribute attr (lblLabelled c) })
 
@@ -177,9 +179,7 @@ target t = Attribute (\c -> c { lblTarget = Just t })
 
 -- | Displays text (see 'text'). Unlike every other control built on
 -- 'control', a label never takes keyboard focus itself, whether by Tab
--- or by being clicked: this is fixed behaviour, not a default -- 'label'
--- always overrides 'focusPolicy' to 'NotFocusable' itself, so it wins
--- regardless of what a caller passes. The only way a click on a label affects focus
+-- or by being clicked. The only way a click on a label affects focus
 -- at all is 'target': unlike a control taking focus for itself, which
 -- happens on mouse-down, redirecting focus onto a /different/ element only
 -- takes effect once the click completes -- so dragging off the label

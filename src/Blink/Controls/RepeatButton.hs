@@ -52,6 +52,8 @@ defaultRepeatButtonConfig = RepeatButtonConfig
 instance HasControlConfig e msg (RepeatButtonConfig e msg) where
   overControl attr = Attribute (\rc -> rc { rbButton = runAttribute (overControl attr) (rbButton rc) })
 
+instance HasEventHandlers (RepeatButtonConfig e msg)
+
 instance HasButtonConfig e msg (RepeatButtonConfig e msg) where
   overButton attr = Attribute (\rc -> rc { rbButton = runAttribute attr (rbButton rc) })
 

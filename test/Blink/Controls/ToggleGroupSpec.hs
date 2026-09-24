@@ -33,7 +33,7 @@ sizes = [minBound .. maxBound]
 -- | The element ids a test group's items resolve to, plus 'Before' -- a
 -- plain unrelated control preceding the group in some tests, standing in
 -- for the rest of a real form.
-data TestElement = Before | Group | Item Size deriving (Eq, Ord, Show)
+data TestElement = Before | Group | Item Size | FocusHolder deriving (Eq, Ord, Show)
 
 tag :: ToggleGroupPart Size -> TestElement
 tag ToggleGroup         = Group
@@ -173,7 +173,7 @@ spec = describe "Blink.Controls.ToggleGroup" $ do
   describe "as a control" $
     controlBehaviourSpec
       (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-      controlTestBounds controlSeedCtx Group (Point 5 5) controlHitRect (Point 400 400)
+      controlTestBounds controlSeedCtx Group FocusHolder (Point 5 5) controlHitRect (Point 400 400)
       render
 
   describe "focus" $ do

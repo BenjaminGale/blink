@@ -41,9 +41,12 @@ import Blink.View.Drawing (withClip)
 import Blink.Style
 import Blink.Controls.Style (toggleGroupMetrics, toggleGroupStyle)
 
--- | Identifies one of the two scrollbars 'scrollPanel' can composite in.
+-- | Identifies one part of a 'scrollPanel' for the purpose of building
+-- element ids: the panel's own root, or a part of one of the two
+-- scrollbars it can composite in.
 data ScrollPanelPart
-  = ScrollPanelHBar ScrollBarPart
+  = ScrollPanel
+  | ScrollPanelHBar ScrollBarPart
   | ScrollPanelVBar ScrollBarPart
   deriving (Eq, Ord, Show)
 
@@ -56,6 +59,8 @@ data ScrollPanelConfig e msg = ScrollPanelConfig
 
 instance HasControlConfig e msg (ScrollPanelConfig e msg) where
   overControl attr = Attribute (\c -> c { spControl = runAttribute (overControl attr) (spControl c) })
+
+instance HasEventHandlers (ScrollPanelConfig e msg)
 
 instance HasLayoutConfig (ScrollPanelConfig e msg) where
   overLayout attr = Attribute (\c -> c { spLayout = runAttribute attr (spLayout c) })
@@ -78,6 +83,7 @@ wheelStepPx :: Double
 wheelStepPx = 48
 
 -- | A scrollable viewport onto @cfg@'s own 'spContent' (see 'content').
+-- @tag@ builds every part's element id from a 'ScrollPanelPart'.
 scrollPanel :: Ord e => (ScrollPanelPart -> e) -> [Attribute (ScrollPanelConfig e msg)] -> Element e msg
 scrollPanel tag attrs = Element
   { elLayout  = spLayout cfg
@@ -107,7 +113,8 @@ scrollPanel tag attrs = Element
       pure (w, h)
 
     ctrl = (spControl cfg)
-      { ccFocusPolicy = NotFocusable
+      { ccElementId   = Just (tag ScrollPanel)
+      , ccFocusPolicy = NotFocusable
       , ccContent     = const viewport
       }
 

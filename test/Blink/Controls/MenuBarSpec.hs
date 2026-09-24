@@ -11,7 +11,6 @@ import Blink.AppFixtures (drawnTexts, logAddedBetween, resultState, startApp, te
 import Blink.Controls.Button (ButtonConfig)
 import Blink.Controls.Control (Attribute, control, defaultControlConfig, elementId, onFocusGained, onFocusLost, post, postWith, resolve)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec, styleAttributeSpec)
-import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Controls.Fixtures (contentRectFor, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.Label (mnemonic, text)
 import Blink.Controls.MenuBar (MenuBarConfig, MenuBarPart (..), itemAttrs, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu, submenuItems)
@@ -139,7 +138,7 @@ keyInput k = (mkInput fileTriggerPoint False) { keyEvents = [KeyEvent k [] False
 altKeyInput :: Char -> FrameInput
 altKeyInput c = (mkInput (Point 90 90) False) { keyEvents = [KeyEvent (KeyChar (toUpper c)) [Alt] False] }
 
-newtype ContractElem = ContractPart (MenuBarPart Int Int) deriving (Eq, Ord, Show)
+data ContractElem = ContractPart (MenuBarPart Int Int) | FocusHolder deriving (Eq, Ord, Show)
 
 -- | Real margin, unlike 'testMetrics', for the hit-region contract below.
 contractTheme :: Theme ContractElem
@@ -175,8 +174,7 @@ renderSingleLabel attrs = runElement $ menuBar ContractPart
 contractSpec :: Spec
 contractSpec = do
   controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    contractBounds contractCtx (ContractPart MenuBar) (Point 5 5) contractHitRect (Point 200 200) renderEmptyMenuBar
-  fixedNotFocusableSpec contractBounds contractCtx renderEmptyMenuBar
+    contractBounds contractCtx (ContractPart MenuBar) FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyMenuBar
   describe "label" $
     styleAttributeSpec labelContractBounds contractCtx (hitRectFor (contentRectFor labelContractBounds)) renderSingleLabel
 

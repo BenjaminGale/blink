@@ -3,13 +3,10 @@ module Blink.Controls.ProgressBarSpec (spec) where
 
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute, elementId, isEnabled)
-import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
-import Blink.Controls.ElementBehaviour (tagged)
-import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
+import Blink.Controls.Control (Attribute, isEnabled)
+import Blink.Controls.ControlBehaviour (styleAttributeSpec)
 import Blink.Controls.Fixtures (contentRectFor, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
-import Blink.Geometry (Point (..), Rectangle (..))
-import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
+import Blink.Geometry (Rectangle (..))
 import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, bandWidth, progress, progressBar)
 import Blink.Rendering (DrawCommand (..))
 import Blink.Style (Theme)
@@ -38,12 +35,6 @@ seedCtx = emptyViewContext testBounds noInput testTheme
 run :: [Attribute'] -> IO (ViewContext TestElement String)
 run attrs = snd <$> runView (runElement (progressBar attrs)) seedCtx
 
--- | 'progressBar' with 'elementId' 'Bar' set -- for the shared behaviour
--- contracts below, which need a real identity to track hover\/click\/focus
--- against.
-renderWithId :: [Attribute'] -> View TestElement String ()
-renderWithId attrs = runElement (progressBar (elementId Bar : attrs))
-
 -- | A context whose animation clock reads one elapsed second -- 'runView'
 -- against this directly, rather than through 'runInteractions', since
 -- advancing frames via simulated input never moves the animation clock on
@@ -64,18 +55,9 @@ wideElapsedCtx =
 
 spec :: Spec
 spec = describe "Blink.Controls.ProgressBar" $ do
-  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    testBounds seedCtx Bar (Point 5 5) hitRect (Point 200 200) renderWithId
-
-  fixedNotFocusableSpec testBounds seedCtx renderWithId
+  styleAttributeSpec testBounds seedCtx hitRect (runElement . progressBar)
 
   describe "no id" $ do
-    -- No 'elementId' at all -- 'run' never adds one, unlike 'renderWithId'.
-    it "raises no events at all, even with every handler attached and the cursor pressed and released over it" $ do
-      result <- runInteractions testBounds seedCtx (runElement (progressBar tagged)) []
-                  [MouseDown (Point 50 50), MouseUp (Point 50 50)]
-      resultMessages result `shouldBe` []
-
     it "still renders (in its resting style), just like it does with an id" $ do
       ctx <- run [progress (Progress 0.5)]
       getDrawCommands ctx `shouldContain` [FillRect (Rectangle 15 15 35 70) testColour]

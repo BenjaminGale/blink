@@ -32,7 +32,7 @@ forest0 =
   , Node "test" []
   ]
 
-newtype TestElem = Part (TreeTablePart String) deriving (Eq, Ord, Show)
+data TestElem = Part (TreeTablePart String) | FocusHolder deriving (Eq, Ord, Show)
 
 testTheme :: Theme TestElem
 testTheme = mkTestTheme zeroMetrics (plainStyleSet (plainStyle testColour))
@@ -119,7 +119,7 @@ renderEmptyTreeTable attrs =
 -- | 'treeTable' discards any elementId in favour of its own root id.
 contractSpec :: Spec
 contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
-  testBounds contractCtx (Part (TTRow List)) (Point 5 5) contractHitRect (Point 200 200) renderEmptyTreeTable
+  testBounds contractCtx (Part (TTRow List)) FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyTreeTable
 
 widgetSpec :: Spec
 widgetSpec = describe "treeTable" $

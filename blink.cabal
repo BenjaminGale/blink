@@ -129,7 +129,6 @@ test-suite blink-tests
         Blink.Controls.DividerSpec
         Blink.Controls.ImageSpec
         Blink.Controls.ElementBehaviour
-        Blink.Controls.FixedFocusBehaviour
         Blink.Controls.Fixtures
         Blink.Controls.LabelSpec
         Blink.Controls.ListSpec

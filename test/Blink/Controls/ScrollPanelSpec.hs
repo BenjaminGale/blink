@@ -3,9 +3,8 @@ module Blink.Controls.ScrollPanelSpec (spec) where
 
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute, elementId)
+import Blink.Controls.Control (Attribute)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
-import Blink.Controls.FixedFocusBehaviour (fixedNotFocusableSpec)
 import Blink.Controls.Fixtures
   (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
@@ -19,9 +18,7 @@ import Blink.Style (Theme)
 import Blink.View
 import Blink.View.Drawing (fillRect)
 
--- | 'Root' is for the shared control contracts below -- 'scrollPanel'
--- forces no id of its own, so they need one handed in via 'elementId'.
-data TestElem = Part ScrollPanelPart | Root deriving (Eq, Ord, Show)
+data TestElem = Part ScrollPanelPart | FocusHolder deriving (Eq, Ord, Show)
 
 tag :: ScrollPanelPart -> TestElem
 tag = Part
@@ -54,9 +51,6 @@ type Attribute' = Attribute (ScrollPanelConfig TestElem String)
 
 render :: [Attribute'] -> View TestElem String ()
 render attrs = runElement (scrollPanel tag attrs)
-
-renderWithId :: [Attribute'] -> View TestElem String ()
-renderWithId attrs = render (elementId Root : attrs)
 
 contractTheme :: Theme TestElem
 contractTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
@@ -116,6 +110,4 @@ spec = describe "Blink.Controls.ScrollPanel" $ do
       resultDraws result `shouldContain` [FillRect (Rectangle (-116) (-156) 200 200) testColour]
 
   controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    testBounds contractCtx Root (Point 5 5) contractHitRect (Point 200 200) renderWithId
-
-  fixedNotFocusableSpec testBounds contractCtx renderWithId
+    testBounds contractCtx (tag ScrollPanel) FocusHolder (Point 5 5) contractHitRect (Point 200 200) render

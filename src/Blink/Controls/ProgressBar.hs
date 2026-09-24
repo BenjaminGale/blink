@@ -92,11 +92,8 @@ bandWidth v = Attribute (\pc -> pc { pbBandWidth = v })
 
 -- | A progress indicator, set via 'progress' to 'Progress' for a
 -- determinate bar or 'Indeterminate' for a continuously animating band.
--- Takes no id by default -- pass 'Blink.Controls.Control.elementId' to
--- give one instance a stable identity and react to its hover\/click\/focus
--- events. Never a tab stop, though: fixed behaviour, not a default -- 'progressBar'
--- always overrides 'focusPolicy' to 'NotFocusable' itself, so it wins
--- regardless of what a caller passes. Has no content of its own to size to, so it
+-- Display-only: it takes no id, raises no events, and is never focusable.
+-- Has no content of its own to size to, so it
 -- defaults to filling the space it's given on both axes, same as every
 -- control did before controls reported their own 'Blink.Layout.Constraints.Layout'.
 -- Override with 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.

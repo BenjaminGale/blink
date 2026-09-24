@@ -3,7 +3,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | A single image, drawn with no interactive behaviour of its own. A
 -- leaf, built directly on 'control' -- nothing derives from it, and (like
--- "Blink.Controls.Divider") it's never a tab stop and takes no id.
+-- "Blink.Controls.Divider") it takes no id, raises no events, and is never
+-- a tab stop.
 --
 -- 'fitWidth'\/'fitHeight'\/'preserveRatio' follow JavaFX's own
 -- @ImageView@: with neither fit dimension set, 'image' sizes itself to

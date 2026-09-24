@@ -111,7 +111,7 @@ spec = describe "Blink.Style.Defaults" $ do
       styleTextColour style `shouldBe` paletteTextMuted testPalette
 
     -- Every control below is focusable under its own default 'FocusPolicy'
-    -- (see each control module's own 'Blink.Controls.Control.focusPolicy'
+    -- (see each control module's own 'Blink.Controls.Control.ccFocusPolicy'
     -- for the ones deliberately excluded, e.g. a scrollbar's own buttons and
     -- track, which are 'Blink.Controls.Control.NotFocusable'). Missing an
     -- entry here means a focused instance draws no focus ring at all.

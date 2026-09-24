@@ -76,6 +76,8 @@ defaultMenuButtonConfig = MenuButtonConfig
 instance HasControlConfig e msg (MenuButtonConfig e a msg) where
   overControl attr = Attribute (\c -> c { mbToggle = runAttribute (overControl attr) (mbToggle c) })
 
+instance HasEventHandlers (MenuButtonConfig e a msg)
+
 instance HasLabelledConfig e msg (MenuButtonConfig e a msg) where
   overLabelled attr = Attribute (\c -> c { mbToggle = runAttribute (overLabelled attr) (mbToggle c) })
 

@@ -95,6 +95,8 @@ defaultButtonConfig = ButtonConfig
 instance HasControlConfig e msg (ButtonConfig e msg) where
   overControl attr = Attribute (\bc -> bc { bcControl = runAttribute attr (bcControl bc) })
 
+instance HasEventHandlers (ButtonConfig e msg)
+
 instance HasLabelledConfig e msg (ButtonConfig e msg) where
   overLabelled attr = Attribute (\bc -> bc { bcLabelled = runAttribute attr (bcLabelled bc) })
 

@@ -540,6 +540,8 @@ data ListConfig sel e msg a = ListConfig
 instance HasControlConfig e msg (ListConfig sel e msg a) where
   overControl attr = Attribute (\c -> c { lcControl = runAttribute (overControl attr) (lcControl c) })
 
+instance HasEventHandlers (ListConfig sel e msg a)
+
 instance HasLayoutConfig (ListConfig sel e msg a) where
   overLayout attr = Attribute (\c -> c { lcLayout = runAttribute attr (lcLayout c) })
 
@@ -734,7 +736,7 @@ virtualizedRows scrollBarTag itemCount rh renderRows = do
         spacer h      = elementWithLayout (Layout fill (exactly h) TopLeft) (pure ())
 
 -- | Everything 'list' does, minus being an 'Element': one 'Focusable'
--- stop (unless overridden via 'Blink.Controls.Control.focusPolicy')
+-- stop (unless the 'Blink.Controls.Control.ccFocusPolicy' in 'lcControl' says otherwise)
 -- whose rows are never tab stops. Up\/Down move the cursor, Shift-Up\/Down
 -- extend a range, Enter\/Space act on the cursor, a click on a row
 -- activates it. Every change is computed against the model exactly as
@@ -748,8 +750,8 @@ virtualizedRows scrollBarTag itemCount rh renderRows = do
 -- root id from 'List', and each row's id from 'ListItem' applied to the
 -- row's own item value -- so the caller never writes a per-row id by
 -- hand, and can't accidentally give the root and a row the same id (see
--- 'ListPart'). Any 'Blink.Controls.Control.elementId' attribute set on
--- 'lcControl' is discarded in favour of @mkId List@, the same as
+-- 'ListPart'). Any 'Blink.Controls.Control.ccElementId' already set on
+-- 'lcControl' is replaced by @mkId List@, the same as
 -- 'Blink.Controls.ToggleGroup.toggleButtonGroup'.
 --
 -- The shape every list-like control ('list', and

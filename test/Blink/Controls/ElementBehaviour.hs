@@ -16,7 +16,7 @@ import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
 import Blink.Controls.Control
-  ( Attribute, HasControlConfig
+  ( Attribute, HasControlConfig, HasEventHandlers
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed
   , onFocusGained, onFocusLost
   , post
@@ -31,7 +31,7 @@ import Blink.View
 -- can raise with a plain label naming it, discarding any payload -- enough
 -- to assert "this fired" declaratively without a bespoke message type per
 -- caller.
-tagged :: HasControlConfig e String cfg => [Attribute cfg]
+tagged :: (HasControlConfig e String cfg, HasEventHandlers cfg) => [Attribute cfg]
 tagged =
   [ onMouseEntered (post "MouseEntered")
   , onMouseExited  (post "MouseExited")
@@ -52,7 +52,7 @@ tagged =
 -- distinct part (e.g. a checkbox's glyph and caption) can't pass just
 -- because one particular point happens to work.
 elementBehaviourSpec
-  :: (Ord e, HasControlConfig e String cfg)
+  :: (Ord e, HasControlConfig e String cfg, HasEventHandlers cfg)
   => Rectangle                                    -- ^ bounds the thing under test renders at
   -> ViewContext e String                           -- ^ starting context (theme\/measurer already set up)
   -> e                                             -- ^ element id under test

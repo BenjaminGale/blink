@@ -54,13 +54,14 @@ toggleBehaviourSpec
   -> Rectangle                                   -- ^ bounds the control renders at
   -> ViewContext e String                          -- ^ starting context (theme\/measurer already set up)
   -> e                                             -- ^ element id under test
+  -> e                                             -- ^ an unused id, for a control that holds focus away from it
   -> Point                                         -- ^ a point inside its margin (not part of its hit area)
   -> Rectangle                                     -- ^ the region making up its margin-inset hit area
   -> Point                                         -- ^ a point outside its bounds entirely
   -> ([Attribute (ToggleConfig e String)] -> View e String ()) -- ^ render the control under test with these attrs
   -> Spec
-toggleBehaviourSpec next bounds ctx eid marginPoint insideRect outsidePoint render = do
-  buttonBehaviourSpec defaultButtonBehaviourConfig bounds ctx eid marginPoint insideRect outsidePoint
+toggleBehaviourSpec next bounds ctx eid holder marginPoint insideRect outsidePoint render = do
+  buttonBehaviourSpec defaultButtonBehaviourConfig bounds ctx eid holder marginPoint insideRect outsidePoint
     (\attrs -> render (isSelected False : attrs))
 
   describe "toggle" $ do

@@ -4,9 +4,9 @@ module Blink.Controls.SliderSpec (spec) where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute, FocusPolicy (..), focusPolicy, onFocusGained, onFocusLost, post, postWith)
+import Blink.Controls.Control (Attribute, onFocusGained, onFocusLost, post, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
-import Blink.Controls.Fixtures (contentRectFor, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics)
+import Blink.Controls.Fixtures (contentRectFor, focusHeldBy, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics)
 import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -16,7 +16,7 @@ import Blink.Style (Style (..), StyleSet (..), Theme (..), soloBorder)
 import Blink.View
 import Blink.Element (runElement)
 
-data TestElement = Handle | Other deriving (Eq, Ord, Show)
+data TestElement = Handle | Other | FocusHolder deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -110,7 +110,7 @@ runWithGroove attrs = snd <$> runView (runElement (slider Handle attrs)) (emptyV
 
 spec :: Spec
 spec = describe "Blink.Controls.Slider" $ do
-  controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx Handle (Point 5 5) hitRect (Point 200 200) (runElement . slider Handle)
+  controlBehaviourSpec defaultControlBehaviourConfig testBounds seedCtx Handle FocusHolder (Point 5 5) hitRect (Point 200 200) (runElement . slider Handle)
 
   describe "rendering" $ do
     it "fills the correct proportion and centres the thumb at 0.5" $ do
@@ -153,7 +153,7 @@ spec = describe "Blink.Controls.Slider" $ do
       getDrawCommands ctx `shouldContain` [ringAt]
 
     it "draws no focus ring while not focused" $ do
-      ctx <- run [focusPolicy NotFocusable, value 0.5]
+      ctx <- snd <$> runView (focusHeldBy FocusHolder >> runElement (slider Handle [value 0.5])) seedCtx
       getDrawCommands ctx `shouldNotContain` [ringAt]
 
   describe "hover/drag thumb colour" $ do

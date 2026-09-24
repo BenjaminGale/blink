@@ -11,9 +11,10 @@
 -- plain click) passes a 'ControlBehaviourConfig' reflecting that, rather
 -- than skipping this contract altogether.
 --
--- 'controlBehaviourSpec' runs every part. Each part is also exported on its
--- own, one per attribute capability, for a widget that exposes only some
--- of them.
+-- 'controlBehaviourSpec' runs every part a widget's attribute list can
+-- reach. Each part is also exported on its own, for a widget that exposes
+-- only some of them. 'focusPolicyAttributeSpec' is for 'ControlConfig'
+-- itself, the only config that accepts 'focusPolicy'.
 module Blink.Controls.ControlBehaviour
   ( ControlBehaviourConfig (..)
   , defaultControlBehaviourConfig
@@ -30,9 +31,10 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Controls.Control (Attribute, FocusPolicy (..), HasControlConfig, isEnabled, focusPolicy, style)
+import Blink.Controls.Control
+  (Attribute, ControlConfig, FocusPolicy (..), HasControlConfig, HasEventHandlers, isEnabled, focusPolicy, style)
 import Blink.Controls.ElementBehaviour (elementBehaviourSpec, tagged)
-import Blink.Controls.Fixtures (plainStyle, plainStyleSet)
+import Blink.Controls.Fixtures (focusHeldBy, plainStyle, plainStyleSet)
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
@@ -64,40 +66,41 @@ defaultControlBehaviourConfig = ControlBehaviourConfig { cbcAutoClaims = True, c
 -- one at random from @insideRect@ on each run -- see
 -- 'Blink.Controls.ElementBehaviour.elementBehaviourSpec'.
 controlBehaviourSpec
-  :: (Ord e, Show e, HasControlConfig e String cfg)
+  :: (Ord e, Show e, HasControlConfig e String cfg, HasEventHandlers cfg)
   => ControlBehaviourConfig                      -- ^ how this control's focus behaviour deviates, if at all
   -> Rectangle                                   -- ^ bounds the control renders at
   -> ViewContext e String                          -- ^ starting context (theme\/measurer already set up)
   -> e                                             -- ^ element id under test
+  -> e                                             -- ^ an unused id, for a control that holds focus away from it
   -> Point                                         -- ^ a point inside its margin (not part of its hit area)
   -> Rectangle                                     -- ^ the region making up its margin-inset hit area
   -> Point                                         -- ^ a point outside its bounds entirely
   -> ([Attribute cfg] -> View e String ())                -- ^ render the control under test with these attrs
   -> Spec
-controlBehaviourSpec cfg bounds ctx eid marginPoint insideRect outsidePoint render = do
-  controlEventSpec bounds ctx eid marginPoint insideRect outsidePoint render
+controlBehaviourSpec cfg bounds ctx eid holder marginPoint insideRect outsidePoint render = do
+  controlEventSpec bounds ctx eid holder marginPoint insideRect outsidePoint render
   styleAttributeSpec bounds ctx insideRect render
   focusBehaviourSpec cfg bounds ctx insideRect outsidePoint render
-  focusPolicyAttributeSpec bounds ctx insideRect render
   enabledAttributeSpec bounds ctx insideRect render
 
 -- | The raw events the event-handler attributes react to, and the margin
 -- those events respect.
 controlEventSpec
-  :: (Ord e, HasControlConfig e String cfg)
+  :: (Ord e, HasControlConfig e String cfg, HasEventHandlers cfg)
   => Rectangle                                   -- ^ bounds the control renders at
   -> ViewContext e String                          -- ^ starting context (theme\/measurer already set up)
   -> e                                             -- ^ element id under test
+  -> e                                             -- ^ an unused id, for a control that holds focus away from it
   -> Point                                         -- ^ a point inside its margin (not part of its hit area)
   -> Rectangle                                     -- ^ the region making up its margin-inset hit area
   -> Point                                         -- ^ a point outside its bounds entirely
   -> ([Attribute cfg] -> View e String ())                -- ^ render the control under test with these attrs
   -> Spec
-controlEventSpec bounds ctx eid marginPoint insideRect outsidePoint render = do
+controlEventSpec bounds ctx eid holder marginPoint insideRect outsidePoint render = do
   -- A control auto-claims focus the moment nothing else holds it, which
   -- would otherwise leak an incidental focus-gained event into every one
   -- of these raw-fact checks.
-  elementBehaviourSpec bounds ctx eid insideRect outsidePoint (\attrs -> render (focusPolicy NotFocusable : attrs))
+  elementBehaviourSpec bounds ctx eid insideRect outsidePoint (\attrs -> focusHeldBy holder >> render attrs)
 
   describe "hit region" $ do
     it "does not raise a click event for a press and release inside its margin" $ do
@@ -112,7 +115,7 @@ controlEventSpec bounds ctx eid marginPoint insideRect outsidePoint render = do
 -- | Whether the control claims, keeps, and gives up focus the way @cfg@
 -- says it should, with no focus attribute passed.
 focusBehaviourSpec
-  :: (Ord e, HasControlConfig e String cfg)
+  :: (Ord e, HasControlConfig e String cfg, HasEventHandlers cfg)
   => ControlBehaviourConfig                      -- ^ how this control's focus behaviour deviates, if at all
   -> Rectangle                                   -- ^ bounds the control renders at
   -> ViewContext e String                          -- ^ starting context (theme\/measurer already set up)
@@ -154,11 +157,11 @@ focusBehaviourSpec cfg bounds ctx insideRect outsidePoint render = do
 -- | 'focusPolicy' 'NotFocusable' keeps the control from taking focus, both
 -- by rendering first and by being clicked.
 focusPolicyAttributeSpec
-  :: (Ord e, HasControlConfig e String cfg)
+  :: Ord e
   => Rectangle                                   -- ^ bounds the control renders at
   -> ViewContext e String                          -- ^ starting context (theme\/measurer already set up)
   -> Rectangle                                     -- ^ the region making up its margin-inset hit area
-  -> ([Attribute cfg] -> View e String ())                -- ^ render the control under test with these attrs
+  -> ([Attribute (ControlConfig e String)] -> View e String ())  -- ^ render the control under test with these attrs
   -> Spec
 focusPolicyAttributeSpec bounds ctx insideRect render =
   describe "focusPolicy attribute" $ do
@@ -174,7 +177,7 @@ focusPolicyAttributeSpec bounds ctx insideRect render =
 -- | 'isEnabled' 'False' stops the control reacting, the same as an
 -- enclosing 'disableWhen'.
 enabledAttributeSpec
-  :: (Ord e, HasControlConfig e String cfg)
+  :: (Ord e, HasControlConfig e String cfg, HasEventHandlers cfg)
   => Rectangle                                   -- ^ bounds the control renders at
   -> ViewContext e String                          -- ^ starting context (theme\/measurer already set up)
   -> Rectangle                                     -- ^ the region making up its margin-inset hit area

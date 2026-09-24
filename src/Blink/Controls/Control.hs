@@ -14,8 +14,14 @@
 -- deep, via the class's 'overControl' method. A config that itself /is/
 -- 'ControlConfig' delegates with 'id'; a config that nests one delegates by
 -- rewriting just that field. 'overControl' composes through arbitrary
--- nesting depth, so an attribute's reach is decided by where its field
--- sits, not by which instances a widget declines to declare.
+-- nesting depth.
+--
+-- 'style' and 'isEnabled' apply to any config with a 'HasControlConfig'
+-- instance. The event-handler attributes ('onClicked' and the rest) also
+-- need a 'HasEventHandlers' instance, which a widget declares only if it
+-- reports those events. 'elementId', 'focusPolicy' and 'mouseActivation'
+-- apply to 'ControlConfig' alone: a widget built on 'control' sets those
+-- fields itself, so no widget's attribute list accepts them.
 --
 -- = Control
 --
@@ -61,6 +67,7 @@ module Blink.Controls.Control
   , ControlConfig (..)
   , ControlInteraction (..)
   , HasControlConfig (..)
+  , HasEventHandlers
   , defaultControlConfig
   , control
   , focusTargetOnClick
@@ -129,7 +136,7 @@ data MouseActivation
 -- | Appends a handler to whichever 'ControlConfig' field @get@\/@set@
 -- address, wrapping the result as an 'Attribute'. The shared plumbing
 -- behind every @onX@ builder below.
-addHandler :: HasControlConfig e msg cfg
+addHandler :: (HasControlConfig e msg cfg, HasEventHandlers cfg)
            => (ControlConfig e msg -> [h]) -> (ControlConfig e msg -> [h] -> ControlConfig e msg)
            -> h -> Attribute cfg
 addHandler get set h = overControl (Attribute (\cc -> set cc (get cc ++ [h])))
@@ -138,25 +145,25 @@ addHandler get set h = overControl (Attribute (\cc -> set cc (get cc ++ [h])))
 -- tracking across frames -- see 'control'. Unset by default, in which case
 -- the control raises no events and takes no part in focus at all,
 -- regardless of any handler attached to it.
-elementId :: HasControlConfig e msg cfg => e -> Attribute cfg
-elementId eid = overControl (Attribute (\cc -> cc { ccElementId = Just eid }))
+elementId :: e -> Attribute (ControlConfig e msg)
+elementId eid = Attribute (\cc -> cc { ccElementId = Just eid })
 
 -- | Reacts when the pointer starts being over the control this frame.
-onMouseEntered :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onMouseEntered :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
 onMouseEntered = addHandler ccOnMouseEntered (\cc hs -> cc { ccOnMouseEntered = hs })
 
 -- | Reacts when the pointer stops being over the control this frame.
-onMouseExited :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onMouseExited :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
 onMouseExited = addHandler ccOnMouseExited (\cc hs -> cc { ccOnMouseExited = hs })
 
 -- | Reacts when the mouse button goes down while the control is hit.
-onMouseDown :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onMouseDown :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
 onMouseDown = addHandler ccOnMouseDown (\cc hs -> cc { ccOnMouseDown = hs })
 
 -- | Reacts when the mouse button comes up while the control is hit, even
 -- if the press started elsewhere. See 'onClicked' for the click-only
 -- version.
-onMouseUp :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onMouseUp :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
 onMouseUp = addHandler ccOnMouseUp (\cc hs -> cc { ccOnMouseUp = hs })
 
 -- | Reacts when the control is clicked -- by default (see
@@ -165,26 +172,26 @@ onMouseUp = addHandler ccOnMouseUp (\cc hs -> cc { ccOnMouseUp = hs })
 -- while it still holds capture, even outside its bounds. Mouse-only -- see
 -- 'Blink.Controls.Button.onActivated' for the event that also fires on
 -- Enter while a button-like control holds focus.
-onClicked :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onClicked :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
 onClicked = addHandler ccOnClicked (\cc hs -> cc { ccOnClicked = hs })
 
 -- | Reacts to a key event while the control holds focus, with the
 -- triggering 'KeyEvent'.
-onKeyPressed :: HasControlConfig e msg cfg => KeyEventHandler e msg -> Attribute cfg
+onKeyPressed :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => KeyEventHandler e msg -> Attribute cfg
 onKeyPressed = addHandler ccOnKeyPressed (\cc hs -> cc { ccOnKeyPressed = hs })
 
 -- | Reacts when the control is named the winner of a focus transfer.
-onFocusGained :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onFocusGained :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
 onFocusGained = addHandler ccOnFocusGained (\cc hs -> cc { ccOnFocusGained = hs })
 
 -- | Reacts when the control loses focus, whether to a transfer or a clear.
-onFocusLost :: HasControlConfig e msg cfg => EventHandler e msg -> Attribute cfg
+onFocusLost :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
 onFocusLost = addHandler ccOnFocusLost (\cc hs -> cc { ccOnFocusLost = hs })
 
 -- | Which way this control's own mouse-button activity turns into a click
 -- -- see 'MouseActivation'. Defaults to 'ClickActivated'.
-mouseActivation :: HasControlConfig e msg cfg => MouseActivation -> Attribute cfg
-mouseActivation a = overControl (Attribute (\cc -> cc { ccMouseActivation = a }))
+mouseActivation :: MouseActivation -> Attribute (ControlConfig e msg)
+mouseActivation a = Attribute (\cc -> cc { ccMouseActivation = a })
 
 -- | Runs every handler in @hs@ on @a@, dispatching the resulting 'Effect's.
 runHandlers :: [a -> [Effect e msg]] -> a -> View e msg ()
@@ -352,13 +359,9 @@ fireElementEvents cc ci = do
 -- | Whether a control's own identity participates in keyboard focus.
 -- Attached via the @ccFocusPolicy@ field of 'ControlConfig' (defaulting to
 -- @'Focusable' 'defaultFocusOptions'@, matching every control's original,
--- single-flag behavior). Unlike other
--- 'ControlConfig' fields, a widget that needs a fixed value (e.g.
--- 'Blink.Controls.Label.label' always being 'NotFocusable') sets it
--- unconditionally after resolving attrs, the same way it already pins
--- other fixed behavior -- there is no separate, narrower attribute for
--- this; 'focusPolicy' is the only one, and any widget is free to override
--- whatever a caller passed through it.
+-- single-flag behavior). A widget built on 'control' sets this field
+-- itself (e.g. 'Blink.Controls.Label.label' always being 'NotFocusable');
+-- no widget's attribute list accepts 'focusPolicy'.
 --
 -- A composite with its own distinctly-identified children (a list, a
 -- tree, an editable row) that needs to give Tab a different meaning while
@@ -522,15 +525,21 @@ noInteraction s = ControlInteraction
   , ciStyle        = s
   }
 
--- | Implemented by any config type that nests a 'ControlConfig', letting a
--- control attribute (e.g. 'focusPolicy', 'onClicked') be applied to it
--- directly. Every instance but the base case delegates one hop into its
--- own nested field.
+-- | Implemented by any config type that nests a 'ControlConfig', letting
+-- 'style' and 'isEnabled' be applied to it directly. Every instance but the
+-- base case delegates one hop into its own nested field.
 class HasControlConfig e msg cfg | cfg -> e msg where
   overControl :: Attribute (ControlConfig e msg) -> Attribute cfg
 
 instance HasControlConfig e msg (ControlConfig e msg) where
   overControl = id
+
+-- | Implemented by a config whose widget reports raw pointer, key and
+-- focus events, letting 'onClicked' and the other event-handler
+-- attributes be applied to it.
+class HasEventHandlers cfg
+
+instance HasEventHandlers (ControlConfig e msg)
 
 -- | Whether the control responds to input at all. A disabled control still
 -- renders (in its disabled style) but ignores hover, clicks, key presses,
@@ -548,13 +557,9 @@ style k = overControl (Attribute (\cc -> cc { ccStyleKey = k }))
 -- keyboard focus -- see 'FocusPolicy'. Defaults to
 -- @'Focusable' 'defaultFocusOptions'@, matching every control's original
 -- behavior: Tab\/Shift-Tab cycling onto it, and auto-claiming focus by
--- rendering first while nothing else holds it. There is no separate
--- on\/off flag for this -- a widget that needs a
--- fixed value (e.g. 'Blink.Controls.Label.label' always being
--- 'NotFocusable') sets it unconditionally after resolving attrs, the same
--- way it already pins other fixed behavior.
-focusPolicy :: HasControlConfig e msg cfg => FocusPolicy -> Attribute cfg
-focusPolicy p = overControl (Attribute (\cc -> cc { ccFocusPolicy = p }))
+-- rendering first while nothing else holds it.
+focusPolicy :: FocusPolicy -> Attribute (ControlConfig e msg)
+focusPolicy p = Attribute (\cc -> cc { ccFocusPolicy = p })
 
 -- | Which way, if any, focus just moved, for 'control's own immediate
 -- self-claim\/self-give-up notifications -- distinct from the deferred

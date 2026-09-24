@@ -65,7 +65,7 @@ flattenVisibleSpec = describe "flattenVisible" $ do
 
 -- * Widget behaviour
 
-newtype TestElem = Part (TreePart String) deriving (Eq, Ord, Show)
+data TestElem = Part (TreePart String) | FocusHolder deriving (Eq, Ord, Show)
 
 -- | Rows are 20px tall, and with "src" expanded there are exactly four
 -- visible rows (see 'flattenVisibleSpec' above), so an 80px-tall scene
@@ -167,7 +167,7 @@ renderEmptyTree attrs = renderSilentTree (forest [] : selection (unselected []) 
 -- | 'tree' discards any elementId in favour of its own root id.
 contractSpec :: Spec
 contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
-  testBounds contractCtx (Part (TreeRow List)) (Point 5 5) contractHitRect (Point 200 200) renderEmptyTree
+  testBounds contractCtx (Part (TreeRow List)) FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyTree
 
 widgetSpec :: Spec
 widgetSpec = describe "tree" $ do

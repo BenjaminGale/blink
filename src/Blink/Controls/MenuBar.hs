@@ -112,6 +112,8 @@ defaultMenuBarConfig = MenuBarConfig
 instance HasControlConfig e msg (MenuBarConfig e a b msg) where
   overControl attr = Attribute (\c -> c { mbrControl = runAttribute (overControl attr) (mbrControl c) })
 
+instance HasEventHandlers (MenuBarConfig e a b msg)
+
 instance HasLayoutConfig (MenuBarConfig e a b msg) where
   overLayout attr = Attribute (\c -> c { mbrLayout = runAttribute attr (mbrLayout c) })
 

@@ -18,7 +18,7 @@ import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (StyleSet (..), Theme (..), VisualState (CommonMouseOver), styleTextColour)
 import Blink.View
 
-data TestElement = Remember deriving (Eq, Ord, Show)
+data TestElement = Remember | FocusHolder deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -63,7 +63,7 @@ start attrs = startAt seedCtx (fullSize attrs)
 
 spec :: Spec
 spec = describe "Blink.Controls.Checkbox" $ do
-  toggleBehaviourSpec not testBounds seedCtx Remember (Point 5 5) hitRect (Point 200 200) fullSize
+  toggleBehaviourSpec not testBounds seedCtx Remember FocusHolder (Point 5 5) hitRect (Point 200 200) fullSize
 
   it "is as wide as its glyph, the gap, its caption and the space after it, plus chrome, by default" $ do
     let ctx = withMeasurers (noOpMeasurers { msrText = monospaceTextMeasurer 10 12 }) seedCtx
