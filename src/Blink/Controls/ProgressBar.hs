@@ -14,18 +14,23 @@ module Blink.Controls.ProgressBar
   , progress
   , bandSpeed
   , bandWidth
+    -- * Style
+  , progressBarStyle
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (void, when)
+import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
-import Blink.Controls.ProgressBar.Style (progressBarStyleKey)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
 import Blink.Layout.Constraints (Layout (..), fill)
-import Blink.Style (Style (..))
 import Blink.View
 import Blink.View.Drawing (fillRect)
 import Blink.Element (Element (..), HasLayoutConfig (..), noIntrinsicSize)
+import Blink.Rendering (TextAlign (..))
+import Blink.Style
+import Blink.Controls.Style (progressBarMetrics)
 
 -- | The value passed to 'progressBar' via 'progress'.
 data ProgressValue
@@ -123,3 +128,28 @@ progressBar attrs = Element
               phase  = cycles - fromIntegral (floor cycles :: Int)
               left   = rectX r - bandW + (rectWidth r + bandW) * phase
           withBounds (r { rectX = left, rectWidth = bandW }) $ fillRect (styleTextColour s)
+
+-- * Style
+
+-- | The 'StyleKey' 'Blink.Controls.ProgressBar.progressBar' resolves
+-- its style from unless overridden via 'Blink.Controls.Control.style'.
+progressBarStyleKey :: StyleKey e
+progressBarStyleKey = Class "progressBar"
+
+-- | A progress bar's track/fill style: 'paletteSurface' for the track
+-- (background), 'paletteAccent' for the fill (drawn via
+-- 'styleTextColour'), no border.
+progressBarStyle :: Palette -> StyleSet
+progressBarStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = paletteSurface p
+      , styleTextColour   = paletteAccent p
+      , styleTextAlign    = AlignLeft
+      , styleBorder       = noBorder
+      }
+  , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
+  }
+
+-- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p = [ (progressBarStyleKey, (progressBarMetrics, progressBarStyle p)) ]

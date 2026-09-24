@@ -8,6 +8,8 @@
 module Blink.Controls.RadioButton
   ( radioButton
   , radioButtonStyleKey
+    -- * Style
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (void)
@@ -18,14 +20,13 @@ import Blink.Controls.Control
 import Blink.Controls.Label (lcText)
 import Blink.Controls.ToggleButton
   (ToggleConfig (..), defaultGlyphToggleConfig, glyphCaptionContent, glyphCaptionElement, toggleBase)
-import Blink.Controls.RadioButton.Style (radioButtonStyleKey)
-import Blink.Controls.Style (iconStyleKey)
+import Blink.Controls.Style (flatRowMetrics, flatRowStyle, iconStyleKey)
 import Blink.Geometry (Rectangle (..))
 import Blink.Rendering (ImagePath)
-import Blink.Style (Style (..), VisualState (..), resolveStyle)
 import Blink.View (getBounds, getStyleSet, isDisabled, isRegionHit, withBounds)
 import Blink.View.Drawing (drawImage)
 import Blink.Element (Element (..))
+import Blink.Style
 
 -- | The fixed width reserved for the glyph, on the left of the caption.
 glyphWidth :: Double
@@ -96,3 +97,14 @@ radioButton eid attrs = Element
       { tgcNext   = const True
       , tgcButton = btn { bcControl = ctrl }
       }
+
+-- * Style
+
+-- | The 'StyleKey' 'Blink.Controls.RadioButton.radioButton' resolves
+-- its style from unless overridden via 'Blink.Controls.Control.style'.
+radioButtonStyleKey :: StyleKey e
+radioButtonStyleKey = Class "radioButton"
+
+-- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p = [ (radioButtonStyleKey, (flatRowMetrics, flatRowStyle p)) ]

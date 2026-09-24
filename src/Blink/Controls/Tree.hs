@@ -30,6 +30,9 @@ module Blink.Controls.Tree
   , expanded
   , renderNode
   , onExpansionChanged
+    -- * Style
+  , treeChevronStyleKey
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (void, when)
@@ -41,17 +44,17 @@ import qualified Data.Set as Set
 import Data.Tree (Forest, Tree (..))
 
 import Blink.Controls.Control
-import Blink.Controls.List
-import Blink.Controls.Tree.Style (treeChevronStyleKey)
+import Blink.Controls.List hiding (defaultStyleEntries)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, noIntrinsicSize)
-import Blink.Geometry (Alignment (TopLeft))
+import Blink.Geometry (Alignment (TopLeft), uniform)
 import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (ImagePath)
-import Blink.Style (Style (..))
+import Blink.Rendering (ImagePath, TextAlign (..))
 import Blink.View (Effect, View, currentStyle)
 import Blink.View.Drawing (drawImage)
+import Blink.Style
+import Blink.Controls.Style (transparent)
 
 -- | Every currently visible row of @forest@, in document order, paired
 -- with its depth (0 for a root). A node's children are only ever visited
@@ -284,3 +287,47 @@ handleExpansionKey mkRowId listCfg visRows expanded0 onExpansionChanged0 viewpor
       where
         (before, atX) = break (\(y, _, _) -> y == x) visRows
         myDepth       = case atX of { (_, d, _) : _ -> d; [] -> 0 }
+
+-- * Style
+
+-- | The 'StyleKey' a 'Blink.Controls.Tree.tree' row's chevron resolves
+-- its style from unless overridden via 'Blink.Controls.Control.style'.
+treeChevronStyleKey :: StyleKey e
+treeChevronStyleKey = Class "tree-chevron"
+
+-- | No margin\/padding\/border -- the chevron already sits in a fixed,
+-- narrow column 'Blink.Controls.Tree.tree' reserves for it, so any
+-- chrome inset would just crowd its glyph.
+treeChevronMetrics :: Metrics
+treeChevronMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = uniform 0
+  }
+
+-- | A plain, transparent, centred icon with no border -- the same shape
+-- 'Blink.Controls.Label.labelStyle' has, just with no padding of
+-- its own. Uses 'paletteIcon'\/'paletteIconHover' (the same colours
+-- 'Blink.Controls.Checkbox.checkbox'\/'Blink.Controls.RadioButton.radioButton'
+-- tint their own icons with), since the chevron is nothing but an icon.
+treeChevronStyle :: Palette -> StyleSet
+treeChevronStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = transparent
+      , styleTextColour   = paletteIcon p
+      , styleTextAlign    = AlignCenter
+      , styleBorder       = noBorder
+      }
+  , styleOverrides = Map.fromList
+      [ (CommonMouseOver, \s -> s { styleTextColour = paletteIconHover p })
+      , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
+      ]
+  }
+
+-- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
+-- Needed at all only because 'Blink.Controls.Control.defaultControlConfig'
+-- resolves an unset 'Blink.Controls.Control.ccStyleKey' to
+-- 'Blink.Style.Defaults.defaultTheme''s boxed-control fallback look --
+-- without it, the chevron would draw with a button's full
+-- border\/background chrome instead of sitting flush in its narrow column.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p = [ (treeChevronStyleKey, (treeChevronMetrics, treeChevronStyle p)) ]

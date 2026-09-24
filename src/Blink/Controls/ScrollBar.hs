@@ -47,6 +47,8 @@ module Blink.Controls.ScrollBar
   , scrollBarThickness
   , visibleFraction
   , step
+    -- * Style
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (forM_, replicateM_, void, when)
@@ -54,15 +56,15 @@ import Control.Monad (forM_, replicateM_, void, when)
 import Blink.Controls.Button
   (ButtonActivation (..), ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig, onActivated)
 import Blink.Controls.Control
-import Blink.Controls.ScrollBar.Style (scrollBarButtonStyleKey, scrollBarStyleKey, scrollBarTrackStyleKey)
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), ImagePath)
-import Blink.Style (Style (..), styleBorderColour)
 import Blink.View
 import Blink.View.Drawing (drawImage, fillRect)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, height, noIntrinsicSize, runElement, width)
+import Blink.Style
+import Blink.Controls.Style (iconStyle, progressBarMetrics, sliderStyle, toggleGroupMetrics, toggleGroupStyle)
 
 -- | The thickness (cross-axis extent) of the whole control, and of each
 -- arrow button's extent along the main axis. Both fixed rather than
@@ -358,3 +360,26 @@ scrollBar tag attrs = Element
       , ccFocusPolicy = NotFocusable
       , ccContent     = const (runElement box)
       }
+
+-- * Style
+
+-- | 'StyleKey's 'Blink.Controls.ScrollBar.scrollBar' resolves its own
+-- chrome, its arrow buttons, and its track from unless overridden via
+-- 'Blink.Controls.Control.style'.
+scrollBarStyleKey, scrollBarButtonStyleKey, scrollBarTrackStyleKey :: StyleKey e
+scrollBarStyleKey       = Class "scrollBar"
+scrollBarButtonStyleKey = Class "scrollBarButton"
+scrollBarTrackStyleKey  = Class "scrollBarTrack"
+
+-- | This control's entries in 'Blink.Style.Defaults.defaultTheme' -- three
+-- shapes from "Blink.Controls.Style", none of them owned by the scrollbar
+-- itself: its outer container reuses the plain wrapper look, its arrow
+-- buttons reuse the plain-icon look (no background\/border of their own --
+-- just the icon, recolouring on hover), and its track reuses the slider's
+-- track look.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p =
+  [ (scrollBarStyleKey,       (toggleGroupMetrics, toggleGroupStyle p))
+  , (scrollBarButtonStyleKey, (toggleGroupMetrics, iconStyle p))
+  , (scrollBarTrackStyleKey,  (progressBarMetrics, sliderStyle p))
+  ]

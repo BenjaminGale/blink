@@ -30,6 +30,8 @@ module Blink.Controls.ToggleGroup
   , selectedItem
   , allowDeselect
   , onSelectionChanged
+    -- * Style
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (void)
@@ -37,12 +39,13 @@ import Control.Monad (void)
 import Blink.Controls.Control
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.ToggleButton (ToggleConfig, isSelected, onSelectedChanged, toggleButton)
-import Blink.Controls.ToggleGroup.Style (radioButtonGroupStyleKey, toggleButtonGroupStyleKey)
 import Blink.Geometry (Alignment (TopLeft), Orientation (..))
 import Blink.Layout.Box (children, hBox, spacing, vBox)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.View (Effect)
 import Blink.Element (Element (..), HasLayoutConfig (..), runElement)
+import Blink.Style
+import Blink.Controls.Style (toggleGroupMetrics, toggleGroupStyle)
 
 -- | Identifies one part of a 'toggleButtonGroup'\/'radioButtonGroup' for the
 -- purpose of building element ids: the group's own container
@@ -243,3 +246,27 @@ onItemToggled cfg item newlySelected
   | otherwise            = []
   where
     fire selection = concatMap ($ selection) (tggOnSelectionChanged cfg)
+
+-- * Style
+
+-- | The 'StyleKey' 'Blink.Controls.ToggleGroup.toggleButtonGroup'
+-- resolves its own chrome from unless overridden via
+-- 'Blink.Controls.Control.style'.
+toggleButtonGroupStyleKey :: StyleKey e
+toggleButtonGroupStyleKey = Class "toggleButtonGroup"
+
+-- | The 'StyleKey' 'Blink.Controls.ToggleGroup.radioButtonGroup'
+-- resolves its own chrome from unless overridden via
+-- 'Blink.Controls.Control.style'.
+radioButtonGroupStyleKey :: StyleKey e
+radioButtonGroupStyleKey = Class "radioButtonGroup"
+
+-- | This control pair's entries in 'Blink.Style.Defaults.defaultTheme' --
+-- the plain wrapper look from "Blink.Controls.Style", since neither has a
+-- shape of its own; the items inside resolve their own look from
+-- 'Blink.Controls.Button.buttonStyleKey'\/'Blink.Controls.RadioButton.radioButtonStyleKey'.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p =
+  [ (toggleButtonGroupStyleKey, (toggleGroupMetrics, toggleGroupStyle p))
+  , (radioButtonGroupStyleKey,  (toggleGroupMetrics, toggleGroupStyle p))
+  ]

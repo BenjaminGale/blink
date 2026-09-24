@@ -84,27 +84,8 @@ library
         Blink.Layout.Constraints
         Blink.Rendering
         Blink.Style
-        Blink.Controls.Button.Style
-        Blink.Controls.Checkbox.Style
         Blink.Controls.Style
         Blink.Style.Defaults
-        Blink.Controls.Divider.Style
-        Blink.Controls.Image.Style
-        Blink.Controls.Label.Style
-        Blink.Controls.List.Style
-        Blink.Controls.ProgressBar.Style
-        Blink.Controls.RadioButton.Style
-        Blink.Controls.ScrollBar.Style
-        Blink.Controls.ScrollPanel.Style
-        Blink.Controls.Slider.Style
-        Blink.Controls.TextInput.Style
-        Blink.Controls.ToggleButton.Style
-        Blink.Controls.ToggleGroup.Style
-        Blink.Controls.Table.Style
-        Blink.Controls.Tree.Style
-        Blink.Controls.Menu.Style
-        Blink.Controls.MenuButton.Style
-        Blink.Controls.MenuBar.Style
     hs-source-dirs: src
 
 executable demo

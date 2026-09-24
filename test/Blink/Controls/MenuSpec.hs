@@ -11,8 +11,7 @@ import Blink.AppFixtures (drawnTexts, resultDraws, resultState, solidPalette, st
 import Blink.Controls.Button (ButtonConfig, onActivated)
 import Blink.Controls.Control (onFocusGained, post)
 import Blink.Controls.Label (mnemonic, text)
-import Blink.Controls.Menu (MenuItems (..), menuListWithSubmenus)
-import qualified Blink.Controls.Menu.Style as MenuStyle
+import Blink.Controls.Menu (MenuItems (..), defaultStyleEntries, menuListWithSubmenus)
 import Blink.Element (Attribute, elLayout, elementWithLayout, height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Alt))
@@ -95,7 +94,7 @@ menuApp = App
 -- library's real menu item style so its highlight can be observed.
 menuTheme :: Theme Part
 menuTheme = (emptyTheme (testMetrics, testStyleSet))
-  { themeElementStyles = Map.fromList (MenuStyle.defaultStyleEntries highlightPalette) }
+  { themeElementStyles = Map.fromList (defaultStyleEntries highlightPalette) }
 
 -- | Black everywhere except 'highlightColour', so an item's highlight fill
 -- is the only thing drawn in that colour.

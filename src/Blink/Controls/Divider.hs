@@ -14,18 +14,23 @@ module Blink.Controls.Divider
   , divider
   , orientation
   , thickness
+    -- * Style
+  , dividerStyle
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (forM_, void)
+import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
-import Blink.Controls.Divider.Style (dividerStyleKey)
-import Blink.Geometry (Alignment (TopLeft), Orientation (..), Size (..))
+import Blink.Geometry (Alignment (TopLeft), Orientation (..), Size (..), uniform)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
-import Blink.Style (styleBorderColour)
 import Blink.View
 import Blink.View.Drawing (fillRect)
 import Blink.Element (Element (..), HasLayoutConfig (..))
+import Blink.Rendering (TextAlign (..))
+import Blink.Style
+import Blink.Controls.Style (transparent)
 
 -- | Every capability 'divider' resolves: the wrapped 'ControlConfig', the
 -- axis it runs along, its thickness across that axis, and the 'Layout'
@@ -116,3 +121,35 @@ divider attrs = Element
     body = do
       s <- currentStyle
       forM_ (styleBorderColour s) fillRect
+
+-- * Style
+
+-- | The 'StyleKey' 'Blink.Controls.Divider.divider' resolves its
+-- style from unless overridden via 'Blink.Controls.Control.style'.
+dividerStyleKey :: StyleKey e
+dividerStyleKey = Class "divider"
+
+dividerMetrics :: Metrics
+dividerMetrics = Metrics
+  { metricsMargin      = uniform 4
+  , metricsPadding     = uniform 0
+  }
+
+-- | A divider's line style: transparent background, 'paletteBorder' for
+-- the line itself (drawn via 'styleBorderColour', same as
+-- 'Blink.Controls.Slider.sliderStyle's groove). Width 0 so the
+-- control's own automatic border draw never fires.
+dividerStyle :: Palette -> StyleSet
+dividerStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = transparent
+      , styleTextColour   = paletteTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleBorder       = soloBorder (paletteBorder p) 0
+      }
+  , styleOverrides = Map.empty
+  }
+
+-- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p = [ (dividerStyleKey, (dividerMetrics, dividerStyle p)) ]

@@ -8,6 +8,8 @@
 module Blink.Controls.Checkbox
   ( checkbox
   , checkboxStyleKey
+    -- * Style
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (void)
@@ -18,14 +20,13 @@ import Blink.Controls.Control
 import Blink.Controls.Label (lcText)
 import Blink.Controls.ToggleButton
   (ToggleConfig (..), defaultGlyphToggleConfig, glyphCaptionContent, glyphCaptionElement, toggleBase)
-import Blink.Controls.Checkbox.Style (checkboxStyleKey)
-import Blink.Controls.Style (iconStyleKey)
+import Blink.Controls.Style (flatRowMetrics, flatRowStyle, iconStyleKey)
 import Blink.Geometry (Rectangle (..), Size (..))
 import Blink.Rendering (ImagePath)
-import Blink.Style (Style (..), VisualState (..), resolveStyle)
 import Blink.View (getBounds, getStyleSet, isDisabled, isRegionHit, withBounds)
 import Blink.View.Drawing (drawImage)
 import Blink.Element (Element (..))
+import Blink.Style
 
 -- | The fixed width reserved for the glyph, on the left of the caption.
 glyphWidth :: Double
@@ -109,3 +110,14 @@ checkbox eid attrs = Element
       { tgcNext   = not
       , tgcButton = btn { bcControl = ctrl }
       }
+
+-- * Style
+
+-- | The 'StyleKey' 'Blink.Controls.Checkbox.checkbox' resolves its
+-- style from unless overridden via 'Blink.Controls.Control.style'.
+checkboxStyleKey :: StyleKey e
+checkboxStyleKey = Class "checkbox"
+
+-- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p = [ (checkboxStyleKey, (flatRowMetrics, flatRowStyle p)) ]

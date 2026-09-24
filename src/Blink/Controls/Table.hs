@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 -- | A table built on 'listBase': each row lays out one cell per
@@ -34,25 +35,30 @@ module Blink.Controls.Table
   , tableSpacer
   , weaveColumns
   , columnSpacer
+    -- * Style
+  , tableHeaderStyleKey
+  , tableColumnDividerStyleKey
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (forM_, void, when)
 import Data.Maybe (isJust)
+import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
-import Blink.Controls.List
-import Blink.Controls.List.Style (listItemStyleKey)
-import Blink.Controls.Table.Style (tableColumnDividerStyleKey, tableHeaderStyleKey)
+import Blink.Controls.List hiding (defaultStyleEntries)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, noIntrinsicSize, runElement)
-import Blink.Geometry (Alignment (TopLeft), Insets (..), Point (pointX), Rectangle (..), insetRect)
+import Blink.Geometry (Alignment (TopLeft), Insets (..), Point (pointX), Rectangle (..), insetRect, uniform)
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), Length, exactly, fill)
-import Blink.Style (styleBase, styleBorderColour)
 import Blink.View
   ( CursorShape (..), Effect, View, currentStyle, getBounds, getExtentState, getMousePos, getStyleSet, isDragging
   , requestCursor, requestExtentBy, withBounds
   )
 import Blink.View.Drawing (fillRect)
+import Blink.Rendering (TextAlign (..))
+import Blink.Style
+import Blink.Controls.Style (transparent)
 
 -- | Identifies one part of a 'table' for the purpose of building
 -- element ids -- every part 'listBase' itself already needs (the root,
@@ -366,3 +372,78 @@ tableSpacer cfg = elementWithLayout (Layout fill (exactly height) TopLeft) (pure
     rowsHeight   = fromIntegral (length (itemStates (lcSelection cfg))) * lcRowHeight cfg
     headerHeight = if isJust (lcHeader cfg) then lcRowHeight cfg else 0
     height       = headerHeight + rowsHeight
+
+-- * Style
+
+-- | The 'StyleKey' each of a 'Blink.Controls.Table.table''s header
+-- cells resolves its style from unless overridden via
+-- 'Blink.Controls.Control.style'.
+tableHeaderStyleKey :: StyleKey e
+tableHeaderStyleKey = Class "table-header"
+
+-- | The 'StyleKey' a 'Blink.Controls.Table.table''s draggable
+-- column-resize handle resolves its style from. Distinct from
+-- 'Blink.Controls.Divider.dividerStyleKey' -- that one's default 4px
+-- margin would eat the handle's own few pixels of width, since a
+-- control's chrome insets both its hit area and its content bounds by
+-- margin before running.
+tableColumnDividerStyleKey :: StyleKey e
+tableColumnDividerStyleKey = Class "table-column-divider"
+
+-- | A shaded strip, no border, tinted on hover. A resize handle (see
+-- 'tableColumnDividerStyleKey') between cells (see
+-- 'Blink.Controls.Table.table') separates them instead of a border.
+tableHeaderStyle :: Palette -> StyleSet
+tableHeaderStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = paletteSurface p
+      , styleTextColour   = paletteTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleBorder       = noBorder
+      }
+  , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleBackground = paletteSurfaceHover p })
+  }
+
+-- | No margin\/padding of its own -- 'Blink.Controls.Table.columnHeaderRow'
+-- insets the whole header row once, by the same chrome a data row gets,
+-- rather than padding each header cell individually; padding here too
+-- would double up on that and push a header cell's content further right
+-- than the matching row cell's.
+tableHeaderMetrics :: Metrics
+tableHeaderMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = uniform 0
+  }
+
+-- | No margin (unlike 'Blink.Controls.Divider.divider') -- the handle's
+-- whole few-pixel width has to stay both hittable and drawable.
+tableColumnDividerMetrics :: Metrics
+tableColumnDividerMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = uniform 0
+  }
+
+-- | A vertical line, 'paletteBorder' by default, tinted on hover the
+-- same way a header cell is.
+tableColumnDividerStyle :: Palette -> StyleSet
+tableColumnDividerStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = transparent
+      , styleTextColour   = paletteTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleBorder       = soloBorder (paletteBorder p) 0
+      }
+  , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleBorder = withBorderColour (paletteSurfaceHover p) (styleBorder s) })
+  }
+
+-- | This control's own entries in 'Blink.Style.Defaults.defaultTheme'.
+-- Needed at all only because 'Blink.Controls.Control.defaultControlConfig'
+-- resolves an unset 'Blink.Controls.Control.ccStyleKey' to
+-- 'Blink.Style.Defaults.defaultTheme''s boxed-control fallback look --
+-- without them, the header would draw with a button's full chrome instead
+-- of a header that reads distinctly from the rows beneath it.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p =
+  [ (tableHeaderStyleKey, (tableHeaderMetrics, tableHeaderStyle p))
+  , (tableColumnDividerStyleKey, (tableColumnDividerMetrics, tableColumnDividerStyle p))
+  ]

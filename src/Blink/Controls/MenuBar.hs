@@ -33,25 +33,33 @@ module Blink.Controls.MenuBar
   , submenuItems
   , openMenu
   , onOpenMenuChanged
+    -- * Style
+  , menuBarStyleKey
+  , menuBarLabelStyleKey
+  , menuBarListStyleKey
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (forM_, void, when)
 
 import Data.List (elemIndex, find)
 import Data.Maybe (isJust, listToMaybe)
+import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement, lcMnemonic, lcText)
-import Blink.Controls.Menu (MenuItems (..), menuListWithSubmenus, menuTrigger, submenuInPlay)
-import Blink.Controls.MenuBar.Style (menuBarLabelStyleKey, menuBarListStyleKey, menuBarStyleKey)
-import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig)
-import Blink.Geometry (Alignment (TopLeft))
+import Blink.Controls.Menu (MenuItems (..), menuListMetrics, menuListWithSubmenus, menuTrigger, submenuInPlay)
+import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleChecked)
+import Blink.Geometry (Alignment (TopLeft), Insets (..), uniform)
 import Blink.Input (InputState (inputKeyEvents), Key (KeyLeft, KeyRight), KeyEvent (key))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.View
 import Blink.Element (Element (..), HasLayoutConfig (..), height, runElement, width)
+import Blink.Controls.Style (containerStyle, transparent)
+import Blink.Rendering (TextAlign (..))
+import Blink.Style
 
 -- | Identifies one part of a 'menuBar': its own container ('MenuBar'), one
 -- top-level menu's own label ('MenuBarLabel'), its item list's own focus
@@ -262,3 +270,83 @@ itemsElement tag cfg menuKey close onBar switchMenu = base { elRun = handleMenuS
     menuStep KeyLeft  = Just (-1)
     menuStep KeyRight = Just 1
     menuStep _        = Nothing
+
+-- * Style
+
+-- | The 'StyleKey' 'Blink.Controls.MenuBar.menuBar' resolves its own
+-- container chrome from unless overridden via 'Blink.Controls.Control.style'.
+-- A flat strip -- background plus a bottom rule only, the same
+-- top\/bottom-only-border idea the sample app's own status bar uses --
+-- rather than a fully bordered box, so it reads as a toolbar sitting above
+-- the rest of the window instead of a boxed-in panel.
+menuBarStyleKey :: StyleKey e
+menuBarStyleKey = Class "menuBar"
+
+-- | The 'StyleKey' each of 'Blink.Controls.MenuBar.menuBar''s own labels
+-- resolves its look from -- flat at rest (no visible border\/fill), tinted
+-- on hover and while its own dropdown is open ('toggleChecked'), the same
+-- pseudo-state 'Blink.Controls.ToggleButton.toggleBase' already puts in
+-- 'Blink.Controls.Control.ccActiveStates'. Deliberately its own key rather
+-- than 'Blink.Controls.ToggleButton.toggleButtonStyleKey' -- a
+-- top-level menu label reads as a plain menu-bar item, not a button.
+menuBarLabelStyleKey :: StyleKey e
+menuBarLabelStyleKey = Class "menuBarLabel"
+
+-- | The 'StyleKey' an open dropdown list resolves its own panel
+-- background\/border from unless overridden via 'Blink.Controls.Control.style'.
+-- Uses 'containerStyle' -- the same shape
+-- 'Blink.Controls.MenuButton.menuButtonListStyleKey' resolves to.
+menuBarListStyleKey :: StyleKey e
+menuBarListStyleKey = Class "menuBarList"
+
+menuBarMetrics :: Metrics
+menuBarMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = Insets { topInset = 0, rightInset = 4, bottomInset = 0, leftInset = 4 }
+  }
+
+menuBarLabelMetrics :: Metrics
+menuBarLabelMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = Insets { topInset = 3, rightInset = 8, bottomInset = 3, leftInset = 8 }
+  }
+
+-- | Only the bottom edge visible -- the flat-strip, rule-only look
+-- described in the doc comment on 'menuBarStyleKey'.
+bottomOnly :: EdgeVisibility
+bottomOnly = allEdgesVisible { edgeTopVisible = False, edgeRightVisible = False, edgeLeftVisible = False }
+
+menuBarStyle :: Palette -> StyleSet
+menuBarStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = paletteSurface p
+      , styleTextColour   = paletteTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleBorder       = map (\l -> l { layerVisible = bottomOnly }) (soloBorder (paletteBorder p) 1)
+      }
+  , styleOverrides = Map.empty
+  }
+
+menuBarLabelStyle :: Palette -> StyleSet
+menuBarLabelStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = transparent
+      , styleTextColour   = paletteTextPrimary p
+      , styleTextAlign    = AlignCenter
+      , styleBorder       = soloBorder transparent 1
+      }
+  , styleOverrides = Map.fromList
+      [ (CommonMouseOver, \s -> s { styleBackground = paletteSurfaceHover p })
+      , (CommonPressed,   \s -> s { styleBackground = paletteSurfaceHover p })
+      , (toggleChecked,   \s -> s { styleBackground = paletteSurfaceHover p })
+      , (FocusFocused,    \s -> s { styleBorder = withBorderColour (paletteFocusRing p) (styleBorder s) })
+      ]
+  }
+
+-- | This control's entries in 'Blink.Style.Defaults.defaultTheme'.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p =
+  [ (menuBarStyleKey,      (menuBarMetrics, menuBarStyle p))
+  , (menuBarLabelStyleKey, (menuBarLabelMetrics, menuBarLabelStyle p))
+  , (menuBarListStyleKey,  (menuListMetrics, containerStyle p))
+  ]

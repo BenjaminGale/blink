@@ -20,21 +20,23 @@ module Blink.Controls.Slider
   , step
   , onValueChanged
   , thumbColourFor
+    -- * Style
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (forM_, void, when)
 import Data.Maybe (fromMaybe)
 
 import Blink.Controls.Control
-import Blink.Controls.Slider.Style (sliderStyleKey)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..))
-import Blink.Style (Style (..), soloBorder, styleBorderColour)
 import Blink.View
 import Blink.View.Drawing (fillRect, strokeRect)
 import Blink.Element (Element (..), HasLayoutConfig (..), noIntrinsicSize)
+import Blink.Style
+import Blink.Controls.Style (progressBarMetrics, sliderStyle)
 
 -- | The height of the thin filled bar drawn along the middle of the
 -- control's full bounds -- deliberately much shorter than the thumb, so
@@ -231,3 +233,14 @@ slider eid attrs = Element
       when (newValue /= value0) $ runHandlers (scOnValueChanged cfg) newValue
 
       drawTrack s bounds focused hovered capturing value0
+
+-- * Style
+
+-- | The 'StyleKey' 'Blink.Controls.Slider.slider' resolves its style
+-- from unless overridden via 'Blink.Controls.Control.style'.
+sliderStyleKey :: StyleKey e
+sliderStyleKey = Class "slider"
+
+-- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p = [ (sliderStyleKey, (progressBarMetrics, sliderStyle p)) ]

@@ -9,13 +9,11 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
-  ( Direction (..), ListPart (..), MultiSelection, SingleSelection, isItem, moveCursor, multiSelected
+  ( Direction (..), ListPart (..), MultiSelection, SingleSelection, isItem, listStyleKey, moveCursor, multiSelected
   , onSelectionChanged, rowHeight, selectItem, selectedItems, selection, unselected
   )
-import Blink.Controls.List.Style (listStyleKey)
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Controls.Tree
-import Blink.Controls.Tree.Style (treeChevronStyleKey)
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
 import Blink.Element (Element (..), height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
@@ -79,7 +77,7 @@ testTheme :: Theme TestElem
 testTheme = mkTestTheme zeroMetrics (plainStyleSet (plainStyle testColour))
 
 -- | Distinct from the chevron's resting colour, so a test can tell
--- whether it actually resolved 'Blink.Controls.Tree.Style.treeChevronStyleKey'\'s
+-- whether it actually resolved 'Blink.Controls.Tree.treeChevronStyleKey'\'s
 -- own hover override.
 chevronHoverColour :: Colour
 chevronHoverColour = RGBA 0 0 1 1

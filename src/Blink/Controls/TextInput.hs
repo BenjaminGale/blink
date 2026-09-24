@@ -18,25 +18,29 @@ module Blink.Controls.TextInput
   , displayFilter
   , onInput
   , onSubmit
+    -- * Style
+  , textInputStyle
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (forM_, void, when)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement)
-import Blink.Controls.TextInput.Style (textInputStyleKey)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Style (..))
 import Blink.View
 import Blink.View.Drawing (fillRect, drawText)
 import Blink.View.Selection (selectionHasExtent, selectionLow, selectionHigh, cursor, extendActive)
 import Blink.Element (Element (..), HasLayoutConfig (..))
+import Blink.Style
+import Blink.Controls.Style (buttonStyle, controlMetrics)
 
 -- | Every capability 'textInput' resolves: the wrapped 'ControlConfig',
 -- its current value, 'placeholder', 'inputFilter'\/'displayFilter', and
@@ -393,3 +397,27 @@ textInput eid attrs = Element
           else pure scrollX
 
       drawTextInputContent s bounds displayValue (ticPlaceholder cfg) canEdit effectiveScrollX selFinal
+
+-- * Style
+
+-- | The 'StyleKey' 'Blink.Controls.TextInput.textInput' resolves its
+-- style from unless overridden via 'Blink.Controls.Control.style'.
+textInputStyleKey :: StyleKey e
+textInputStyleKey = Class "textInput"
+
+-- | Like 'Blink.Controls.Style.buttonStyle' but with a subtler pressed
+-- state: a mouse-down on a text input starts a drag-to-select, so filling
+-- it with 'paletteAccent' (as a button does) would hide the selection
+-- highlight instead of just darkening the background a touch.
+textInputStyle :: Palette -> StyleSet
+textInputStyle p = base
+  { styleOverrides = Map.insert CommonPressed
+      (\s -> s { styleBackground = paletteSurfaceHover p })
+      (styleOverrides base)
+  }
+  where
+    base = buttonStyle AlignLeft p
+
+-- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p = [ (textInputStyleKey, (controlMetrics, textInputStyle p)) ]

@@ -14,10 +14,9 @@ itself (no built-in control needs it) but exported the same way
 on 'Blink.View.Focus.withFocusScope' -- see "Theme"'s @withStatusBar@-style
 registration in the sample app.
 
-A shape used by exactly one control lives in that control's own
-@Blink.Style.\<Control\>@ module instead (e.g.
-"Blink.Controls.ProgressBar.Style", "Blink.Controls.Divider.Style",
-"Blink.Controls.Label.Style") -- this module is only for shapes more than one
+A shape used by exactly one control lives in that control's own module
+instead (e.g. "Blink.Controls.ProgressBar", "Blink.Controls.Divider",
+"Blink.Controls.Label") -- this module is only for shapes more than one
 control resolves to. 'buttonStyle' is also 'Blink.Style.Defaults.defaultTheme's
 'Blink.Style.themeDefaultStyle' fallback, making it the library's
 one universal default look.
@@ -68,8 +67,8 @@ flatRowMetrics = Metrics
   , metricsPadding     = uniform 4
   }
 
--- | Shared by 'Blink.Controls.ProgressBar.Style', 'Blink.Controls.Slider.Style',
--- and 'Blink.Controls.ScrollBar.Style's track -- despite the name, this is
+-- | Shared by 'Blink.Controls.ProgressBar', 'Blink.Controls.Slider',
+-- and 'Blink.Controls.ScrollBar's track -- despite the name, this is
 -- the generic track metrics, not something owned by the progress bar.
 progressBarMetrics :: Metrics
 progressBarMetrics = Metrics
@@ -80,9 +79,9 @@ progressBarMetrics = Metrics
 -- | No margin\/padding\/border of its own -- a
 -- 'Blink.Controls.ToggleGroup.toggleButtonGroup'\/'Blink.Controls.ToggleGroup.radioButtonGroup'
 -- is just a plain wrapper around its items; any chrome belongs on the
--- items themselves ('Blink.Controls.Button.Style.buttonStyleKey'\/'Blink.Controls.RadioButton.Style.radioButtonStyleKey'),
+-- items themselves ('Blink.Controls.Button.buttonStyleKey'\/'Blink.Controls.RadioButton.radioButtonStyleKey'),
 -- not doubled up on their container. Shared by
--- 'Blink.Controls.ScrollBar.Style's own outer container for the same reason.
+-- 'Blink.Controls.ScrollBar's own outer container for the same reason.
 toggleGroupMetrics :: Metrics
 toggleGroupMetrics = Metrics
   { metricsMargin      = uniform 0
@@ -92,7 +91,7 @@ toggleGroupMetrics = Metrics
 -- | A bordered-box control style: background/border step through
 -- hover/press/focus/disabled, with a bold accent fill on press. Used for
 -- buttons, toggle buttons, text inputs, and a scrollbar's own buttons --
--- see "Blink.Controls.ToggleButton.Style" for the extra accent fill a toggle
+-- see "Blink.Controls.ToggleButton" for the extra accent fill a toggle
 -- button adds on top while selected.
 buttonStyle :: TextAlign -> Palette -> StyleSet
 buttonStyle align p = StyleSet
@@ -113,7 +112,7 @@ buttonStyle align p = StyleSet
 -- | A flat, mostly-invisible row style: no background or border
 -- normally, just a hover tint and a focus ring, so it reads as a plain
 -- row rather than a button. Used for checkboxes and radio buttons.
--- No 'Blink.Controls.ToggleButton.Style.toggleChecked' override -- the glyph itself (checkmark or filled
+-- No 'Blink.Controls.ToggleButton.toggleChecked' override -- the glyph itself (checkmark or filled
 -- dot) already shows selected state, and overriding it here would mask
 -- the hover/press tint above whenever a row is selected.
 flatRowStyle :: Palette -> StyleSet
@@ -198,7 +197,7 @@ containerStyle p = StyleSet
 
 -- | The 'StyleKey' a control resolves an icon's own tint from --
 -- independently of whatever 'StyleKey' governs the row it sits in (e.g.
--- 'Blink.Controls.Checkbox.Style.checkboxStyleKey'), so hovering the
+-- 'Blink.Controls.Checkbox.checkboxStyleKey'), so hovering the
 -- icon specifically can recolour it without also recolouring that row's
 -- caption text. A control resolves this itself (it isn't part of the
 -- usual per-control 'Blink.Controls.Control.ccStyleKey'\/'Blink.View.currentStyle'

@@ -22,19 +22,19 @@ myButtonStyle = (buttonStyle AlignCenter myPalette)
 @
 
 Register it under whichever 'StyleKey' the control resolves to (e.g.
-'Blink.Controls.Button.Style.buttonStyleKey', or a different 'Class'\/'ElementId'
+'Blink.Controls.Button.buttonStyleKey', or a different 'Class'\/'ElementId'
 passed via 'Blink.Controls.Control.style') in 'themeElementStyles'.
 
 = Module layout
 
-Each built-in control's own registration in 'defaultTheme' lives in its
-own @Blink.Style.\<Control\>@ module (e.g. "Blink.Controls.Checkbox.Style"),
-which is also where a control's own shape lives if it has one (e.g.
-"Blink.Controls.ProgressBar.Style"). A shape shared by more than one control
-lives in "Blink.Controls.Style" instead, since no single control's
-module could own it. This module only assembles those pieces into one
-'Theme' -- see any of the modules above for the actual colours and
-metrics.
+Each built-in control's own registration in 'defaultTheme' is the
+@defaultStyleEntries@ exported from that control's module (e.g.
+"Blink.Controls.Checkbox"), which is also where a control's own shape
+lives if it has one (e.g. 'Blink.Controls.ProgressBar.progressBarStyle').
+A shape shared by more than one control lives in "Blink.Controls.Style"
+instead, since no single control's module could own it. This module only
+assembles those pieces into one 'Theme' -- see any of the modules above
+for the actual colours and metrics.
 -}
 module Blink.Style.Defaults
   ( defaultTheme
@@ -56,29 +56,29 @@ import Blink.Controls.Style
   (buttonStyle, containerStyle, controlMetrics, flatRowStyle, iconStyle, iconStyleKey, sliderStyle
   , toggleGroupMetrics, toggleGroupStyle
   )
-import Blink.Controls.Divider.Style (dividerStyle)
-import Blink.Controls.Label.Style (labelStyle)
-import Blink.Controls.ProgressBar.Style (progressBarStyle)
+import Blink.Controls.Divider (dividerStyle)
+import Blink.Controls.Label (labelStyle)
+import Blink.Controls.ProgressBar (progressBarStyle)
 
-import qualified Blink.Controls.Button.Style as Button
-import qualified Blink.Controls.Checkbox.Style as Checkbox
-import qualified Blink.Controls.Divider.Style as Divider
-import qualified Blink.Controls.Image.Style as Image
-import qualified Blink.Controls.Label.Style as Label
-import qualified Blink.Controls.List.Style as List
-import qualified Blink.Controls.Menu.Style as Menu
-import qualified Blink.Controls.MenuBar.Style as MenuBar
-import qualified Blink.Controls.MenuButton.Style as MenuButton
-import qualified Blink.Controls.ProgressBar.Style as ProgressBar
-import qualified Blink.Controls.RadioButton.Style as RadioButton
-import qualified Blink.Controls.ScrollBar.Style as ScrollBar
-import qualified Blink.Controls.ScrollPanel.Style as ScrollPanel
-import qualified Blink.Controls.Slider.Style as Slider
-import qualified Blink.Controls.TextInput.Style as TextInput
-import qualified Blink.Controls.ToggleButton.Style as ToggleButton
-import qualified Blink.Controls.ToggleGroup.Style as ToggleGroup
-import qualified Blink.Controls.Table.Style as Table
-import qualified Blink.Controls.Tree.Style as Tree
+import qualified Blink.Controls.Button as Button
+import qualified Blink.Controls.Checkbox as Checkbox
+import qualified Blink.Controls.Divider as Divider
+import qualified Blink.Controls.Image as Image
+import qualified Blink.Controls.Label as Label
+import qualified Blink.Controls.List as List
+import qualified Blink.Controls.Menu as Menu
+import qualified Blink.Controls.MenuBar as MenuBar
+import qualified Blink.Controls.MenuButton as MenuButton
+import qualified Blink.Controls.ProgressBar as ProgressBar
+import qualified Blink.Controls.RadioButton as RadioButton
+import qualified Blink.Controls.ScrollBar as ScrollBar
+import qualified Blink.Controls.ScrollPanel as ScrollPanel
+import qualified Blink.Controls.Slider as Slider
+import qualified Blink.Controls.TextInput as TextInput
+import qualified Blink.Controls.ToggleButton as ToggleButton
+import qualified Blink.Controls.ToggleGroup as ToggleGroup
+import qualified Blink.Controls.Table as Table
+import qualified Blink.Controls.Tree as Tree
 
 -- | A complete 'Theme' for every built-in control, built entirely from
 -- @p@. Works for any element type @e@ since every entry is 'Class'-keyed,

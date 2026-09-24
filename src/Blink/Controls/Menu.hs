@@ -21,19 +21,24 @@ module Blink.Controls.Menu
   , menuList
   , menuListWithSubmenus
   , submenuInPlay
+    -- * Style
+  , menuItemStyleKey
+  , menuItemSubmenuOpen
+  , menuListMetrics
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (filterM, forM_, void, when)
 import Data.List (find)
 import Data.Maybe (isJust, listToMaybe)
 import qualified Data.Set as Set
+import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement, lcMnemonic, lcText, renderLabelledContent)
-import Blink.Controls.Menu.Style (menuItemStyleKey, menuItemSubmenuOpen)
 import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), toggleBase)
-import Blink.Geometry (Alignment (TopLeft))
+import Blink.Geometry (Alignment (TopLeft), Insets (..), uniform)
 import Blink.Input
   ( InputState (inputKeyEvents), Key (KeyDown, KeyEscape, KeyLeft, KeyRight, KeyTab, KeyUp)
   , KeyEvent (key)
@@ -43,6 +48,9 @@ import Blink.Layout.Constraints (Layout (..), atLeast, fill, fitContent)
 import Blink.Popup (Edge (Start), Side (SideRight), content, placement, popup)
 import Blink.View
 import Blink.Element (Element (..), height, width)
+import Blink.Controls.Style (transparent)
+import Blink.Rendering (TextAlign (..))
+import Blink.Style
 
 -- | Runs @toggleCfg@ as a menu's trigger, with 'tgcSelected' as whether
 -- the menu is open. While open, shows @listFor close@ in a popup anchored
@@ -335,3 +343,52 @@ submenuInPlay menu = withFocusScope (miListId menu) $ do
 -- | Whether @cur@ is @item@'s own submenu.
 submenuFocused :: Eq e => MenuItems e b msg -> Maybe e -> b -> Bool
 submenuFocused menu cur item = maybe False ((== cur) . Just . fst) (miSubmenu menu item)
+
+-- * Style
+
+-- | The 'StyleKey' each item in a dropdown menu resolves its look from,
+-- unless overridden via 'Blink.Controls.Control.style' in its attributes.
+menuItemStyleKey :: StyleKey e
+menuItemStyleKey = Class "menuItem"
+
+-- | Present in an item's 'Blink.Controls.Control.ccActiveStates' while its
+-- submenu is open, so the item stays highlighted after the highlight moves
+-- into that submenu.
+menuItemSubmenuOpen :: VisualState
+menuItemSubmenuOpen = Custom "MenuItem" "SubmenuOpen"
+
+-- | The spacing of a dropdown menu's panel.
+menuListMetrics :: Metrics
+menuListMetrics = Metrics
+  { metricsMargin  = uniform 0
+  , metricsPadding = Insets { topInset = 4, rightInset = 0, bottomInset = 4, leftInset = 0 }
+  }
+
+menuItemMetrics :: Metrics
+menuItemMetrics = Metrics
+  { metricsMargin  = uniform 0
+  , metricsPadding = Insets { topInset = 4, rightInset = 12, bottomInset = 4, leftInset = 12 }
+  }
+
+-- | No 'CommonMouseOver' look: hovering an item moves the highlight onto
+-- it, so 'FocusFocused' alone marks the one highlighted item.
+menuItemStyle :: Palette -> StyleSet
+menuItemStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground = transparent
+      , styleTextColour = paletteTextPrimary p
+      , styleTextAlign  = AlignLeft
+      , styleBorder     = []
+      }
+  , styleOverrides = Map.fromList
+      [ (CommonDisabled,      \s -> s { styleTextColour = paletteTextMuted p })
+      , (FocusFocused,        \s -> s { styleBackground = paletteSurfaceHover p })
+      , (menuItemSubmenuOpen, \s -> s { styleBackground = paletteSurfaceHover p })
+      ]
+  }
+
+-- | This module's entry in 'Blink.Style.Defaults.defaultTheme', for the
+-- items in a dropdown menu. Shared by "Blink.Controls.MenuButton" and
+-- "Blink.Controls.MenuBar".
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p = [ (menuItemStyleKey, (menuItemMetrics, menuItemStyle p)) ]

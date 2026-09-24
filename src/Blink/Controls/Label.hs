@@ -30,23 +30,27 @@ module Blink.Controls.Label
   , labelStyleKey
   , label
   , target
+    -- * Style
+  , labelStyle
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (forM_, when)
 import Data.Char (toUpper)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
-import Blink.Controls.Label.Style (labelStyleKey)
-import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..))
+import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..), uniform)
 import Blink.Input (InputState (inputAltHeld))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Rendering (TextAlign (..))
-import Blink.Style (Style (..))
 import Blink.View (View, charOffset, currentStyle, getBounds, getCurrentScope, getInput, measureText, withBounds)
 import Blink.View.Drawing (drawText, fillRect)
 import Blink.Element (Element (..), HasLayoutConfig (..))
+import Blink.Style
+import Blink.Controls.Style (transparent)
 
 -- * Caption fragment
 
@@ -202,3 +206,32 @@ label eid attrs = Element
       , ccContent     = const (renderLabelledContent (lblLabelled cfg))
       , ccElementId   = Just eid
       }
+
+-- * Style
+
+-- | The 'StyleKey' 'Blink.Controls.Label.label' resolves its style
+-- from unless overridden via 'Blink.Controls.Control.style'.
+labelStyleKey :: StyleKey e
+labelStyleKey = Class "label"
+
+labelMetrics :: Metrics
+labelMetrics = Metrics
+  { metricsMargin      = uniform 0
+  , metricsPadding     = uniform 6
+  }
+
+-- | A plain, transparent label style with no border.
+labelStyle :: Palette -> StyleSet
+labelStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground   = transparent
+      , styleTextColour   = paletteTextPrimary p
+      , styleTextAlign    = AlignLeft
+      , styleBorder       = noBorder
+      }
+  , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
+  }
+
+-- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p = [ (labelStyleKey, (labelMetrics, labelStyle p)) ]

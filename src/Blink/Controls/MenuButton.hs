@@ -26,6 +26,9 @@ module Blink.Controls.MenuButton
   , itemAttrs
   , isOpen
   , onOpenChanged
+    -- * Style
+  , menuButtonListStyleKey
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (void)
@@ -33,11 +36,12 @@ import Control.Monad (void)
 import Blink.Controls.Button (ButtonConfig (..))
 import Blink.Controls.Control
 import Blink.Controls.Label (HasLabelledConfig (..), LabelledConfig (..), captionElement, lcText)
-import Blink.Controls.Menu (MenuItems (..), menuList, menuTrigger)
-import Blink.Controls.MenuButton.Style (menuButtonListStyleKey)
+import Blink.Controls.Menu (MenuItems (..), menuList, menuListMetrics, menuTrigger)
 import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction, defaultToggleButtonConfig)
 import Blink.View
 import Blink.Element (Element (..), HasLayoutConfig (..))
+import Blink.Style
+import Blink.Controls.Style (containerStyle)
 
 -- | Identifies one part of a 'menuButton': the trigger button itself
 -- ('MenuButtonTrigger'), the item list's own focus scope
@@ -150,3 +154,20 @@ itemsElement tag cfg close onTrigger =
       , miItemAttrs = mbItemAttrs cfg
       , miSubmenu   = const Nothing
       }
+
+-- * Style
+
+-- | The 'StyleKey' the item list resolves its own panel background\/border
+-- from unless overridden via 'Blink.Controls.Control.style'. Uses
+-- 'containerStyle' -- built for exactly this shape, a composite on
+-- 'Blink.View.Focus.withFocusScope' that reads as focused whenever any item
+-- inside it does.
+menuButtonListStyleKey :: StyleKey e
+menuButtonListStyleKey = Class "menuButtonList"
+
+-- | This control's one entry in 'Blink.Style.Defaults.defaultTheme', for
+-- the popup list. The trigger button itself resolves its look from
+-- 'Blink.Controls.ToggleButton.toggleButtonStyleKey' instead -- see
+-- 'defaultMenuButtonConfig'.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p = [ (menuButtonListStyleKey, (menuListMetrics, containerStyle p)) ]

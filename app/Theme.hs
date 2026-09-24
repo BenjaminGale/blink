@@ -29,7 +29,7 @@ import Blink.Controls.Tree (TreePart)
 import Blink.Controls.TreeTable (TreeTablePart)
 import Blink.Style
 import Blink.Style.Defaults (defaultTheme)
-import Blink.Controls.Divider.Style (dividerStyle)
+import Blink.Controls.Divider (dividerStyle)
 import Blink.Controls.Style (transparent)
 
 -- | Which of the demo's sidebar-selected pages is showing.
@@ -184,7 +184,7 @@ buttonShowcaseMetrics = Metrics { metricsMargin = uniform 6, metricsPadding = un
 -- the fixed Common-then-Focus-then-Custom fold order 'resolveStyle' uses.
 -- (A single shared border, recoloured wholesale by every state as
 -- 'Blink.Controls.Style.buttonStyle' and
--- 'Blink.Controls.ToggleButton.Style.toggleButtonStyleKey' both do, is
+-- 'Blink.Controls.ToggleButton.toggleButtonStyleKey' both do, is
 -- exactly how a checked-and-focused toggle button loses its focus ring:
 -- whichever override runs last -- here, the checked state -- overwrites
 -- the colour focus already set.)

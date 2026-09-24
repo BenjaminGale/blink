@@ -104,6 +104,23 @@ module Blink.Controls.List
   , rowHeight
   , onSelectionChanged
   , onItemActivated
+    -- * Style
+    -- | Selected and cursor are independent facts about a row (a
+    -- 'MultiSelection' row can be either, both, or neither), so unlike
+    -- 'Blink.Controls.ToggleButton.toggleChecked'\/'Blink.Controls.ToggleButton.toggleUnchecked'
+    -- -- one group, mutually exclusive -- 'listSelected'\/'listUnselected'
+    -- and 'listCursor'\/'listNoCursor' are /two/ groups, each contributing
+    -- exactly one member every frame, the same way
+    -- 'Blink.Style.CommonNormal'\/etc. and
+    -- 'Blink.Style.FocusFocused'\/'Blink.Style.FocusUnfocused' already
+    -- compose independently of each other.
+  , listStyleKey
+  , listItemStyleKey
+  , listSelected
+  , listUnselected
+  , listCursor
+  , listNoCursor
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (void, when)
@@ -111,21 +128,23 @@ import Data.List (elemIndex, find, findIndex)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
+import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 
 import Blink.Controls.Control
-import Blink.Controls.List.Style (listCursor, listItemStyleKey, listNoCursor, listSelected, listStyleKey, listUnselected)
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBar, scrollBarThickness, visibleFraction)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, height, noIntrinsicSize, runElement)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..), insetRect)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Shift))
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
-import Blink.Style (StyleSet (..))
 import Blink.View
   ( Effect, View, getBounds, getCursorIndex, getScrollState, getStyleSet, getWheelDelta, isRegionHit
   , requestScrollBy, setCursorIndex, setScrollStateNow, withBounds
   )
 import Blink.View.Drawing (withClip)
+import Blink.Style
+import Blink.Controls.Style (containerStyle, controlMetrics, flatRowMetrics, flatRowStyle)
 
 -- * Selection models
 
@@ -976,3 +995,75 @@ scrollRowIntoView mkId cfg itemCount viewportHeight idx = when (maxOffset > 0) $
 rowsSpacer :: ListConfig sel e msg a -> [ItemState a] -> Element e msg
 rowsSpacer cfg states =
   elementWithLayout (Layout fill (exactly (totalRowsHeight (lcRowHeight cfg) (length states))) TopLeft) (pure ())
+
+-- * Style
+
+-- | The 'StyleKey' 'Blink.Controls.List.list' resolves its own chrome
+-- from unless overridden via 'Blink.Controls.Control.style'.
+listStyleKey :: StyleKey e
+listStyleKey = Class "list"
+
+-- | The 'StyleKey' each row resolves from unless overridden via a
+-- differently-styled 'Blink.Controls.List.renderItem'.
+listItemStyleKey :: StyleKey e
+listItemStyleKey = Class "list-item"
+
+-- | The pseudo-state group for whether a row is selected.
+listSelectionGroup :: Text
+listSelectionGroup = "ListSelection"
+
+-- | Present in a row's 'Blink.Controls.Control.ccActiveStates' whenever
+-- 'Blink.Controls.List.isSelected' is 'True' for that row.
+listSelected :: VisualState
+listSelected = Custom listSelectionGroup "Selected"
+
+-- | Present whenever 'Blink.Controls.List.isSelected' is 'False'. Themes
+-- typically register no override -- the plain row look already reads as
+-- "unselected".
+listUnselected :: VisualState
+listUnselected = Custom listSelectionGroup "Unselected"
+
+-- | The pseudo-state group for whether a row holds the keyboard cursor.
+listCursorGroup :: Text
+listCursorGroup = "ListCursor"
+
+-- | Present whenever 'Blink.Controls.List.isCursor' is 'True' for that
+-- row.
+listCursor :: VisualState
+listCursor = Custom listCursorGroup "Cursor"
+
+-- | Present whenever 'Blink.Controls.List.isCursor' is 'False'.
+listNoCursor :: VisualState
+listNoCursor = Custom listCursorGroup "NoCursor"
+
+-- | 'flatRowStyle' with a bold accent fill while 'listSelected', and a
+-- focus-ring-coloured border while 'listCursor' -- so the cursor reads
+-- distinctly from selection even on a row that's both (or neither, in a
+-- 'Blink.Controls.List.MultiSelection').
+listItemStyle :: Palette -> StyleSet
+listItemStyle p = (flatRowStyle p)
+  { styleOverrides = Map.union
+      (Map.fromList
+        [ ( listSelected
+          , \s -> s { styleBackground = paletteAccent p, styleTextColour = paletteTextOnAccent p }
+          )
+        , ( listCursor
+          , \s -> s { styleBorder = withBorderColour (paletteFocusRing p) (styleBorder s) }
+          )
+        ])
+      (styleOverrides (flatRowStyle p))
+  }
+
+-- | This control's entries in 'Blink.Style.Defaults.defaultTheme':
+-- 'containerStyle' for the list itself (unlike
+-- 'Blink.Controls.ToggleGroup.toggleButtonGroup'\/'Blink.Controls.ScrollBar.scrollBar',
+-- whose containers are never themselves a focus target, the root of
+-- 'Blink.Controls.List.list' is exactly what keyboard input reaches, so
+-- it needs a real border and a 'Blink.Style.FocusFocused' ring of its
+-- own, not the borderless wrapper look those use), and @listItemStyle@
+-- for its rows.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p =
+  [ (listStyleKey,     (controlMetrics, containerStyle p))
+  , (listItemStyleKey, (flatRowMetrics, listItemStyle p))
+  ]

@@ -21,6 +21,8 @@ module Blink.Controls.Button
   , button
   , onActivated
   , activation
+    -- * Style
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (void, when)
@@ -28,12 +30,14 @@ import Control.Monad (void, when)
 import Blink.Controls.Control
 import Blink.Controls.Label
   (HasLabelledConfig (..), LabelledConfig (..), captionElement, defaultLabelledConfig, renderLabelledContent)
-import Blink.Controls.Button.Style (buttonStyleKey)
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input (Key (KeyReturn), KeyEvent (..))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.View (View)
 import Blink.Element (Element (..), HasLayoutConfig (..))
+import Blink.Rendering (TextAlign (..))
+import Blink.Style
+import Blink.Controls.Style (buttonStyle, controlMetrics)
 
 -- * Button
 
@@ -162,3 +166,14 @@ button eid attrs = Element
   where
     cfg  = resolve defaultButtonConfig attrs
     ctrl = (bcControl cfg) { ccContent = const (renderLabelledContent (bcLabelled cfg)) }
+
+-- * Style
+
+-- | The 'StyleKey' 'Blink.Controls.Button.button' resolves its style
+-- from unless overridden via 'Blink.Controls.Control.style'.
+buttonStyleKey :: StyleKey e
+buttonStyleKey = Class "button"
+
+-- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p = [ (buttonStyleKey, (controlMetrics, buttonStyle AlignCenter p)) ]

@@ -23,19 +23,23 @@ module Blink.Controls.ScrollPanel
   , defaultScrollPanelConfig
   , scrollPanel
   , content
+    -- * Style
+  , scrollPanelStyleKey
+  , defaultStyleEntries
   ) where
 
 import Control.Monad (void, when)
 
 import Blink.Controls.Control
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBar, scrollBarOrientation, scrollBarThickness, visibleFraction)
-import Blink.Controls.ScrollPanel.Style (scrollPanelStyleKey)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Rectangle (..), Size (..))
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Available (..), Layout (..), MeasureCtx (..), exactly, fill)
 import Blink.View
 import Blink.View.Drawing (withClip)
+import Blink.Style
+import Blink.Controls.Style (toggleGroupMetrics, toggleGroupStyle)
 
 -- | Identifies one of the two scrollbars 'scrollPanel' can composite in.
 data ScrollPanelPart
@@ -180,3 +184,20 @@ scrollPanel tag attrs = Element
 
     scrollBy eid maxOffset wheel =
       when (maxOffset > 0) $ requestScrollBy eid (wheel * wheelStepPx / maxOffset)
+
+-- * Style
+
+-- | The 'StyleKey' 'Blink.Controls.ScrollPanel.scrollPanel' resolves its
+-- own chrome from unless overridden via 'Blink.Controls.Control.style'.
+scrollPanelStyleKey :: StyleKey e
+scrollPanelStyleKey = Class "scrollPanel"
+
+-- | This control's entry in 'Blink.Style.Defaults.defaultTheme':
+-- 'Blink.Controls.Style.toggleGroupStyle', the same transparent, borderless
+-- wrapper look 'Blink.Controls.ScrollBar.scrollBar' uses for its own outer
+-- container. A scroll panel exists to make existing content scrollable, not
+-- to impose a visual boundary of its own, and, being
+-- 'Blink.Controls.Control.NotFocusable', never needs a focus ring either.
+defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
+defaultStyleEntries p =
+  [ (scrollPanelStyleKey, (toggleGroupMetrics, toggleGroupStyle p)) ]
