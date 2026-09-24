@@ -34,7 +34,6 @@ module Blink.Controls.ToggleGroup
   , defaultStyleEntries
   ) where
 
-import Control.Monad (void)
 
 import Blink.Controls.Control
 import Blink.Controls.RadioButton (radioButton)
@@ -215,11 +214,7 @@ toggleGroup
   -> (ToggleGroupPart a -> e)
   -> [Attribute (ToggleGroupConfig e a msg)]
   -> Element e msg
-toggleGroup styleKey widget tag attrs = Element
-  { elLayout  = tggLayout cfg
-  , elMeasure = measureChrome (ccStyleKey (tggControl cfg)) box
-  , elRun     = void (control ccfg)
-  }
+toggleGroup styleKey widget tag attrs = controlElement (tggLayout cfg) box ccfg
   where
     cfg = resolve (defaultToggleGroupConfig styleKey) attrs
     box = (if tggOrientation cfg == Horizontal then hBox else vBox)

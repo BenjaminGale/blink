@@ -22,10 +22,10 @@ module Blink.Controls.RepeatButton
 import Control.Monad (replicateM_, void, when)
 
 import Blink.Controls.Button
-  (ButtonActivation (..), ButtonConfig (..), ButtonInteraction (..), HasButtonConfig (..), buttonBase, defaultButtonConfig)
+  (ButtonActivation (..), ButtonConfig (..), ButtonInteraction (..), HasButtonConfig (..), buttonBase, captionedButton, defaultButtonConfig, withCaptionContent)
 import Blink.Controls.Control
 import Blink.Controls.Label
-  (HasLabelledConfig (..), captionElement, lcText, renderLabelledContent)
+  (HasLabelledConfig (..))
 import Blink.View
 import Blink.Element (Element (..), HasLayoutConfig (..))
 
@@ -89,22 +89,17 @@ repeatInterval v = Attribute (\rc -> rc { rbInterval = v })
 -- to compute our own cadence from, only a stream of discrete key events at
 -- whatever rate the platform delivers them.
 repeatButton :: Ord e => e -> [Attribute (RepeatButtonConfig e msg)] -> Element e msg
-repeatButton eid attrs = Element
-  { elLayout  = bcLayout btn
-  , elMeasure = measureChrome (ccStyleKey (bcControl btn)) (captionElement (lcText (bcLabelled btn)))
-  , elRun     = void run
-  }
+repeatButton eid attrs = captionedButton btn (void run)
   where
     cfg = resolve defaultRepeatButtonConfig attrs
     -- Always 'ActivateOnPress' -- fixed behaviour, not a default (same
     -- idiom as 'Blink.Controls.RadioButton.radioButton' forcing 'tgcNext').
     btn = (rbButton cfg) { bcActivation = ActivateOnPress }
-    ctrl = (bcControl btn) { ccContent = const (renderLabelledContent (bcLabelled btn)) }
 
     run = do
       -- 'buttonBase' itself fires 'onActivated' once already, off
       -- 'ActivateOnPress' (the press) or Enter-while-focused -- this only
       -- adds the repeats past that first activation.
-      r <- buttonBase eid btn { bcControl = ctrl }
+      r <- buttonBase eid (withCaptionContent btn)
       toFire <- resolveHoldRepeats eid (ciHeld (biControl r)) (rbInitialDelay cfg) (rbInterval cfg)
       when (toFire > 0) $ replicateM_ toFire (runHandlers (bcOnActivated btn) ())

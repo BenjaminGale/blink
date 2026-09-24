@@ -125,11 +125,8 @@ treeTable
   => (TreeTablePart a -> e)
   -> [Attribute (TreeTableConfig sel e msg a)]
   -> Element e msg
-treeTable mkId attrs = Element
-  { elLayout  = lcLayout (ttList cfg)
-  , elMeasure = measureChrome (ccStyleKey (lcControl (ttList cfg))) (tableSpacer (ttList cfg))
-  , elRun     = void run
-  }
+treeTable mkId attrs =
+  chromeElement (lcLayout (ttList cfg)) (ccStyleKey (lcControl (ttList cfg))) (tableSpacer (ttList cfg)) (void run)
   where
     cfg = resolve defaultTreeTableConfig attrs
 

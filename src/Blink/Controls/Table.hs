@@ -198,11 +198,8 @@ table
   => (TablePart a -> e)
   -> [Attribute (TableConfig sel e msg a)]
   -> Element e msg
-table mkId attrs = Element
-  { elLayout  = lcLayout (tbList cfg)
-  , elMeasure = measureChrome (ccStyleKey (lcControl (tbList cfg))) (tableSpacer (tbList cfg))
-  , elRun     = void run
-  }
+table mkId attrs =
+  chromeElement (lcLayout (tbList cfg)) (ccStyleKey (lcControl (tbList cfg))) (tableSpacer (tbList cfg)) (void run)
   where
     cfg = resolve defaultTableConfig attrs
 

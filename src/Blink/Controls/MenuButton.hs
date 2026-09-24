@@ -33,9 +33,9 @@ module Blink.Controls.MenuButton
 
 import Control.Monad (void)
 
-import Blink.Controls.Button (ButtonConfig (..))
+import Blink.Controls.Button (ButtonConfig (..), captionedButton)
 import Blink.Controls.Control
-import Blink.Controls.Label (HasLabelledConfig (..), LabelledConfig (..), captionElement, lcText)
+import Blink.Controls.Label (HasLabelledConfig (..))
 import Blink.Controls.Menu (MenuItems (..), menuList, menuListMetrics, menuTrigger)
 import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction, defaultToggleButtonConfig)
 import Blink.View
@@ -128,11 +128,7 @@ onOpenChanged f = Attribute (\c -> c
 -- scope id from 'MenuButtonList', and each item's id from 'MenuButtonItem'
 -- applied to the item's own data.
 menuButton :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> [Attribute (MenuButtonConfig e a msg)] -> Element e msg
-menuButton tag attrs = Element
-  { elLayout  = bcLayout btn
-  , elMeasure = measureChrome (ccStyleKey (bcControl btn)) (captionElement (lcText (bcLabelled btn)))
-  , elRun     = void (runMenuButton tag cfg)
-  }
+menuButton tag attrs = captionedButton btn (void (runMenuButton tag cfg))
   where
     cfg = resolve defaultMenuButtonConfig attrs
     btn = tgcButton (mbToggle cfg)

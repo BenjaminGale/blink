@@ -41,10 +41,10 @@ import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Button
-  (ButtonConfig (..), ButtonInteraction (..), HasButtonConfig (..), buttonBase, defaultButtonConfig)
+  (ButtonConfig (..), ButtonInteraction (..), HasButtonConfig (..), buttonBase, captionedButton, defaultButtonConfig, withCaptionContent)
 import Blink.Controls.Control
 import Blink.Controls.Label
-  (HasLabelledConfig (..), LabelledConfig (..), captionElement, lcText, renderLabelledContent)
+  (HasLabelledConfig (..), LabelledConfig (..), renderLabelledContent)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.View (Effect, View, getBounds, measureText, withBounds)
@@ -139,15 +139,10 @@ toggleBase eid cfg = do
 -- it's given and sizing its height to its own chrome-wrapped caption, the
 -- same as 'Blink.Controls.Button.button'; override with 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 toggleButton :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> Element e msg
-toggleButton eid attrs = Element
-  { elLayout  = bcLayout btn
-  , elMeasure = measureChrome (ccStyleKey (bcControl btn)) (captionElement (lcText (bcLabelled btn)))
-  , elRun     = void (toggleBase eid cfg { tgcNext = not, tgcButton = btn { bcControl = ctrl } })
-  }
+toggleButton eid attrs = captionedButton btn (void (toggleBase eid cfg { tgcNext = not, tgcButton = withCaptionContent btn }))
   where
-    cfg  = resolve defaultToggleButtonConfig attrs
-    btn  = tgcButton cfg
-    ctrl = (bcControl btn) { ccContent = const (renderLabelledContent (bcLabelled btn)) }
+    cfg = resolve defaultToggleButtonConfig attrs
+    btn = tgcButton cfg
 
 -- | 'defaultToggleButtonConfig' styled via @styleKey@ and sized to fit its
 -- own content on both axes -- the shared default for a leaf toggle control

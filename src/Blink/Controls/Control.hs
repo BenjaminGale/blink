@@ -86,9 +86,13 @@ module Blink.Controls.Control
     -- * Measurement
   , chromeInsets
   , measureChrome
+
+    -- * Elements
+  , chromeElement
+  , controlElement
   ) where
 
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, void, when)
 import Data.List (find)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -98,7 +102,7 @@ import Blink.Geometry
   , borderInsets, inflate, insetRect, uniformRadii
   )
 import Blink.Input (ButtonState (..), InputState (..), Key, KeyEvent (..), Modifier, Mouse (..), captureOf)
-import Blink.Layout.Constraints (MeasureCtx (..), shrink)
+import Blink.Layout.Constraints (Layout, MeasureCtx (..), shrink)
 import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), VisualState (..), resolveStyle)
 import Blink.View
 import Blink.View.Context (Effect (..))
@@ -878,3 +882,17 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
 -- onto its 'Blink.Controls.Label.target'.
 focusTargetOnClick :: Maybe e -> e -> ControlInteraction e msg -> View e msg ()
 focusTargetOnClick scope target ci = when (ciClicked ci) (requestFocus scope target)
+
+-- | An element laid out by @layout@ that measures as @content@ wrapped in
+-- the chrome @styleKey@ resolves to, and runs @run@.
+chromeElement :: Ord e => Layout -> StyleKey e -> Element e msg -> View e msg () -> Element e msg
+chromeElement layout styleKey content run = Element
+  { elLayout  = layout
+  , elMeasure = measureChrome styleKey content
+  , elRun     = run
+  }
+
+-- | 'chromeElement' for a widget whose run is @ctrl@ alone, measuring its
+-- chrome from the same style key @ctrl@ draws with.
+controlElement :: Ord e => Layout -> Element e msg -> ControlConfig e msg -> Element e msg
+controlElement layout content ctrl = chromeElement layout (ccStyleKey ctrl) content (void (control ctrl))

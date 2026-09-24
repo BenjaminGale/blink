@@ -18,7 +18,7 @@ module Blink.Controls.Divider
   , defaultStyleEntries
   ) where
 
-import Control.Monad (forM_, void)
+import Control.Monad (forM_)
 import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
@@ -96,11 +96,7 @@ thickness t = Attribute (\dc -> dc { dcThickness = t })
 -- 'Blink.Element.align' picks where within that extra space the
 -- line sits.
 divider :: Ord e => [Attribute (DividerConfig e msg)] -> Element e msg
-divider attrs = Element
-  { elLayout  = dcLayout cfg
-  , elMeasure = measureChrome (ccStyleKey ctrl) (Element (dcLayout cfg) intrinsicSize (pure ()))
-  , elRun     = void (control ctrl)
-  }
+divider attrs = controlElement (dcLayout cfg) (Element (dcLayout cfg) intrinsicSize (pure ())) ctrl
   where
     cfg  = resolve defaultDividerConfig attrs
     ctrl = (dcControl cfg)

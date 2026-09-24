@@ -30,7 +30,6 @@ module Blink.Controls.Image
   , defaultStyleEntries
   ) where
 
-import Control.Monad (void)
 import Data.Maybe (fromMaybe)
 import qualified Data.Map.Strict as Map
 
@@ -121,11 +120,7 @@ resolveImageSize preserve mFitW mFitH (Size w h)
 -- own (possibly fit-constrained) content on both axes; override with
 -- 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 image :: Ord e => [Attribute (ImageConfig e msg)] -> Element e msg
-image attrs = Element
-  { elLayout  = icLayout cfg
-  , elMeasure = measureChrome (ccStyleKey ctrl) (Element (icLayout cfg) intrinsicSize (pure ()))
-  , elRun     = void (control ctrl)
-  }
+image attrs = controlElement (icLayout cfg) (Element (icLayout cfg) intrinsicSize (pure ())) ctrl
   where
     cfg  = resolve defaultImageConfig attrs
     ctrl = (icControl cfg)

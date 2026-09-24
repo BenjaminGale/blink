@@ -28,7 +28,7 @@ module Blink.Controls.ScrollPanel
   , defaultStyleEntries
   ) where
 
-import Control.Monad (void, when)
+import Control.Monad (when)
 
 import Blink.Controls.Control
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBar, scrollBarOrientation, scrollBarThickness, visibleFraction)
@@ -85,11 +85,7 @@ wheelStepPx = 48
 -- | A scrollable viewport onto @cfg@'s own 'spContent' (see 'content').
 -- @tag@ builds every part's element id from a 'ScrollPanelPart'.
 scrollPanel :: Ord e => (ScrollPanelPart -> e) -> [Attribute (ScrollPanelConfig e msg)] -> Element e msg
-scrollPanel tag attrs = Element
-  { elLayout  = spLayout cfg
-  , elMeasure = measureChrome (ccStyleKey (spControl cfg)) measureEl
-  , elRun     = void (control ctrl)
-  }
+scrollPanel tag attrs = controlElement (spLayout cfg) measureEl ctrl
   where
     cfg   = resolve defaultScrollPanelConfig attrs
     child = spContent cfg

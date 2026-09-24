@@ -28,15 +28,15 @@ module Blink.Controls.Menu
   , defaultStyleEntries
   ) where
 
-import Control.Monad (filterM, forM_, void, when)
+import Control.Monad (filterM, forM_, when)
 import Data.List (find)
 import Data.Maybe (isJust, listToMaybe)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 
-import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig)
+import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonBase, captionedButton, defaultButtonConfig, withCaptionContent)
 import Blink.Controls.Control
-import Blink.Controls.Label (captionElement, lcMnemonic, lcText, renderLabelledContent)
+import Blink.Controls.Label (lcMnemonic)
 import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), toggleBase)
 import Blink.Geometry (Alignment (TopLeft), Insets (..), uniform)
 import Blink.Input
@@ -83,9 +83,8 @@ menuTrigger triggerId listId toggleCfg listFor = do
     suppressClickToFocus policy = case policy of
       Focusable opts | wasOpen -> Focusable opts { focusIsClickToFocus = False }
       _                        -> policy
-    ctrl = (bcControl btn)
-      { ccContent     = const (renderLabelledContent (bcLabelled btn))
-      , ccFocusPolicy = suppressClickToFocus (ccFocusPolicy (bcControl btn))
+    ctrl = (bcControl (withCaptionContent btn))
+      { ccFocusPolicy = suppressClickToFocus (ccFocusPolicy (bcControl btn))
       }
 
 -- | One menu list's ids and items.
@@ -152,11 +151,8 @@ closeThis (Nested _ toParent) = toParent
 menuListCore
   :: (Ord e, Ord b)
   => StyleKey e -> MenuItems e b msg -> CloseBehaviour e msg -> Bool -> Element e msg
-menuListCore styleKey menu closeBehaviour pressKeepsOpen = Element
-  { elLayout  = Layout (atLeast menuMinWidth) fitContent TopLeft
-  , elMeasure = measureChrome styleKey (itemBox (map (toItemElement False) items))
-  , elRun     = void (control panelCfg)
-  }
+menuListCore styleKey menu closeBehaviour pressKeepsOpen =
+  controlElement (Layout (atLeast menuMinWidth) fitContent TopLeft) (itemBox (map (toItemElement False) items)) panelCfg
   where
     MenuItems { miListId = listId, miItemId = itemId, miItems = items, miSubmenu = submenuFor } = menu
 
@@ -207,27 +203,23 @@ menuListCore styleKey menu closeBehaviour pressKeepsOpen = Element
       pressed <- isButtonPressed
       when (pressed && not pressKeepsOpen && not onList) (closeAll closeBehaviour)
 
-    toItemElement onList item = Element
-      { elLayout  = bcLayout itemCfg
-      , elMeasure = measureChrome (ccStyleKey (bcControl itemCfg)) (captionElement (lcText (bcLabelled itemCfg)))
-      , elRun     = do
-          opened <- maybe (pure False) (isFocused . fst) (submenuFor item)
-          let states = if opened then Set.singleton menuItemSubmenuOpen else Set.empty
-          r <- buttonBase (itemId item) itemCfg { bcControl = itemCtrl { ccActiveStates = states } }
-          case submenuFor item of
-            Nothing                -> do
-              highlightOnHover item r
-              when (biActivated r) (closeAll closeBehaviour)
-            Just (subId, subItems) ->
-              runSubmenu menu item subId r $
-                popup (itemId item)
-                  [ content (submenuElement item subId subItems (onList || pressKeepsOpen))
-                  , placement SideRight Start
-                  ]
-      }
+    toItemElement onList item = captionedButton itemCfg $ do
+      opened <- maybe (pure False) (isFocused . fst) (submenuFor item)
+      let states = if opened then Set.singleton menuItemSubmenuOpen else Set.empty
+      r <- buttonBase (itemId item) itemCfg { bcControl = itemCtrl { ccActiveStates = states } }
+      case submenuFor item of
+        Nothing                -> do
+          highlightOnHover item r
+          when (biActivated r) (closeAll closeBehaviour)
+        Just (subId, subItems) ->
+          runSubmenu menu item subId r $
+            popup (itemId item)
+              [ content (submenuElement item subId subItems (onList || pressKeepsOpen))
+              , placement SideRight Start
+              ]
       where
         itemCfg  = itemConfig menu item
-        itemCtrl = (bcControl itemCfg) { ccContent = const (renderLabelledContent (bcLabelled itemCfg)) }
+        itemCtrl = bcControl (withCaptionContent itemCfg)
 
     -- Keeps a single highlight shared by mouse and keyboard.
     highlightOnHover item r = do

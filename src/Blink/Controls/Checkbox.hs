@@ -63,11 +63,7 @@ checkBoxOutlineIcon = "assets/icons/check_box_outline_blank.svg"
 -- on both axes, the same as 'Blink.Controls.Label.label'; override with
 -- 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 checkbox :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> Element e msg
-checkbox eid attrs = Element
-  { elLayout  = bcLayout btn
-  , elMeasure = measureChrome (ccStyleKey ctrl) content
-  , elRun     = void (toggleBase eid cfg')
-  }
+checkbox eid attrs = chromeElement (bcLayout btn) (ccStyleKey ctrl) content (void (toggleBase eid cfg'))
   where
     cfg      = resolve (defaultGlyphToggleConfig checkboxStyleKey) attrs
     content  = withTrailingSpace (glyphCaptionElement glyphWidth labelGap (lcText (bcLabelled btn)))

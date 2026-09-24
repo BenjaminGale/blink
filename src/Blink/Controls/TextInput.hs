@@ -335,17 +335,13 @@ drawTextInputContent s bounds displayValue placeholderText canEdit ox sel@(Selec
 -- its own value's width, which would make the field resize as it's typed
 -- into. Override with 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 textInput :: Ord e => e -> [Attribute (TextInputConfig e msg)] -> Element e msg
-textInput eid attrs = Element
-  { elLayout  = ticLayout cfg
-  , elMeasure = measureChrome (ccStyleKey (ticControl cfg)) (lineHeightElement (ticValue cfg))
-  , elRun     = do
-      wasFocused <- isFocused eid
-      let ctrl = (ticControl cfg)
-            { ccContent   = body wasFocused
-            , ccElementId = Just eid
-            }
-      void (control ctrl)
-  }
+textInput eid attrs = chromeElement (ticLayout cfg) (ccStyleKey (ticControl cfg)) (lineHeightElement (ticValue cfg)) $ do
+  wasFocused <- isFocused eid
+  let ctrl = (ticControl cfg)
+        { ccContent   = body wasFocused
+        , ccElementId = Just eid
+        }
+  void (control ctrl)
   where
     cfg = resolve defaultTextInputConfig attrs
 

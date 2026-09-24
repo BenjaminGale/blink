@@ -46,9 +46,9 @@ import Data.List (elemIndex, find)
 import Data.Maybe (isJust, listToMaybe)
 import qualified Data.Map.Strict as Map
 
-import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), defaultButtonConfig)
+import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), captionedButton, defaultButtonConfig)
 import Blink.Controls.Control
-import Blink.Controls.Label (captionElement, lcMnemonic, lcText)
+import Blink.Controls.Label (lcMnemonic)
 import Blink.Controls.Menu (MenuItems (..), menuListMetrics, menuListWithSubmenus, menuTrigger, submenuInPlay)
 import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleChecked)
 import Blink.Geometry (Alignment (TopLeft), Insets (..), uniform)
@@ -167,19 +167,11 @@ onOpenMenuChanged f = Attribute (\c -> c { mbrOnOpenMenuChanged = mbrOnOpenMenuC
 -- own focus scope id from 'MenuBarList', each item's id from
 -- 'MenuBarItem', and each submenu's own scope id from 'MenuBarSubmenu'.
 menuBar :: (Ord e, Ord a, Ord b) => (MenuBarPart a b -> e) -> [Attribute (MenuBarConfig e a b msg)] -> Element e msg
-menuBar tag attrs = Element
-  { elLayout  = mbrLayout cfg
-  , elMeasure = measureChrome (ccStyleKey (mbrControl cfg)) (rowBox False)
-  , elRun     = void (control ccfg)
-  }
+menuBar tag attrs = controlElement (mbrLayout cfg) (rowBox False) ccfg
   where
     cfg = resolve defaultMenuBarConfig attrs
     rowBox onBar = hBox [ width fill, height fill, children (map (toLabel onBar) (mbrMenus cfg)) ]
-    toLabel onBar menuKey = Element
-      { elLayout  = bcLayout labelCfg
-      , elMeasure = measureChrome (ccStyleKey (bcControl labelCfg)) (captionElement (lcText (bcLabelled labelCfg)))
-      , elRun     = void (runMenuBarLabel tag cfg menuKey labelCfg onBar)
-      }
+    toLabel onBar menuKey = captionedButton labelCfg (void (runMenuBarLabel tag cfg menuKey labelCfg onBar))
       where labelCfg = labelConfigFor menuKey
     labelConfigFor m = resolve labelDefaults (width fitContent : height fitContent : mbrLabelAttrs cfg m)
     labelDefaults = defaultButtonConfig

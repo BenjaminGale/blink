@@ -254,11 +254,8 @@ arrowLayoutAttrs Vertical   = [width fill, height (exactly scrollBarThickness)]
 -- aren't exposed here since a
 -- scrollbar's own arrows never customise them either.
 arrowButton :: Ord e => e -> ImagePath -> [Attribute (ButtonConfig e msg)] -> Element e msg
-arrowButton eid path attrs = Element
-  { elLayout  = bcLayout btn
-  , elMeasure = measureChrome (ccStyleKey (bcControl btn)) (elementWithLayout (bcLayout btn) (pure ()))
-  , elRun     = void run
-  }
+arrowButton eid path attrs =
+  chromeElement (bcLayout btn) (ccStyleKey (bcControl btn)) (elementWithLayout (bcLayout btn) (pure ())) (void run)
   where
     btn  = (resolve defaultButtonConfig attrs) { bcActivation = ActivateOnPress }
     ctrl = (bcControl btn) { ccContent = const drawArrow }
@@ -289,11 +286,7 @@ arrowButton eid path attrs = Element
 -- 'Blink.View.ScrollState' key -- see the module header for reading it
 -- from elsewhere.
 scrollBar :: Ord e => (ScrollBarPart -> e) -> [Attribute (ScrollBarConfig e msg)] -> Element e msg
-scrollBar tag attrs = Element
-  { elLayout  = sbLayout cfg
-  , elMeasure = measureChrome (ccStyleKey (sbControl cfg)) box
-  , elRun     = void (control ctrl)
-  }
+scrollBar tag attrs = controlElement (sbLayout cfg) box ctrl
   where
     cfg       = resolve defaultScrollBarConfig attrs
     o         = sbOrientation cfg
@@ -317,11 +310,7 @@ scrollBar tag attrs = Element
         ] ++ arrowLayoutAttrs o
       )
 
-    trackEl = Element
-      { elLayout  = Layout fill fill TopLeft
-      , elMeasure = measureChrome scrollBarTrackStyleKey (Element (Layout fill fill TopLeft) noIntrinsicSize (pure ()))
-      , elRun     = void (control trackCtrl)
-      }
+    trackEl = controlElement (Layout fill fill TopLeft) (Element (Layout fill fill TopLeft) noIntrinsicSize (pure ())) trackCtrl
 
     trackCtrl = defaultControlConfig
       { ccElementId       = Just (tag ScrollBarTrack)

@@ -24,7 +24,7 @@ module Blink.Controls.Slider
   , defaultStyleEntries
   ) where
 
-import Control.Monad (forM_, void, when)
+import Control.Monad (forM_, when)
 import Data.Maybe (fromMaybe)
 
 import Blink.Controls.Control
@@ -198,11 +198,7 @@ drawTrack s bounds focused hovered dragging v = do
 -- 'Blink.Controls.ProgressBar.progressBar'; override with
 -- 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 slider :: Ord e => e -> [Attribute (SliderConfig e msg)] -> Element e msg
-slider eid attrs = Element
-  { elLayout  = scLayout cfg
-  , elMeasure = measureChrome (ccStyleKey ctrl) (Element (scLayout cfg) noIntrinsicSize (pure ()))
-  , elRun     = void (control ctrl)
-  }
+slider eid attrs = controlElement (scLayout cfg) (Element (scLayout cfg) noIntrinsicSize (pure ())) ctrl
   where
     cfg  = resolve defaultSliderConfig attrs
     ctrl = (scControl cfg)

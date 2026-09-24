@@ -18,6 +18,8 @@ module Blink.Controls.Button
   , defaultButtonConfig
   , buttonStyleKey
   , buttonBase
+  , captionedButton
+  , withCaptionContent
   , button
   , onActivated
   , activation
@@ -160,14 +162,19 @@ buttonBase eid cfg = do
 -- default. Defaults to filling the width it's given and sizing its height
 -- to its own chrome-wrapped caption; override with 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 button :: Ord e => e -> [Attribute (ButtonConfig e msg)] -> Element e msg
-button eid attrs = Element
-  { elLayout  = bcLayout cfg
-  , elMeasure = measureChrome (ccStyleKey (bcControl cfg)) (captionElement (lcText (bcLabelled cfg)))
-  , elRun     = void (buttonBase eid cfg { bcControl = ctrl })
-  }
+button eid attrs = captionedButton cfg (void (buttonBase eid (withCaptionContent cfg)))
   where
-    cfg  = resolve defaultButtonConfig attrs
-    ctrl = (bcControl cfg) { ccContent = const (renderLabelledContent (bcLabelled cfg)) }
+    cfg = resolve defaultButtonConfig attrs
+
+-- | An element laid out by @cfg@'s own layout that measures as its caption
+-- inside its chrome, and runs @run@. The shape every captioned
+-- button-like widget shares.
+captionedButton :: Ord e => ButtonConfig e msg -> View e msg () -> Element e msg
+captionedButton cfg = chromeElement (bcLayout cfg) (ccStyleKey (bcControl cfg)) (captionElement (lcText (bcLabelled cfg)))
+
+-- | @cfg@ with its content set to draw its own caption.
+withCaptionContent :: ButtonConfig e msg -> ButtonConfig e msg
+withCaptionContent cfg = cfg { bcControl = (bcControl cfg) { ccContent = const (renderLabelledContent (bcLabelled cfg)) } }
 
 -- * Style
 

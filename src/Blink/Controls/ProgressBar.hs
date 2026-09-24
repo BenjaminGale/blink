@@ -19,7 +19,7 @@ module Blink.Controls.ProgressBar
   , defaultStyleEntries
   ) where
 
-import Control.Monad (void, when)
+import Control.Monad (when)
 import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
@@ -98,11 +98,7 @@ bandWidth v = Attribute (\pc -> pc { pbBandWidth = v })
 -- control did before controls reported their own 'Blink.Layout.Constraints.Layout'.
 -- Override with 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 progressBar :: Ord e => [Attribute (ProgressBarConfig e msg)] -> Element e msg
-progressBar attrs = Element
-  { elLayout  = pbLayout cfg
-  , elMeasure = measureChrome (ccStyleKey ctrl) (Element (pbLayout cfg) noIntrinsicSize (pure ()))
-  , elRun     = void (control ctrl)
-  }
+progressBar attrs = controlElement (pbLayout cfg) (Element (pbLayout cfg) noIntrinsicSize (pure ())) ctrl
   where
     cfg  = resolve defaultProgressBarConfig attrs
     ctrl = (pbControl cfg)

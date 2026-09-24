@@ -191,14 +191,10 @@ target t = Attribute (\c -> c { lblTarget = Just t })
 -- spanning it alone, so it shouldn't claim the whole row by default.
 -- Override with 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 label :: Ord e => e -> [Attribute (LabelConfig e msg)] -> Element e msg
-label eid attrs = Element
-  { elLayout  = lblLayout cfg
-  , elMeasure = measureChrome (ccStyleKey (lblControl cfg)) (captionElement (lcText (lblLabelled cfg)))
-  , elRun     = do
-      scope <- getCurrentScope
-      ci    <- control ctrl
-      forM_ (lblTarget cfg) (\t -> focusTargetOnClick scope t ci)
-  }
+label eid attrs = chromeElement (lblLayout cfg) (ccStyleKey ctrl) (captionElement (lcText (lblLabelled cfg))) $ do
+  scope <- getCurrentScope
+  ci    <- control ctrl
+  forM_ (lblTarget cfg) (\t -> focusTargetOnClick scope t ci)
   where
     cfg  = resolve defaultLabelConfig attrs
     ctrl = (lblControl cfg)

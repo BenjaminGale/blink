@@ -58,11 +58,8 @@ radioUncheckedIcon = "assets/icons/radio_button_unchecked.svg"
 -- same as 'Blink.Controls.Label.label'; override with
 -- 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 radioButton :: Ord e => e -> [Attribute (ToggleConfig e msg)] -> Element e msg
-radioButton eid attrs = Element
-  { elLayout  = bcLayout btn
-  , elMeasure = measureChrome (ccStyleKey ctrl) (glyphCaptionElement glyphWidth glyphGap (lcText (bcLabelled btn)))
-  , elRun     = void (toggleBase eid cfg')
-  }
+radioButton eid attrs =
+  chromeElement (bcLayout btn) (ccStyleKey ctrl) (glyphCaptionElement glyphWidth glyphGap (lcText (bcLabelled btn))) (void (toggleBase eid cfg'))
   where
     cfg      = resolve (defaultGlyphToggleConfig radioButtonStyleKey) attrs
     btn      = tgcButton cfg

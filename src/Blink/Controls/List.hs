@@ -940,11 +940,8 @@ listFrom
   => (ListPart a -> e)
   -> ListConfig sel e msg a
   -> Element e msg
-listFrom mkId cfg = Element
-  { elLayout  = lcLayout cfg
-  , elMeasure = measureChrome (ccStyleKey (lcControl cfg)) (rowsSpacer cfg (itemStates (lcSelection cfg)))
-  , elRun     = void (listBase mkId cfg)
-  }
+listFrom mkId cfg =
+  chromeElement (lcLayout cfg) (ccStyleKey (lcControl cfg)) (rowsSpacer cfg (itemStates (lcSelection cfg))) (void (listBase mkId cfg))
 
 -- | Brings row @idx@ (0-based, into a flat list of @itemCount@ rows at
 -- @cfg@'s own 'lcRowHeight') into a @viewportHeight@-tall viewport --

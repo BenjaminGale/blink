@@ -175,11 +175,8 @@ tree
   => (TreePart a -> e)
   -> [Attribute (TreeConfig sel e msg a)]
   -> Element e msg
-tree mkId attrs = Element
-  { elLayout  = lcLayout listCfg
-  , elMeasure = measureChrome (ccStyleKey (lcControl listCfg)) (rowsSpacer listCfg (itemStates (lcSelection listCfg)))
-  , elRun     = void run
-  }
+tree mkId attrs =
+  chromeElement (lcLayout listCfg) (ccStyleKey (lcControl listCfg)) (rowsSpacer listCfg (itemStates (lcSelection listCfg))) (void run)
   where
     cfg     = resolve defaultTreeConfig attrs
     listCfg = (tcList cfg) { lcRenderItem = renderRow }
