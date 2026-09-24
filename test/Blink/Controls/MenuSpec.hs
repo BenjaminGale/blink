@@ -11,7 +11,7 @@ import Blink.AppFixtures (drawnTexts, resultDraws, resultState, solidPalette, st
 import Blink.Controls.Button (ButtonConfig, onActivated)
 import Blink.Controls.Control (onFocusGained, post)
 import Blink.Controls.Label (mnemonic, text)
-import Blink.Controls.Menu (menuListWithSubmenus)
+import Blink.Controls.Menu (MenuItems (..), menuListWithSubmenus)
 import qualified Blink.Controls.Menu.Style as MenuStyle
 import Blink.Element (Attribute, elLayout, elementWithLayout, height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
@@ -71,12 +71,19 @@ menuApp = App
         Nothing -> requestFocus Nothing TopList
         Just _  -> pure ()
       runElement $
-        (menuListWithSubmenus testStyleKey TopList ItemPart [Open, Save, Export] itemAttrsFor submenuFor
-          (emit (Logged "Closed")) False)
+        (menuListWithSubmenus testStyleKey menu (emit (Logged "Closed")) False)
           { elLayout = Layout (exactly 100) fill TopLeft }
   , update  = \(Logged t) -> modify (++ [t])
   }
   where
+    menu = MenuItems
+      { miListId    = TopList
+      , miItemId    = ItemPart
+      , miItems     = [Open, Save, Export]
+      , miItemAttrs = itemAttrsFor
+      , miSubmenu   = submenuFor
+      }
+
     itemAttrsFor :: Item -> [Attribute (ButtonConfig Part Event)]
     itemAttrsFor item =
       [ text (T.pack (show item)), mnemonic (itemMnemonic item), width (exactly 40), height (exactly 20)

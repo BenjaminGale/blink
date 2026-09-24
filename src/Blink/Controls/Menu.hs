@@ -16,7 +16,8 @@
 -- 'menuTrigger' is the toggle that opens such a list and returns focus to
 -- itself when the list closes.
 module Blink.Controls.Menu
-  ( menuTrigger
+  ( MenuItems (..)
+  , menuTrigger
   , menuList
   , menuListWithSubmenus
   , submenuInPlay
@@ -26,7 +27,7 @@ module Blink.Controls.Menu
 import Control.Monad (filterM, forM_, void, when)
 import Data.Char (toUpper)
 import Data.List (find)
-import Data.Maybe (listToMaybe)
+import Data.Maybe (isJust, listToMaybe)
 import qualified Data.Set as Set
 
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig)
@@ -81,11 +82,22 @@ menuTrigger triggerId listId toggleCfg listFor = do
       , ccFocusPolicy = suppressClickToFocus (ccFocusPolicy (bcControl btn))
       }
 
+-- | One menu list's ids and items.
+data MenuItems e b msg = MenuItems
+  { miListId    :: e
+    -- ^ The list's element id and focus scope.
+  , miItemId    :: b -> e
+    -- ^ Each item's id, built from its data so reordering keeps per-item state.
+  , miItems     :: [b]
+  , miItemAttrs :: b -> [Attribute (ButtonConfig e msg)]
+  , miSubmenu   :: b -> Maybe (e, [b])
+    -- ^ An item's own submenu, if it has one: its list id and its items,
+    -- which may carry further submenus of their own. Ignored by 'menuList'.
+  }
+
 -- | A vertical list of buttons, one per item, on a panel styled by
 -- @styleKey@. The list has a minimum width, grows if an item needs more,
--- and every item spans its full width. @listId@ is the list's element id
--- and focus scope; @itemId@ builds each item's id from its data, so
--- reordering keeps per-item state.
+-- and every item spans its full width.
 --
 -- @onOutsideTrigger@ is whether the pointer is somewhere outside this list
 -- that still shouldn't close it, such as the trigger that opened it, or
@@ -93,24 +105,18 @@ menuTrigger triggerId listId toggleCfg listFor = do
 -- menus isn't also treated as an outside press.
 menuList
   :: (Ord e, Ord b)
-  => StyleKey e -> e -> (b -> e) -> [b] -> (b -> [Attribute (ButtonConfig e msg)]) -> View e msg () -> Bool
-  -> Element e msg
-menuList styleKey listId itemId items itemAttrsFor close onOutsideTrigger =
-  menuListCore styleKey listId itemId items itemAttrsFor (const Nothing)
+  => StyleKey e -> MenuItems e b msg -> View e msg () -> Bool -> Element e msg
+menuList styleKey menu close onOutsideTrigger =
+  menuListCore styleKey menu { miSubmenu = const Nothing }
     CloseBehaviour { cbCloseAll = close, cbCloseThis = close, cbNested = False }
     onOutsideTrigger
 
--- | 'menuList' with optional per-item submenus. @submenuFor@ gives an
--- item's own submenu, if it has one: its own list\/focus scope id (built
--- the same way as @itemId@) paired with its items, which may carry a
--- further submenu of their own via the same function.
+-- | 'menuList' with the optional per-item submenus from 'miSubmenu'.
 menuListWithSubmenus
   :: (Ord e, Ord b)
-  => StyleKey e -> e -> (b -> e) -> [b] -> (b -> [Attribute (ButtonConfig e msg)]) -> (b -> Maybe (e, [b]))
-  -> View e msg () -> Bool
-  -> Element e msg
-menuListWithSubmenus styleKey listId itemId items itemAttrsFor submenuFor close onOutsideTrigger =
-  menuListCore styleKey listId itemId items itemAttrsFor submenuFor
+  => StyleKey e -> MenuItems e b msg -> View e msg () -> Bool -> Element e msg
+menuListWithSubmenus styleKey menu close onOutsideTrigger =
+  menuListCore styleKey menu
     CloseBehaviour { cbCloseAll = close, cbCloseThis = close, cbNested = False }
     onOutsideTrigger
 
@@ -136,15 +142,15 @@ data CloseBehaviour e msg = CloseBehaviour
 -- | The shared engine behind both 'menuList' and 'menuListWithSubmenus'.
 menuListCore
   :: (Ord e, Ord b)
-  => StyleKey e -> e -> (b -> e) -> [b] -> (b -> [Attribute (ButtonConfig e msg)]) -> (b -> Maybe (e, [b]))
-  -> CloseBehaviour e msg -> Bool
-  -> Element e msg
-menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour onOutsideTrigger = Element
+  => StyleKey e -> MenuItems e b msg -> CloseBehaviour e msg -> Bool -> Element e msg
+menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
   { elLayout  = Layout (atLeast menuMinWidth) fitContent TopLeft
   , elMeasure = measureChrome styleKey (itemBox (map (toItemElement False) items))
   , elRun     = void (control panelCfg)
   }
   where
+    MenuItems { miListId = listId, miItemId = itemId, miItems = items, miItemAttrs = itemAttrsFor, miSubmenu = submenuFor } = menu
+
     itemBox kids = vBox [ width fitContent, height fitContent, children kids ]
 
     -- A 'fill' item measures as zero, so only stretch items when laying out.
@@ -176,9 +182,7 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
 
     anySubmenuFocused = do
       cur <- getFocus
-      pure $ any (\it -> case submenuFor it of
-                            Just (subId, _) -> Just subId == cur
-                            Nothing         -> False) items
+      pure $ any (submenuFocused menu cur) items
 
     handleEscape = do
       evs <- inputKeyEvents <$> getInput
@@ -313,7 +317,7 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
     -- list itself doesn't count as outside, so a click there (e.g. on
     -- another item, to activate it) doesn't close the whole menu first.
     submenuElement item subId subItems onParent =
-      menuListCore styleKey subId itemId subItems itemAttrsFor submenuFor
+      menuListCore styleKey menu { miListId = subId, miItems = subItems }
         CloseBehaviour
           { cbCloseAll  = cbCloseAll closeBehaviour
           , cbCloseThis = requestFocus (Just listId) (itemId item)
@@ -325,12 +329,15 @@ menuListCore styleKey listId itemId items itemAttrsFor submenuFor closeBehaviour
 -- that submenu. Left\/Right then belongs to this list rather than to an
 -- enclosing control, such as 'Blink.Controls.MenuBar.menuBar' switching
 -- menus.
-submenuInPlay :: (Ord e, Ord b) => e -> (b -> e) -> [b] -> (b -> Maybe (e, [b])) -> View e msg Bool
-submenuInPlay listId itemId items submenuFor = withFocusScope listId $ do
+submenuInPlay :: (Ord e, Ord b) => MenuItems e b msg -> View e msg Bool
+submenuInPlay menu = withFocusScope (miListId menu) $ do
   cur <- getFocus
-  pure $ any (\it -> case submenuFor it of
-                        Just (subId, _) -> cur == Just (itemId it) || cur == Just subId
-                        Nothing         -> False) items
+  let itemFocused it = isJust (miSubmenu menu it) && cur == Just (miItemId menu it)
+  pure $ any (\it -> itemFocused it || submenuFocused menu cur it) (miItems menu)
+
+-- | Whether @cur@ is @item@'s own submenu.
+submenuFocused :: Eq e => MenuItems e b msg -> Maybe e -> b -> Bool
+submenuFocused menu cur item = maybe False ((== cur) . Just . fst) (miSubmenu menu item)
 
 -- | The first of @xs@ whose mnemonic this frame's key events activate,
 -- consuming that key so nothing else also reacts to it.

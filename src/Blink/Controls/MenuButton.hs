@@ -33,7 +33,7 @@ import Control.Monad (void)
 import Blink.Controls.Button (ButtonConfig (..))
 import Blink.Controls.Control
 import Blink.Controls.Label (HasLabelledConfig (..), LabelledConfig (..), captionElement, lcText)
-import Blink.Controls.Menu (menuList, menuTrigger)
+import Blink.Controls.Menu (MenuItems (..), menuList, menuTrigger)
 import Blink.Controls.MenuButton.Style (menuButtonListStyleKey)
 import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction, defaultToggleButtonConfig)
 import Blink.View
@@ -141,4 +141,12 @@ runMenuButton tag cfg = do
 -- outside press.
 itemsElement :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg () -> Bool -> Element e msg
 itemsElement tag cfg close onTrigger =
-  menuList menuButtonListStyleKey (tag MenuButtonList) (tag . MenuButtonItem) (mbItems cfg) (mbItemAttrs cfg) close onTrigger
+  menuList menuButtonListStyleKey menu close onTrigger
+  where
+    menu = MenuItems
+      { miListId    = tag MenuButtonList
+      , miItemId    = tag . MenuButtonItem
+      , miItems     = mbItems cfg
+      , miItemAttrs = mbItemAttrs cfg
+      , miSubmenu   = const Nothing
+      }

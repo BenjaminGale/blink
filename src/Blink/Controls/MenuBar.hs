@@ -43,7 +43,7 @@ import Data.Maybe (isJust, listToMaybe)
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement, lcMnemonic, lcText)
-import Blink.Controls.Menu (menuListWithSubmenus, menuTrigger, submenuInPlay, takeMnemonic)
+import Blink.Controls.Menu (MenuItems (..), menuListWithSubmenus, menuTrigger, submenuInPlay, takeMnemonic)
 import Blink.Controls.MenuBar.Style (menuBarLabelStyleKey, menuBarListStyleKey, menuBarStyleKey)
 import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig)
 import Blink.Geometry (Alignment (TopLeft))
@@ -236,20 +236,23 @@ itemsElement
   -> Element e msg
 itemsElement tag cfg menuKey close onBar switchMenu = base { elRun = handleMenuSwitchKeys >> elRun base }
   where
-    listId  = tag (MenuBarList menuKey)
-    itemId  = tag . MenuBarItem menuKey
-    items   = mbrMenuItems cfg menuKey
+    menu = MenuItems
+      { miListId    = tag (MenuBarList menuKey)
+      , miItemId    = tag . MenuBarItem menuKey
+      , miItems     = mbrMenuItems cfg menuKey
+      , miItemAttrs = mbrItemAttrs cfg menuKey
+      , miSubmenu   = submenuFor
+      }
     submenuFor item = case mbrSubmenuItems cfg menuKey item of
       [] -> Nothing
       xs -> Just (tag (MenuBarSubmenu menuKey item), xs)
 
-    base = menuListWithSubmenus menuBarListStyleKey listId itemId items (mbrItemAttrs cfg menuKey) submenuFor
-      close onBar
+    base = menuListWithSubmenus menuBarListStyleKey menu close onBar
 
     -- Left\/Right belongs to a submenu the moment one is highlighted or
     -- open (see 'submenuInPlay'); only otherwise does it switch menus.
     handleMenuSwitchKeys = do
-      inPlay <- submenuInPlay listId itemId items submenuFor
+      inPlay <- submenuInPlay menu
       evs    <- inputKeyEvents <$> getInput
       when (not inPlay) $ forM_ (find (isJust . menuStep . key) evs) $ \e -> do
         consumeKey (key e)
