@@ -169,20 +169,16 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
     -- While the highlight points at an open submenu, this level's own
     -- handling is skipped; the submenu (its own deferred popup) owns it.
     scopedRun = withFocusScope listId $ do
-      openSubmenu <- anySubmenuFocused
+      openSubmenu <- anySubmenuFocused menu
       onList      <- isRegionHit
       when (not openSubmenu) $ do
         handleEscape
         handleTabOut
         handleOutsideClick onList
-        handleArrowKeys
+        handleArrowKeys menu
         handleLeftArrow
-        handleMnemonics
+        handleMnemonics menu closeBehaviour
       elRun (itemBox (map (fillWidth . toItemElement onList) items))
-
-    anySubmenuFocused = do
-      cur <- getFocus
-      pure $ any (submenuFocused menu cur) items
 
     onKey k act = keyPressed k >>= (`when` act)
 
@@ -200,38 +196,6 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
       pressed <- isButtonPressed
       when (pressed && not onOutsideTrigger && not onList) (cbCloseAll closeBehaviour)
 
-    -- Moves focus by index because Tab traversal doesn't wrap, and menu
-    -- items should.
-    handleArrowKeys = case items of
-      [] -> pure ()
-      is -> do
-        evs <- inputKeyEvents <$> getInput
-        forM_ (find ((`elem` [KeyDown, KeyUp]) . key) evs) $ \e -> do
-          consumeKey (key e)
-          current <- getFocus
-          let count        = length is
-              currentIndex = current >>= (`lookup` zip (map itemId is) [0 ..])
-              nextIndex = case (key e, currentIndex) of
-                (KeyDown, Nothing) -> 0
-                (KeyDown, Just i)  -> (i + 1) `mod` count
-                (_,       Nothing) -> count - 1
-                (_,       Just i)  -> (i - 1) `mod` count
-          forM_ (itemAt is nextIndex) $ \item -> requestFocus (Just listId) (itemId item)
-
-    itemAt xs idx = case drop idx xs of
-      (x : _) -> Just x
-      []      -> Nothing
-
-    itemMnemonic item = lcMnemonic (bcLabelled (resolve defaultButtonConfig (itemAttrsFor item)))
-
-    handleMnemonics =
-      takeMnemonic itemMnemonic items >>= mapM_ (\item ->
-        case submenuFor item of
-          Just (subId, _) -> requestFocus (Just listId) subId
-          Nothing         -> do
-            runHandlers (bcOnActivated (resolve defaultButtonConfig (itemAttrsFor item))) ()
-            cbCloseAll closeBehaviour)
-
     toItemElement onList item = Element
       { elLayout  = bcLayout itemCfg
       , elMeasure = measureChrome (ccStyleKey (bcControl itemCfg)) (captionElement (lcText (bcLabelled itemCfg)))
@@ -243,7 +207,12 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
             Nothing                -> do
               highlightOnHover item r
               when (biActivated r) (cbCloseAll closeBehaviour)
-            Just (subId, subItems) -> runSubmenu item subId subItems r onList
+            Just (subId, subItems) ->
+              runSubmenu menu item subId r $
+                popup (itemId item)
+                  [ content (submenuElement item subId subItems (onList || onOutsideTrigger))
+                  , placement SideRight Start
+                  ]
       }
       where
         itemCfg  = resolve defaultButtonConfig (style menuItemStyleKey : width fitContent : height fitContent : itemAttrsFor item)
@@ -251,57 +220,8 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
 
     -- Keeps a single highlight shared by mouse and keyboard.
     highlightOnHover item r = do
-      pointed <- pointerMovedOver r
+      pointed <- pointerMovedOver menu r
       when pointed $ requestFocus (Just listId) (itemId item)
-
-    -- Movement rather than entry, so the pointer takes the highlight back
-    -- from the keyboard without first leaving the item. While a sibling's
-    -- submenu is open, the delayed switch in 'runSubmenu' moves it instead.
-    pointerMovedOver r = do
-      moved       <- hasMouseMoved
-      siblingOpen <- anySubmenuFocused
-      pure (moved && ciHovered (biControl r) && not siblingOpen)
-
-    -- While another item's submenu is open, hovering this one doesn't open
-    -- its submenu straight away; the delayed switch below does, so a
-    -- diagonal move towards the open submenu can cross this item safely.
-    runSubmenu item subId subItems r onList = do
-      opened <- isFocused subId
-      when (not opened) $ do
-        pointed      <- pointerMovedOver r
-        highlighted  <- isFocused (itemId item)
-        rightPressed <- if highlighted then keyPressed KeyRight else pure False
-        when (pointed || biActivated r || rightPressed) $
-          requestFocus (Just listId) subId
-      leaving <- if opened then leavingSubmenu item subId else pure False
-      heldFor <- resolveHeldFor subId leaving
-      when (heldFor >= submenuSwitchDelay) $ do
-        sibling <- hoveredSibling item
-        forM_ sibling $ \it -> requestFocus (Just listId) (maybe (itemId it) fst (submenuFor it))
-      when opened $
-        popup (itemId item)
-          [ content (submenuElement item subId subItems (onList || onOutsideTrigger))
-          , placement SideRight Start
-          ]
-
-    -- Anywhere on this list other than @item@ counts, including the gaps
-    -- between items, so sweeping across several items doesn't restart the
-    -- delay. Uses last frame's hover because items later in the list
-    -- haven't run yet this frame.
-    leavingSubmenu item subId = do
-      overList    <- wasMouseOverLastFrame listId
-      overItem    <- wasMouseOverLastFrame (itemId item)
-      overSubmenu <- wasMouseOverLastFrame subId
-      pure (overList && not overItem && not overSubmenu)
-
-    hoveredSibling item =
-      listToMaybe <$> filterM (wasMouseOverLastFrame . itemId) (filter ((/= itemId item) . itemId) items)
-
-    keyPressed k = do
-      evs <- inputKeyEvents <$> getInput
-      case find ((== k) . key) evs of
-        Just e  -> consumeKey (key e) >> pure True
-        Nothing -> pure False
 
     -- @onParent@ is whether the click landed on this list or anywhere this
     -- list itself doesn't count as outside, so a click there (e.g. on
@@ -314,6 +234,98 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
           , cbNested    = True
           }
         onParent
+
+anySubmenuFocused :: Eq e => MenuItems e b msg -> View e msg Bool
+anySubmenuFocused menu = do
+  cur <- getFocus
+  pure $ any (submenuFocused menu cur) (miItems menu)
+
+-- | Moves focus by index because Tab traversal doesn't wrap, and menu
+-- items should.
+handleArrowKeys :: Eq e => MenuItems e b msg -> View e msg ()
+handleArrowKeys menu = case miItems menu of
+  [] -> pure ()
+  is -> do
+    evs <- inputKeyEvents <$> getInput
+    forM_ (find ((`elem` [KeyDown, KeyUp]) . key) evs) $ \e -> do
+      consumeKey (key e)
+      current <- getFocus
+      let count        = length is
+          currentIndex = current >>= (`lookup` zip (map (miItemId menu) is) [0 ..])
+          nextIndex = case (key e, currentIndex) of
+            (KeyDown, Nothing) -> 0
+            (KeyDown, Just i)  -> (i + 1) `mod` count
+            (_,       Nothing) -> count - 1
+            (_,       Just i)  -> (i - 1) `mod` count
+      forM_ (itemAt is nextIndex) $ \item -> requestFocus (Just (miListId menu)) (miItemId menu item)
+  where
+    itemAt xs idx = case drop idx xs of
+      (x : _) -> Just x
+      []      -> Nothing
+
+handleMnemonics :: MenuItems e b msg -> CloseBehaviour e msg -> View e msg ()
+handleMnemonics menu closeBehaviour =
+  takeMnemonic itemMnemonic (miItems menu) >>= mapM_ (\item ->
+    case miSubmenu menu item of
+      Just (subId, _) -> requestFocus (Just (miListId menu)) subId
+      Nothing         -> do
+        runHandlers (bcOnActivated (resolve defaultButtonConfig (miItemAttrs menu item))) ()
+        cbCloseAll closeBehaviour)
+  where
+    itemMnemonic item = lcMnemonic (bcLabelled (resolve defaultButtonConfig (miItemAttrs menu item)))
+
+-- | Movement rather than entry, so the pointer takes the highlight back
+-- from the keyboard without first leaving the item. While a sibling's
+-- submenu is open, the delayed switch in 'runSubmenu' moves it instead.
+pointerMovedOver :: Eq e => MenuItems e b msg -> ButtonInteraction e msg -> View e msg Bool
+pointerMovedOver menu r = do
+  moved       <- hasMouseMoved
+  siblingOpen <- anySubmenuFocused menu
+  pure (moved && ciHovered (biControl r) && not siblingOpen)
+
+-- | Opens @item@'s submenu @subId@ and runs @showSubmenu@ while it's open.
+-- While another item's submenu is open, hovering this one doesn't open
+-- its submenu straight away; the delayed switch below does, so a
+-- diagonal move towards the open submenu can cross this item safely.
+runSubmenu
+  :: Ord e
+  => MenuItems e b msg -> b -> e -> ButtonInteraction e msg -> View e msg () -> View e msg ()
+runSubmenu menu item subId r showSubmenu = do
+  opened <- isFocused subId
+  when (not opened) $ do
+    pointed      <- pointerMovedOver menu r
+    highlighted  <- isFocused (miItemId menu item)
+    rightPressed <- if highlighted then keyPressed KeyRight else pure False
+    when (pointed || biActivated r || rightPressed) $
+      requestFocus (Just (miListId menu)) subId
+  leaving <- if opened then leavingSubmenu menu item subId else pure False
+  heldFor <- resolveHeldFor subId leaving
+  when (heldFor >= submenuSwitchDelay) $ do
+    sibling <- hoveredSibling menu item
+    forM_ sibling $ \it -> requestFocus (Just (miListId menu)) (maybe (miItemId menu it) fst (miSubmenu menu it))
+  when opened showSubmenu
+
+-- | Anywhere on this list other than @item@ counts, including the gaps
+-- between items, so sweeping across several items doesn't restart the
+-- delay. Uses last frame's hover because items later in the list
+-- haven't run yet this frame.
+leavingSubmenu :: Ord e => MenuItems e b msg -> b -> e -> View e msg Bool
+leavingSubmenu menu item subId = do
+  overList    <- wasMouseOverLastFrame (miListId menu)
+  overItem    <- wasMouseOverLastFrame (miItemId menu item)
+  overSubmenu <- wasMouseOverLastFrame subId
+  pure (overList && not overItem && not overSubmenu)
+
+hoveredSibling :: Ord e => MenuItems e b msg -> b -> View e msg (Maybe b)
+hoveredSibling menu item = listToMaybe <$> filterM (wasMouseOverLastFrame . miItemId menu) siblings
+  where siblings = filter ((/= miItemId menu item) . miItemId menu) (miItems menu)
+
+keyPressed :: Key -> View e msg Bool
+keyPressed k = do
+  evs <- inputKeyEvents <$> getInput
+  case find ((== k) . key) evs of
+    Just e  -> consumeKey (key e) >> pure True
+    Nothing -> pure False
 
 -- | 'True' when @listId@'s highlight is on an item with a submenu, or in
 -- that submenu. Left\/Right then belongs to this list rather than to an
