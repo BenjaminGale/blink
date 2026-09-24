@@ -184,25 +184,15 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
       cur <- getFocus
       pure $ any (submenuFocused menu cur) items
 
-    handleEscape = do
-      evs <- inputKeyEvents <$> getInput
-      case find ((== KeyEscape) . key) evs of
-        Just e  -> consumeKey (key e) >> cbCloseThis closeBehaviour
-        Nothing -> pure ()
+    onKey k act = keyPressed k >>= (`when` act)
 
-    handleLeftArrow = when (cbNested closeBehaviour) $ do
-      evs <- inputKeyEvents <$> getInput
-      case find ((== KeyLeft) . key) evs of
-        Just e  -> consumeKey (key e) >> cbCloseThis closeBehaviour
-        Nothing -> pure ()
+    handleEscape = onKey KeyEscape (cbCloseThis closeBehaviour)
+
+    handleLeftArrow = when (cbNested closeBehaviour) $ onKey KeyLeft (cbCloseThis closeBehaviour)
 
     -- Closes on Tab\/Shift-Tab too: this list renders after its trigger's
     -- own siblings, so a plain handoff can't reach them.
-    handleTabOut = do
-      evs <- inputKeyEvents <$> getInput
-      case find ((== KeyTab) . key) evs of
-        Just e  -> consumeKey (key e) >> cbCloseAll closeBehaviour
-        Nothing -> pure ()
+    handleTabOut = onKey KeyTab (cbCloseAll closeBehaviour)
 
     -- Closes on the press: the pressed control takes focus then, and waiting
     -- for the release would show this list without focus until it came.
