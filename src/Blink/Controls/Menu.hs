@@ -99,8 +99,8 @@ data MenuItems e b msg = MenuItems
 -- @styleKey@. The list has a minimum width, grows if an item needs more,
 -- and every item spans its full width.
 --
--- @onOutsideTrigger@ is whether the pointer is somewhere outside this list
--- that still shouldn't close it, such as the trigger that opened it, or
+-- @pressKeepsOpen@ is whether the pointer is somewhere outside this list
+-- where a press shouldn't close it, such as the trigger that opened it, or
 -- anywhere on the row of a 'Blink.Controls.MenuBar.menuBar', so switching
 -- menus isn't also treated as an outside press.
 menuList
@@ -112,10 +112,10 @@ menuList styleKey menu = menuListWithSubmenus styleKey menu { miSubmenu = const 
 menuListWithSubmenus
   :: (Ord e, Ord b)
   => StyleKey e -> MenuItems e b msg -> View e msg () -> Bool -> Element e msg
-menuListWithSubmenus styleKey menu close onOutsideTrigger =
+menuListWithSubmenus styleKey menu close pressKeepsOpen =
   menuListCore styleKey menu
     (TopLevel close)
-    onOutsideTrigger
+    pressKeepsOpen
 
 menuMinWidth :: Double
 menuMinWidth = 160
@@ -146,7 +146,7 @@ closeThis (Nested _ toParent) = toParent
 menuListCore
   :: (Ord e, Ord b)
   => StyleKey e -> MenuItems e b msg -> CloseBehaviour e msg -> Bool -> Element e msg
-menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
+menuListCore styleKey menu closeBehaviour pressKeepsOpen = Element
   { elLayout  = Layout (atLeast menuMinWidth) fitContent TopLeft
   , elMeasure = measureChrome styleKey (itemBox (map (toItemElement False) items))
   , elRun     = void (control panelCfg)
@@ -199,7 +199,7 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
     -- for the release would show this list without focus until it came.
     handleOutsideClick onList = do
       pressed <- isButtonPressed
-      when (pressed && not onOutsideTrigger && not onList) (closeAll closeBehaviour)
+      when (pressed && not pressKeepsOpen && not onList) (closeAll closeBehaviour)
 
     toItemElement onList item = Element
       { elLayout  = bcLayout itemCfg
@@ -215,7 +215,7 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
             Just (subId, subItems) ->
               runSubmenu menu item subId r $
                 popup (itemId item)
-                  [ content (submenuElement item subId subItems (onList || onOutsideTrigger))
+                  [ content (submenuElement item subId subItems (onList || pressKeepsOpen))
                   , placement SideRight Start
                   ]
       }
@@ -228,13 +228,12 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
       pointed <- pointerMovedOver menu r
       when pointed $ requestFocus (Just listId) (itemId item)
 
-    -- @onParent@ is whether the click landed on this list or anywhere this
-    -- list itself doesn't count as outside, so a click there (e.g. on
-    -- another item, to activate it) doesn't close the whole menu first.
-    submenuElement item subId subItems onParent =
+    -- A press on this list keeps the submenu open too, so a click on
+    -- another item (to activate it) doesn't close the whole menu first.
+    submenuElement item subId subItems pressKeepsSubmenuOpen =
       menuListCore styleKey menu { miListId = subId, miItems = subItems }
         (Nested (closeAll closeBehaviour) (requestFocus (Just listId) (itemId item)))
-        onParent
+        pressKeepsSubmenuOpen
 
 anySubmenuFocused :: Eq e => MenuItems e b msg -> View e msg Bool
 anySubmenuFocused menu = do
