@@ -43,7 +43,7 @@ import Data.Maybe (isJust, listToMaybe)
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), defaultButtonConfig)
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement, lcMnemonic, lcText)
-import Blink.Controls.Menu (MenuItems (..), menuListWithSubmenus, menuTrigger, submenuInPlay, takeMnemonic)
+import Blink.Controls.Menu (MenuItems (..), menuListWithSubmenus, menuTrigger, submenuInPlay)
 import Blink.Controls.MenuBar.Style (menuBarLabelStyleKey, menuBarListStyleKey, menuBarStyleKey)
 import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig)
 import Blink.Geometry (Alignment (TopLeft))

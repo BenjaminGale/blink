@@ -21,11 +21,9 @@ module Blink.Controls.Menu
   , menuList
   , menuListWithSubmenus
   , submenuInPlay
-  , takeMnemonic
   ) where
 
 import Control.Monad (filterM, forM_, void, when)
-import Data.Char (toUpper)
 import Data.List (find)
 import Data.Maybe (isJust, listToMaybe)
 import qualified Data.Set as Set
@@ -37,8 +35,8 @@ import Blink.Controls.Menu.Style (menuItemStyleKey, menuItemSubmenuOpen)
 import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), toggleBase)
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input
-  ( InputState (inputKeyEvents), Key (KeyChar, KeyDown, KeyEscape, KeyLeft, KeyRight, KeyTab, KeyUp)
-  , KeyEvent (key), mnemonicActivated
+  ( InputState (inputKeyEvents), Key (KeyDown, KeyEscape, KeyLeft, KeyRight, KeyTab, KeyUp)
+  , KeyEvent (key)
   )
 import Blink.Layout.Box (children, vBox)
 import Blink.Layout.Constraints (Layout (..), atLeast, fill, fitContent)
@@ -183,7 +181,7 @@ menuListCore styleKey menu closeBehaviour pressKeepsOpen = Element
         handleMnemonics menu closeBehaviour
       elRun (itemBox (map (fillWidth . toItemElement onList) items))
 
-    onKey k act = keyPressed k >>= (`when` act)
+    onKey k act = takeKey k >>= (`when` act)
 
     handleEscape = onKey KeyEscape (closeThis closeBehaviour)
 
@@ -299,7 +297,7 @@ runSubmenu menu item subId r showSubmenu = do
   when (not opened) $ do
     pointed      <- pointerMovedOver menu r
     highlighted  <- isFocused (miItemId menu item)
-    rightPressed <- if highlighted then keyPressed KeyRight else pure False
+    rightPressed <- if highlighted then takeKey KeyRight else pure False
     when (pointed || biActivated r || rightPressed) $
       requestFocus (Just (miListId menu)) subId
   leaving <- if opened then leavingSubmenu menu item subId else pure False
@@ -324,13 +322,6 @@ hoveredSibling :: Ord e => MenuItems e b msg -> b -> View e msg (Maybe b)
 hoveredSibling menu item = listToMaybe <$> filterM (wasMouseOverLastFrame . miItemId menu) siblings
   where siblings = filter ((/= miItemId menu item) . miItemId menu) (miItems menu)
 
-keyPressed :: Key -> View e msg Bool
-keyPressed k = do
-  evs <- inputKeyEvents <$> getInput
-  case find ((== k) . key) evs of
-    Just e  -> consumeKey (key e) >> pure True
-    Nothing -> pure False
-
 -- | 'True' when @listId@'s highlight is on an item with a submenu, or in
 -- that submenu. Left\/Right then belongs to this list rather than to an
 -- enclosing control, such as 'Blink.Controls.MenuBar.menuBar' switching
@@ -344,12 +335,3 @@ submenuInPlay menu = withFocusScope (miListId menu) $ do
 -- | Whether @cur@ is @item@'s own submenu.
 submenuFocused :: Eq e => MenuItems e b msg -> Maybe e -> b -> Bool
 submenuFocused menu cur item = maybe False ((== cur) . Just . fst) (miSubmenu menu item)
-
--- | The first of @xs@ whose mnemonic this frame's key events activate,
--- consuming that key so nothing else also reacts to it.
-takeMnemonic :: (x -> Maybe Char) -> [x] -> View e msg (Maybe x)
-takeMnemonic mnemonicOf xs = do
-  evs <- inputKeyEvents <$> getInput
-  let hit = find (maybe False (`mnemonicActivated` evs) . mnemonicOf) xs
-  forM_ (hit >>= mnemonicOf) (consumeKey . KeyChar . toUpper)
-  pure hit

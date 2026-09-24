@@ -389,6 +389,8 @@ module Blink.View
   , hasQueuedFocus
   , withFocusScope
   , consumeKey
+  , takeKey
+  , takeMnemonic
   , withoutKeyEvents
   , getPreviousTabStop
   , setPreviousTabStop

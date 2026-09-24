@@ -63,6 +63,8 @@ module Blink.View.Context
   , getInput
   , contextInput
   , consumeKey
+  , takeKey
+  , takeMnemonic
   , withoutKeyEvents
     -- * Focus scope (raw)
   , getCurrentScope
@@ -137,8 +139,9 @@ module Blink.View.Context
   , defaultNavigationKeys
   ) where
 
-import Control.Monad (unless)
-import Data.List (foldl')
+import Control.Monad (forM_, unless)
+import Data.Char (toUpper)
+import Data.List (find, foldl')
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -146,7 +149,7 @@ import Blink.Rendering (DrawCommand, CursorShape (..), Measurers (..), noOpMeasu
 import Blink.Geometry (Edge, Rectangle, Side, Size)
 import Blink.Input
   ( Key (..), KeyEvent (..), Modifier (..), InputState (..)
-  , Mouse (..), emptyMouse, advanceButton, advanceHover
+  , Mouse (..), emptyMouse, advanceButton, advanceHover, mnemonicActivated
   )
 import Blink.Style (Style, StyleSet, Metrics, StyleKey (..), Theme (..), resolveStyle)
 
@@ -932,6 +935,23 @@ consumeKey :: Key -> View e msg ()
 consumeKey k = modify $ \ctx ->
   let input = ctxInput ctx
   in ctx { ctxInput = input { inputKeyEvents = filter (\e -> key e /= k) (inputKeyEvents input) } }
+
+-- | Whether this frame's key events include @k@, consuming it if so.
+takeKey :: Key -> View e msg Bool
+takeKey k = do
+  evs <- inputKeyEvents <$> getInput
+  case find ((== k) . key) evs of
+    Just _  -> consumeKey k >> pure True
+    Nothing -> pure False
+
+-- | The first of @xs@ whose mnemonic this frame's key events activate,
+-- consuming that key so nothing else also reacts to it.
+takeMnemonic :: (x -> Maybe Char) -> [x] -> View e msg (Maybe x)
+takeMnemonic mnemonicOf xs = do
+  evs <- inputKeyEvents <$> getInput
+  let hit = find (maybe False (`mnemonicActivated` evs) . mnemonicOf) xs
+  forM_ (hit >>= mnemonicOf) (consumeKey . KeyChar . toUpper)
+  pure hit
 
 -- | Hides the given key\/modifier combinations from 'getInput' -- and so
 -- from anything reading raw key events, e.g. 'Blink.Controls.Control.onKeyPressed'
