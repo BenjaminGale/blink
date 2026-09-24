@@ -155,7 +155,7 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
   , elRun     = void (control panelCfg)
   }
   where
-    MenuItems { miListId = listId, miItemId = itemId, miItems = items, miItemAttrs = itemAttrsFor, miSubmenu = submenuFor } = menu
+    MenuItems { miListId = listId, miItemId = itemId, miItems = items, miSubmenu = submenuFor } = menu
 
     itemBox kids = vBox [ width fitContent, height fitContent, children kids ]
 
@@ -223,7 +223,7 @@ menuListCore styleKey menu closeBehaviour onOutsideTrigger = Element
                   ]
       }
       where
-        itemCfg  = resolve defaultButtonConfig (style menuItemStyleKey : width fitContent : height fitContent : itemAttrsFor item)
+        itemCfg  = itemConfig menu item
         itemCtrl = (bcControl itemCfg) { ccContent = const (renderLabelledContent (bcLabelled itemCfg)) }
 
     -- Keeps a single highlight shared by mouse and keyboard.
@@ -273,10 +273,14 @@ handleMnemonics menu closeBehaviour =
     case miSubmenu menu item of
       Just (subId, _) -> requestFocus (Just (miListId menu)) subId
       Nothing         -> do
-        runHandlers (bcOnActivated (resolve defaultButtonConfig (miItemAttrs menu item))) ()
+        runHandlers (bcOnActivated (itemConfig menu item)) ()
         closeAll closeBehaviour)
   where
-    itemMnemonic item = lcMnemonic (bcLabelled (resolve defaultButtonConfig (miItemAttrs menu item)))
+    itemMnemonic = lcMnemonic . bcLabelled . itemConfig menu
+
+itemConfig :: MenuItems e b msg -> b -> ButtonConfig e msg
+itemConfig menu item =
+  resolve defaultButtonConfig (style menuItemStyleKey : width fitContent : height fitContent : miItemAttrs menu item)
 
 -- | Movement rather than entry, so the pointer takes the highlight back
 -- from the keyboard without first leaving the item. While a sibling's
