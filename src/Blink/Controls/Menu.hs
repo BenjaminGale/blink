@@ -106,10 +106,7 @@ data MenuItems e b msg = MenuItems
 menuList
   :: (Ord e, Ord b)
   => StyleKey e -> MenuItems e b msg -> View e msg () -> Bool -> Element e msg
-menuList styleKey menu close onOutsideTrigger =
-  menuListCore styleKey menu { miSubmenu = const Nothing }
-    (TopLevel close)
-    onOutsideTrigger
+menuList styleKey menu = menuListWithSubmenus styleKey menu { miSubmenu = const Nothing }
 
 -- | 'menuList' with the optional per-item submenus from 'miSubmenu'.
 menuListWithSubmenus
