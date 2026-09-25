@@ -76,9 +76,9 @@ wheelStepPx :: Double
 wheelStepPx = 48
 
 -- | A scrollable viewport onto @cfg@'s own 'spContent' (see 'content').
--- @tag@ builds every part's element id from a 'ScrollPanelPart'.
+-- @mkId@ builds every part's element id from a 'ScrollPanelPart'.
 scrollPanel :: Ord e => (ScrollPanelPart -> e) -> [Attribute (ScrollPanelConfig e msg)] -> Element e msg
-scrollPanel tag attrs = controlElement (spLayout cfg) measureEl ctrl
+scrollPanel mkId attrs = controlElement (spLayout cfg) measureEl ctrl
   where
     cfg   = resolve defaultScrollPanelConfig attrs
     child = spContent cfg
@@ -99,14 +99,14 @@ scrollPanel tag attrs = controlElement (spLayout cfg) measureEl ctrl
       pure (Size w h)
 
     ctrl = (spControl cfg)
-      { ccElementId   = Just (tag ScrollPanel)
+      { ccElementId   = Just (mkId ScrollPanel)
       , ccFocusPolicy = NotFocusable
       , ccContent     = const viewport
       }
 
     viewport = do
       contentSize <- naturalSize
-      scrollViewport (tag . ScrollPanelViewport) ScrollViewportConfig
+      scrollViewport (mkId . ScrollPanelViewport) ScrollViewportConfig
         { svWheelStep   = wheelStepPx
         , svContentSize = contentSize
         , svContent     = const (runElement child)

@@ -528,23 +528,23 @@ data ListPart a
 -- by a wrapper built on 'listBase' (e.g. a table deriving one from its
 -- own column headers).
 data ListConfig sel e msg a = ListConfig
-  { lcControl            :: ControlConfig e msg
-  , lcLayout             :: Layout
-  , lcSelection          :: sel a
-  , lcRenderItem         :: ItemState a -> Element e msg
-  , lcRowHeight          :: Double
-  , lcOnSelectionChanged :: [sel a -> [Effect e msg]]
-  , lcOnItemActivated    :: [a -> [Effect e msg]]
-  , lcHeader             :: Maybe (Element e msg)
+  { lstControl            :: ControlConfig e msg
+  , lstLayout             :: Layout
+  , lstSelection          :: sel a
+  , lstRenderItem         :: ItemState a -> Element e msg
+  , lstRowHeight          :: Double
+  , lstOnSelectionChanged :: [sel a -> [Effect e msg]]
+  , lstOnItemActivated    :: [a -> [Effect e msg]]
+  , lstHeader             :: Maybe (Element e msg)
   }
 
 instance HasControlConfig e msg (ListConfig sel e msg a) where
-  overControl = nested lcControl (\c x -> c { lcControl = x }) . overControl
+  overControl = nested lstControl (\c x -> c { lstControl = x }) . overControl
 
 instance HasEventHandlers (ListConfig sel e msg a)
 
 instance HasLayoutConfig (ListConfig sel e msg a) where
-  overLayout = nested lcLayout (\c x -> c { lcLayout = x })
+  overLayout = nested lstLayout (\c x -> c { lstLayout = x })
 
 -- | Every control built on an embedded 'ListConfig' -- 'list' itself, and
 -- the table\/tree\/tree-table wrappers built on 'listBase' -- implements
@@ -583,14 +583,14 @@ totalRowsHeight rh n = fromIntegral n * rh
 -- rows, so never scrolls.
 baseListConfig :: sel a -> ListConfig sel e msg a
 baseListConfig s0 = ListConfig
-  { lcControl            = defaultControlConfig { ccStyleKey = listStyleKey }
-  , lcLayout             = Layout fill fill TopLeft
-  , lcSelection          = s0
-  , lcRenderItem         = const emptyElement
-  , lcRowHeight          = defaultRowHeight
-  , lcOnSelectionChanged = []
-  , lcOnItemActivated    = []
-  , lcHeader             = Nothing
+  { lstControl            = defaultControlConfig { ccStyleKey = listStyleKey }
+  , lstLayout             = Layout fill fill TopLeft
+  , lstSelection          = s0
+  , lstRenderItem         = const emptyElement
+  , lstRowHeight          = defaultRowHeight
+  , lstOnSelectionChanged = []
+  , lstOnItemActivated    = []
+  , lstHeader             = Nothing
   }
 
 -- | 'defaultControlConfig' (styled via @Class \"list\"@), filling its
@@ -611,17 +611,17 @@ requiredListConfig = baseListConfig
 -- | The whole model -- items and selection together. The only way to set
 -- either; @sel@ is inferred from this argument.
 instance HasSelection (sel a) (ListConfig sel e msg a) where
-  selection s = Attribute (\c -> c { lcSelection = s })
+  selection s = Attribute (\c -> c { lstSelection = s })
 
 -- | How a row draws its item; receives the row's selected\/cursor flags
 -- for styling.
 renderItem :: HasListConfig sel e msg a cfg => (ItemState a -> Element e msg) -> Attribute cfg
-renderItem f = overList (Attribute (\c -> c { lcRenderItem = f }))
+renderItem f = overList (Attribute (\c -> c { lstRenderItem = f }))
 
 -- | The height every row is drawn at, overriding whatever height
 -- 'renderItem'\/'s own element requests. Defaults to 32px.
 rowHeight :: HasListConfig sel e msg a cfg => Double -> Attribute cfg
-rowHeight h = overList (Attribute (\c -> c { lcRowHeight = h }))
+rowHeight h = overList (Attribute (\c -> c { lstRowHeight = h }))
 
 -- | Reacts whenever a user-driven change actually moves the model to a
 -- new value, with the complete new model. Without it the list still
@@ -629,7 +629,7 @@ rowHeight h = overList (Attribute (\c -> c { lcRowHeight = h }))
 -- 'list'), but the app never learns of it, so next frame's 'selection'
 -- puts it right back -- the list is then read-only in practice.
 instance HasSelectionChanged e msg (sel a) (ListConfig sel e msg a) where
-  onSelectionChanged = appendTo lcOnSelectionChanged (\c hs -> c { lcOnSelectionChanged = hs })
+  onSelectionChanged = appendTo lstOnSelectionChanged (\c hs -> c { lstOnSelectionChanged = hs })
 
 -- | Reacts when the user acts on a specific item: a click on its row, or
 -- Enter\/Space with the cursor on it. Fires whether or not that action
@@ -638,7 +638,7 @@ instance HasSelectionChanged e msg (sel a) (ListConfig sel e msg a) where
 -- 'onSelectionChanged' keeping selection state in sync. Arrowing never
 -- fires this.
 onItemActivated :: HasListConfig sel e msg a cfg => (a -> [Effect e msg]) -> Attribute cfg
-onItemActivated = overList . appendTo lcOnItemActivated (\c hs -> c { lcOnItemActivated = hs })
+onItemActivated = overList . appendTo lstOnItemActivated (\c hs -> c { lstOnItemActivated = hs })
 
 -- | What 'listBase' reports back: the underlying 'control' call's own
 -- 'ControlInteraction' (so a control built on top of 'listBase' -- e.g. a
@@ -659,14 +659,14 @@ data ListInteraction sel e msg a = ListInteraction
   }
 
 -- | Everything 'list' does, minus being an 'Element': one 'Focusable'
--- stop (unless the 'Blink.Controls.Control.ccFocusPolicy' in 'lcControl' says otherwise)
+-- stop (unless the 'Blink.Controls.Control.ccFocusPolicy' in 'lstControl' says otherwise)
 -- whose rows are never tab stops. Up\/Down move the cursor, Shift-Up\/Down
 -- extend a range, Enter\/Space act on the cursor, a click on a row
 -- activates it. Every change is computed against the model exactly as
--- passed in via 'lcSelection' this frame, never against any
+-- passed in via 'lstSelection' this frame, never against any
 -- locally-derived value -- rendering, keyboard handling, and click
--- handling all read it as given, and 'lcOnSelectionChanged'\/
--- 'lcOnItemActivated' report the result for the app to store and pass
+-- handling all read it as given, and 'lstOnSelectionChanged'\/
+-- 'lstOnItemActivated' report the result for the app to store and pass
 -- back in next frame.
 --
 -- @mkId@ builds every part's element id from a 'ListPart': the list's own
@@ -674,7 +674,7 @@ data ListInteraction sel e msg a = ListInteraction
 -- row's own item value -- so the caller never writes a per-row id by
 -- hand, and can't accidentally give the root and a row the same id (see
 -- 'ListPart'). Any 'Blink.Controls.Control.ccElementId' already set on
--- 'lcControl' is replaced by @mkId List@, the same as
+-- 'lstControl' is replaced by @mkId List@, the same as
 -- 'Blink.Controls.ToggleGroup.toggleButtonGroup'.
 --
 -- The shape every list-like control ('list', and
@@ -686,27 +686,27 @@ listBase
   -> View e msg (ListInteraction sel e msg a)
 listBase mkId cfg = do
   r             <- control ccfg
-  (m, styleSet) <- getStyleSet (ccStyleKey (lcControl cfg))
+  (m, styleSet) <- getStyleSet (ccStyleKey (lstControl cfg))
   outer         <- getBounds
   let (finalModel, activated) = keyboardResult (ciKeysPressed r)
       viewportHeight           = rectHeight (insetRect (chromeInsets m (styleBase styleSet)) outer) - headerHeight
   pure (ListInteraction r finalModel activated viewportHeight)
   where
-    s0   = lcSelection cfg
+    s0   = lstSelection cfg
 
     itemCount = length (itemStates s0)
 
-    -- The fixed header (see 'lcHeader') eats into the rows' own viewport
+    -- The fixed header (see 'lstHeader') eats into the rows' own viewport
     -- the same way chrome does -- 'liViewportHeight' has to account for
     -- it too, alongside 'ccContent's own 'composite', which actually
     -- lays the header out above the rows.
-    headerHeight = maybe 0 (const (lcRowHeight cfg)) (lcHeader cfg)
+    headerHeight = maybe 0 (const (lstRowHeight cfg)) (lstHeader cfg)
 
-    fireSelectionChanged s = when (s /= s0) $ runHandlers (lcOnSelectionChanged cfg) s
-    fireItemActivated      = runHandlers (lcOnItemActivated cfg)
+    fireSelectionChanged s = when (s /= s0) $ runHandlers (lstOnSelectionChanged cfg) s
+    fireItemActivated      = runHandlers (lstOnItemActivated cfg)
 
     -- The selection model and activated items that this frame's keyboard
-    -- input (if any) produces, starting from 'lcSelection' as given.
+    -- input (if any) produces, starting from 'lstSelection' as given.
     -- Called both from 'ccContent' (to fire the reactions and adjust
     -- scroll, exactly as before this function existed) and again from
     -- 'listBase' itself, on the same 'ciKeysPressed' value, purely to
@@ -717,13 +717,13 @@ listBase mkId cfg = do
     -- side-effect-free.
     keyboardResult = foldl stepKey (s0, [])
 
-    ccfg = (lcControl cfg)
+    ccfg = (lstControl cfg)
       { ccElementId = Just (mkId List)
       , ccContent = \ci -> do
           let (finalModel, activated) = keyboardResult (ciKeysPressed ci)
           fireSelectionChanged finalModel
           mapM_ fireItemActivated activated
-          maybe (rowsArea finalModel) (`headerArea` finalModel) (lcHeader cfg)
+          maybe (rowsArea finalModel) (`headerArea` finalModel) (lstHeader cfg)
       }
 
     -- The fixed header composited above the rows, reserving the same
@@ -734,8 +734,8 @@ listBase mkId cfg = do
     -- alignment with the rows beneath it.
     headerArea headerEl finalModel = do
       bounds <- getBounds
-      let rowsHeight = rectHeight bounds - lcRowHeight cfg
-          rowsScroll = totalRowsHeight (lcRowHeight cfg) itemCount > rowsHeight
+      let rowsHeight = rectHeight bounds - lstRowHeight cfg
+          rowsScroll = totalRowsHeight (lstRowHeight cfg) itemCount > rowsHeight
           headerRow
             | rowsScroll = hBox
                 [ children
@@ -746,14 +746,14 @@ listBase mkId cfg = do
             | otherwise = headerEl
       runElement $ vBox
         [ children
-            [ elementWithLayout (Layout fill (exactly (lcRowHeight cfg)) TopLeft) (runElement headerRow)
+            [ elementWithLayout (Layout fill (exactly (lstRowHeight cfg)) TopLeft) (runElement headerRow)
             , elementWithLayout (Layout fill fill TopLeft) (rowsArea finalModel)
             ]
         ]
 
     -- Keyboard-driven scroll adjustment plus the rows themselves --
     -- composed via a real 'vBox' rather than manual bounds math when a
-    -- header is present (see 'lcHeader'), so 'getBounds' here already
+    -- header is present (see 'lstHeader'), so 'getBounds' here already
     -- reflects the space left after it.
     rowsArea finalModel = do
       trackCursor finalModel
@@ -782,8 +782,8 @@ listBase mkId cfg = do
     -- visible set changes. The content has no width of its own, so it
     -- never scrolls horizontally.
     renderViewport = scrollViewport (mkId . ListViewport) ScrollViewportConfig
-      { svWheelStep   = lcRowHeight cfg * wheelRowsPerNotch
-      , svContentSize = Size 0 (totalRowsHeight (lcRowHeight cfg) itemCount)
+      { svWheelStep   = lstRowHeight cfg * wheelRowsPerNotch
+      , svContentSize = Size 0 (totalRowsHeight (lstRowHeight cfg) itemCount)
       , svContent     = runElement . visibleRows
       }
 
@@ -792,7 +792,7 @@ listBase mkId cfg = do
     visibleRows inView =
       vBox [children (spacer topSkipped : zipWith (row viewportHeight) [loIdx ..] inViewStates ++ [spacer bottomSkipped])]
       where
-        rh             = lcRowHeight cfg
+        rh             = lstRowHeight cfg
         offsetY        = rectY inView
         viewportHeight = rectHeight inView
         loIdx          = max 0 (floor (offsetY / rh))
@@ -834,7 +834,7 @@ listBase mkId cfg = do
       ]
 
     row viewportHeight idx st = Element
-      { elLayout  = Layout fill (exactly (lcRowHeight cfg)) TopLeft
+      { elLayout  = Layout fill (exactly (lstRowHeight cfg)) TopLeft
       , elMeasure = noIntrinsicSize
       , elRun     = void $ control defaultControlConfig
           { ccElementId    = Just (mkId (ListItem (itemValue st)))
@@ -843,7 +843,7 @@ listBase mkId cfg = do
           , ccActiveStates = rowStates st
           , ccContent      = \rci -> do
               when (ciClicked rci) (rowActivated viewportHeight idx (itemValue st))
-              runElement (lcRenderItem cfg st)
+              runElement (lstRenderItem cfg st)
           }
       }
 
@@ -882,10 +882,10 @@ listFrom
   -> ListConfig sel e msg a
   -> Element e msg
 listFrom mkId cfg =
-  chromeElement (lcLayout cfg) (ccStyleKey (lcControl cfg)) (listMeasure (isJust (lcHeader cfg)) cfg) (void (listBase mkId cfg))
+  chromeElement (lstLayout cfg) (ccStyleKey (lstControl cfg)) (listMeasure (isJust (lstHeader cfg)) cfg) (void (listBase mkId cfg))
 
 -- | Brings row @idx@ (0-based, into a flat list of @itemCount@ rows at
--- @cfg@'s own 'lcRowHeight') into a @viewportHeight@-tall viewport --
+-- @cfg@'s own 'lstRowHeight') into a @viewportHeight@-tall viewport --
 -- top-aligned if it currently falls above, bottom-aligned if below. A
 -- no-op when the content already fits without scrolling, or the row is
 -- already fully in view. Takes effect immediately, via
@@ -912,7 +912,7 @@ listFrom mkId cfg =
 scrollRowIntoView :: Ord e => (ListPart a -> e) -> ListConfig sel e msg a -> Int -> Double -> Int -> View e msg ()
 scrollRowIntoView mkId cfg itemCount viewportHeight idx = when (maxOffset > 0) $ do
   scrollFrac <- getScrollState listScrollEid
-  let rh        = lcRowHeight cfg
+  let rh        = lstRowHeight cfg
       rowTop    = fromIntegral idx * rh
       rowBottom = rowTop + rh
       offsetY   = scrollFrac * maxOffset
@@ -923,11 +923,11 @@ scrollRowIntoView mkId cfg itemCount viewportHeight idx = when (maxOffset > 0) $
   mapM_ (setScrollStateNow listScrollEid) newFrac
   where
     listScrollEid = mkId (ListViewport (ViewportVerticalBar ScrollBar))
-    contentHeight = totalRowsHeight (lcRowHeight cfg) itemCount
+    contentHeight = totalRowsHeight (lstRowHeight cfg) itemCount
     maxOffset     = contentHeight - viewportHeight
 
 -- | What a list-like control measures as inside its chrome: every row,
--- plus one more for a header when @hasHeader@, each 'lcRowHeight' tall.
+-- plus one more for a header when @hasHeader@, each 'lstRowHeight' tall.
 -- Its width is whatever it's offered, the same as any element with no
 -- width of its own.
 listMeasure :: SelectionModel sel => Bool -> ListConfig sel e msg a -> Element e msg
@@ -938,7 +938,7 @@ listMeasure hasHeader cfg = Element
   }
   where
     headerRows = if hasHeader then 1 else 0
-    rowsHeight = totalRowsHeight (lcRowHeight cfg) (length (itemStates (lcSelection cfg)) + headerRows)
+    rowsHeight = totalRowsHeight (lstRowHeight cfg) (length (itemStates (lstSelection cfg)) + headerRows)
 
 -- * Style
 
@@ -950,7 +950,7 @@ listStyleKey = Class "list"
 -- | The 'StyleKey' each row resolves from unless overridden via a
 -- differently-styled 'Blink.Controls.List.renderItem'.
 listItemStyleKey :: StyleKey e
-listItemStyleKey = Class "list-item"
+listItemStyleKey = Class "listItem"
 
 -- | The pseudo-state group for whether a row is selected.
 listSelectionGroup :: Text

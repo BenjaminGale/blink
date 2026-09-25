@@ -5,7 +5,7 @@
 -- | A table built on 'listBase': each row lays out one cell per
 -- 'columns' entry, sized to that column's own width, with a header row
 -- of the columns' header content aligned to the same widths -- fixed
--- above the scrollable rows (via 'lcHeader'), never itself a selectable
+-- above the scrollable rows (via 'lstHeader'), never itself a selectable
 -- or focusable row. A draggable handle between each pair of header cells
 -- resizes the two columns it sits between.
 module Blink.Controls.Table
@@ -230,7 +230,7 @@ table
   -> [Attribute (TableConfig sel e msg a)]
   -> Element e msg
 table mkId attrs =
-  chromeElement (lcLayout (tbList cfg)) (ccStyleKey (lcControl (tbList cfg))) (listMeasure hasColumns (tbList cfg)) (void run)
+  chromeElement (lstLayout (tbList cfg)) (ccStyleKey (lstControl (tbList cfg))) (listMeasure hasColumns (tbList cfg)) (void run)
   where
     cfg        = resolve defaultTableConfig attrs
     cols       = tbColumns cfg
@@ -238,7 +238,7 @@ table mkId attrs =
 
     run = do
       (widths, listCfg) <- withColumns (mkId . TableHeaderCell) (mkId . TableColumnDivider) cols (tbList cfg)
-      listBase (mkId . TableRow) listCfg { lcRenderItem = renderRow widths }
+      listBase (mkId . TableRow) listCfg { lstRenderItem = renderRow widths }
 
     renderRow widths st = columnRow widths (csColumns cols) (\_ w c -> columnCell w c st)
 
@@ -257,7 +257,7 @@ withColumns
 withColumns mkHeaderId mkDividerId cols listCfg = do
   widths <- resolveColumnWidths mkDividerId (csColumns cols)
   pure (widths, listCfg
-    { lcHeader = if null (csColumns cols) then Nothing else
+    { lstHeader = if null (csColumns cols) then Nothing else
         Just (columnHeaderRow mkHeaderId mkDividerId
                 (requestColumnSort (csSort cols) (csOnColumnSortRequested cols)) widths (csColumns cols))
     })
@@ -320,7 +320,7 @@ columnHeaderRow mkHeaderId mkDividerId onSortClick widths cols =
     bounds <- getBounds
     -- Left\/right only: a row's own chrome shifts where its content
     -- starts\/ends horizontally, but the header is exactly one
-    -- 'lcRowHeight' tall already -- insetting its top\/bottom too would
+    -- 'lstRowHeight' tall already -- insetting its top\/bottom too would
     -- needlessly shrink every header cell's own height, and so its
     -- hover\/selection highlight.
     let horizontalInsets = insets { topInset = 0, bottomInset = 0 }
@@ -412,7 +412,7 @@ resizeHandle mkDividerId idx = Element
 -- cells resolves its style from unless overridden via
 -- 'Blink.Controls.Control.style'.
 tableHeaderStyleKey :: StyleKey e
-tableHeaderStyleKey = Class "table-header"
+tableHeaderStyleKey = Class "tableHeader"
 
 -- | The 'StyleKey' a 'Blink.Controls.Table.table''s draggable
 -- column-resize handle resolves its style from. Distinct from
@@ -421,7 +421,7 @@ tableHeaderStyleKey = Class "table-header"
 -- control's chrome insets both its hit area and its content bounds by
 -- margin before running.
 tableColumnDividerStyleKey :: StyleKey e
-tableColumnDividerStyleKey = Class "table-column-divider"
+tableColumnDividerStyleKey = Class "tableColumnDivider"
 
 -- | A shaded strip, no border, tinted on hover. A resize handle (see
 -- 'tableColumnDividerStyleKey') between cells (see

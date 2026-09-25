@@ -99,7 +99,7 @@ treeTable
   -> [Attribute (TreeTableConfig sel e msg a)]
   -> Element e msg
 treeTable mkId attrs =
-  chromeElement (lcLayout (ttList cfg)) (ccStyleKey (lcControl (ttList cfg))) (listMeasure hasColumns (ttList cfg)) (void run)
+  chromeElement (lstLayout (ttList cfg)) (ccStyleKey (lstControl (ttList cfg))) (listMeasure hasColumns (ttList cfg)) (void run)
   where
     cfg        = resolve defaultTreeTableConfig attrs
     cols       = ttColumns cfg

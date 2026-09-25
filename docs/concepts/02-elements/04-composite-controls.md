@@ -76,15 +76,15 @@ mental model, but its type is a function. It's the recipe for all of
 ## Inside the control
 
 Whenever `scrollBar` needs a concrete id for one part, say the track, it
-applies the function it was given:
+applies the function it was given, which it calls `mkId`:
 
 ```haskell
-tag ScrollBarTrack
+mkId ScrollBarTrack
 ```
 
 This evaluates to `VScrollCtl ScrollBarTrack :: ControlId` (when called
 from the vertical scrollbar), an ordinary, fully built value, usable for
-hover/focus/capture lookup like any other id. `scrollBar` calls `tag` once
+hover/focus/capture lookup like any other id. `scrollBar` calls `mkId` once
 per part, internally, whenever it needs that part's id for the frame; you
 never see the intermediate function from outside.
 
@@ -105,7 +105,7 @@ another, and each `toggleButtonGroup`/`radioButtonGroup` item is its own
 focus target. Style-class selection is a separate mechanism: `ccStyleKey`
 is a plain `Class` per part (`scrollBarTrackStyleKey`,
 `scrollBarButtonStyleKey`), fixed and shared across every instance
-regardless of `tag`, so it's not by itself a reason to build a second id.
+regardless of `mkId`, so it's not by itself a reason to build a second id.
 A part with no independent interaction of its own doesn't need one.
 
 ## The "whole" is just another part
@@ -128,14 +128,14 @@ data ToggleGroupPart a
   deriving (Eq, Ord, Show)
 ```
 
-`tag ToggleGroup` is the id the group's own wrapping `control` renders
+`mkId ToggleGroup` is the id the group's own wrapping `control` renders
 under. Its style still resolves from a fixed `Class`
 (`toggleButtonGroupStyleKey`/`radioButtonGroupStyleKey`), same as any
 part's; the id itself is only for interaction bookkeeping. For
-`scrollBar`, that bookkeeping use extends to one more thing: `tag
+`scrollBar`, that bookkeeping use extends to one more thing: `mkId
 ScrollBar` doubles as the `Blink.View.ScrollState` key the current
 position is stored under. A caller that needs to read a scrollbar's
-position from elsewhere uses the identical id, `tag ScrollBar`, passed to
+position from elsewhere uses the identical id, `mkId ScrollBar`, passed to
 `getScrollState`, so no separate attribute needs to expose it.
 
 The composite's own id is deliberately not itself a keyboard focus target

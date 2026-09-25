@@ -18,7 +18,7 @@
 -- A caller that needs to know the current position too -- to offset the
 -- content being scrolled, say -- reads it the same way, via
 -- 'Blink.View.getScrollState' passed the identical element id
--- (@tag 'ScrollBar'@); no attribute\/reaction pair is needed to expose
+-- (@mkId 'ScrollBar'@); no attribute\/reaction pair is needed to expose
 -- it, the same way none is needed to read a text input's own scroll
 -- offset from outside it.
 --
@@ -262,20 +262,20 @@ arrowButton eid path attrs =
 -- tracking the pointer without recentring under it; holding either arrow
 -- steps the position by 'step', repeating for as long as it's held.
 --
--- @tag@ builds each part's element id from a 'ScrollBarPart' -- the caller
--- never writes a per-part id by hand. @tag 'ScrollBar'@ doubles as the
+-- @mkId@ builds each part's element id from a 'ScrollBarPart' -- the caller
+-- never writes a per-part id by hand. @mkId 'ScrollBar'@ doubles as the
 -- 'Blink.View.ScrollState' key -- see the module header for reading it
 -- from elsewhere.
 scrollBar :: Ord e => (ScrollBarPart -> e) -> [Attribute (ScrollBarConfig e msg)] -> Element e msg
-scrollBar tag attrs = controlElement (scrollBarLayout cfg) box ctrl
+scrollBar mkId attrs = controlElement (scrollBarLayout cfg) box ctrl
   where
     cfg       = resolve defaultScrollBarConfig attrs
     o         = sbOrientation cfg
-    scrollEid = tag ScrollBar
+    scrollEid = mkId ScrollBar
 
     box = (if o == Horizontal then hBox else vBox) [children [decrementBtn, trackEl, incrementBtn]]
 
-    decrementBtn = arrowButton (tag ScrollBarDecrement)
+    decrementBtn = arrowButton (mkId ScrollBarDecrement)
       (if o == Horizontal then "assets/icons/arrow_left.svg" else "assets/icons/arrow_drop_up.svg")
       ( [ style scrollBarButtonStyleKey
         , overControl (focusPolicy NotFocusable)
@@ -283,7 +283,7 @@ scrollBar tag attrs = controlElement (scrollBarLayout cfg) box ctrl
         ] ++ arrowLayoutAttrs o
       )
 
-    incrementBtn = arrowButton (tag ScrollBarIncrement)
+    incrementBtn = arrowButton (mkId ScrollBarIncrement)
       (if o == Horizontal then "assets/icons/arrow_right.svg" else "assets/icons/arrow_drop_down.svg")
       ( [ style scrollBarButtonStyleKey
         , overControl (focusPolicy NotFocusable)
@@ -294,7 +294,7 @@ scrollBar tag attrs = controlElement (scrollBarLayout cfg) box ctrl
     trackEl = controlElement (Layout fill fill TopLeft) (Element (Layout fill fill TopLeft) noIntrinsicSize (pure ())) trackCtrl
 
     trackCtrl = defaultControlConfig
-      { ccElementId       = Just (tag ScrollBarTrack)
+      { ccElementId       = Just (mkId ScrollBarTrack)
       , ccStyleKey        = scrollBarTrackStyleKey
       , ccFocusPolicy     = NotFocusable
       , ccMouseActivation = CaptureActivated
@@ -304,7 +304,7 @@ scrollBar tag attrs = controlElement (scrollBarLayout cfg) box ctrl
     trackBody ci = do
       bounds <- getBounds
       value0 <- getScrollState scrollEid
-      let trackId  = tag ScrollBarTrack
+      let trackId  = mkId ScrollBarTrack
           thumbLen = thumbLengthFor o bounds (sbVisibleFraction cfg)
       when (not (ciDisabled ci) && ciIsCaptured ci) $ do
         mouseMain <- pointMain o <$> getMousePos

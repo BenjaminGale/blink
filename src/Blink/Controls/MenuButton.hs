@@ -119,31 +119,31 @@ onOpenChanged = nested mbToggle (\c t -> c { mbToggle = t }) . onSelectedChanged
 -- caption, the same as 'Blink.Controls.Button.button'; override with
 -- 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 --
--- @tag@ builds every part's element id from a 'MenuButtonPart': the
+-- @mkId@ builds every part's element id from a 'MenuButtonPart': the
 -- trigger's own id from 'MenuButtonTrigger', its item list's own focus
 -- scope id from 'MenuButtonList', and each item's id from 'MenuButtonItem'
 -- applied to the item's own data.
 menuButton :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> [Attribute (MenuButtonConfig e a msg)] -> Element e msg
-menuButton tag attrs = captionedButton btn (void (runMenuButton tag cfg))
+menuButton mkId attrs = captionedButton btn (void (runMenuButton mkId cfg))
   where
     cfg = resolve defaultMenuButtonConfig attrs
     btn = tgcButton (mbToggle cfg)
 
 runMenuButton :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg (ToggleInteraction e msg)
-runMenuButton tag cfg = do
+runMenuButton mkId cfg = do
   onTrigger <- isRegionHit
-  menuTrigger (tag MenuButtonTrigger) (tag MenuButtonList) (mbToggle cfg) (\close -> itemsElement tag cfg close onTrigger)
+  menuTrigger (mkId MenuButtonTrigger) (mkId MenuButtonList) (mbToggle cfg) (\close -> itemsElement mkId cfg close onTrigger)
 
 -- | The open item list. @onTrigger@ is whether the pointer is on the
 -- trigger, so a press there toggles the menu rather than counting as an
 -- outside press.
 itemsElement :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg () -> Bool -> Element e msg
-itemsElement tag cfg close onTrigger =
+itemsElement mkId cfg close onTrigger =
   menuList menuButtonListStyleKey menu close onTrigger
   where
     menu = MenuItems
-      { miListId    = tag MenuButtonList
-      , miItemId    = tag . MenuButtonItem
+      { miListId    = mkId MenuButtonList
+      , miItemId    = mkId . MenuButtonItem
       , miItems     = mbItems cfg
       , miItemAttrs = mbItemAttrs cfg
       , miSubmenu   = const Nothing

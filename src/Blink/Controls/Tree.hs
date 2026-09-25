@@ -15,7 +15,7 @@
 -- depth leaves just the flat item order a selection model already
 -- expects). Expansion is tracked entirely separately, as a plain
 -- @Set a@ the caller passes in via 'expanded' and gets told about via
--- 'onExpansionChanged', the same shape 'lcSelection'\/'onSelectionChanged'
+-- 'onExpansionChanged', the same shape 'lstSelection'\/'onSelectionChanged'
 -- already have for the selection model.
 module Blink.Controls.Tree
   ( flattenVisible
@@ -216,7 +216,7 @@ tree
   -> [Attribute (TreeConfig sel e msg a)]
   -> Element e msg
 tree mkId attrs =
-  chromeElement (lcLayout listCfg) (ccStyleKey (lcControl listCfg)) (listMeasure False listCfg) (void run)
+  chromeElement (lstLayout listCfg) (ccStyleKey (lstControl listCfg)) (listMeasure False listCfg) (void run)
   where
     cfg     = resolve defaultTreeConfig attrs
     td      = tcTreeData cfg
@@ -257,7 +257,7 @@ treeListBase mkRowId cfg = do
     td       = tlTreeData cfg
     visRows  = visibleNodes (tdForest td) (tdExpanded td)
     nodeInfo = Map.fromList [ (x, (depth, hasChildren)) | (x, depth, hasChildren) <- visRows ]
-    listCfg  = (tlList cfg) { lcRenderItem = tlRenderRow cfg . itemState }
+    listCfg  = (tlList cfg) { lstRenderItem = tlRenderRow cfg . itemState }
 
     itemState st = TreeItemState st depth hasChildren (Set.member x (tdExpanded td))
       where
@@ -343,11 +343,11 @@ handleExpansionKey mkRowId listCfg visRows nodeInfo expanded0 onExpansionChanged
       _                                        -> maybe (pure ()) climbToParent (stepsToParent x)
     _ -> pure ()
   where
-    s0       = lcSelection listCfg
+    s0       = lstSelection listCfg
 
     setExpanded s'  = runHandlers onExpansionChanged0 s'
     moveCursorTo s' = when (s' /= s0) $ do
-      runHandlers (lcOnSelectionChanged listCfg) s'
+      runHandlers (lstOnSelectionChanged listCfg) s'
       let rowIndex = cursorItem s' >>= \x -> findIndex (\(y, _, _) -> y == x) visRows
       mapM_ (scrollRowIntoView mkRowId listCfg (length visRows) viewportHeight) rowIndex
     climbToParent n = moveCursorTo (applyN n (moveCursor Prev) s0)
@@ -366,7 +366,7 @@ handleExpansionKey mkRowId listCfg visRows nodeInfo expanded0 onExpansionChanged
 -- | The 'StyleKey' a 'Blink.Controls.Tree.tree' row's chevron resolves
 -- its style from unless overridden via 'Blink.Controls.Control.style'.
 treeChevronStyleKey :: StyleKey e
-treeChevronStyleKey = Class "tree-chevron"
+treeChevronStyleKey = Class "treeChevron"
 
 -- | 'Blink.Controls.Style.iconStyle', centred -- the chevron is nothing
 -- but an icon, tinted the same way a checkbox's or radio button's is.

@@ -206,7 +206,7 @@ radioButtonGroup = toggleGroup radioButtonGroupStyleKey radioButton
 -- fixed, not attr-settable): Tab moves directly between its items, each
 -- independently focusable, exactly as if the group weren't there.
 --
--- @tag@ builds every part's element id from a 'ToggleGroupPart': the group's
+-- @mkId@ builds every part's element id from a 'ToggleGroupPart': the group's
 -- own container id from 'ToggleGroup', and each item's id from
 -- 'ToggleGroupItem' applied to the item's own data -- so the caller never
 -- writes a per-item id by hand.
@@ -217,19 +217,19 @@ toggleGroup
   -> (ToggleGroupPart a -> e)
   -> [Attribute (ToggleGroupConfig e a msg)]
   -> Element e msg
-toggleGroup styleKey widget tag attrs = controlElement (tggLayout cfg) box ccfg
+toggleGroup styleKey widget mkId attrs = controlElement (tggLayout cfg) box ccfg
   where
     cfg = resolve (defaultToggleGroupConfig styleKey) attrs
     box = (if tggOrientation cfg == Horizontal then hBox else vBox)
             [ spacing (tggItemSpacing cfg), children (map toItem (tggItems cfg)) ]
-    toItem item = widget (tag (ToggleGroupItem item))
+    toItem item = widget (mkId (ToggleGroupItem item))
       ( tggToggleAttrs cfg item
       ++ [ isSelected (Just item == tggSelected cfg)
          , onSelectedChanged (onItemToggled cfg item)
          ]
       )
     ccfg = (tggControl cfg)
-      { ccElementId   = Just (tag ToggleGroup)
+      { ccElementId   = Just (mkId ToggleGroup)
       , ccFocusPolicy = NotFocusable
       , ccContent     = const (runElement box)
       }

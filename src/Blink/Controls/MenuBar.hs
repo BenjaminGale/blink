@@ -160,23 +160,23 @@ onOpenMenuChanged :: (Maybe a -> [Effect e msg]) -> Attribute (MenuBarConfig e a
 onOpenMenuChanged = appendTo mbrOnOpenMenuChanged (\c hs -> c { mbrOnOpenMenuChanged = hs })
 
 -- | A row of labels, one per 'menus', each opening a dropdown list of
--- items (built from 'menuItems') when clicked. @tag@ builds every part's
+-- items (built from 'menuItems') when clicked. @mkId@ builds every part's
 -- element id from a 'MenuBarPart': the bar's own container id from
 -- 'MenuBar', each label's own id from 'MenuBarLabel', each open dropdown's
 -- own focus scope id from 'MenuBarList', each item's id from
 -- 'MenuBarItem', and each submenu's own scope id from 'MenuBarSubmenu'.
 menuBar :: (Ord e, Ord a, Ord b) => (MenuBarPart a b -> e) -> [Attribute (MenuBarConfig e a b msg)] -> Element e msg
-menuBar tag attrs = controlElement (mbrLayout cfg) (rowBox False) ccfg
+menuBar mkId attrs = controlElement (mbrLayout cfg) (rowBox False) ccfg
   where
     cfg = resolve defaultMenuBarConfig attrs
     rowBox onBar = hBox [ width fill, height fill, children (map (toLabel onBar) (mbrMenus cfg)) ]
-    toLabel onBar menuKey = captionedButton labelCfg (void (runMenuBarLabel tag cfg menuKey labelCfg onBar))
+    toLabel onBar menuKey = captionedButton labelCfg (void (runMenuBarLabel mkId cfg menuKey labelCfg onBar))
       where labelCfg = labelConfigFor menuKey
     labelConfigFor m = resolve labelDefaults (width fitContent : height fitContent : mbrLabelAttrs cfg m)
     labelDefaults = defaultButtonConfig
       { bcControl = (bcControl defaultButtonConfig) { ccStyleKey = menuBarLabelStyleKey } }
     ccfg = (mbrControl cfg)
-      { ccElementId   = Just (tag MenuBar)
+      { ccElementId   = Just (mkId MenuBar)
       , ccFocusPolicy = NotFocusable
       , ccContent     = const (handleMnemonics >> isRegionHit >>= runElement . rowBox)
       }
@@ -185,7 +185,7 @@ menuBar tag attrs = controlElement (mbrLayout cfg) (rowBox False) ccfg
     handleMnemonics = do
       scope <- getCurrentScope
       takeMnemonic labelMnemonic (mbrMenus cfg) >>= mapM_ (\menuKey ->
-        when (mbrOpenMenu cfg /= Just menuKey) (openMenuFor tag cfg scope menuKey))
+        when (mbrOpenMenu cfg /= Just menuKey) (openMenuFor mkId cfg scope menuKey))
 
     labelMnemonic = lcMnemonic . bcLabelled . labelConfigFor
 
@@ -196,12 +196,12 @@ runMenuBarLabel
   :: (Ord e, Ord a, Ord b)
   => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> ButtonConfig e msg -> Bool
   -> View e msg (ToggleInteraction e msg)
-runMenuBarLabel tag cfg menuKey labelCfg onBar = do
+runMenuBarLabel mkId cfg menuKey labelCfg onBar = do
   enclosingScope <- getCurrentScope
-  let open            = openMenuFor tag cfg enclosingScope
+  let open            = openMenuFor mkId cfg enclosingScope
       switchMenu step = forM_ (adjacentMenu (mbrMenus cfg) menuKey step) open
-  r <- menuTrigger (tag (MenuBarLabel menuKey)) (tag (MenuBarList menuKey)) toggleCfg
-         (\close -> itemsElement tag cfg menuKey close onBar switchMenu)
+  r <- menuTrigger (mkId (MenuBarLabel menuKey)) (mkId (MenuBarList menuKey)) toggleCfg
+         (\close -> itemsElement mkId cfg menuKey close onBar switchMenu)
   let someOtherOpen = maybe False (/= menuKey) (mbrOpenMenu cfg)
       hoveredIn     = ciMouseEntered (biControl (tgiButton r))
   when (hoveredIn && someOtherOpen) (open menuKey)
@@ -216,9 +216,9 @@ runMenuBarLabel tag cfg menuKey labelCfg onBar = do
 
 -- | Opens @newKey@'s dropdown and focuses its item list.
 openMenuFor :: (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> Maybe e -> a -> View e msg ()
-openMenuFor tag cfg enclosingScope newKey = do
+openMenuFor mkId cfg enclosingScope newKey = do
   runHandlers (mbrOnOpenMenuChanged cfg) (Just newKey)
-  requestFocus enclosingScope (tag (MenuBarList newKey))
+  requestFocus enclosingScope (mkId (MenuBarList newKey))
 
 -- | The menu @step@ places after @menuKey@ (before it, if negative),
 -- wrapping at either end. 'Nothing' if @menuKey@ isn't in @allMenus@.
@@ -235,18 +235,18 @@ itemsElement
   :: (Ord e, Ord a, Ord b)
   => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> View e msg () -> Bool -> (Int -> View e msg ())
   -> Element e msg
-itemsElement tag cfg menuKey close onBar switchMenu = base { elRun = handleMenuSwitchKeys >> elRun base }
+itemsElement mkId cfg menuKey close onBar switchMenu = base { elRun = handleMenuSwitchKeys >> elRun base }
   where
     menu = MenuItems
-      { miListId    = tag (MenuBarList menuKey)
-      , miItemId    = tag . MenuBarItem menuKey
+      { miListId    = mkId (MenuBarList menuKey)
+      , miItemId    = mkId . MenuBarItem menuKey
       , miItems     = mbrMenuItems cfg menuKey
       , miItemAttrs = mbrItemAttrs cfg menuKey
       , miSubmenu   = submenuFor
       }
     submenuFor item = case mbrSubmenuItems cfg menuKey item of
       [] -> Nothing
-      xs -> Just (tag (MenuBarSubmenu menuKey item), xs)
+      xs -> Just (mkId (MenuBarSubmenu menuKey item), xs)
 
     base = menuListWithSubmenus menuBarListStyleKey menu close onBar
 
