@@ -14,11 +14,11 @@ import Blink.Controls.List
 import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..), cell, cellWidth, column, sortable)
 import Blink.Controls.TreeTable
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
-import Blink.Element (Element (..), height, runElement, width)
+import Blink.Element (Element (..), height, measureElement, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Layout.Constraints (Layout (..), exactly, fill)
+import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
 import Blink.Style (Theme)
 import Blink.View
 
@@ -122,7 +122,11 @@ contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
   testBounds contractCtx (Part (TTRow List)) FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyTreeTable
 
 widgetSpec :: Spec
-widgetSpec = describe "treeTable" $
+widgetSpec = describe "treeTable" $ do
+  it "measures its height as a header row plus one row per visible item when sized to its content" $ do
+    (sz, _) <- runView (measureElement (Rectangle 0 0 100 400) (treeTable Part [columns testColumns, selection (unselected ["a", "b", "c"]), rowHeight 20, height fitContent])) seedCtx
+    sizeHeight sz `shouldBe` 80
+
   it "indents column 0 by depth while column 1+ cells stay aligned across depths" $ do
     result <- runInteractions testBounds seedCtx
       (renderTreeTable [expanded (Set.singleton "src"), selection (unselected items)])

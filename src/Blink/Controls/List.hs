@@ -97,7 +97,7 @@ module Blink.Controls.List
   , listBase
   , list
   , requiredList
-  , rowsSpacer
+  , listMeasure
   , scrollRowIntoView
   , selection
   , renderItem
@@ -125,6 +125,7 @@ module Blink.Controls.List
 
 import Control.Monad (void, when)
 import Data.List (elemIndex, find, findIndex)
+import Data.Maybe (isJust)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
@@ -134,7 +135,7 @@ import Data.Text (Text)
 import Blink.Controls.Control
 import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBar, scrollBarThickness, visibleFraction)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, height, noIntrinsicSize, runElement)
-import Blink.Geometry (Alignment (TopLeft), Rectangle (..), insetRect)
+import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..), insetRect)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Shift))
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
@@ -576,13 +577,15 @@ totalRowsHeight :: Double -> Int -> Double
 totalRowsHeight rh n = fromIntegral n * rh
 
 -- | 'defaultControlConfig' (styled via @Class \"list\"@), filling its
--- parent's width and sizing its height to its own rows, no per-row render
+-- parent on both axes and scrolling its rows within that, no per-row render
 -- (draws nothing), a 32px row height, and no reactions, starting from the
--- given selection.
+-- given selection. With 'Blink.Element.height' set to
+-- 'Blink.Layout.Constraints.fitContent' it instead sizes its height to its
+-- rows, so never scrolls.
 baseListConfig :: sel a -> ListConfig sel e msg a
 baseListConfig s0 = ListConfig
   { lcControl            = defaultControlConfig { ccStyleKey = listStyleKey }
-  , lcLayout             = Layout fill fitContent TopLeft
+  , lcLayout             = Layout fill fill TopLeft
   , lcSelection          = s0
   , lcRenderItem         = const emptyElement
   , lcRowHeight          = defaultRowHeight
@@ -592,7 +595,7 @@ baseListConfig s0 = ListConfig
   }
 
 -- | 'defaultControlConfig' (styled via @Class \"list\"@), filling its
--- parent's width and sizing its height to its own rows, 'emptySelection',
+-- parent on both axes and scrolling its rows within that, 'emptySelection',
 -- no per-row render (draws nothing), a 32px row height, and no reactions.
 -- Every 'SelectionModel' except 'RequiredSelection' has an empty value to
 -- start from this way -- see 'requiredListConfig' for that model instead.
@@ -941,7 +944,7 @@ listFrom
   -> ListConfig sel e msg a
   -> Element e msg
 listFrom mkId cfg =
-  chromeElement (lcLayout cfg) (ccStyleKey (lcControl cfg)) (rowsSpacer cfg (itemStates (lcSelection cfg))) (void (listBase mkId cfg))
+  chromeElement (lcLayout cfg) (ccStyleKey (lcControl cfg)) (listMeasure (isJust (lcHeader cfg)) cfg) (void (listBase mkId cfg))
 
 -- | Brings row @idx@ (0-based, into a flat list of @itemCount@ rows at
 -- @cfg@'s own 'lcRowHeight') into a @viewportHeight@-tall viewport --
@@ -985,15 +988,19 @@ scrollRowIntoView mkId cfg itemCount viewportHeight idx = when (maxOffset > 0) $
     contentHeight = totalRowsHeight (lcRowHeight cfg) itemCount
     maxOffset     = contentHeight - viewportHeight
 
--- | A single fixed-height stand-in for every current row stacked
--- vertically, used only to measure a list-like control's own height --
--- the virtualised rendering inside 'listBase' already substitutes a
--- plain spacer for a skipped row for exactly the same reason: since
--- every row is fixed at 'lcRowHeight', only the total count times that
--- height matters for measurement, never any row's actual content.
-rowsSpacer :: ListConfig sel e msg a -> [ItemState a] -> Element e msg
-rowsSpacer cfg states =
-  elementWithLayout (Layout fill (exactly (totalRowsHeight (lcRowHeight cfg) (length states))) TopLeft) (pure ())
+-- | What a list-like control measures as inside its chrome: every row,
+-- plus one more for a header when @hasHeader@, each 'lcRowHeight' tall.
+-- Its width is whatever it's offered, the same as any element with no
+-- width of its own.
+listMeasure :: SelectionModel sel => Bool -> ListConfig sel e msg a -> Element e msg
+listMeasure hasHeader cfg = Element
+  { elLayout  = Layout fill fitContent TopLeft
+  , elMeasure = \ctx -> (\sz -> sz { sizeHeight = rowsHeight }) <$> noIntrinsicSize ctx
+  , elRun     = pure ()
+  }
+  where
+    headerRows = if hasHeader then 1 else 0
+    rowsHeight = totalRowsHeight (lcRowHeight cfg) (length (itemStates (lcSelection cfg)) + headerRows)
 
 -- * Style
 

@@ -176,7 +176,7 @@ tree
   -> [Attribute (TreeConfig sel e msg a)]
   -> Element e msg
 tree mkId attrs =
-  chromeElement (lcLayout listCfg) (ccStyleKey (lcControl listCfg)) (rowsSpacer listCfg (itemStates (lcSelection listCfg))) (void run)
+  chromeElement (lcLayout listCfg) (ccStyleKey (lcControl listCfg)) (listMeasure False listCfg) (void run)
   where
     cfg     = resolve defaultTreeConfig attrs
     listCfg = (tcList cfg) { lcRenderItem = renderRow }

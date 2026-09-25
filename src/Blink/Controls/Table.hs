@@ -32,7 +32,6 @@ module Blink.Controls.Table
   , columnCell
   , columnHeaderRow
   , requestColumnSort
-  , tableSpacer
   , weaveColumns
   , columnSpacer
     -- * Style
@@ -42,7 +41,6 @@ module Blink.Controls.Table
   ) where
 
 import Control.Monad (forM_, void, when)
-import Data.Maybe (isJust)
 import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
@@ -199,7 +197,7 @@ table
   -> [Attribute (TableConfig sel e msg a)]
   -> Element e msg
 table mkId attrs =
-  chromeElement (lcLayout (tbList cfg)) (ccStyleKey (lcControl (tbList cfg))) (tableSpacer (tbList cfg)) (void run)
+  chromeElement (lcLayout (tbList cfg)) (ccStyleKey (lcControl (tbList cfg))) (listMeasure (not (null (tbColumns cfg))) (tbList cfg)) (void run)
   where
     cfg = resolve defaultTableConfig attrs
 
@@ -360,17 +358,6 @@ resizeHandle mkDividerId idx = Element
       s <- currentStyle
       let lineRect = bounds { rectX = rectX bounds + (handleWidth - 1) / 2, rectWidth = 1 }
       forM_ (styleBorderColour s) (\c -> withBounds lineRect (fillRect c))
-
--- | A single fixed-height stand-in for the header (if any) plus every
--- current row stacked vertically -- used only to measure the table's
--- own height, the same reason 'Blink.Controls.List.rowsSpacer' exists
--- for a plain list, extended by one row's worth when there's a header.
-tableSpacer :: SelectionModel sel => ListConfig sel e msg a -> Element e msg
-tableSpacer cfg = elementWithLayout (Layout fill (exactly height) TopLeft) (pure ())
-  where
-    rowsHeight   = fromIntegral (length (itemStates (lcSelection cfg))) * lcRowHeight cfg
-    headerHeight = if isJust (lcHeader cfg) then lcRowHeight cfg else 0
-    height       = headerHeight + rowsHeight
 
 -- * Style
 

@@ -11,10 +11,10 @@ import Blink.Controls.List
   )
 import Blink.Controls.Table
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
-import Blink.Element (Element (..), height, runElement, width)
+import Blink.Element (Element (..), height, measureElement, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Layout.Constraints (Layout (..), exactly, fill)
+import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
 import Blink.Rendering (Colour (..))
 import Blink.AppFixtures (solidPalette)
 import Blink.Style (Palette, Theme)
@@ -141,7 +141,11 @@ renderSilentTable attrs = runElement $ table Part
   )
 
 widgetSpec :: Spec
-widgetSpec = describe "table" $
+widgetSpec = describe "table" $ do
+  it "measures its height as a header row plus one row per item when sized to its content" $ do
+    (sz, _) <- runView (measureElement (Rectangle 0 0 100 400) (table Part [columns testColumns, selection (unselected [1, 2, 3]), rowHeight 20, height fitContent])) seedCtx
+    sizeHeight sz `shouldBe` 80
+
   it "renders one cell per column at each column's own width, with a header aligned to them" $ do
     result <- runInteractions testBounds seedCtx
       (renderTable [selection (unselected items)])

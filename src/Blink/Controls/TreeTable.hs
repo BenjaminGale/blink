@@ -29,7 +29,7 @@ import Blink.Controls.Control
 import Blink.Controls.List
 import Blink.Controls.Table
   ( ColumnConfig (..), SortDirection (..), columnCell, columnHeaderRow, columnSpacer, requestColumnSort
-  , resolveColumnWidths, tableSpacer, weaveColumns
+  , resolveColumnWidths, weaveColumns
   )
 import Blink.Controls.Tree (handleExpansionKey, indentAndChevron, visibleNodes)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, runElement)
@@ -126,7 +126,7 @@ treeTable
   -> [Attribute (TreeTableConfig sel e msg a)]
   -> Element e msg
 treeTable mkId attrs =
-  chromeElement (lcLayout (ttList cfg)) (ccStyleKey (lcControl (ttList cfg))) (tableSpacer (ttList cfg)) (void run)
+  chromeElement (lcLayout (ttList cfg)) (ccStyleKey (lcControl (ttList cfg))) (listMeasure (not (null (ttColumns cfg))) (ttList cfg)) (void run)
   where
     cfg = resolve defaultTreeTableConfig attrs
 

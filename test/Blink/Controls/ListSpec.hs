@@ -10,11 +10,11 @@ import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBeha
 import Blink.Controls.List
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
-import Blink.Element (Element (..), height, runElement, width)
+import Blink.Element (Element (..), height, measureElement, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Layout.Constraints (Layout (..), exactly, fill)
+import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
 import Blink.Style (Theme)
 import Blink.View
 
@@ -332,6 +332,10 @@ contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
 widgetSpec :: Spec
 widgetSpec = describe "list" $ do
   let start = selectFirst testItems
+
+  it "measures its height as one row per item when sized to its content" $ do
+    (sz, _) <- runView (measureElement (Rectangle 0 0 100 400) (list Part [selection (unselected testItems), rowHeight 20, height fitContent])) seedCtx
+    sizeHeight sz `shouldBe` 60
 
   it "clicking an unselected row selects and activates it" $ do
     result <- runInteractions testBounds seedCtx

@@ -15,11 +15,11 @@ import Blink.Controls.List
 import Blink.Controls.ScrollBar (ScrollBarPart (..))
 import Blink.Controls.Tree
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
-import Blink.Element (Element (..), height, runElement, width)
+import Blink.Element (Element (..), height, measureElement, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..), uniform)
 import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Layout.Constraints (Layout (..), exactly, fill)
+import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonMouseOver))
 import Blink.View
@@ -171,6 +171,10 @@ contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
 
 widgetSpec :: Spec
 widgetSpec = describe "tree" $ do
+  it "measures its height as one row per visible item when sized to its content" $ do
+    (sz, _) <- runView (measureElement (Rectangle 0 0 100 400) (tree Part [selection (unselected ["a", "b", "c"]), rowHeight 20, height fitContent])) seedCtx
+    sizeHeight sz `shouldBe` 60
+
   it "indents each row's content proportional to its depth, past a fixed chevron column" $ do
     result <- runInteractions testBounds seedCtx
       (renderTree [expanded (Set.singleton "src"), selection (unselected items)])
