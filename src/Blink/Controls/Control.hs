@@ -441,7 +441,7 @@ data ControlConfig e msg = ControlConfig
     -- ^ Renders the control's content, given this same frame's own
     -- 'ControlInteraction' -- already fully computed by the time this
     -- runs, so content reads facts like 'ciFocused'\/'ciKeysPressed'\/
-    -- 'ciWasDragging' off it directly rather than re-deriving them via
+    -- 'ciIsCaptured' off it directly rather than re-deriving them via
     -- 'isFocused'\/'getInput'\/'isDragging' itself.
   , ccFocusPolicy     :: FocusPolicy
     -- ^ Whether, and how, this control's own identity participates in
@@ -489,16 +489,17 @@ data ControlInteraction e msg = ControlInteraction
   , ciMouseUp      :: Bool
   , ciClicked      :: Bool
   , ciFocusGained  :: Bool
+    -- ^ Focus arrived at this control, however it got there: a click, Tab,
+    -- Shift-Tab, a direct request, or claiming focus by rendering first.
   , ciFocusLost    :: Bool
+    -- ^ Focus left this control, however it went.
   , ciKeysPressed  :: [KeyEvent]
-  , ciWasDragging  :: Bool
-    -- ^ Whether this control already held mouse capture as of the *start*
-    -- of this frame's processing, before anything this frame (including a
-    -- fresh capture acquired this same frame) could change it. Lets
-    -- content distinguish "continuing an existing drag" from "a fresh
-    -- grab just starting" -- a fact only available from before the frame
-    -- began, the same reason a plain live 'isDragging' read from inside
-    -- content can't recover it.
+  , ciIsCaptured   :: Bool
+    -- ^ Whether this control holds mouse capture -- a press that started
+    -- on it and hasn't been released, wherever the pointer is now.
+  , ciCaptureStarted :: Bool
+    -- ^ True only when the press that gives this control capture begins,
+    -- so content can tell a new drag from one in progress.
   , ciDisabled     :: Bool
     -- ^ Whether this control is disabled, either directly
     -- ('Blink.Controls.Control.isEnabled') or via an enclosing
@@ -524,7 +525,8 @@ noInteraction s = ControlInteraction
   , ciFocusGained  = False
   , ciFocusLost    = False
   , ciKeysPressed  = []
-  , ciWasDragging  = False
+  , ciIsCaptured   = False
+  , ciCaptureStarted = False
   , ciDisabled     = False
   , ciStyle        = s
   }
@@ -569,6 +571,12 @@ focusPolicy p = Attribute (\cc -> cc { ccFocusPolicy = p })
 -- self-claim\/self-give-up notifications -- distinct from the deferred
 -- focus handoffs 'control' itself detects via 'hasGainedFocus'\/'hasLostFocus'.
 data FocusTransition = FocusUnchanged | GainedFocus | LostFocus
+
+isGained, isLost :: FocusTransition -> Bool
+isGained GainedFocus = True
+isGained _           = False
+isLost LostFocus = True
+isLost _         = False
 
 focusTransition :: Bool -> Bool -> FocusTransition
 focusTransition was now
@@ -804,7 +812,15 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       when (ciMouseDown raw && isClickToFocus (ccFocusPolicy cc) && not nowFocused) (requestFocus currentScope eid)
       let active = intrinsicStates disabled raw `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
-      let final = raw { ciStyle = s }
+          -- A self-claim or Tab give-up fires its handlers above, directly,
+          -- rather than through @raw@'s own focus events -- so it's only
+          -- added to the reported events here, after those have fired.
+          transition = focusTransition wasFocused nowFocused
+          final = raw
+            { ciStyle       = s
+            , ciFocusGained = ciFocusGained raw || isGained transition
+            , ciFocusLost   = ciFocusLost raw || isLost transition
+            }
       renderStyled m s (ccContent cc final)
       when (isTabStop (ccFocusPolicy cc) && not disabled) (setPreviousTabStop eid)
       pure final
@@ -817,10 +833,9 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
     -- itself depends on these flags), fires @cc@'s own handlers, and
     -- reports the full picture.
     watchInteraction eid disabled placeholderStyle = do
-      -- Read before anything else this frame (in particular, before
-      -- 'watchHover' can freshly 'acquireCapture') so it reflects capture
-      -- as of the *start* of the frame -- see 'ciWasDragging'.
-      wasDragging <- isDragging eid
+      -- Read before 'watchHover' can freshly 'acquireCapture', so a capture
+      -- acquired below is reported as starting -- see 'ciCaptureStarted'.
+      wasCaptured <- isDragging eid
       hit         <- isRegionHit
       let eligible = not disabled && hit
       occluded        <- if eligible then isOccludedFor eid else pure False
@@ -843,6 +858,7 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
             | occludedByPopup = mouseI0 { mbiMouseDown = False }
             | otherwise       = mouseI0
       focusI <- watchFocus eid disabled
+      captured <- isDragging eid
       let interaction = (noInteraction placeholderStyle)
             { ciHovered      = hiHovered hoverI
             , ciMouseEntered = hiMouseEntered hoverI
@@ -855,7 +871,8 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
             , ciFocusGained  = fiFocusGained focusI
             , ciFocusLost    = fiFocusLost focusI
             , ciKeysPressed  = fiKeysPressed focusI
-            , ciWasDragging  = wasDragging
+            , ciIsCaptured   = captured
+            , ciCaptureStarted = captured && not wasCaptured
             , ciDisabled     = disabled
             }
       fireElementEvents cc interaction

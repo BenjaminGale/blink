@@ -28,7 +28,7 @@ import Data.Maybe (fromMaybe)
 
 import Blink.Controls.Control
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), clampFraction)
-import Blink.Input (InputState (..), Key (..), KeyEvent (..))
+import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.View
 import Blink.View.Drawing (fillRect, strokeRect)
@@ -182,23 +182,14 @@ slider eid attrs = controlElement (scLayout cfg) (Element (scLayout cfg) noIntri
       , ccElementId = Just eid
       }
     body ci = do
-      s         <- currentStyle
-      bounds    <- getBounds
-      disabled  <- isDisabled
-      let focused = ciFocused ci
-      capturing <- isDragging eid
-      -- One frame behind the real hit test (see 'wasMouseOverLastFrame'),
-      -- since 'body' has no access to this frame's own hover reading --
-      -- imperceptible for a cosmetic thumb tint.
-      hovered   <- wasMouseOverLastFrame eid
-      input     <- getInput
-
-      let value0   = clampFraction (scValue cfg)
-          keyEvts  = if not disabled && focused then inputKeyEvents input else []
-          fromKeys = resolveKeyboardValue (scStep cfg) keyEvts value0
+      s      <- currentStyle
+      bounds <- getBounds
+      let capturing = ciIsCaptured ci
+          value0    = clampFraction (scValue cfg)
+          fromKeys  = resolveKeyboardValue (scStep cfg) (ciKeysPressed ci) value0
 
       fromMouse <-
-        if not disabled && capturing
+        if not (ciDisabled ci) && capturing
           then Just . fractionAt (trackRect bounds) . pointX <$> getMousePos
           else pure Nothing
 
@@ -206,7 +197,7 @@ slider eid attrs = controlElement (scLayout cfg) (Element (scLayout cfg) noIntri
 
       when (newValue /= value0) $ runHandlers (scOnValueChanged cfg) newValue
 
-      drawTrack s bounds focused hovered capturing value0
+      drawTrack s bounds (ciFocused ci) (ciHovered ci) capturing value0
 
 -- * Style
 

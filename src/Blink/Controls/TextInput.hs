@@ -117,15 +117,6 @@ onInput f = Attribute (\tc -> tc { ticOnInput = ticOnInput tc ++ [f] })
 onSubmit :: EventHandler e msg -> Attribute (TextInputConfig e msg)
 onSubmit f = Attribute (\tc -> tc { ticOnSubmit = ticOnSubmit tc ++ [f] })
 
--- | Whether a click/drag this frame is continuing a drag already in
--- progress, or arriving alongside a fresh focus change -- the two facts
--- 'resolveMouseSelection' needs from before the frame started, since
--- neither is recoverable from this frame's own state alone.
-data SelectionGesture = SelectionGesture
-  { sgWasCapturing :: Bool  -- ^ control was already being dragged last frame
-  , sgJustFocused  :: Bool  -- ^ control just gained focus this frame
-  }
-
 -- | Click sets both selection ends at the clicked character; dragging
 -- extends only the active end, keeping the anchor from before the drag
 -- started. Gaining focus with no drag in progress -- Tab\/Shift-Tab, or the
@@ -133,27 +124,22 @@ data SelectionGesture = SelectionGesture
 -- entire value. Assumes the caller has already checked the control is
 -- focused and enabled.
 resolveMouseSelection
-  :: Ord e
-  => e                -- ^ element ID
+  :: ControlInteraction e msg
   -> Rectangle        -- ^ control's bounds
-  -> SelectionGesture
   -> Text             -- ^ displayed value (post-'displayFilter')
   -> Double           -- ^ current horizontal scroll offset
   -> Selection        -- ^ current selection
   -> View e msg Selection
-resolveMouseSelection eid bounds gesture displayValue scrollX sel = do
-  isCapturing <- isDragging eid
-  if isCapturing
-    then do
+resolveMouseSelection ci bounds displayValue scrollX sel
+  | ciIsCaptured ci = do
       mousePos <- getMousePos
       let localX = realToFrac (pointX mousePos - rectX bounds) + realToFrac scrollX :: Float
       clickedPos <- charAtOffset displayValue localX
-      pure $ if not (sgWasCapturing gesture) || sgJustFocused gesture
+      pure $ if ciCaptureStarted ci || ciFocusGained ci
         then cursor clickedPos
         else extendActive (const clickedPos) sel
-    else pure $ if sgJustFocused gesture
-      then Selection 0 (T.length displayValue)
-      else sel
+  | ciFocusGained ci = pure (Selection 0 (T.length displayValue))
+  | otherwise        = pure sel
 
 -- | Ctrl+A selects the entire value; Shift+Left\/Right extend the
 -- selection; plain Left\/Right collapse an existing selection to its near
@@ -184,16 +170,15 @@ resolveKeyboardSelection canEdit keyEvts len sel@(Selection _ active)
 -- the one after it. 'inputFilter' is applied to newly typed text before
 -- insertion. Assumes the caller has already checked the control is
 -- focused and enabled.
-applyEdit :: (Text -> Text) -> Text -> InputState -> Selection -> (Selection, Maybe Text)
-applyEdit inputFilterFn currentValue input sel@(Selection _ active)
+applyEdit :: (Text -> Text) -> Text -> [KeyEvent] -> [Text] -> Selection -> (Selection, Maybe Text)
+applyEdit inputFilterFn currentValue keyEvts typedText sel@(Selection _ active)
   | backspace || delete || hasTyped =
       (cursor newCursor, if newText /= currentValue then Just newText else Nothing)
   | otherwise = (sel, Nothing)
   where
-    keyEvts   = inputKeyEvents input
     backspace = any (\e -> key e == KeyBackspace) keyEvts
     delete    = any (\e -> key e == KeyDelete) keyEvts
-    typed     = inputFilterFn (foldl (<>) T.empty (inputTypedText input))
+    typed     = inputFilterFn (foldl (<>) T.empty typedText)
     hasTyped  = not (T.null typed)
     hasSel    = selectionHasExtent sel
     selLo     = selectionLow sel
@@ -222,26 +207,27 @@ resolveSelectionAndEdit
   -> e
   -> Rectangle
   -> Bool              -- ^ canEdit
-  -> SelectionGesture
+  -> ControlInteraction e msg
   -> Text              -- ^ current value
   -> Text              -- ^ displayed value (post-'displayFilter')
   -> Double            -- ^ current horizontal scroll offset
-  -> InputState
-  -> Selection         -- ^ selection at the start of the frame
+  -> [Text]            -- ^ text typed since the last frame
+  -> Selection         -- ^ the selection before this change
   -> View e msg Selection
-resolveSelectionAndEdit cfg eid bounds canEdit gesture currentValue displayValue scrollX input selInit = do
+resolveSelectionAndEdit cfg eid bounds canEdit ci currentValue displayValue scrollX typedText selInit = do
   selAfterMouse <-
     if canEdit
-      then resolveMouseSelection eid bounds gesture displayValue scrollX selInit
+      then resolveMouseSelection ci bounds displayValue scrollX selInit
       else pure selInit
 
-  let selAfterKeys = resolveKeyboardSelection canEdit (inputKeyEvents input) (T.length currentValue) selAfterMouse
+  let keyEvts      = ciKeysPressed ci
+      selAfterKeys = resolveKeyboardSelection canEdit keyEvts (T.length currentValue) selAfterMouse
 
       (selFinal, edited)
-        | canEdit   = applyEdit (ticInputFilter cfg) currentValue input selAfterKeys
+        | canEdit   = applyEdit (ticInputFilter cfg) currentValue keyEvts typedText selAfterKeys
         | otherwise = (selAfterKeys, Nothing)
 
-      submitted = canEdit && any (\e -> key e == KeyReturn) (inputKeyEvents input)
+      submitted = canEdit && any (\e -> key e == KeyReturn) keyEvts
 
   when submitted $ runHandlers (ticOnSubmit cfg) ()
   forM_ edited $ \t -> runHandlers (ticOnInput cfg) t
@@ -335,15 +321,14 @@ drawTextInputContent s bounds displayValue placeholderText canEdit ox sel@(Selec
 -- its own value's width, which would make the field resize as it's typed
 -- into. Override with 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 textInput :: Ord e => e -> [Attribute (TextInputConfig e msg)] -> Element e msg
-textInput eid attrs = chromeElement (ticLayout cfg) (ccStyleKey (ticControl cfg)) (lineHeightElement (ticValue cfg)) $ do
-  wasFocused <- isFocused eid
-  let ctrl = (ticControl cfg)
-        { ccContent   = body wasFocused
-        , ccElementId = Just eid
-        }
-  void (control ctrl)
+textInput eid attrs =
+  chromeElement (ticLayout cfg) (ccStyleKey (ticControl cfg)) (lineHeightElement (ticValue cfg)) (void (control ctrl))
   where
-    cfg = resolve defaultTextInputConfig attrs
+    cfg  = resolve defaultTextInputConfig attrs
+    ctrl = (ticControl cfg)
+      { ccContent   = body
+      , ccElementId = Just eid
+      }
 
     -- A single line of the current value's text, for height purposes only
     -- ('elLayout' never asks for 'fitContent' width) -- falls back to a
@@ -351,35 +336,25 @@ textInput eid attrs = chromeElement (ticLayout cfg) (ccStyleKey (ticControl cfg)
     -- zero height.
     lineHeightElement t = captionElement (if T.null t then " " else t)
 
-    body wasFocused ci = do
+    body ci = do
       let currentValue = ticValue cfg
       s        <- currentStyle
-      let hasFocus = ciFocused ci
-      disabled <- isDisabled
       bounds   <- getBounds
       input    <- getInput
       sel      <- getSelection eid
       frac     <- getScrollState eid
-      let gained      = ciFocusGained ci
-          wasCapturing = ciWasDragging ci
 
       let displayValue = ticDisplayFilter cfg currentValue
-          w           = rectWidth bounds
-          selInit     = fromMaybe (cursor (T.length currentValue)) sel
-          -- True on the one frame focus arrives, whether as an immediate
-          -- same-frame claim (auto-claim, or Tab landing here) or a @Focus@
-          -- effect applied between frames (a click on this control, or
-          -- Shift-Tab) -- 'hasFocus'\/'wasFocused' alone catch the former;
-          -- 'ciFocusGained' reports the latter on the frame it takes effect.
-          justFocused = (hasFocus && not wasFocused) || gained
-          canEdit     = hasFocus && not disabled
+          w            = rectWidth bounds
+          selInit      = fromMaybe (cursor (T.length currentValue)) sel
+          canEdit      = ciFocused ci && not (ciDisabled ci)
 
       contentW <- realToFrac <$> charOffset displayValue (T.length displayValue)
       let maxScrollPx = maxScrollPixels contentW w
           scrollX     = scrollPixels maxScrollPx frac
 
-      selFinal <- resolveSelectionAndEdit cfg eid bounds canEdit
-        (SelectionGesture wasCapturing justFocused) currentValue displayValue scrollX input selInit
+      selFinal <- resolveSelectionAndEdit cfg eid bounds canEdit ci currentValue displayValue scrollX
+        (inputTypedText input) selInit
 
       -- Computed locally rather than re-read via 'getScrollState': scroll
       -- writes are deferred (applied between frames), so a same-frame

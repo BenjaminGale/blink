@@ -54,7 +54,7 @@ import Blink.Geometry (Alignment (TopLeft), Insets (..), Point (pointX), Rectang
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), Length, exactly, fill)
 import Blink.View
-  ( CursorShape (..), Effect, View, currentStyle, getBounds, getExtentState, getMousePos, getStyleSet, isDragging
+  ( CursorShape (..), Effect, View, currentStyle, getBounds, getExtentState, getMousePos, getStyleSet
   , requestCursor, requestExtentBy, withBounds
   )
 import Blink.View.Drawing (fillRect)
@@ -395,8 +395,8 @@ resizeHandle mkDividerId idx = Element
   where
     eid = mkDividerId idx
     body ci = do
-      dragging <- isDragging eid
-      bounds   <- getBounds
+      let dragging = ciIsCaptured ci
+      bounds <- getBounds
       when (dragging || ciHovered ci) $ requestCursor CursorResizeHorizontal
       when dragging $ do
         mouseX <- pointX <$> getMousePos

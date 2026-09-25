@@ -295,30 +295,27 @@ scrollBar tag attrs = controlElement (sbLayout cfg) box ctrl
       }
 
     trackBody ci = do
-      s         <- currentStyle
-      bounds    <- getBounds
-      disabled  <- isDisabled
-      let trackId = tag ScrollBarTrack
-      capturing <- isDragging trackId
-      hovered   <- wasMouseOverLastFrame trackId
-      value0    <- getScrollState scrollEid
-      let thumbLen = thumbLengthFor o bounds (sbVisibleFraction cfg)
-      when (not disabled && capturing) $ do
+      s      <- currentStyle
+      bounds <- getBounds
+      value0 <- getScrollState scrollEid
+      let trackId  = tag ScrollBarTrack
+          thumbLen = thumbLengthFor o bounds (sbVisibleFraction cfg)
+      when (not (ciDisabled ci) && ciIsCaptured ci) $ do
         mouseMain <- pointMain o <$> getMousePos
         current   <- getExtentState trackId
         -- 'requestExtentBy' accumulates, so the delta zeroes out whatever
         -- the last drag on this track left behind before fixing this
         -- drag's own offset.
         grabOffset <-
-          if ciWasDragging ci
-            then pure current
-            else do
+          if ciCaptureStarted ci
+            then do
               let offset = grabOffsetAt (thumbOriginFor o bounds thumbLen value0) thumbLen mouseMain
               requestExtentBy trackId (offset - current)
               pure offset
+            else pure current
         let newValue = fractionForOrigin o bounds thumbLen (mouseMain - grabOffset)
         when (newValue /= value0) $ requestScrollTo scrollEid newValue
-      drawTrack o s bounds hovered capturing (sbVisibleFraction cfg) value0
+      drawTrack o s bounds (ciHovered ci) (ciIsCaptured ci) (sbVisibleFraction cfg) value0
 
     ctrl = (sbControl cfg)
       { ccElementId   = Just scrollEid

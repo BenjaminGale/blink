@@ -47,7 +47,7 @@ import Blink.Controls.Label
   (HasLabelledConfig (..), LabelledConfig (..), renderLabelledContent)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
-import Blink.View (Effect, View, getBounds, getStyleSet, isDisabled, isRegionHit, measureText, withBounds)
+import Blink.View (Effect, View, getBounds, getStyleSet, isRegionHit, measureText, withBounds)
 import Blink.View.Drawing (drawImage)
 import Blink.Element (Element (..), HasLayoutConfig (..))
 import Blink.Rendering (Colour, ImagePath, TextAlign (..))
@@ -195,11 +195,10 @@ iconToggle eid iconCfg =
     content = withTrailingSpace (glyphCaptionElement iconW (itGap iconCfg) (lcText (bcLabelled btn)))
     withTrailingSpace el =
       el { elMeasure = fmap (\sz -> sz { sizeWidth = sizeWidth sz + itTrailingSpace iconCfg }) . elMeasure el }
-    ctrl = (bcControl btn) { ccContent = const (glyphCaptionContent iconW (itGap iconCfg) drawIcon (bcLabelled btn)) }
+    ctrl = (bcControl btn) { ccContent = \ci -> glyphCaptionContent iconW (itGap iconCfg) (drawIcon ci) (bcLabelled btn) }
 
-    drawIcon = do
+    drawIcon ci = do
       (_, iconStyleSet) <- getStyleSet iconStyleKey
-      disabled          <- isDisabled
       bounds            <- getBounds
       let iconSize = max 0 (min iconW (rectHeight bounds) - itIconInset iconCfg)
           iconRect = Rectangle
@@ -212,9 +211,9 @@ iconToggle eid iconCfg =
       withBounds iconRect $ do
         hovered <- isRegionHit
         let iconState
-              | disabled  = CommonDisabled
-              | hovered   = CommonMouseOver
-              | otherwise = CommonNormal
+              | ciDisabled ci = CommonDisabled
+              | hovered       = CommonMouseOver
+              | otherwise     = CommonNormal
             colour = styleTextColour (resolveStyle iconStyleSet (Set.singleton iconState))
         drawImage colour icon
 

@@ -20,16 +20,18 @@ data ControlInteraction e msg = ControlInteraction
   , ciMouseEntered, ciMouseExited :: Bool
   , ciMouseDown, ciMouseUp, ciClicked :: Bool
   , ciFocusGained, ciFocusLost :: Bool
-  , ciWasDragging :: Bool
+  , ciIsCaptured, ciCaptureStarted :: Bool
   , ciKeysPressed :: [KeyEvent]
   , ciDisabled :: Bool
   }
 ```
 
-`ciWasDragging` records whether the control already held mouse capture
-before the current frame began, distinguishing a continuing drag from a
-capture acquired this frame; this cannot be derived from a live read of
-capture state within the same frame.
+`ciIsCaptured` is true while the mouse button that was pressed on the
+control is still held, wherever the pointer has moved since.
+`ciCaptureStarted` is true only when that press begins, so a slider or
+text input can tell a new drag from one in progress. `ciFocusGained` and
+`ciFocusLost` report focus arriving or leaving by any route: a click, Tab,
+a focus request, or the control taking focus because nothing else had it.
 
 `ciClicked` fires according to the widget's `MouseActivation` setting.
 `ClickActivated` (the default) requires the release to land within the
