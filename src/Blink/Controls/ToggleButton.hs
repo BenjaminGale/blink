@@ -63,7 +63,7 @@ isSelected b = Attribute (\cfg -> cfg { tgcSelected = b })
 -- It's up to the reaction to actually store the new value and pass it back
 -- in via 'isSelected' next frame.
 onSelectedChanged :: (Bool -> [Effect e msg]) -> Attribute (ToggleConfig e msg)
-onSelectedChanged f = Attribute (\cfg -> cfg { tgcOnSelectedChanged = tgcOnSelectedChanged cfg ++ [f] })
+onSelectedChanged = appendTo tgcOnSelectedChanged (\cfg hs -> cfg { tgcOnSelectedChanged = hs })
 
 -- | Every capability 'toggleButton' (and any checkbox\/radio button) shares:
 -- the wrapped 'ButtonConfig', how activating the control changes its
@@ -90,18 +90,18 @@ defaultToggleButtonConfig = ToggleConfig
   }
 
 instance HasControlConfig e msg (ToggleConfig e msg) where
-  overControl attr = Attribute (\tc -> tc { tgcButton = runAttribute (overControl attr) (tgcButton tc) })
+  overControl = nested tgcButton (\tc x -> tc { tgcButton = x }) . overControl
 
 instance HasEventHandlers (ToggleConfig e msg)
 
 instance HasLabelledConfig e msg (ToggleConfig e msg) where
-  overLabelled attr = Attribute (\tc -> tc { tgcButton = runAttribute (overLabelled attr) (tgcButton tc) })
+  overLabelled = nested tgcButton (\tc x -> tc { tgcButton = x }) . overLabelled
 
 instance HasButtonConfig e msg (ToggleConfig e msg) where
-  overButton attr = Attribute (\tc -> tc { tgcButton = runAttribute attr (tgcButton tc) })
+  overButton = nested tgcButton (\tc x -> tc { tgcButton = x })
 
 instance HasLayoutConfig (ToggleConfig e msg) where
-  overLayout attr = Attribute (\tc -> tc { tgcButton = runAttribute (overLayout attr) (tgcButton tc) })
+  overLayout = nested tgcButton (\tc x -> tc { tgcButton = x }) . overLayout
 
 -- | What 'toggleBase' reports back: the wrapped button's own
 -- 'ButtonInteraction', and the selected state after this frame's

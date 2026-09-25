@@ -49,10 +49,10 @@ defaultDividerConfig = DividerConfig
   }
 
 instance HasControlConfig e msg (DividerConfig e msg) where
-  overControl attr = Attribute (\dc -> dc { dcControl = runAttribute attr (dcControl dc) })
+  overControl = nested dcControl (\dc x -> dc { dcControl = x })
 
 instance HasLayoutConfig (DividerConfig e msg) where
-  overLayout attr = Attribute (\dc -> dc { dcLayout = runAttribute attr (dcLayout dc) })
+  overLayout = nested dcLayout (\dc x -> dc { dcLayout = x })
 
 -- | The default 'Layout' for a divider running along @o@: fills the space
 -- it's given along that axis, and sizes itself to 'dcThickness' (plus

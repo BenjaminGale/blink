@@ -74,12 +74,12 @@ defaultTextInputConfig = TextInputConfig
   }
 
 instance HasControlConfig e msg (TextInputConfig e msg) where
-  overControl attr = Attribute (\tc -> tc { ticControl = runAttribute attr (ticControl tc) })
+  overControl = nested ticControl (\tc x -> tc { ticControl = x })
 
 instance HasEventHandlers (TextInputConfig e msg)
 
 instance HasLayoutConfig (TextInputConfig e msg) where
-  overLayout attr = Attribute (\tc -> tc { ticLayout = runAttribute attr (ticLayout tc) })
+  overLayout = nested ticLayout (\tc x -> tc { ticLayout = x })
 
 -- | Sets the field's current value. Defaults to @\"\"@ when not given.
 instance HasValue Text (TextInputConfig e msg) where
@@ -113,11 +113,11 @@ displayFilter f = Attribute (\tc -> tc { ticDisplayFilter = f })
 
 -- | Reacts with the new value whenever a keystroke changes it.
 onInput :: (Text -> [Effect e msg]) -> Attribute (TextInputConfig e msg)
-onInput f = Attribute (\tc -> tc { ticOnInput = ticOnInput tc ++ [f] })
+onInput = appendTo ticOnInput (\tc hs -> tc { ticOnInput = hs })
 
 -- | Reacts when Enter is pressed while the field is focused and enabled.
 onSubmit :: EventHandler e msg -> Attribute (TextInputConfig e msg)
-onSubmit f = Attribute (\tc -> tc { ticOnSubmit = ticOnSubmit tc ++ [f] })
+onSubmit = appendTo ticOnSubmit (\tc hs -> tc { ticOnSubmit = hs })
 
 -- | Click sets both selection ends at the clicked character; dragging
 -- extends only the active end, keeping the anchor from before the drag

@@ -110,12 +110,12 @@ defaultMenuBarConfig = MenuBarConfig
   }
 
 instance HasControlConfig e msg (MenuBarConfig e a b msg) where
-  overControl attr = Attribute (\c -> c { mbrControl = runAttribute (overControl attr) (mbrControl c) })
+  overControl = nested mbrControl (\c x -> c { mbrControl = x }) . overControl
 
 instance HasEventHandlers (MenuBarConfig e a b msg)
 
 instance HasLayoutConfig (MenuBarConfig e a b msg) where
-  overLayout attr = Attribute (\c -> c { mbrLayout = runAttribute attr (mbrLayout c) })
+  overLayout = nested mbrLayout (\c x -> c { mbrLayout = x })
 
 -- | The top-level menus to build a label from, in order. Defaults to
 -- @[]@; a later 'menus' attribute replaces an earlier one rather than
@@ -157,7 +157,7 @@ openMenu m = Attribute (\c -> c { mbrOpenMenu = m })
 -- label click, or 'Nothing' whenever the open menu closes for any other
 -- reason. Store it and pass it back via 'openMenu'.
 onOpenMenuChanged :: (Maybe a -> [Effect e msg]) -> Attribute (MenuBarConfig e a b msg)
-onOpenMenuChanged f = Attribute (\c -> c { mbrOnOpenMenuChanged = mbrOnOpenMenuChanged c ++ [f] })
+onOpenMenuChanged = appendTo mbrOnOpenMenuChanged (\c hs -> c { mbrOnOpenMenuChanged = hs })
 
 -- | A row of labels, one per 'menus', each opening a dropdown list of
 -- items (built from 'menuItems') when clicked. @tag@ builds every part's

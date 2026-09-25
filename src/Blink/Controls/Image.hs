@@ -67,10 +67,10 @@ defaultImageConfig = ImageConfig
   }
 
 instance HasControlConfig e msg (ImageConfig e msg) where
-  overControl attr = Attribute (\c -> c { icControl = runAttribute attr (icControl c) })
+  overControl = nested icControl (\c x -> c { icControl = x })
 
 instance HasLayoutConfig (ImageConfig e msg) where
-  overLayout attr = Attribute (\c -> c { icLayout = runAttribute (overLayout attr) (icLayout c) })
+  overLayout = nested icLayout (\c x -> c { icLayout = x }) . overLayout
 
 -- | Sets the image to draw. Defaults to @\"\"@ (drawing nothing
 -- meaningful) when not given.

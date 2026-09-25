@@ -62,10 +62,10 @@ defaultProgressBarConfig = ProgressBarConfig
   }
 
 instance HasControlConfig e msg (ProgressBarConfig e msg) where
-  overControl attr = Attribute (\pc -> pc { pbControl = runAttribute attr (pbControl pc) })
+  overControl = nested pbControl (\pc x -> pc { pbControl = x })
 
 instance HasLayoutConfig (ProgressBarConfig e msg) where
-  overLayout attr = Attribute (\pc -> pc { pbLayout = runAttribute attr (pbLayout pc) })
+  overLayout = nested pbLayout (\pc x -> pc { pbLayout = x })
 
 -- | Sets the bar to 'Progress' (determinate) or 'Indeterminate'. Defaults
 -- to @'Progress' 0@.

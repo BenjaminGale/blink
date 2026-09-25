@@ -163,15 +163,15 @@ data TableConfig sel e msg a = TableConfig
   }
 
 instance HasControlConfig e msg (TableConfig sel e msg a) where
-  overControl attr = Attribute (\tc -> tc { tbList = runAttribute (overControl attr) (tbList tc) })
+  overControl = nested tbList (\tc x -> tc { tbList = x }) . overControl
 
 instance HasEventHandlers (TableConfig sel e msg a)
 
 instance HasLayoutConfig (TableConfig sel e msg a) where
-  overLayout attr = Attribute (\tc -> tc { tbList = runAttribute (overLayout attr) (tbList tc) })
+  overLayout = nested tbList (\tc x -> tc { tbList = x }) . overLayout
 
 instance HasListConfig sel e msg a (TableConfig sel e msg a) where
-  overList attr = Attribute (\tc -> tc { tbList = runAttribute attr (tbList tc) })
+  overList = nested tbList (\tc x -> tc { tbList = x })
 
 instance HasSelection (sel a) (TableConfig sel e msg a) where
   selection = overList . selection
@@ -180,7 +180,7 @@ instance HasSelectionChanged e msg (sel a) (TableConfig sel e msg a) where
   onSelectionChanged = overList . onSelectionChanged
 
 instance HasColumnsConfig e msg a (TableConfig sel e msg a) where
-  overColumns attr = Attribute (\tc -> tc { tbColumns = runAttribute attr (tbColumns tc) })
+  overColumns = nested tbColumns (\tc x -> tc { tbColumns = x })
 
 -- | 'defaultListConfig' and 'defaultColumnsConfig'.
 defaultTableConfig :: (SelectionModel sel, EmptySelection sel) => TableConfig sel e msg a
@@ -206,7 +206,7 @@ sortedBy s = overColumns (Attribute (\c -> c { csSort = s }))
 -- 'colSortable') requests a sort: 'Ascending' for a column not already
 -- sorted, otherwise the opposite of its current direction.
 onColumnSortRequested :: HasColumnsConfig e msg a cfg => ((Int, SortDirection) -> [Effect e msg]) -> Attribute cfg
-onColumnSortRequested h = overColumns (Attribute (\c -> c { csOnColumnSortRequested = csOnColumnSortRequested c ++ [h] }))
+onColumnSortRequested = overColumns . appendTo csOnColumnSortRequested (\c hs -> c { csOnColumnSortRequested = hs })
 
 -- | Never let a drag squeeze a column narrower than this, however far
 -- past it the pointer moves -- a column can always be dragged back out

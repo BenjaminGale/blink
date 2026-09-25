@@ -160,15 +160,15 @@ defaultLabelConfig = LabelConfig
   }
 
 instance HasControlConfig e msg (LabelConfig e msg) where
-  overControl attr = Attribute (\c -> c { lblControl = runAttribute attr (lblControl c) })
+  overControl = nested lblControl (\c x -> c { lblControl = x })
 
 instance HasEventHandlers (LabelConfig e msg)
 
 instance HasLabelledConfig e msg (LabelConfig e msg) where
-  overLabelled attr = Attribute (\c -> c { lblLabelled = runAttribute attr (lblLabelled c) })
+  overLabelled = nested lblLabelled (\c x -> c { lblLabelled = x })
 
 instance HasLayoutConfig (LabelConfig e msg) where
-  overLayout attr = Attribute (\c -> c { lblLayout = runAttribute attr (lblLayout c) })
+  overLayout = nested lblLayout (\c x -> c { lblLayout = x })
 
 -- | Names the element a click on the label should focus instead of the
 -- label itself -- e.g. a caption redirecting a click onto the input beside

@@ -126,12 +126,12 @@ defaultScrollBarConfig = ScrollBarConfig
   }
 
 instance HasControlConfig e msg (ScrollBarConfig e msg) where
-  overControl attr = Attribute (\sc -> sc { sbControl = runAttribute attr (sbControl sc) })
+  overControl = nested sbControl (\sc x -> sc { sbControl = x })
 
 instance HasEventHandlers (ScrollBarConfig e msg)
 
 instance HasLayoutConfig (ScrollBarConfig e msg) where
-  overLayout attr = Attribute (\sc -> sc { sbLayout = runAttribute attr (sbLayout sc) })
+  overLayout = nested sbLayout (\sc x -> sc { sbLayout = x })
 
 -- | Which axis the bar runs along: 'Horizontal' arranges the arrows and
 -- track left-to-right, 'Vertical' (the default) top-to-bottom. Resets the

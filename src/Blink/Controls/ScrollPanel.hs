@@ -51,12 +51,12 @@ data ScrollPanelConfig e msg = ScrollPanelConfig
   }
 
 instance HasControlConfig e msg (ScrollPanelConfig e msg) where
-  overControl attr = Attribute (\c -> c { spControl = runAttribute (overControl attr) (spControl c) })
+  overControl = nested spControl (\c x -> c { spControl = x }) . overControl
 
 instance HasEventHandlers (ScrollPanelConfig e msg)
 
 instance HasLayoutConfig (ScrollPanelConfig e msg) where
-  overLayout attr = Attribute (\c -> c { spLayout = runAttribute attr (spLayout c) })
+  overLayout = nested spLayout (\c x -> c { spLayout = x })
 
 -- | Fills whatever space it's given on both axes -- sizing to the
 -- content's own extent instead would leave nothing to ever scroll.

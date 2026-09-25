@@ -25,7 +25,7 @@ import Blink.Layout.Constraints
   )
 import Blink.View (View, getBounds, withBounds)
 import Blink.View.Drawing (withClip)
-import Blink.Element (Attribute (..), Element (..), HasLayoutConfig (..), resolve)
+import Blink.Element (Attribute (..), Element (..), HasLayoutConfig (..), nested, resolve)
 
 -- | Every capability 'hBox'\/'vBox' resolve: the box's own size request,
 -- spacing, margin, alignment of the content block, and the children
@@ -39,7 +39,7 @@ data BoxConfig e msg = BoxConfig
   }
 
 instance HasLayoutConfig (BoxConfig e msg) where
-  overLayout attr = Attribute (\c -> c { bxLayout = runAttribute attr (bxLayout c) })
+  overLayout = nested bxLayout (\c x -> c { bxLayout = x })
 
 -- | Fills its parent on both axes, no spacing, no margin, 'TopLeft'
 -- alignment, and no children. Override only the attributes you need:

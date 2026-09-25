@@ -44,6 +44,8 @@ module Blink.Controls.Control
   ( -- * Attributes
     Attribute (..)
   , resolve
+  , nested
+  , appendTo
 
     -- * Raw events
   , EventHandler
@@ -112,7 +114,7 @@ import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), Visu
 import Blink.View
 import Blink.View.Context (Effect (..))
 import Blink.View.Drawing (withClip, withBackground, withBorder)
-import Blink.Element (Attribute (..), Element (..), resolve)
+import Blink.Element (Attribute (..), Element (..), appendTo, nested, resolve)
 
 -- * Raw events
 
@@ -148,7 +150,7 @@ data MouseActivation
 addHandler :: (HasControlConfig e msg cfg, HasEventHandlers cfg)
            => (ControlConfig e msg -> [h]) -> (ControlConfig e msg -> [h] -> ControlConfig e msg)
            -> h -> Attribute cfg
-addHandler get set h = overControl (Attribute (\cc -> set cc (get cc ++ [h])))
+addHandler get set = overControl . appendTo get set
 
 -- | Gives the control a stable identity, keying its hover\/capture\/focus
 -- tracking across frames -- see 'control'. Unset by default, in which case

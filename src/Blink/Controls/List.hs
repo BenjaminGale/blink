@@ -539,12 +539,12 @@ data ListConfig sel e msg a = ListConfig
   }
 
 instance HasControlConfig e msg (ListConfig sel e msg a) where
-  overControl attr = Attribute (\c -> c { lcControl = runAttribute (overControl attr) (lcControl c) })
+  overControl = nested lcControl (\c x -> c { lcControl = x }) . overControl
 
 instance HasEventHandlers (ListConfig sel e msg a)
 
 instance HasLayoutConfig (ListConfig sel e msg a) where
-  overLayout attr = Attribute (\c -> c { lcLayout = runAttribute attr (lcLayout c) })
+  overLayout = nested lcLayout (\c x -> c { lcLayout = x })
 
 -- | Every control built on an embedded 'ListConfig' -- 'list' itself, and
 -- the table\/tree\/tree-table wrappers built on 'listBase' -- implements
@@ -629,7 +629,7 @@ rowHeight h = overList (Attribute (\c -> c { lcRowHeight = h }))
 -- 'list'), but the app never learns of it, so next frame's 'selection'
 -- puts it right back -- the list is then read-only in practice.
 instance HasSelectionChanged e msg (sel a) (ListConfig sel e msg a) where
-  onSelectionChanged h = Attribute (\c -> c { lcOnSelectionChanged = lcOnSelectionChanged c ++ [h] })
+  onSelectionChanged = appendTo lcOnSelectionChanged (\c hs -> c { lcOnSelectionChanged = hs })
 
 -- | Reacts when the user acts on a specific item: a click on its row, or
 -- Enter\/Space with the cursor on it. Fires whether or not that action
@@ -638,7 +638,7 @@ instance HasSelectionChanged e msg (sel a) (ListConfig sel e msg a) where
 -- 'onSelectionChanged' keeping selection state in sync. Arrowing never
 -- fires this.
 onItemActivated :: HasListConfig sel e msg a cfg => (a -> [Effect e msg]) -> Attribute cfg
-onItemActivated h = overList (Attribute (\c -> c { lcOnItemActivated = lcOnItemActivated c ++ [h] }))
+onItemActivated = overList . appendTo lcOnItemActivated (\c hs -> c { lcOnItemActivated = hs })
 
 -- | What 'listBase' reports back: the underlying 'control' call's own
 -- 'ControlInteraction' (so a control built on top of 'listBase' -- e.g. a

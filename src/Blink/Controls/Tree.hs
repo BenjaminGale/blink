@@ -142,15 +142,15 @@ data TreeConfig sel e msg a = TreeConfig
   }
 
 instance HasControlConfig e msg (TreeConfig sel e msg a) where
-  overControl attr = Attribute (\tc -> tc { tcList = runAttribute (overControl attr) (tcList tc) })
+  overControl = nested tcList (\tc x -> tc { tcList = x }) . overControl
 
 instance HasEventHandlers (TreeConfig sel e msg a)
 
 instance HasLayoutConfig (TreeConfig sel e msg a) where
-  overLayout attr = Attribute (\tc -> tc { tcList = runAttribute (overLayout attr) (tcList tc) })
+  overLayout = nested tcList (\tc x -> tc { tcList = x }) . overLayout
 
 instance HasListConfig sel e msg a (TreeConfig sel e msg a) where
-  overList attr = Attribute (\tc -> tc { tcList = runAttribute attr (tcList tc) })
+  overList = nested tcList (\tc x -> tc { tcList = x })
 
 instance HasSelection (sel a) (TreeConfig sel e msg a) where
   selection = overList . selection
@@ -159,7 +159,7 @@ instance HasSelectionChanged e msg (sel a) (TreeConfig sel e msg a) where
   onSelectionChanged = overList . onSelectionChanged
 
 instance HasTreeDataConfig e msg a (TreeConfig sel e msg a) where
-  overTreeData attr = Attribute (\tc -> tc { tcTreeData = runAttribute attr (tcTreeData tc) })
+  overTreeData = nested tcTreeData (\tc x -> tc { tcTreeData = x })
 
 -- | 'defaultListConfig', 'defaultTreeDataConfig', and no per-node render
 -- (draws nothing).
@@ -189,7 +189,7 @@ renderNode f = Attribute (\c -> c { tcRenderNode = f })
 -- 'Blink.Controls.List.onSelectionChanged' has to
 -- 'Blink.Controls.List.selection'.
 onExpansionChanged :: HasTreeDataConfig e msg a cfg => (Set a -> [Effect e msg]) -> Attribute cfg
-onExpansionChanged h = overTreeData (Attribute (\c -> c { tdOnExpansionChanged = tdOnExpansionChanged c ++ [h] }))
+onExpansionChanged = overTreeData . appendTo tdOnExpansionChanged (\c hs -> c { tdOnExpansionChanged = hs })
 
 -- | The width of one level of indent, and of the chevron column every
 -- row reserves regardless of whether it actually draws one -- so a leaf

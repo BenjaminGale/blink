@@ -37,7 +37,7 @@ import Blink.Controls.Button (ButtonConfig (..), captionedButton)
 import Blink.Controls.Control
 import Blink.Controls.Label (HasLabelledConfig (..))
 import Blink.Controls.Menu (MenuItems (..), menuList, menuListMetrics, menuTrigger)
-import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction, defaultToggleButtonConfig)
+import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction, defaultToggleButtonConfig, isSelected, onSelectedChanged)
 import Blink.View
 import Blink.Element (Element (..), HasItemAttrs (..), HasItems (..), HasLayoutConfig (..))
 import Blink.Style
@@ -74,15 +74,15 @@ defaultMenuButtonConfig = MenuButtonConfig
   }
 
 instance HasControlConfig e msg (MenuButtonConfig e a msg) where
-  overControl attr = Attribute (\c -> c { mbToggle = runAttribute (overControl attr) (mbToggle c) })
+  overControl = nested mbToggle (\c x -> c { mbToggle = x }) . overControl
 
 instance HasEventHandlers (MenuButtonConfig e a msg)
 
 instance HasLabelledConfig e msg (MenuButtonConfig e a msg) where
-  overLabelled attr = Attribute (\c -> c { mbToggle = runAttribute (overLabelled attr) (mbToggle c) })
+  overLabelled = nested mbToggle (\c x -> c { mbToggle = x }) . overLabelled
 
 instance HasLayoutConfig (MenuButtonConfig e a msg) where
-  overLayout attr = Attribute (\c -> c { mbToggle = runAttribute (overLayout attr) (mbToggle c) })
+  overLayout = nested mbToggle (\c x -> c { mbToggle = x }) . overLayout
 
 -- | The data to build one item from, in order. Defaults to @[]@; a later
 -- 'items' attribute replaces an earlier one rather than adding to it.
@@ -101,14 +101,13 @@ instance HasItemAttrs (a -> [Attribute (ButtonConfig e msg)]) (MenuButtonConfig 
 -- 'Blink.Controls.ToggleButton.isSelected' for a plain toggle button.
 -- Defaults to 'False'.
 isOpen :: Bool -> Attribute (MenuButtonConfig e a msg)
-isOpen b = Attribute (\c -> c { mbToggle = (mbToggle c) { tgcSelected = b } })
+isOpen = nested mbToggle (\c t -> c { mbToggle = t }) . isSelected
 
 -- | Reacts when the list should open or close, with the new value: from
 -- activating the trigger, or 'False' whenever the open list closes for any
 -- other reason. Store it and pass it back via 'isOpen'.
 onOpenChanged :: (Bool -> [Effect e msg]) -> Attribute (MenuButtonConfig e a msg)
-onOpenChanged f = Attribute (\c -> c
-  { mbToggle = (mbToggle c) { tgcOnSelectedChanged = tgcOnSelectedChanged (mbToggle c) ++ [f] } })
+onOpenChanged = nested mbToggle (\c t -> c { mbToggle = t }) . onSelectedChanged
 
 -- | A button labelled via 'Blink.Controls.Label.text' that opens a dropdown
 -- list of items, built from 'items', when activated by a click or Enter

@@ -59,15 +59,15 @@ data TreeTableConfig sel e msg a = TreeTableConfig
   }
 
 instance HasControlConfig e msg (TreeTableConfig sel e msg a) where
-  overControl attr = Attribute (\tc -> tc { ttList = runAttribute (overControl attr) (ttList tc) })
+  overControl = nested ttList (\tc x -> tc { ttList = x }) . overControl
 
 instance HasEventHandlers (TreeTableConfig sel e msg a)
 
 instance HasLayoutConfig (TreeTableConfig sel e msg a) where
-  overLayout attr = Attribute (\tc -> tc { ttList = runAttribute (overLayout attr) (ttList tc) })
+  overLayout = nested ttList (\tc x -> tc { ttList = x }) . overLayout
 
 instance HasListConfig sel e msg a (TreeTableConfig sel e msg a) where
-  overList attr = Attribute (\tc -> tc { ttList = runAttribute attr (ttList tc) })
+  overList = nested ttList (\tc x -> tc { ttList = x })
 
 instance HasSelection (sel a) (TreeTableConfig sel e msg a) where
   selection = overList . selection
@@ -76,10 +76,10 @@ instance HasSelectionChanged e msg (sel a) (TreeTableConfig sel e msg a) where
   onSelectionChanged = overList . onSelectionChanged
 
 instance HasColumnsConfig e msg a (TreeTableConfig sel e msg a) where
-  overColumns attr = Attribute (\tc -> tc { ttColumns = runAttribute attr (ttColumns tc) })
+  overColumns = nested ttColumns (\tc x -> tc { ttColumns = x })
 
 instance HasTreeDataConfig e msg a (TreeTableConfig sel e msg a) where
-  overTreeData attr = Attribute (\tc -> tc { ttTreeData = runAttribute attr (ttTreeData tc) })
+  overTreeData = nested ttTreeData (\tc x -> tc { ttTreeData = x })
 
 -- | 'defaultListConfig', 'defaultColumnsConfig', and
 -- 'defaultTreeDataConfig'.

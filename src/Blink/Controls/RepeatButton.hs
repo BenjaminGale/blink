@@ -51,18 +51,18 @@ defaultRepeatButtonConfig = RepeatButtonConfig
   }
 
 instance HasControlConfig e msg (RepeatButtonConfig e msg) where
-  overControl attr = Attribute (\rc -> rc { rbButton = runAttribute (overControl attr) (rbButton rc) })
+  overControl = nested rbButton (\rc x -> rc { rbButton = x }) . overControl
 
 instance HasEventHandlers (RepeatButtonConfig e msg)
 
 instance HasButtonConfig e msg (RepeatButtonConfig e msg) where
-  overButton attr = Attribute (\rc -> rc { rbButton = runAttribute attr (rbButton rc) })
+  overButton = nested rbButton (\rc x -> rc { rbButton = x })
 
 instance HasLabelledConfig e msg (RepeatButtonConfig e msg) where
-  overLabelled attr = Attribute (\rc -> rc { rbButton = runAttribute (overLabelled attr) (rbButton rc) })
+  overLabelled = nested rbButton (\rc x -> rc { rbButton = x }) . overLabelled
 
 instance HasLayoutConfig (RepeatButtonConfig e msg) where
-  overLayout attr = Attribute (\rc -> rc { rbButton = runAttribute (overLayout attr) (rbButton rc) })
+  overLayout = nested rbButton (\rc x -> rc { rbButton = x }) . overLayout
 
 -- | How long the button must be held before it starts repeating. Defaults
 -- to 0.4 seconds.

@@ -95,15 +95,15 @@ defaultButtonConfig = ButtonConfig
   }
 
 instance HasControlConfig e msg (ButtonConfig e msg) where
-  overControl attr = Attribute (\bc -> bc { bcControl = runAttribute attr (bcControl bc) })
+  overControl = nested bcControl (\bc x -> bc { bcControl = x })
 
 instance HasEventHandlers (ButtonConfig e msg)
 
 instance HasLabelledConfig e msg (ButtonConfig e msg) where
-  overLabelled attr = Attribute (\bc -> bc { bcLabelled = runAttribute attr (bcLabelled bc) })
+  overLabelled = nested bcLabelled (\bc x -> bc { bcLabelled = x })
 
 instance HasLayoutConfig (ButtonConfig e msg) where
-  overLayout attr = Attribute (\bc -> bc { bcLayout = runAttribute attr (bcLayout bc) })
+  overLayout = nested bcLayout (\bc x -> bc { bcLayout = x })
 
 -- | Implemented by any config type that nests a 'ButtonConfig', letting
 -- 'onActivated' be applied to it directly.
@@ -119,7 +119,7 @@ instance HasButtonConfig e msg (ButtonConfig e msg) where
 -- activated" -- see 'onClicked' for the mouse-only, element-level event
 -- this is split from.
 onActivated :: HasButtonConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onActivated f = overButton (Attribute (\bc -> bc { bcOnActivated = bcOnActivated bc ++ [f] }))
+onActivated = overButton . appendTo bcOnActivated (\bc hs -> bc { bcOnActivated = hs })
 
 -- | Which raw event counts as activating the control -- see
 -- 'ButtonActivation'. Defaults to 'ActivateOnClick'.

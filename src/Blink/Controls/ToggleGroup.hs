@@ -98,12 +98,12 @@ defaultToggleGroupConfig styleKey = ToggleGroupConfig
   }
 
 instance HasControlConfig e msg (ToggleGroupConfig e a msg) where
-  overControl attr = Attribute (\c -> c { tggControl = runAttribute (overControl attr) (tggControl c) })
+  overControl = nested tggControl (\c x -> c { tggControl = x }) . overControl
 
 instance HasEventHandlers (ToggleGroupConfig e a msg)
 
 instance HasLayoutConfig (ToggleGroupConfig e a msg) where
-  overLayout attr = Attribute (\c -> c { tggLayout = runAttribute attr (tggLayout c) })
+  overLayout = nested tggLayout (\c x -> c { tggLayout = x })
 
 -- | The data to build one item from, in order. Defaults to @[]@; a later
 -- 'items' attribute replaces an earlier one rather than adding to it.
@@ -150,7 +150,7 @@ allowDeselect b = Attribute (\c -> c { tggAllowDeselect = b })
 -- | Reacts when selecting or clearing an item actually changes the group's
 -- selection -- see 'toggleGroup' for exactly which clicks fire this.
 instance HasSelectionChanged e msg (Maybe a) (ToggleGroupConfig e a msg) where
-  onSelectionChanged f = Attribute (\c -> c { tggOnSelectionChanged = tggOnSelectionChanged c ++ [f] })
+  onSelectionChanged = appendTo tggOnSelectionChanged (\c hs -> c { tggOnSelectionChanged = hs })
 
 -- | A row (or column, see 'orientation') of
 -- 'Blink.Controls.ToggleButton.toggleButton's built from 'items', one

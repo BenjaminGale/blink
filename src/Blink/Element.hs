@@ -16,6 +16,8 @@ module Blink.Element
     -- * Attributes
   , Attribute (..)
   , resolve
+  , nested
+  , appendTo
     -- * Layout attributes
   , HasLayoutConfig (..)
   , width
@@ -139,6 +141,19 @@ newtype Attribute cfg = Attribute { runAttribute :: cfg -> cfg }
 -- later attribute setting the same field overrides an earlier one.
 resolve :: cfg -> [Attribute cfg] -> cfg
 resolve = foldl' (\cfg (Attribute f) -> f cfg)
+
+-- | Applies an attribute for a nested config to the config around it,
+-- given how to read the nested field and how to replace it. The usual
+-- body of an instance letting an attribute reach a nested config, e.g.
+-- @overControl = nested bcControl (\\bc cc -> bc { bcControl = cc })@.
+nested :: (outer -> inner) -> (outer -> inner -> outer) -> Attribute inner -> Attribute outer
+nested get set (Attribute f) = Attribute (\o -> set o (f (get o)))
+
+-- | An attribute that adds @h@ to the end of a list field, given how to
+-- read the field and how to replace it -- the usual body of an @onX@
+-- attribute, so each reaction added runs after the ones before it.
+appendTo :: (cfg -> [h]) -> (cfg -> [h] -> cfg) -> h -> Attribute cfg
+appendTo get set h = Attribute (\c -> set c (get c ++ [h]))
 
 -- | Implemented by any config type that nests a 'Layout', letting 'width'\/
 -- 'height'\/'align' be applied to it directly -- the same delegation

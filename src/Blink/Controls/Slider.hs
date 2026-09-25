@@ -99,12 +99,12 @@ defaultSliderConfig = SliderConfig
   }
 
 instance HasControlConfig e msg (SliderConfig e msg) where
-  overControl attr = Attribute (\sc -> sc { scControl = runAttribute attr (scControl sc) })
+  overControl = nested scControl (\sc x -> sc { scControl = x })
 
 instance HasEventHandlers (SliderConfig e msg)
 
 instance HasLayoutConfig (SliderConfig e msg) where
-  overLayout attr = Attribute (\sc -> sc { scLayout = runAttribute attr (scLayout sc) })
+  overLayout = nested scLayout (\sc x -> sc { scLayout = x })
 
 -- | Sets the slider's current value, clamped to @[0, 1]@. Defaults to 0.
 instance HasValue Double (SliderConfig e msg) where
@@ -121,7 +121,7 @@ instance HasStep (SliderConfig e msg) where
 -- arrow key press would change it. It's up to the reaction to actually
 -- store the new value and pass it back in via 'value' next frame.
 onValueChanged :: (Double -> [Effect e msg]) -> Attribute (SliderConfig e msg)
-onValueChanged f = Attribute (\sc -> sc { scOnValueChanged = scOnValueChanged sc ++ [f] })
+onValueChanged = appendTo scOnValueChanged (\sc hs -> sc { scOnValueChanged = hs })
 
 -- | The @[0, 1]@ fraction along @bounds@ that horizontal position @x@ maps
 -- to, clamped to stay within the track even when the pointer has moved
