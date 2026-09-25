@@ -32,7 +32,7 @@ import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.View
 import Blink.View.Drawing (fillRect, strokeRect)
-import Blink.Element (Element (..), HasLayoutConfig (..), noIntrinsicSize)
+import Blink.Element (Element (..), HasLayoutConfig (..), noIntrinsicSize, HasStep (..), HasValue (..))
 import Blink.Style
 import Blink.Controls.Style (progressBarMetrics, sliderStyle, thumbColourFor)
 
@@ -106,15 +106,15 @@ instance HasLayoutConfig (SliderConfig e msg) where
   overLayout attr = Attribute (\sc -> sc { scLayout = runAttribute attr (scLayout sc) })
 
 -- | Sets the slider's current value, clamped to @[0, 1]@. Defaults to 0.
-value :: Double -> Attribute (SliderConfig e msg)
-value v = Attribute (\sc -> sc { scValue = v })
+instance HasValue Double (SliderConfig e msg) where
+  value v = Attribute (\sc -> sc { scValue = v })
 
 -- | How much an arrow key press while focused (Left\/Down to decrease,
 -- Right\/Up to increase) moves the value by. Has no effect on dragging or
 -- clicking the track, which always follow the pointer continuously.
 -- Defaults to 0.1.
-step :: Double -> Attribute (SliderConfig e msg)
-step s = Attribute (\sc -> sc { scStep = s })
+instance HasStep (SliderConfig e msg) where
+  step s = Attribute (\sc -> sc { scStep = s })
 
 -- | Reacts with the new value whenever dragging, clicking the track, or an
 -- arrow key press would change it. It's up to the reaction to actually

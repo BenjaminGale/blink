@@ -10,7 +10,7 @@ import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBeha
 import Blink.Controls.Label (text)
 import Blink.Controls.ToggleGroup
   ( ToggleGroupConfig, ToggleGroupPart (..), allowDeselect, defaultToggleGroupConfig
-  , items, onSelectionChanged, selectedItem, tggSelected, toggleAttributes, toggleButtonGroup
+  , items, onSelectionChanged, selection, tggSelected, itemAttrs, toggleButtonGroup
   )
 import Blink.Controls.Fixtures
   (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
@@ -78,7 +78,7 @@ inSlot Large  = Point 250 50
 render :: [Attribute'] -> View TestElement String ()
 render attrs = runElement $ toggleButtonGroup tag
   ( items sizes
-  : toggleAttributes (\s -> [text (Text.pack (show s)), width (exactly 100), height fill])
+  : itemAttrs (\s -> [text (Text.pack (show s)), width (exactly 100), height fill])
   : attrs
   )
 
@@ -125,28 +125,28 @@ spec = describe "Blink.Controls.ToggleGroup" $ do
   describe "selection" $ do
     it "selects a clicked item that wasn't already selected" $ do
       result <- runInteractions groupBounds seedCtx
-        (render [selectedItem (Just Small), selectionAttr])
+        (render [selection (Just Small), selectionAttr])
         [MoveTo (inSlot Medium)]
         [ClickAt (inSlot Medium)]
       resultMessages result `shouldBe` ["SelectionChanged:Just Medium"]
 
     it "clicking the already-selected item does nothing when deselecting isn't allowed" $ do
       result <- runInteractions groupBounds seedCtx
-        (render [selectedItem (Just Small), selectionAttr])
+        (render [selection (Just Small), selectionAttr])
         [MoveTo (inSlot Small)]
         [ClickAt (inSlot Small)]
       resultMessages result `shouldBe` []
 
     it "clicking the already-selected item deselects when allowDeselect is set" $ do
       result <- runInteractions groupBounds seedCtx
-        (render [selectedItem (Just Small), allowDeselect True, selectionAttr])
+        (render [selection (Just Small), allowDeselect True, selectionAttr])
         [MoveTo (inSlot Small)]
         [ClickAt (inSlot Small)]
       resultMessages result `shouldBe` ["SelectionChanged:Nothing"]
 
     it "clicking an unselected item reports it as selected even with nothing selected yet" $ do
       result <- runInteractions groupBounds seedCtx
-        (render [selectedItem Nothing, selectionAttr])
+        (render [selection Nothing, selectionAttr])
         [MoveTo (inSlot Large)]
         [ClickAt (inSlot Large)]
       resultMessages result `shouldBe` ["SelectionChanged:Just Large"]
@@ -154,7 +154,7 @@ spec = describe "Blink.Controls.ToggleGroup" $ do
     it "only ever reports one item as selected, regardless of click order" $ monadicIO $ do
       p <- pick (genPointIn (Rectangle 100 0 200 100)) -- Medium or Large
       result <- run $ runInteractions groupBounds seedCtx
-        (render [selectedItem (Just Small), allowDeselect True, selectionAttr])
+        (render [selection (Just Small), allowDeselect True, selectionAttr])
         [MoveTo p]
         [ClickAt p]
       assert (resultMessages result `elem` [["SelectionChanged:Just Medium"], ["SelectionChanged:Just Large"]])
@@ -162,7 +162,7 @@ spec = describe "Blink.Controls.ToggleGroup" $ do
   describe "disabling" $
     it "disables every item when the group itself is disabled" $ do
       result <- runInteractions groupBounds seedCtx
-        (render [selectedItem (Just Small), isEnabled False, selectionAttr])
+        (render [selection (Just Small), isEnabled False, selectionAttr])
         [MoveTo (inSlot Medium)]
         [ClickAt (inSlot Medium)]
       resultMessages result `shouldBe` []
@@ -178,14 +178,14 @@ spec = describe "Blink.Controls.ToggleGroup" $ do
 
   describe "focus" $ do
     it "is not itself a tab stop -- Tab from before lands directly on the first item" $ do
-      result <- runInteractions sceneBounds seedCtx (renderScene [selectedItem Nothing]) [Wait 1] [Tab, Wait 1]
+      result <- runInteractions sceneBounds seedCtx (renderScene [selection Nothing]) [Wait 1] [Tab, Wait 1]
       focusedOn (Item Small) result `shouldBe` True
 
     it "items remain independently focusable -- Tab moves from one item straight to the next" $ do
-      result <- runInteractions sceneBounds seedCtx (renderScene [selectedItem Nothing])
+      result <- runInteractions sceneBounds seedCtx (renderScene [selection Nothing])
         [Wait 1, Tab, Wait 1] [Tab, Wait 1]
       focusedOn (Item Medium) result `shouldBe` True
 
     it "Shift-Tab leaves the group for Before, regardless of which item is selected" $ do
-      result <- runInteractions sceneBounds seedCtx (renderScene [selectedItem (Just Medium)]) [Wait 1, Tab, Wait 1] [ShiftTab, Wait 1]
+      result <- runInteractions sceneBounds seedCtx (renderScene [selection (Just Medium)]) [Wait 1, Tab, Wait 1] [ShiftTab, Wait 1]
       focusedOn Before result `shouldBe` True

@@ -56,7 +56,7 @@ import Blink.Input (InputState (inputKeyEvents), Key (KeyLeft, KeyRight), KeyEve
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.View
-import Blink.Element (Element (..), HasLayoutConfig (..), height, runElement, width)
+import Blink.Element (Element (..), HasItemAttrs (..), HasLayoutConfig (..), height, runElement, width)
 import Blink.Controls.Style (containerStyle, transparent)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style
@@ -125,7 +125,7 @@ menus xs = Attribute (\c -> c { mbrMenus = xs })
 
 -- | Attributes for each top-level menu's label button (e.g.
 -- 'Blink.Controls.Label.text'), given the menu. The same shape as
--- 'Blink.Controls.ToggleGroup.toggleAttributes'.
+-- 'Blink.Controls.ToggleGroup.itemAttrs'.
 labelAttrs :: (a -> [Attribute (ButtonConfig e msg)]) -> Attribute (MenuBarConfig e a b msg)
 labelAttrs f = Attribute (\c -> c { mbrLabelAttrs = f })
 
@@ -138,10 +138,9 @@ menuItems f = Attribute (\c -> c { mbrMenuItems = f })
 -- data (e.g. 'Blink.Controls.Label.text', 'Blink.Controls.Button.onActivated').
 -- An item's own 'Blink.Controls.Button.onActivated' fires (if set) in
 -- addition to, not instead of, 'menuBar' closing the menu on that same
--- activation. Import "Blink.Controls.MenuBar" qualified if also using
--- 'Blink.Controls.MenuButton.itemAttrs', which has the same name.
-itemAttrs :: (a -> b -> [Attribute (ButtonConfig e msg)]) -> Attribute (MenuBarConfig e a b msg)
-itemAttrs f = Attribute (\c -> c { mbrItemAttrs = f })
+-- activation.
+instance HasItemAttrs (a -> b -> [Attribute (ButtonConfig e msg)]) (MenuBarConfig e a b msg) where
+  itemAttrs f = Attribute (\c -> c { mbrItemAttrs = f })
 
 -- | The data to build one item's own submenu from, given its menu and
 -- itself. Defaults to @\\_ _ -> []@ (no submenu).
@@ -150,7 +149,7 @@ submenuItems f = Attribute (\c -> c { mbrSubmenuItems = f })
 
 -- | Which top-level menu, if any, currently has its dropdown open.
 -- External state the caller owns and re-supplies every frame, the same as
--- 'Blink.Controls.ToggleGroup.selectedItem'. Defaults to 'Nothing'.
+-- 'Blink.Controls.ToggleGroup.selection'. Defaults to 'Nothing'.
 openMenu :: Maybe a -> Attribute (MenuBarConfig e a b msg)
 openMenu m = Attribute (\c -> c { mbrOpenMenu = m })
 

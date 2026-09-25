@@ -6,7 +6,7 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
-  ( ItemState, ListPart (List), SingleSelection, isItem, onSelectionChanged, rowHeight, selectAt, selectFirst
+  ( ItemState, ListPart (List), SingleSelection, itemValue, onSelectionChanged, rowHeight, selectAt, selectFirst
   , selection, unselected
   )
 import Blink.Controls.Table
@@ -51,7 +51,7 @@ marker label = Element
   }
 
 cellMarker :: String -> ItemState Int -> Element TestElem String
-cellMarker col st = marker (col ++ show (isItem st))
+cellMarker col st = marker (col ++ show (itemValue st))
 
 items :: [Int]
 items = [1, 2, 3]

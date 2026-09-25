@@ -39,7 +39,7 @@ import Blink.Controls.Label (HasLabelledConfig (..))
 import Blink.Controls.Menu (MenuItems (..), menuList, menuListMetrics, menuTrigger)
 import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction, defaultToggleButtonConfig)
 import Blink.View
-import Blink.Element (Element (..), HasLayoutConfig (..))
+import Blink.Element (Element (..), HasItemAttrs (..), HasItems (..), HasLayoutConfig (..))
 import Blink.Style
 import Blink.Controls.Style (containerStyle)
 
@@ -86,18 +86,15 @@ instance HasLayoutConfig (MenuButtonConfig e a msg) where
 
 -- | The data to build one item from, in order. Defaults to @[]@; a later
 -- 'items' attribute replaces an earlier one rather than adding to it.
--- Import "Blink.Controls.MenuButton" qualified if also using
--- 'Blink.Controls.ToggleGroup.items', which has the same name.
-items :: [a] -> Attribute (MenuButtonConfig e a msg)
-items xs = Attribute (\c -> c { mbItems = xs })
+instance HasItems a (MenuButtonConfig e a msg) where
+  items xs = Attribute (\c -> c { mbItems = xs })
 
 -- | Attributes for each item's button (e.g. 'Blink.Controls.Label.text',
--- 'Blink.Controls.Button.onActivated'), given the item. The same shape as
--- 'Blink.Controls.ToggleGroup.toggleAttributes'. An item's
+-- 'Blink.Controls.Button.onActivated'), given the item. An item's
 -- own 'Blink.Controls.Button.onActivated' fires (if set) in addition to,
 -- not instead of, 'menuButton' closing the list on that same activation.
-itemAttrs :: (a -> [Attribute (ButtonConfig e msg)]) -> Attribute (MenuButtonConfig e a msg)
-itemAttrs f = Attribute (\c -> c { mbItemAttrs = f })
+instance HasItemAttrs (a -> [Attribute (ButtonConfig e msg)]) (MenuButtonConfig e a msg) where
+  itemAttrs f = Attribute (\c -> c { mbItemAttrs = f })
 
 -- | Whether the item list is currently open. External state the caller
 -- owns and re-supplies every frame, the same as

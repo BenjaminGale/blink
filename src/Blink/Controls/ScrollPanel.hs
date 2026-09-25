@@ -29,7 +29,7 @@ module Blink.Controls.ScrollPanel
 
 import Blink.Controls.Control
 import Blink.Controls.ScrollBar (ScrollViewportConfig (..), ScrollViewportPart, scrollViewport)
-import Blink.Element (Element (..), HasLayoutConfig (..), emptyElement, runElement)
+import Blink.Element (Element (..), HasLayoutConfig (..), emptyElement, runElement, HasContent (..))
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Size (..))
 import Blink.Layout.Constraints (Available (..), Layout (..), MeasureCtx (..), fill)
 import Blink.Style
@@ -68,8 +68,8 @@ defaultScrollPanelConfig = ScrollPanelConfig
   }
 
 -- | The single child the panel scrolls.
-content :: Element e msg -> Attribute (ScrollPanelConfig e msg)
-content el = Attribute (\c -> c { spContent = el })
+instance HasContent e msg (ScrollPanelConfig e msg) where
+  content el = Attribute (\c -> c { spContent = el })
 
 -- | Pixels a single mouse-wheel notch scrolls.
 wheelStepPx :: Double

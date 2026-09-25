@@ -43,7 +43,7 @@ module Blink.Controls.ScrollBar
   , scrollBarButtonStyleKey
   , scrollBarTrackStyleKey
   , scrollBar
-  , scrollBarOrientation
+  , orientation
   , scrollBarThickness
   , visibleFraction
   , step
@@ -66,7 +66,7 @@ import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (ImagePath)
 import Blink.View
 import Blink.View.Drawing (drawImage, fillRect, withClip)
-import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, height, noIntrinsicSize, runElement, width)
+import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, height, noIntrinsicSize, runElement, width, HasOrientation (..), HasStep (..))
 import Blink.Style
 import Blink.Controls.Style (iconStyle, progressBarMetrics, sliderStyle, thumbColourFor, toggleGroupMetrics, toggleGroupStyle)
 
@@ -107,7 +107,7 @@ data ScrollBarConfig e msg = ScrollBarConfig
 
 -- | The default 'Layout' for a scrollbar running along @o@: fills the space
 -- it's given along that axis, and sizes itself to 'scrollBarThickness'
--- across it. Set via 'scrollBarOrientation'.
+-- across it. Set via 'orientation'.
 layoutFor :: Orientation -> Layout
 layoutFor Horizontal = Layout fill (exactly scrollBarThickness) TopLeft
 layoutFor Vertical   = Layout (exactly scrollBarThickness) fill TopLeft
@@ -136,8 +136,8 @@ instance HasLayoutConfig (ScrollBarConfig e msg) where
 -- default 'Layout' the new axis implies -- apply this before any
 -- 'Blink.Element.width'\/'Blink.Element.height'
 -- override in the attribute list, or it will clobber them.
-scrollBarOrientation :: Orientation -> Attribute (ScrollBarConfig e msg)
-scrollBarOrientation o = Attribute (\sc -> sc { sbOrientation = o, sbLayout = layoutFor o })
+instance HasOrientation (ScrollBarConfig e msg) where
+  orientation o = Attribute (\sc -> sc { sbOrientation = o, sbLayout = layoutFor o })
 
 -- | How much of the scrollable content is visible at once, as a fraction of
 -- the whole -- sets the thumb's length as that fraction of the track,
@@ -148,8 +148,8 @@ visibleFraction v = Attribute (\sc -> sc { sbVisibleFraction = v })
 
 -- | How much each arrow button moves the position by, once per activation
 -- (including each repeat while held -- see @arrowButton@). Defaults to 0.05.
-step :: Double -> Attribute (ScrollBarConfig e msg)
-step s = Attribute (\sc -> sc { sbStep = s })
+instance HasStep (ScrollBarConfig e msg) where
+  step s = Attribute (\sc -> sc { sbStep = s })
 
 -- | @bounds@'s own extent along @o@ -- width for 'Horizontal', height for
 -- 'Vertical'.
@@ -397,9 +397,9 @@ scrollViewport mkId cfg = do
       ]
       where
         vBar = scrollBar (mkId . ViewportVerticalBar)
-          [ scrollBarOrientation Vertical, height fill, visibleFraction (viewportH / contentH) ]
+          [ orientation Vertical, height fill, visibleFraction (viewportH / contentH) ]
         hBar = scrollBar (mkId . ViewportHorizontalBar)
-          [ scrollBarOrientation Horizontal, width fill, visibleFraction (viewportW / contentW) ]
+          [ orientation Horizontal, width fill, visibleFraction (viewportW / contentW) ]
         corner = elementWithLayout (Layout (exactly scrollBarThickness) (exactly scrollBarThickness) TopLeft) (pure ())
 
     -- 'withClip' must capture this bounds -- the viewport's own, not yet

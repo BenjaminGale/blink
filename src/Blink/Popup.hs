@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 -- | 'popup', the entry point into Blink's deferred overlay layer: menus,
 -- tooltips, and comboboxes are built on top of it. A call to 'popup' does
 -- not run its content inline -- it captures an anchor, measures the
@@ -16,7 +18,7 @@ module Blink.Popup
   , popup
   ) where
 
-import Blink.Element (Attribute (..), Element (..), emptyElement, measureElement, resolve)
+import Blink.Element (Attribute (..), Element (..), emptyElement, measureElement, resolve, HasContent (..))
 import Blink.Geometry (Edge (..), Point (..), Rectangle (..), Side (..))
 import Blink.View (PendingPopup (..), View, getBounds, getCurrentScope, getWindowSize, queuePopup)
 
@@ -42,8 +44,8 @@ defaultPopupConfig = PopupConfig
 
 -- | The popup's content. Defaults to 'emptyElement' -- a 'popup' call with
 -- no 'content' queues and later runs nothing.
-content :: Element e msg -> Attribute (PopupConfig e msg)
-content el = Attribute (\c -> c { popContent = el })
+instance HasContent e msg (PopupConfig e msg) where
+  content el = Attribute (\c -> c { popContent = el })
 
 -- | Anchors the popup at an explicit point instead of the calling control's
 -- own bounds -- for a context menu, where there is no anchor control, only

@@ -8,7 +8,7 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
-  ( Direction (..), ItemState, ListPart (List), SingleSelection, isItem, moveCursor, onSelectionChanged, rowHeight
+  ( Direction (..), ItemState, ListPart (List), SingleSelection, itemValue, moveCursor, onSelectionChanged, rowHeight
   , selectItem, selection, unselected
   )
 import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..), cell, cellWidth, column, sortable)
@@ -58,10 +58,10 @@ marker label = Element
   }
 
 nameCell :: ItemState String -> Element TestElem String
-nameCell st = marker (isItem st)
+nameCell st = marker (itemValue st)
 
 qtyCell :: ItemState String -> Element TestElem String
-qtyCell st = marker ("Qty:" ++ isItem st)
+qtyCell st = marker ("Qty:" ++ itemValue st)
 
 -- | Real cell markers (for checking row alignment), silent headers --
 -- header alignment is 'table''s own concern, not this row-focused test.

@@ -1,3 +1,4 @@
+{-# LANGUAGE FunctionalDependencies #-}
 -- | 'Element', the type that pairs a component's size request with how to
 -- measure and how to run it, and the protocol containers use to resolve a
 -- content-dependent 'Blink.Layout.Constraints.Length' into a concrete
@@ -20,6 +21,18 @@ module Blink.Element
   , width
   , height
   , align
+    -- * Attributes shared across widgets
+    -- | Each is one attribute name that several widgets accept, each
+    -- widget with its own type for it -- a slider's 'value' is a 'Double',
+    -- a text input's is 'Data.Text.Text'.
+  , HasValue (..)
+  , HasStep (..)
+  , HasOrientation (..)
+  , HasItems (..)
+  , HasItemAttrs (..)
+  , HasSelection (..)
+  , HasSelectionChanged (..)
+  , HasContent (..)
   ) where
 
 import Data.List (foldl')
@@ -29,7 +42,7 @@ import Blink.Layout.Constraints
   ( Available (..), Layout (..), Length, MeasureCtx (..)
   , exactly, fill, layoutWithConstraints, preferredSize, resolveLength
   )
-import Blink.View (View, getBounds)
+import Blink.View (Effect, View, getBounds)
 
 -- | The layout-facing pairing of a component's size request, its measure,
 -- and its frame action. A container consumes a list of these to arrange a
@@ -153,3 +166,50 @@ height l = overLayout (Attribute (\lay -> lay { layoutHeight = l }))
 -- fill the slot on one or both axes. Defaults to 'TopLeft'.
 align :: HasLayoutConfig cfg => Alignment -> Attribute cfg
 align a = overLayout (Attribute (\lay -> lay { layoutAlignment = a }))
+
+-- * Attributes shared across widgets
+
+-- | A widget whose current value the caller sets, of type @v@.
+class HasValue v cfg | cfg -> v where
+  -- | The widget's current value -- caller-owned, passed back in every
+  -- frame.
+  value :: v -> Attribute cfg
+
+-- | A widget that moves its value by a fixed amount per key or button
+-- press.
+class HasStep cfg where
+  -- | How far one key or button press moves the value.
+  step :: Double -> Attribute cfg
+
+-- | A widget laid out along one axis.
+class HasOrientation cfg where
+  -- | Which axis the widget runs along.
+  orientation :: Orientation -> Attribute cfg
+
+-- | A widget built from a list of items of type @a@.
+class HasItems a cfg | cfg -> a where
+  -- | The data to build one item from, in order. A later 'items' replaces
+  -- an earlier one rather than adding to it.
+  items :: [a] -> Attribute cfg
+
+-- | A widget whose items are each configured from their own data, by a
+-- function of type @f@.
+class HasItemAttrs f cfg | cfg -> f where
+  -- | Attributes for the widget built from each item, given its data.
+  itemAttrs :: f -> Attribute cfg
+
+-- | A widget whose selection, of type @s@, the caller owns.
+class HasSelection s cfg | cfg -> s where
+  -- | The current selection -- caller-owned, passed back in every frame.
+  selection :: s -> Attribute cfg
+
+-- | A widget that reports a user-driven change to its selection.
+class HasSelectionChanged e msg s cfg | cfg -> e msg s where
+  -- | Reacts with the new selection whenever the user changes it. Store it
+  -- and pass it back via 'selection'.
+  onSelectionChanged :: (s -> [Effect e msg]) -> Attribute cfg
+
+-- | A widget that shows a single child element.
+class HasContent e msg cfg | cfg -> e msg where
+  -- | The child element shown.
+  content :: Element e msg -> Attribute cfg

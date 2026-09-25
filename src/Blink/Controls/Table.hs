@@ -46,7 +46,10 @@ import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
 import Blink.Controls.List hiding (defaultStyleEntries)
-import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, noIntrinsicSize, runElement)
+import Blink.Element
+  ( Element (..), HasLayoutConfig (..), HasSelection (..), HasSelectionChanged (..), elementWithLayout, emptyElement
+  , noIntrinsicSize, runElement
+  )
 import Blink.Geometry (Alignment (TopLeft), Insets (..), Point (pointX), Rectangle (..), insetRect, uniform)
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), Length, exactly, fill)
@@ -168,6 +171,12 @@ instance HasLayoutConfig (TableConfig sel e msg a) where
 
 instance HasListConfig sel e msg a (TableConfig sel e msg a) where
   overList attr = Attribute (\tc -> tc { tbList = runAttribute attr (tbList tc) })
+
+instance HasSelection (sel a) (TableConfig sel e msg a) where
+  selection = overList . selection
+
+instance HasSelectionChanged e msg (sel a) (TableConfig sel e msg a) where
+  onSelectionChanged = overList . onSelectionChanged
 
 instance HasColumnsConfig e msg a (TableConfig sel e msg a) where
   overColumns attr = Attribute (\tc -> tc { tbColumns = runAttribute attr (tbColumns tc) })

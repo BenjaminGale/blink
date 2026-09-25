@@ -5,7 +5,7 @@
 -- widgets built from a list of data, one per item, that never lets more
 -- than one be selected at once. The caller never builds the individual
 -- widgets itself -- 'toggleButtonGroup' and 'radioButtonGroup' do, from
--- 'items' and 'toggleAttributes' -- the same way a hand-rolled row of
+-- 'items' and 'itemAttrs' -- the same way a hand-rolled row of
 -- 'Blink.Controls.RadioButton.radioButton's already derives each
 -- one's selected state from a single external value; this just centralizes
 -- that pattern instead of it being copied at every call site.
@@ -24,10 +24,10 @@ module Blink.Controls.ToggleGroup
   , toggleButtonGroupStyleKey
   , radioButtonGroupStyleKey
   , items
-  , toggleAttributes
-  , groupOrientation
+  , itemAttrs
+  , orientation
   , itemSpacing
-  , selectedItem
+  , selection
   , allowDeselect
   , onSelectionChanged
     -- * Style
@@ -42,7 +42,10 @@ import Blink.Geometry (Alignment (TopLeft), Orientation (..))
 import Blink.Layout.Box (children, hBox, spacing, vBox)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.View (Effect)
-import Blink.Element (Element (..), HasLayoutConfig (..), runElement)
+import Blink.Element
+  ( Element (..), HasItemAttrs (..), HasItems (..), HasLayoutConfig (..), HasOrientation (..), HasSelection (..)
+  , HasSelectionChanged (..), runElement
+  )
 import Blink.Style
 import Blink.Controls.Style (toggleGroupMetrics, toggleGroupStyle)
 
@@ -52,7 +55,7 @@ import Blink.Controls.Style (toggleGroupMetrics, toggleGroupStyle)
 -- value rather than its position in the list -- so
 -- reordering\/inserting\/removing items elsewhere in the list never
 -- disturbs another item's hover\/focus\/capture state. Requires distinct
--- item values (see 'items') the same way 'selectedItem' already does, since
+-- item values (see 'items') the same way 'selection' already does, since
 -- two equal items would otherwise build the same id.
 data ToggleGroupPart a
   = ToggleGroup
@@ -104,8 +107,8 @@ instance HasLayoutConfig (ToggleGroupConfig e a msg) where
 
 -- | The data to build one item from, in order. Defaults to @[]@; a later
 -- 'items' attribute replaces an earlier one rather than adding to it.
-items :: [a] -> Attribute (ToggleGroupConfig e a msg)
-items xs = Attribute (\c -> c { tggItems = xs })
+instance HasItems a (ToggleGroupConfig e a msg) where
+  items xs = Attribute (\c -> c { tggItems = xs })
 
 -- | Attributes for the widget built from one item -- exactly the attrs
 -- you'd pass to 'Blink.Controls.ToggleButton.toggleButton' or
@@ -115,12 +118,12 @@ items xs = Attribute (\c -> c { tggItems = xs })
 -- rather than written out by hand for each. Resolved before the group's own
 -- 'isSelected'\/'onSelectedChanged' (see 'toggleGroup'), so nothing here
 -- can override the selection invariant.
-toggleAttributes :: (a -> [Attribute (ToggleConfig e msg)]) -> Attribute (ToggleGroupConfig e a msg)
-toggleAttributes f = Attribute (\c -> c { tggToggleAttrs = f })
+instance HasItemAttrs (a -> [Attribute (ToggleConfig e msg)]) (ToggleGroupConfig e a msg) where
+  itemAttrs f = Attribute (\c -> c { tggToggleAttrs = f })
 
 -- | Arranges items left-to-right ('Horizontal', the default) or top-to-bottom ('Vertical').
-groupOrientation :: Orientation -> Attribute (ToggleGroupConfig e a msg)
-groupOrientation o = Attribute (\c -> c { tggOrientation = o })
+instance HasOrientation (ToggleGroupConfig e a msg) where
+  orientation o = Attribute (\c -> c { tggOrientation = o })
 
 -- | Gap in pixels between consecutive items. Defaults to @0@.
 itemSpacing :: Double -> Attribute (ToggleGroupConfig e a msg)
@@ -130,8 +133,8 @@ itemSpacing v = Attribute (\c -> c { tggItemSpacing = v })
 -- which widget lights up. External state the caller owns and re-supplies
 -- every frame, the same as 'Blink.Controls.ToggleButton.isSelected'
 -- for a single toggle. Defaults to 'Nothing' -- every item starts unselected.
-selectedItem :: Maybe a -> Attribute (ToggleGroupConfig e a msg)
-selectedItem s = Attribute (\c -> c { tggSelected = s })
+instance HasSelection (Maybe a) (ToggleGroupConfig e a msg) where
+  selection s = Attribute (\c -> c { tggSelected = s })
 
 -- | Whether clicking the already-selected item deselects it (moving the
 -- group's selection to 'Nothing') rather than leaving it selected. Defaults
@@ -146,13 +149,13 @@ allowDeselect b = Attribute (\c -> c { tggAllowDeselect = b })
 
 -- | Reacts when selecting or clearing an item actually changes the group's
 -- selection -- see 'toggleGroup' for exactly which clicks fire this.
-onSelectionChanged :: (Maybe a -> [Effect e msg]) -> Attribute (ToggleGroupConfig e a msg)
-onSelectionChanged f = Attribute (\c -> c { tggOnSelectionChanged = tggOnSelectionChanged c ++ [f] })
+instance HasSelectionChanged e msg (Maybe a) (ToggleGroupConfig e a msg) where
+  onSelectionChanged f = Attribute (\c -> c { tggOnSelectionChanged = tggOnSelectionChanged c ++ [f] })
 
--- | A row (or column, see 'groupOrientation') of
+-- | A row (or column, see 'orientation') of
 -- 'Blink.Controls.ToggleButton.toggleButton's built from 'items', one
 -- per item, that never lets more than one be selected at once: each item's
--- own toggle button is selected exactly when it equals 'selectedItem', the
+-- own toggle button is selected exactly when it equals 'selection', the
 -- same external-state comparison a hand-rolled row of radio buttons already
 -- uses, so only ever one can read as selected regardless of how many items
 -- there are.
@@ -164,7 +167,7 @@ onSelectionChanged f = Attribute (\c -> c { tggOnSelectionChanged = tggOnSelecti
 toggleButtonGroup :: (Ord e, Ord a) => (ToggleGroupPart a -> e) -> [Attribute (ToggleGroupConfig e a msg)] -> Element e msg
 toggleButtonGroup = toggleGroup toggleButtonGroupStyleKey toggleButton
 
--- | A row (or column, see 'groupOrientation') of
+-- | A row (or column, see 'orientation') of
 -- 'Blink.Controls.RadioButton.radioButton's built from 'items', one
 -- per item, that never lets more than one be selected at once -- see
 -- 'toggleButtonGroup' for the flat-button-styled equivalent, and
@@ -242,7 +245,7 @@ onItemToggled cfg item newlySelected
   | tggAllowDeselect cfg = fire Nothing
   | otherwise            = []
   where
-    fire selection = concatMap ($ selection) (tggOnSelectionChanged cfg)
+    fire newSelection = concatMap ($ newSelection) (tggOnSelectionChanged cfg)
 
 -- * Style
 

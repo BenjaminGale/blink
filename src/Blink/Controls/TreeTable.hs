@@ -31,7 +31,7 @@ import Blink.Controls.Tree
   ( HasTreeDataConfig (..), TreeDataConfig (..), TreeItemState (..), TreeListConfig (..), defaultTreeDataConfig
   , expanded, forest, indentAndChevron, onExpansionChanged, treeListBase
   )
-import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, runElement)
+import Blink.Element (Element (..), HasLayoutConfig (..), HasSelection (..), HasSelectionChanged (..), elementWithLayout, runElement)
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill)
@@ -68,6 +68,12 @@ instance HasLayoutConfig (TreeTableConfig sel e msg a) where
 
 instance HasListConfig sel e msg a (TreeTableConfig sel e msg a) where
   overList attr = Attribute (\tc -> tc { ttList = runAttribute attr (ttList tc) })
+
+instance HasSelection (sel a) (TreeTableConfig sel e msg a) where
+  selection = overList . selection
+
+instance HasSelectionChanged e msg (sel a) (TreeTableConfig sel e msg a) where
+  onSelectionChanged = overList . onSelectionChanged
 
 instance HasColumnsConfig e msg a (TreeTableConfig sel e msg a) where
   overColumns attr = Attribute (\tc -> tc { ttColumns = runAttribute attr (ttColumns tc) })

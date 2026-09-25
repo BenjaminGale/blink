@@ -8,7 +8,7 @@ import Blink.Controls.Control
   (Attribute, control, defaultControlConfig, elementId, resolve)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.ScrollBar
-  (ScrollBarConfig, ScrollBarPart (..), scrollBar, scrollBarButtonStyleKey, scrollBarOrientation, step)
+  (ScrollBarConfig, ScrollBarPart (..), scrollBar, scrollBarButtonStyleKey, orientation, step)
 import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..))
 import Blink.Input (InputState (..))
@@ -124,7 +124,7 @@ spec = describe "Blink.Controls.ScrollBar" $ do
 
     it "draws left/right arrows when set to Horizontal" $ do
       let horizontalBounds = Rectangle 0 0 100 16
-      result <- runInteractions horizontalBounds seedCtx (render [scrollBarOrientation Horizontal]) [] [Wait 1]
+      result <- runInteractions horizontalBounds seedCtx (render [orientation Horizontal]) [] [Wait 1]
       resultDraws result `shouldContain`
         [DrawImage (Rectangle (-2) (-2) 20 20) "assets/icons/arrow_left.svg" testColour]
       resultDraws result `shouldContain`
@@ -225,7 +225,7 @@ spec = describe "Blink.Controls.ScrollBar" $ do
     it "arranges left-to-right when set to Horizontal, with a click at the equivalent x offset behaving the same as the vertical default" $ do
       ctx <- seededAt 0.5
       let horizontalBounds = Rectangle 0 0 100 16
-      result <- runInteractions horizontalBounds ctx (render [scrollBarOrientation Horizontal])
+      result <- runInteractions horizontalBounds ctx (render [orientation Horizontal])
                   [MoveTo (Point 26 8)]
                   [MouseDown (Point 26 8)]
       contextScrollState scrollEid (resultContext result) `shouldBe` 0

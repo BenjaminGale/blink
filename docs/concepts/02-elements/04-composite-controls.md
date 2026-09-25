@@ -66,7 +66,7 @@ function you can pass around.
 ## At the call site
 
 ```haskell
-scrollBar VScrollCtl [scrollBarOrientation Vertical, height fill]
+scrollBar VScrollCtl [orientation Vertical, height fill]
 ```
 
 Naming the constructor reads like "the id," and that's a fine casual

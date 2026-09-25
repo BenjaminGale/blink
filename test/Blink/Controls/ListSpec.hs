@@ -474,7 +474,7 @@ scrollingSpec = describe "list scrolling" $ do
           }
         renderMarked :: View TestElem String ()
         renderMarked = runElement $ list Part
-          ( renderItem (marker . isItem)
+          ( renderItem (marker . itemValue)
           : width (exactly 100)
           : rowHeight 20
           : height (exactly 60)

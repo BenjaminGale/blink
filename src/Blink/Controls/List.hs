@@ -135,7 +135,10 @@ import Data.Text (Text)
 import Blink.Controls.Control
 import Blink.Controls.ScrollBar
   (ScrollBarPart (..), ScrollViewportConfig (..), ScrollViewportPart (..), scrollBarThickness, scrollViewport)
-import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, noIntrinsicSize, runElement)
+import Blink.Element
+  ( Element (..), HasLayoutConfig (..), HasSelection (..), HasSelectionChanged (..), elementWithLayout, emptyElement
+  , noIntrinsicSize, runElement
+  )
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..), insetRect)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Shift))
 import Blink.Layout.Box (children, hBox, vBox)
@@ -149,9 +152,9 @@ import Blink.Controls.Style (containerStyle, controlMetrics, flatRowMetrics, fla
 -- | One row, as 'list' draws it: the item itself, whether it's selected,
 -- and whether it holds the keyboard cursor.
 data ItemState a = ItemState
-  { isItem     :: a
-  , isSelected :: Bool
-  , isCursor   :: Bool
+  { itemValue     :: a
+  , itemSelected  :: Bool
+  , itemHasCursor :: Bool
   }
 
 -- | Which way a cursor move or extension goes.
@@ -197,11 +200,11 @@ class SelectionModel sel => EmptySelection sel where
 
 -- | Items the model currently reports as selected.
 selectedItems :: SelectionModel sel => sel a -> [a]
-selectedItems = map isItem . filter isSelected . itemStates
+selectedItems = map itemValue . filter itemSelected . itemStates
 
 -- | The item currently holding the cursor, if the list isn't empty.
 cursorItem :: SelectionModel sel => sel a -> Maybe a
-cursorItem = fmap isItem . find isCursor . itemStates
+cursorItem = fmap itemValue . find itemHasCursor . itemStates
 
 -- | Splits @xs@ at the first item equal to @x@: (before, reversed), item,
 -- after.
@@ -607,8 +610,8 @@ requiredListConfig = baseListConfig
 
 -- | The whole model -- items and selection together. The only way to set
 -- either; @sel@ is inferred from this argument.
-selection :: HasListConfig sel e msg a cfg => sel a -> Attribute cfg
-selection s = overList (Attribute (\c -> c { lcSelection = s }))
+instance HasSelection (sel a) (ListConfig sel e msg a) where
+  selection s = Attribute (\c -> c { lcSelection = s })
 
 -- | How a row draws its item; receives the row's selected\/cursor flags
 -- for styling.
@@ -625,8 +628,8 @@ rowHeight h = overList (Attribute (\c -> c { lcRowHeight = h }))
 -- reflects keyboard\/click interaction locally within the frame (see
 -- 'list'), but the app never learns of it, so next frame's 'selection'
 -- puts it right back -- the list is then read-only in practice.
-onSelectionChanged :: HasListConfig sel e msg a cfg => (sel a -> [Effect e msg]) -> Attribute cfg
-onSelectionChanged h = overList (Attribute (\c -> c { lcOnSelectionChanged = lcOnSelectionChanged c ++ [h] }))
+instance HasSelectionChanged e msg (sel a) (ListConfig sel e msg a) where
+  onSelectionChanged h = Attribute (\c -> c { lcOnSelectionChanged = lcOnSelectionChanged c ++ [h] })
 
 -- | Reacts when the user acts on a specific item: a click on its row, or
 -- Enter\/Space with the cursor on it. Fires whether or not that action
@@ -762,7 +765,7 @@ listBase mkId cfg = do
     -- handling (e.g. the caller re-sorting its items). Ignores the very
     -- first observation so mounting doesn't force an initial scroll.
     trackCursor finalModel = do
-      let mIdx = findIndex isCursor (itemStates finalModel)
+      let mIdx = findIndex itemHasCursor (itemStates finalModel)
       lastIdx <- getCursorIndex (mkId List)
       when (mIdx /= lastIdx) $ do
         case lastIdx of
@@ -826,20 +829,20 @@ listBase mkId cfg = do
       scrollRowIntoView mkId cfg itemCount viewportHeight idx
 
     rowStates st = Set.fromList
-      [ if isSelected st then listSelected else listUnselected
-      , if isCursor   st then listCursor   else listNoCursor
+      [ if itemSelected st then listSelected else listUnselected
+      , if itemHasCursor st then listCursor   else listNoCursor
       ]
 
     row viewportHeight idx st = Element
       { elLayout  = Layout fill (exactly (lcRowHeight cfg)) TopLeft
       , elMeasure = noIntrinsicSize
       , elRun     = void $ control defaultControlConfig
-          { ccElementId    = Just (mkId (ListItem (isItem st)))
+          { ccElementId    = Just (mkId (ListItem (itemValue st)))
           , ccStyleKey     = listItemStyleKey
           , ccFocusPolicy  = NotFocusable
           , ccActiveStates = rowStates st
           , ccContent      = \rci -> do
-              when (ciClicked rci) (rowActivated viewportHeight idx (isItem st))
+              when (ciClicked rci) (rowActivated viewportHeight idx (itemValue st))
               runElement (lcRenderItem cfg st)
           }
       }
@@ -954,11 +957,11 @@ listSelectionGroup :: Text
 listSelectionGroup = "ListSelection"
 
 -- | Present in a row's 'Blink.Controls.Control.ccActiveStates' whenever
--- 'Blink.Controls.List.isSelected' is 'True' for that row.
+-- 'Blink.Controls.List.itemSelected' is 'True' for that row.
 listSelected :: VisualState
 listSelected = Custom listSelectionGroup "Selected"
 
--- | Present whenever 'Blink.Controls.List.isSelected' is 'False'. Themes
+-- | Present whenever 'Blink.Controls.List.itemSelected' is 'False'. Themes
 -- typically register no override -- the plain row look already reads as
 -- "unselected".
 listUnselected :: VisualState
@@ -968,12 +971,12 @@ listUnselected = Custom listSelectionGroup "Unselected"
 listCursorGroup :: Text
 listCursorGroup = "ListCursor"
 
--- | Present whenever 'Blink.Controls.List.isCursor' is 'True' for that
+-- | Present whenever 'Blink.Controls.List.itemHasCursor' is 'True' for that
 -- row.
 listCursor :: VisualState
 listCursor = Custom listCursorGroup "Cursor"
 
--- | Present whenever 'Blink.Controls.List.isCursor' is 'False'.
+-- | Present whenever 'Blink.Controls.List.itemHasCursor' is 'False'.
 listNoCursor :: VisualState
 listNoCursor = Custom listCursorGroup "NoCursor"
 

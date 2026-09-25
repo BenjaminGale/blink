@@ -4,32 +4,22 @@
 -- attribute functions used to configure it, and "Blink.Controls.Control"'s
 -- own module header describes how it's built underneath.
 --
--- 'Blink.Controls.Slider.value'\/'Blink.Controls.Slider.step'
--- clash with 'Blink.Controls.TextInput.value' and 'Blink.Controls.ScrollBar.step'
--- respectively, so those two stay out
--- of this umbrella -- import "Blink.Controls.Slider" qualified for
--- them, the way the sample app's @UI@ module does.
---
--- 'Blink.Controls.List.onSelectionChanged' clashes with
--- 'Blink.Controls.ToggleGroup.onSelectionChanged' (the latter stays in
--- this umbrella, being here first) -- import "Blink.Controls.List"
--- qualified for it.
---
--- 'Blink.Controls.MenuButton.items' clashes with
--- 'Blink.Controls.ToggleGroup.items' (the latter stays in this umbrella,
--- being here first) -- import "Blink.Controls.MenuButton" qualified for it.
---
--- 'Blink.Controls.MenuBar.itemAttrs' clashes with
--- 'Blink.Controls.MenuButton.itemAttrs' (the latter stays in this
--- umbrella, being here first) -- import "Blink.Controls.MenuBar" qualified
--- for it.
---
--- 'Blink.Controls.ScrollPanel.content' clashes with 'Blink.Popup.content'
--- and stays out of this umbrella -- import "Blink.Controls.ScrollPanel"
--- qualified for it.
+-- An attribute several widgets share ('value', 'step', 'orientation',
+-- 'items', 'itemAttrs', 'selection', 'onSelectionChanged', 'content') is
+-- one name, defined in "Blink.Element", that works on every widget that
+-- has it.
 module Blink.Controls
-  ( -- * Button
-    button
+  ( -- * Attributes shared across widgets
+    value
+  , step
+  , orientation
+  , items
+  , itemAttrs
+  , selection
+  , onSelectionChanged
+  , content
+    -- * Button
+  , button
   , onActivated
   , activation
     -- * ToggleButton
@@ -51,7 +41,6 @@ module Blink.Controls
   , target
     -- * List
   , list
-  , selection
   , renderItem
   , rowHeight
   , onItemActivated
@@ -74,7 +63,6 @@ module Blink.Controls
   , onValueChanged
     -- * Divider
   , divider
-  , orientation
   , thickness
     -- * Image
   , image
@@ -84,7 +72,6 @@ module Blink.Controls
   , preserveRatio
     -- * TextInput
   , textInput
-  , value
   , placeholder
   , inputFilter
   , displayFilter
@@ -92,35 +79,19 @@ module Blink.Controls
   , onSubmit
     -- * ScrollBar
   , scrollBar
-  , scrollBarOrientation
   , visibleFraction
     -- * ScrollPanel
-    -- | 'Blink.Controls.ScrollPanel.content' clashes with
-    -- 'Blink.Popup.content' and stays out of this umbrella -- import
-    -- "Blink.Controls.ScrollPanel" qualified for it.
   , scrollPanel
     -- * ToggleGroup
   , toggleButtonGroup
   , radioButtonGroup
-  , items
-  , toggleAttributes
-  , groupOrientation
   , itemSpacing
-  , selectedItem
   , allowDeselect
-  , onSelectionChanged
     -- * MenuButton
-    -- | 'Blink.Controls.MenuButton.items' clashes with 'items' above (this
-    -- module's own, from "Blink.Controls.ToggleGroup") and stays out of
-    -- this umbrella -- import "Blink.Controls.MenuButton" qualified for it.
   , menuButton
-  , itemAttrs
   , isOpen
   , onOpenChanged
     -- * MenuBar
-    -- | 'Blink.Controls.MenuBar.itemAttrs' clashes with 'itemAttrs' above
-    -- (from "Blink.Controls.MenuButton") and stays out of this umbrella --
-    -- import "Blink.Controls.MenuBar" qualified for it.
   , menuBar
   , menus
   , labelAttrs
@@ -129,25 +100,23 @@ module Blink.Controls
   , onOpenMenuChanged
   ) where
 
+import Blink.Element (content, itemAttrs, items, onSelectionChanged, orientation, selection, step, value)
 import Blink.Controls.Button (activation, button, onActivated)
 import Blink.Controls.Checkbox (checkbox)
-import Blink.Controls.Divider (divider, orientation, thickness)
+import Blink.Controls.Divider (divider, thickness)
 import Blink.Controls.Image (image, source, fitWidth, fitHeight, preserveRatio)
 import Blink.Controls.Label (label, mnemonic, target, text)
-import Blink.Controls.List (list, onItemActivated, renderItem, rowHeight, selection)
+import Blink.Controls.List (list, onItemActivated, renderItem, rowHeight)
 import Blink.Controls.MenuBar (labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu)
-import Blink.Controls.MenuButton (isOpen, itemAttrs, menuButton, onOpenChanged)
+import Blink.Controls.MenuButton (isOpen, menuButton, onOpenChanged)
 import Blink.Controls.ProgressBar (bandSpeed, bandWidth, progress, progressBar)
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.RepeatButton (initialDelay, repeatButton, repeatInterval)
-import Blink.Controls.ScrollBar (scrollBar, scrollBarOrientation, visibleFraction)
+import Blink.Controls.ScrollBar (scrollBar, visibleFraction)
 import Blink.Controls.ScrollPanel (scrollPanel)
 import Blink.Controls.Slider (onValueChanged, slider)
-import Blink.Controls.TextInput (displayFilter, inputFilter, onInput, onSubmit, placeholder, textInput, value)
+import Blink.Controls.TextInput (displayFilter, inputFilter, onInput, onSubmit, placeholder, textInput)
 import Blink.Controls.ToggleButton (isSelected, onSelectedChanged, toggleButton)
-import Blink.Controls.ToggleGroup
-  ( allowDeselect, groupOrientation, itemSpacing, items, onSelectionChanged, radioButtonGroup
-  , selectedItem, toggleAttributes, toggleButtonGroup
-  )
+import Blink.Controls.ToggleGroup (allowDeselect, itemSpacing, radioButtonGroup, toggleButtonGroup)
 import Blink.Controls.Table (columns, table)
 import Blink.Controls.Tree (expanded, forest, onExpansionChanged, renderNode, tree)

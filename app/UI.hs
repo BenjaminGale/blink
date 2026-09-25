@@ -7,7 +7,7 @@ import Blink.Controls.Control (StyleKey (..), isEnabled, post, postWith, style)
 import Blink.Controls.Label (LabelConfig)
 import Blink.Controls.List
   (ListPart (..), MultiSelection, SingleSelection, multiSelection, selectFirst, selectedItems, singleSelection)
-import qualified Blink.Controls.List as List (isItem, onSelectionChanged)
+import qualified Blink.Controls.List as List (itemValue, onSelectionChanged)
 import qualified Blink.Controls.MenuBar as MenuBar (itemAttrs, submenuItems)
 import qualified Blink.Controls.MenuButton as MenuButton (items)
 import Blink.Controls.ProgressBar (ProgressValue (..))
@@ -338,8 +338,8 @@ rowRadio s =
     ( rowLayout ++
       [ itemSpacing 16
       , items radioOptions
-      , toggleAttributes (\opt -> [text opt, width (exactly 100), height fill, align MiddleLeft])
-      , selectedItem (radioChoice s)
+      , itemAttrs (\opt -> [text opt, width (exactly 100), height fill, align MiddleLeft])
+      , selection (radioChoice s)
       , onSelectionChanged (maybe [] (postWith PickRadio))
       , isEnabled (editingEnabled s)
       ]
@@ -477,10 +477,10 @@ sidebar s =
     [ width (exactly sidebarWidth), height fill, margin 12
     , children
         [ toggleButtonGroup SidebarPageButton
-            [ width fill, height fill, groupOrientation Vertical, itemSpacing 4
+            [ width fill, height fill, orientation Vertical, itemSpacing 4
             , items (map fst pages)
-            , toggleAttributes (\page -> [text (pageLabel page), width fill, height (exactly 32)])
-            , selectedItem (Just (currentPage s))
+            , itemAttrs (\page -> [text (pageLabel page), width fill, height (exactly 32)])
+            , selection (Just (currentPage s))
             , onSelectionChanged (maybe [] (postWith SetPage))
             ]
         ]
@@ -534,7 +534,7 @@ fruitListElem :: AppState -> Element ControlId Msg
 fruitListElem s =
   list FruitList
     [ selection (fruitSelection s)
-    , renderItem (listCaption . List.isItem)
+    , renderItem (listCaption . List.itemValue)
     , List.onSelectionChanged (postWith FruitSelectionChanged)
     , onItemActivated (postWith FruitActivated)
     , height fill
@@ -559,7 +559,7 @@ groceryListElem :: AppState -> Element ControlId Msg
 groceryListElem s =
   list GroceryList
     [ selection (groceryList s)
-    , renderItem (listCaption . List.isItem)
+    , renderItem (listCaption . List.itemValue)
     , List.onSelectionChanged (postWith GroceryListChanged)
     , height fill
     ]
@@ -590,7 +590,7 @@ longListElem :: AppState -> Element ControlId Msg
 longListElem s =
   list LongList
     [ selection (longListSelection s)
-    , renderItem (listCaption . (\n -> "Item " <> T.pack (show n)) . List.isItem)
+    , renderItem (listCaption . (\n -> "Item " <> T.pack (show n)) . List.itemValue)
     , List.onSelectionChanged (postWith LongListChanged)
     , width fill, height (exactly 200)
     ]
@@ -672,7 +672,7 @@ fileTreeElem s =
     [ forest fileForest
     , expanded (fileTreeExpanded s)
     , selection (fileTreeSelection s)
-    , renderNode (listCaption . List.isItem . tisState)
+    , renderNode (listCaption . List.itemValue . tisState)
     , List.onSelectionChanged (postWith FileTreeSelectionChanged)
     , onExpansionChanged (postWith FileTreeExpansionChanged)
     , width fill, height (exactly 200)
@@ -720,11 +720,11 @@ sortedGroceryItems (Just (_, Descending)) = sortOn (Down . snd) groceryTableItem
 
 groceryTableColumns :: [ColumnConfig ControlId Msg Text]
 groceryTableColumns =
-  [ column [header (listCaption "Item"), cellWidth ColumnFill, cell (listCaption . List.isItem), sortable True]
+  [ column [header (listCaption "Item"), cellWidth ColumnFill, cell (listCaption . List.itemValue), sortable True]
   , column
       [ header (listCaption "Qty")
       , cellWidth (ColumnFixed 60)
-      , cell (\st -> listCaption (maybe "" (T.pack . show) (lookup (List.isItem st) groceryTableItems)))
+      , cell (\st -> listCaption (maybe "" (T.pack . show) (lookup (List.itemValue st) groceryTableItems)))
       , sortable True
       ]
   ]
@@ -800,11 +800,11 @@ visibleFileSizeTreeItems sortReq e = map fst (flattenVisible (sortedFileForest s
 
 fileSizeTreeColumns :: [ColumnConfig ControlId Msg Text]
 fileSizeTreeColumns =
-  [ column [header (listCaption "Name"), cellWidth ColumnFill, cell (listCaption . List.isItem), sortable True]
+  [ column [header (listCaption "Name"), cellWidth ColumnFill, cell (listCaption . List.itemValue), sortable True]
   , column
       [ header (listCaption "Size (KB)")
       , cellWidth (ColumnFixed 80)
-      , cell (listCaption . fileSizeLabel . List.isItem)
+      , cell (listCaption . fileSizeLabel . List.itemValue)
       , sortable True
       ]
   ]

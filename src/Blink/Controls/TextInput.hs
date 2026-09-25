@@ -38,7 +38,7 @@ import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.View
 import Blink.View.Drawing (fillRect, drawText)
 import Blink.View.Selection (selectionHasExtent, selectionLow, selectionHigh, cursor, extendActive)
-import Blink.Element (Element (..), HasLayoutConfig (..))
+import Blink.Element (Element (..), HasLayoutConfig (..), HasValue (..))
 import Blink.Style
 import Blink.Controls.Style (buttonStyle, controlMetrics)
 
@@ -80,8 +80,8 @@ instance HasLayoutConfig (TextInputConfig e msg) where
   overLayout attr = Attribute (\tc -> tc { ticLayout = runAttribute attr (ticLayout tc) })
 
 -- | Sets the field's current value. Defaults to @\"\"@ when not given.
-value :: Text -> Attribute (TextInputConfig e msg)
-value t = Attribute (\tc -> tc { ticValue = t })
+instance HasValue Text (TextInputConfig e msg) where
+  value t = Attribute (\tc -> tc { ticValue = t })
 
 -- | Text shown, muted, in place of the value whenever that value is
 -- empty -- drawn directly, never passed through 'inputFilter' or

@@ -9,7 +9,7 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
-  ( Direction (..), ListPart (..), MultiSelection, SingleSelection, isItem, listStyleKey, moveCursor, multiSelected
+  ( Direction (..), ListPart (..), MultiSelection, SingleSelection, itemValue, listStyleKey, moveCursor, multiSelected
   , onSelectionChanged, rowHeight, selectItem, selectedItems, selection, unselected
   )
 import Blink.Controls.ScrollBar (ScrollBarPart (..), ScrollViewportPart (..))
@@ -122,7 +122,7 @@ markerNode tis = Element
   , elMeasure = const (pure (Size 0 0))
   , elRun     = do
       b <- getBounds
-      emit (isItem (tisState tis) ++ "@" ++ show (rectX b))
+      emit (itemValue (tisState tis) ++ "@" ++ show (rectX b))
   }
 
 renderTree :: [Attribute (TreeConfig SingleSelection TestElem String String)] -> View TestElem String ()

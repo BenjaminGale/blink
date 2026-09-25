@@ -26,7 +26,7 @@ import Blink.Geometry (Alignment (TopLeft), Orientation (..), Size (..), uniform
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.View
 import Blink.View.Drawing (fillRect)
-import Blink.Element (Element (..), HasLayoutConfig (..))
+import Blink.Element (Element (..), HasLayoutConfig (..), HasOrientation (..))
 import Blink.Rendering (TextAlign (..))
 import Blink.Style
 import Blink.Controls.Style (transparent)
@@ -74,8 +74,8 @@ layoutFor Vertical   = Layout fitContent fill TopLeft
 -- Resets the default 'Layout' the new axis implies -- apply this before any
 -- 'Blink.Element.width'\/'Blink.Element.height'
 -- override in the attribute list, or it will clobber them.
-orientation :: Orientation -> Attribute (DividerConfig e msg)
-orientation o = Attribute (\dc -> dc { dcOrientation = o, dcLayout = layoutFor o })
+instance HasOrientation (DividerConfig e msg) where
+  orientation o = Attribute (\dc -> dc { dcOrientation = o, dcLayout = layoutFor o })
 
 -- | How thick the drawn line is, across whichever axis 'orientation' isn't
 -- running it along. Defaults to 1. Has no effect if 'Blink.Element.width'\/

@@ -53,7 +53,10 @@ import Data.Tree (Forest, Tree (..))
 
 import Blink.Controls.Control
 import Blink.Controls.List hiding (defaultStyleEntries)
-import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, noIntrinsicSize)
+import Blink.Element
+  ( Element (..), HasLayoutConfig (..), HasSelection (..), HasSelectionChanged (..), elementWithLayout, emptyElement
+  , noIntrinsicSize
+  )
 import Blink.Geometry (Alignment (TopLeft), uniform)
 import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Layout.Box (children, hBox)
@@ -148,6 +151,12 @@ instance HasLayoutConfig (TreeConfig sel e msg a) where
 
 instance HasListConfig sel e msg a (TreeConfig sel e msg a) where
   overList attr = Attribute (\tc -> tc { tcList = runAttribute attr (tcList tc) })
+
+instance HasSelection (sel a) (TreeConfig sel e msg a) where
+  selection = overList . selection
+
+instance HasSelectionChanged e msg (sel a) (TreeConfig sel e msg a) where
+  onSelectionChanged = overList . onSelectionChanged
 
 instance HasTreeDataConfig e msg a (TreeConfig sel e msg a) where
   overTreeData attr = Attribute (\tc -> tc { tcTreeData = runAttribute attr (tcTreeData tc) })
@@ -252,7 +261,7 @@ treeListBase mkRowId cfg = do
 
     itemState st = TreeItemState st depth hasChildren (Set.member x (tdExpanded td))
       where
-        x                    = isItem st
+        x                    = itemValue st
         (depth, hasChildren) = Map.findWithDefault (0, False) x nodeInfo
 
 -- | The indent (proportional to the node's depth) and, when the node has
@@ -284,7 +293,7 @@ indentAndChevron mkChevronId td tis =
               }
           }
 
-    x                   = isItem (tisState tis)
+    x                   = itemValue (tisState tis)
     depth               = tisDepth tis
     hasChildren         = tisHasChildren tis
     expanded0           = tdExpanded td
