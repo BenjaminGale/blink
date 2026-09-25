@@ -10,13 +10,14 @@ import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.ScrollBar
   (ScrollBarConfig, ScrollBarPart (..), scrollBar, scrollBarButtonStyleKey, orientation, step)
 import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
-import Blink.Geometry (Orientation (..), Point (..), Rectangle (..))
+import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..))
 import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.Style (StyleSet (..), Theme (..), VisualState (CommonMouseOver), styleBase, styleTextColour)
 import Blink.View
-import Blink.Element (runElement)
+import Blink.Element (height, measureElement, runElement)
+import Blink.Layout.Constraints (exactly)
 
 -- | The scrollbar's own parts, plus an unrelated preceding control standing
 -- in for the rest of a real form in the focus tests.
@@ -221,7 +222,15 @@ spec = describe "Blink.Controls.ScrollBar" $ do
       let settled = settleEffects ctxHeld
       contextScrollState scrollEid settled `shouldSatisfy` (\v -> abs (v - (0.9 - 4 * 0.05)) < 1e-9)
 
-  describe "orientation" $
+  describe "orientation" $ do
+    it "gives the same size whichever order height and orientation come in" $ do
+      let measure attrs = fst <$> runView (measureElement (Rectangle 0 0 100 100) (scrollBar tag attrs)) seedCtx
+      heightFirst      <- measure [height (exactly 40), orientation Horizontal]
+      orientationFirst <- measure [orientation Horizontal, height (exactly 40)]
+      -- 100 is the horizontal default width: filling the offered space.
+      heightFirst `shouldBe` Size 100 40
+      orientationFirst `shouldBe` Size 100 40
+
     it "arranges left-to-right when set to Horizontal, with a click at the equivalent x offset behaving the same as the vertical default" $ do
       ctx <- seededAt 0.5
       let horizontalBounds = Rectangle 0 0 100 16

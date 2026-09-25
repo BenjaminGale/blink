@@ -8,12 +8,12 @@ import Blink.Controls.Control (Attribute)
 import Blink.Controls.ControlBehaviour (styleAttributeSpec)
 import Blink.Controls.Divider (DividerConfig, divider, dividerLineStyleKey, orientation, thickness)
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
-import Blink.Geometry (Alignment (Center), Orientation (..), Rectangle (..))
+import Blink.Geometry (Alignment (Center), Orientation (..), Rectangle (..), Size (..))
 import Blink.Layout.Constraints (exactly)
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.Style (StyleSet (..), Theme (..))
 import Blink.View
-import Blink.Element (align, runElement, width)
+import Blink.Element (align, height, measureElement, runElement, width)
 
 data TestElement = Bar deriving (Eq, Ord, Show)
 
@@ -84,6 +84,14 @@ spec = describe "Blink.Controls.Divider" $ do
       getDrawCommands ctx `shouldNotContain` [FillRect contentRect testColour]
 
   describe "orientation" $ do
+    it "gives the same size whichever order height and orientation come in" $ do
+      let measure attrs = fst <$> runView (measureElement testBounds (divider attrs)) seedCtx
+      heightFirst      <- measure [height (exactly 40), orientation Vertical]
+      orientationFirst <- measure [orientation Vertical, height (exactly 40)]
+      -- 31 is the vertical default width: the 1px line plus 2*10 margin and 2*5 padding.
+      heightFirst `shouldBe` Size 31 40
+      orientationFirst `shouldBe` Size 31 40
+
     it "runs horizontally by default, filling the offered width" $ do
       ctx <- run []
       getDrawCommands ctx `shouldContain` [FillRect (Rectangle 15 15 70 1) testColour]

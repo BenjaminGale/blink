@@ -96,12 +96,13 @@ data ScrollBarPart
   | ScrollBar
   deriving (Eq, Ord, Show)
 
--- | Every capability 'scrollBar' resolves: the wrapped 'ControlConfig', its
--- own size request, which axis it runs along, the proportion of the track
--- its thumb covers, and the step each arrow moves the position by.
+-- | Every capability 'scrollBar' resolves: the wrapped 'ControlConfig', the
+-- caller's layout attributes (applied over the default layout for its axis
+-- when the scrollbar is built), which axis it runs along, the proportion of
+-- the track its thumb covers, and the step each arrow moves the position by.
 data ScrollBarConfig e msg = ScrollBarConfig
   { sbControl         :: ControlConfig e msg
-  , sbLayout          :: Layout
+  , sbLayoutAttrs     :: [Attribute Layout]
   , sbOrientation     :: Orientation
   , sbVisibleFraction :: Double
   , sbStep            :: Double
@@ -109,7 +110,7 @@ data ScrollBarConfig e msg = ScrollBarConfig
 
 -- | The default 'Layout' for a scrollbar running along @o@: fills the space
 -- it's given along that axis, and sizes itself to 'scrollBarThickness'
--- across it. Set via 'orientation'.
+-- across it.
 layoutFor :: Orientation -> Layout
 layoutFor Horizontal = Layout fill (exactly scrollBarThickness) TopLeft
 layoutFor Vertical   = Layout (exactly scrollBarThickness) fill TopLeft
@@ -119,7 +120,7 @@ layoutFor Vertical   = Layout (exactly scrollBarThickness) fill TopLeft
 defaultScrollBarConfig :: ScrollBarConfig e msg
 defaultScrollBarConfig = ScrollBarConfig
   { sbControl         = defaultControlConfig { ccStyleKey = scrollBarStyleKey }
-  , sbLayout          = layoutFor Vertical
+  , sbLayoutAttrs     = []
   , sbOrientation     = Vertical
   , sbVisibleFraction = 0.2
   , sbStep            = 0.05
@@ -131,15 +132,21 @@ instance HasControlConfig e msg (ScrollBarConfig e msg) where
 instance HasEventHandlers (ScrollBarConfig e msg)
 
 instance HasLayoutConfig (ScrollBarConfig e msg) where
-  overLayout = nested sbLayout (\sc x -> sc { sbLayout = x })
+  overLayout = appendTo sbLayoutAttrs (\sc as -> sc { sbLayoutAttrs = as })
+
+-- | The scrollbar's layout: the default for its 'orientation', with the
+-- caller's 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'
+-- applied over it, in whatever order they were given relative to
+-- 'orientation'.
+scrollBarLayout :: ScrollBarConfig e msg -> Layout
+scrollBarLayout sc = resolve (layoutFor (sbOrientation sc)) (sbLayoutAttrs sc)
 
 -- | Which axis the bar runs along: 'Horizontal' arranges the arrows and
--- track left-to-right, 'Vertical' (the default) top-to-bottom. Resets the
--- default 'Layout' the new axis implies -- apply this before any
--- 'Blink.Element.width'\/'Blink.Element.height'
--- override in the attribute list, or it will clobber them.
+-- track left-to-right, 'Vertical' (the default) top-to-bottom. Picks the
+-- default layout for that axis; 'Blink.Element.width'\/'Blink.Element.height'
+-- still override it, wherever they appear.
 instance HasOrientation (ScrollBarConfig e msg) where
-  orientation o = Attribute (\sc -> sc { sbOrientation = o, sbLayout = layoutFor o })
+  orientation o = Attribute (\sc -> sc { sbOrientation = o })
 
 -- | How much of the scrollable content is visible at once, as a fraction of
 -- the whole -- sets the thumb's length as that fraction of the track,
@@ -260,7 +267,7 @@ arrowButton eid path attrs =
 -- 'Blink.View.ScrollState' key -- see the module header for reading it
 -- from elsewhere.
 scrollBar :: Ord e => (ScrollBarPart -> e) -> [Attribute (ScrollBarConfig e msg)] -> Element e msg
-scrollBar tag attrs = controlElement (sbLayout cfg) box ctrl
+scrollBar tag attrs = controlElement (scrollBarLayout cfg) box ctrl
   where
     cfg       = resolve defaultScrollBarConfig attrs
     o         = sbOrientation cfg

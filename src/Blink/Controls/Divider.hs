@@ -28,37 +28,42 @@ import Blink.Style
 import Blink.Controls.Style (plainFillStyle, plainStyle, zeroMetrics)
 
 -- | Every capability 'divider' resolves: the wrapped 'ControlConfig', the
--- axis it runs along, its thickness across that axis, and the 'Layout'
--- 'orientation' derives from it.
+-- axis it runs along, its thickness across that axis, and the caller's
+-- layout attributes, applied over the default layout for that axis when
+-- the divider is built.
 data DividerConfig e msg = DividerConfig
   { dcControl     :: ControlConfig e msg
   , dcOrientation :: Orientation
   , dcThickness   :: Double
-  , dcLayout      :: Layout
+  , dcLayoutAttrs :: [Attribute Layout]
   }
 
 -- | 'defaultControlConfig' (styled via 'dividerStyleKey'), 'Horizontal', a
--- thickness of 1, and the 'Layout' that follows from those -- see
--- 'orientation'.
+-- thickness of 1, and no layout attributes.
 defaultDividerConfig :: DividerConfig e msg
 defaultDividerConfig = DividerConfig
   { dcControl     = defaultControlConfig { ccStyleKey = dividerStyleKey }
   , dcOrientation = Horizontal
   , dcThickness   = 1
-  , dcLayout      = layoutFor Horizontal
+  , dcLayoutAttrs = []
   }
 
 instance HasControlConfig e msg (DividerConfig e msg) where
   overControl = nested dcControl (\dc x -> dc { dcControl = x })
 
 instance HasLayoutConfig (DividerConfig e msg) where
-  overLayout = nested dcLayout (\dc x -> dc { dcLayout = x })
+  overLayout = appendTo dcLayoutAttrs (\dc as -> dc { dcLayoutAttrs = as })
+
+-- | The divider's layout: the default for its 'orientation', with the
+-- caller's 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'
+-- applied over it, in whatever order they were given relative to
+-- 'orientation'.
+dividerLayout :: DividerConfig e msg -> Layout
+dividerLayout dc = resolve (layoutFor (dcOrientation dc)) (dcLayoutAttrs dc)
 
 -- | The default 'Layout' for a divider running along @o@: fills the space
 -- it's given along that axis, and sizes itself to 'dcThickness' (plus
--- chrome -- see 'divider') across it. Set via 'orientation'; override
--- either axis afterwards with 'Blink.Element.width'\/
--- 'Blink.Element.height' as usual.
+-- chrome -- see 'divider') across it.
 layoutFor :: Orientation -> Layout
 layoutFor Horizontal = Layout fill fitContent TopLeft
 layoutFor Vertical   = Layout fitContent fill TopLeft
@@ -67,11 +72,10 @@ layoutFor Vertical   = Layout fitContent fill TopLeft
 -- line stretching left-to-right, for separating things stacked in a
 -- 'Blink.Layout.Box.vBox'; 'Vertical' draws one stretching top-to-bottom,
 -- for separating things side by side in an 'Blink.Layout.Box.hBox'.
--- Resets the default 'Layout' the new axis implies -- apply this before any
--- 'Blink.Element.width'\/'Blink.Element.height'
--- override in the attribute list, or it will clobber them.
+-- Picks the default layout for that axis; 'Blink.Element.width'\/
+-- 'Blink.Element.height' still override it, wherever they appear.
 instance HasOrientation (DividerConfig e msg) where
-  orientation o = Attribute (\dc -> dc { dcOrientation = o, dcLayout = layoutFor o })
+  orientation o = Attribute (\dc -> dc { dcOrientation = o })
 
 -- | How thick the drawn line is, across whichever axis 'orientation' isn't
 -- running it along. Defaults to 1. Has no effect if 'Blink.Element.width'\/
@@ -91,9 +95,10 @@ thickness t = Attribute (\dc -> dc { dcThickness = t })
 -- 'Blink.Element.align' picks where within that extra space the
 -- line sits.
 divider :: Ord e => [Attribute (DividerConfig e msg)] -> Element e msg
-divider attrs = controlElement (dcLayout cfg) (Element (dcLayout cfg) intrinsicSize (pure ())) ctrl
+divider attrs = controlElement layout (Element layout intrinsicSize (pure ())) ctrl
   where
-    cfg  = resolve defaultDividerConfig attrs
+    cfg    = resolve defaultDividerConfig attrs
+    layout = dividerLayout cfg
     ctrl = (dcControl cfg)
       { ccFocusPolicy  = NotFocusable
       , ccContent      = const body
