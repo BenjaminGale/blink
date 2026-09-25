@@ -13,8 +13,8 @@
 -- @
 -- control --> buttonBase --> button                    (see "Blink.Controls.Button")
 --                             --> toggleBase --> toggleButton --> toggleButtonGroup (see "Blink.Controls.ToggleGroup")
---                                             --> checkbox     (see "Blink.Controls.Checkbox")
---                                             --> radioButton  (see "Blink.Controls.RadioButton") --> radioButtonGroup
+--                                             --> iconToggle --> checkbox     (see "Blink.Controls.Checkbox")
+--                                                            --> radioButton  (see "Blink.Controls.RadioButton") --> radioButtonGroup
 -- @
 module Blink.Controls.ToggleButton
   ( ToggleConfig (..)
@@ -27,8 +27,8 @@ module Blink.Controls.ToggleButton
   , toggleUnchecked
   , toggleBase
   , toggleButton
-  , glyphCaptionElement
-  , glyphCaptionContent
+  , IconToggleConfig (..)
+  , iconToggle
   , isSelected
   , onSelectedChanged
     -- * Style
@@ -47,11 +47,12 @@ import Blink.Controls.Label
   (HasLabelledConfig (..), LabelledConfig (..), renderLabelledContent)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
-import Blink.View (Effect, View, getBounds, measureText, withBounds)
+import Blink.View (Effect, View, getBounds, getStyleSet, isDisabled, isRegionHit, measureText, withBounds)
+import Blink.View.Drawing (drawImage)
 import Blink.Element (Element (..), HasLayoutConfig (..))
-import Blink.Rendering (Colour, TextAlign (..))
+import Blink.Rendering (Colour, ImagePath, TextAlign (..))
 import Blink.Style
-import Blink.Controls.Style (buttonStyle, controlMetrics)
+import Blink.Controls.Style (buttonStyle, controlMetrics, iconStyleKey)
 
 -- | Whether the control is currently selected.
 isSelected :: Bool -> Attribute (ToggleConfig e msg)
@@ -155,6 +156,67 @@ defaultGlyphToggleConfig styleKey = defaultToggleButtonConfig
       , bcLayout  = Layout fitContent fitContent TopLeft
       }
   }
+
+-- | Every capability 'iconToggle' resolves: the wrapped 'ToggleConfig',
+-- and the icon's fixed look.
+data IconToggleConfig e msg = IconToggleConfig
+  { itToggle         :: ToggleConfig e msg
+  , itIconWidth      :: Double
+    -- ^ Width of the icon column, left of the caption.
+  , itGap            :: Double
+    -- ^ Gap between the icon column and the caption.
+  , itIconInset      :: Double
+    -- ^ Margin between the icon column's edges and the drawn icon.
+  , itTrailingSpace  :: Double
+    -- ^ Space measured after the caption.
+  , itSelectedIcon   :: ImagePath
+    -- ^ Drawn while selected.
+  , itUnselectedIcon :: ImagePath
+    -- ^ Drawn while not selected.
+  }
+
+-- | A toggle drawn as an icon beside its caption, running @cfg@'s
+-- 'itToggle' as 'toggleBase' --
+-- clicking either the icon or the caption activates it. The icon is
+-- centred in its column and tinted from 'Blink.Controls.Style.iconStyleKey':
+-- a separate 'StyleKey' from the control's own, resolved against whether
+-- the pointer is over the /icon's own rectangle specifically/, so hovering
+-- the caption beside it, still within the control's larger hit area,
+-- leaves the icon (and the caption's own colour, which never reads from
+-- 'Blink.Controls.Style.iconStyleKey') alone. The shape a checkbox and a
+-- radio button share.
+iconToggle :: Ord e => e -> IconToggleConfig e msg -> Element e msg
+iconToggle eid iconCfg =
+  chromeElement (bcLayout btn) (ccStyleKey (bcControl btn)) content (void (toggleBase eid cfg { tgcButton = btn { bcControl = ctrl } }))
+  where
+    cfg     = itToggle iconCfg
+    btn     = tgcButton cfg
+    iconW   = itIconWidth iconCfg
+    content = withTrailingSpace (glyphCaptionElement iconW (itGap iconCfg) (lcText (bcLabelled btn)))
+    withTrailingSpace el =
+      el { elMeasure = fmap (\sz -> sz { sizeWidth = sizeWidth sz + itTrailingSpace iconCfg }) . elMeasure el }
+    ctrl = (bcControl btn) { ccContent = const (glyphCaptionContent iconW (itGap iconCfg) drawIcon (bcLabelled btn)) }
+
+    drawIcon = do
+      (_, iconStyleSet) <- getStyleSet iconStyleKey
+      disabled          <- isDisabled
+      bounds            <- getBounds
+      let iconSize = max 0 (min iconW (rectHeight bounds) - itIconInset iconCfg)
+          iconRect = Rectangle
+            { rectX      = rectX bounds + (iconW - iconSize) / 2
+            , rectY      = rectY bounds + (rectHeight bounds - iconSize) / 2
+            , rectWidth  = iconSize
+            , rectHeight = iconSize
+            }
+          icon = if tgcSelected cfg then itSelectedIcon iconCfg else itUnselectedIcon iconCfg
+      withBounds iconRect $ do
+        hovered <- isRegionHit
+        let iconState
+              | disabled  = CommonDisabled
+              | hovered   = CommonMouseOver
+              | otherwise = CommonNormal
+            colour = styleTextColour (resolveStyle iconStyleSet (Set.singleton iconState))
+        drawImage colour icon
 
 -- | The glyph-plus-caption content's own preferred size: the glyph's fixed
 -- width plus the gap between it and the caption plus the caption's
