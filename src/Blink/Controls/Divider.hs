@@ -10,6 +10,7 @@ module Blink.Controls.Divider
   ( DividerConfig (..)
   , defaultDividerConfig
   , dividerStyleKey
+  , dividerLineStyleKey
   , divider
   , orientation
   , thickness
@@ -18,18 +19,16 @@ module Blink.Controls.Divider
   , defaultStyleEntries
   ) where
 
-import Control.Monad (forM_)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 
 import Blink.Controls.Control
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Size (..), uniform)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
-import Blink.View
-import Blink.View.Drawing (fillRect)
 import Blink.Element (Element (..), HasLayoutConfig (..), HasOrientation (..))
 import Blink.Rendering (TextAlign (..))
 import Blink.Style
-import Blink.Controls.Style (transparent)
+import Blink.Controls.Style (plainFillStyle, toggleGroupMetrics, transparent)
 
 -- | Every capability 'divider' resolves: the wrapped 'ControlConfig', the
 -- axis it runs along, its thickness across that axis, and the 'Layout'
@@ -85,10 +84,9 @@ thickness :: Double -> Attribute (DividerConfig e msg)
 thickness t = Attribute (\dc -> dc { dcThickness = t })
 
 -- | A plain visual separator (see the module header). Display-only: it
--- takes no id, raises no events, and is never focusable. Draws nothing
--- when the resolved style's border colour is 'Nothing', the same as a
--- control with no border drawing no chrome border. Defaults to filling the space it's given
--- along 'orientation' and sizing to 'thickness' (plus the current theme's
+-- takes no id, raises no events, and is never focusable. Draws its line
+-- as the 'dividerLineStyleKey' part. Defaults to filling the space it's
+-- given along 'orientation' and sizing to 'thickness' (plus the current theme's
 -- margin\/border\/padding, same as every other control) across it --
 -- override with 'Blink.Element.width'\/'Blink.Element.height'\/
 -- 'Blink.Element.align'; when placed in an 'Blink.Layout.Box.hBox'\/
@@ -109,9 +107,7 @@ divider attrs = controlElement (dcLayout cfg) (Element (dcLayout cfg) intrinsicS
     -- matters, since the other is 'fill' and never reaches this at all --
     -- see 'Blink.Layout.Constraints.resolveLength'.
     intrinsicSize = const (pure (Size t t))
-    body = do
-      s <- currentStyle
-      forM_ (styleBorderColour s) fillRect
+    body = drawPart dividerLineStyleKey (Set.singleton CommonNormal)
 
 -- * Style
 
@@ -126,21 +122,27 @@ dividerMetrics = Metrics
   , metricsPadding     = uniform 0
   }
 
--- | A divider's line style: transparent background, 'paletteBorder' for
--- the line itself (drawn via 'styleBorderColour', same as
--- 'Blink.Controls.Slider.sliderStyle's groove). Width 0 so the
--- control's own automatic border draw never fires.
+-- | The 'StyleKey' the line itself resolves its style from.
+dividerLineStyleKey :: StyleKey e
+dividerLineStyleKey = Class "dividerLine"
+
+-- | A divider's own chrome: no background or border of its own, since its
+-- line is a part.
 dividerStyle :: Palette -> StyleSet
 dividerStyle p = StyleSet
   { styleBase = Style
       { styleBackground   = transparent
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignLeft
-      , styleBorder       = soloBorder (paletteBorder p) 0
+      , styleBorder       = noBorder
       }
   , styleOverrides = Map.empty
   }
 
--- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
+-- | This control's entries in 'Blink.Style.Defaults.defaultTheme': its
+-- own chrome and its line.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
-defaultStyleEntries p = [ (dividerStyleKey, (dividerMetrics, dividerStyle p)) ]
+defaultStyleEntries p =
+  [ (dividerStyleKey,     (dividerMetrics, dividerStyle p))
+  , (dividerLineStyleKey, (toggleGroupMetrics, plainFillStyle p (paletteBorder p)))
+  ]

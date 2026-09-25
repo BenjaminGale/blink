@@ -10,6 +10,8 @@ module Blink.Controls.ProgressBar
   , ProgressValue (..)
   , defaultProgressBarConfig
   , progressBarStyleKey
+  , progressBarTrackStyleKey
+  , progressBarFillStyleKey
   , progressBar
   , progress
   , bandSpeed
@@ -21,16 +23,16 @@ module Blink.Controls.ProgressBar
 
 import Control.Monad (when)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 
 import Blink.Controls.Control
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..), clampFraction)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.View
-import Blink.View.Drawing (fillRect)
 import Blink.Element (Element (..), HasLayoutConfig (..), noIntrinsicSize)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style
-import Blink.Controls.Style (progressBarMetrics)
+import Blink.Controls.Style (plainFillStyle, progressBarMetrics, toggleGroupMetrics, transparent, valueFillStyle)
 
 -- | The value passed to 'progressBar' via 'progress'.
 data ProgressValue
@@ -106,13 +108,13 @@ progressBar attrs = controlElement (pbLayout cfg) (Element (pbLayout cfg) noIntr
       , ccContent      = body
       }
     body ci = do
-      s <- currentStyle
       r <- getBounds
+      let partState = Set.singleton (commonState (ciDisabled ci) False False)
+      drawPart progressBarTrackStyleKey partState
       case pbValue cfg of
         Progress value -> do
-          let clamped   = clampFraction value
-              fillRect' = r { rectWidth = rectWidth r * clamped }
-          withBounds fillRect' $ fillRect (styleTextColour s)
+          let fillRect' = r { rectWidth = rectWidth r * clampFraction value }
+          withBounds fillRect' (drawPart progressBarFillStyleKey partState)
         Indeterminate -> when (not (ciDisabled ci)) $ do
           requiresAnimation
           elapsed <- getAnimElapsed
@@ -120,7 +122,7 @@ progressBar attrs = controlElement (pbLayout cfg) (Element (pbLayout cfg) noIntr
               cycles = realToFrac elapsed * pbBandSpeed cfg
               phase  = cycles - fromIntegral (floor cycles :: Int)
               left   = rectX r - bandW + (rectWidth r + bandW) * phase
-          withBounds (r { rectX = left, rectWidth = bandW }) $ fillRect (styleTextColour s)
+          withBounds (r { rectX = left, rectWidth = bandW }) (drawPart progressBarFillStyleKey partState)
 
 -- * Style
 
@@ -129,20 +131,34 @@ progressBar attrs = controlElement (pbLayout cfg) (Element (pbLayout cfg) noIntr
 progressBarStyleKey :: StyleKey e
 progressBarStyleKey = Class "progressBar"
 
--- | A progress bar's track/fill style: 'paletteSurface' for the track
--- (background), 'paletteAccent' for the fill (drawn via
--- 'styleTextColour'), no border.
+-- | The 'StyleKey' the track, the full length the fill runs along,
+-- resolves its style from.
+progressBarTrackStyleKey :: StyleKey e
+progressBarTrackStyleKey = Class "progressBarTrack"
+
+-- | The 'StyleKey' the fill (or, while 'Indeterminate', the moving band)
+-- resolves its style from.
+progressBarFillStyleKey :: StyleKey e
+progressBarFillStyleKey = Class "progressBarFill"
+
+-- | A progress bar's own chrome: no background or border of its own, since
+-- its track and fill are parts.
 progressBarStyle :: Palette -> StyleSet
 progressBarStyle p = StyleSet
   { styleBase = Style
-      { styleBackground   = paletteSurface p
-      , styleTextColour   = paletteAccent p
+      { styleBackground   = transparent
+      , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignLeft
       , styleBorder       = noBorder
       }
-  , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
+  , styleOverrides = Map.empty
   }
 
--- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
+-- | This control's entries in 'Blink.Style.Defaults.defaultTheme': its
+-- own chrome and each of its parts.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
-defaultStyleEntries p = [ (progressBarStyleKey, (progressBarMetrics, progressBarStyle p)) ]
+defaultStyleEntries p =
+  [ (progressBarStyleKey,      (progressBarMetrics, progressBarStyle p))
+  , (progressBarTrackStyleKey, (toggleGroupMetrics, plainFillStyle p (paletteSurface p)))
+  , (progressBarFillStyleKey,  (toggleGroupMetrics, valueFillStyle p (paletteAccent p)))
+  ]

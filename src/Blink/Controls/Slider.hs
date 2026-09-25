@@ -15,6 +15,10 @@ module Blink.Controls.Slider
   ( SliderConfig (..)
   , defaultSliderConfig
   , sliderStyleKey
+  , sliderTrackStyleKey
+  , sliderFillStyleKey
+  , sliderThumbStyleKey
+  , sliderStyle
   , slider
   , value
   , step
@@ -23,7 +27,9 @@ module Blink.Controls.Slider
   , defaultStyleEntries
   ) where
 
-import Control.Monad (forM_, when)
+import Control.Monad (when)
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 
 import Blink.Controls.Control
@@ -31,10 +37,10 @@ import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), clampFra
 import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.View
-import Blink.View.Drawing (fillRect, strokeRect)
 import Blink.Element (Element (..), HasLayoutConfig (..), noIntrinsicSize, HasStep (..), HasValue (..))
 import Blink.Style
-import Blink.Controls.Style (progressBarMetrics, sliderStyle, thumbColourFor)
+import Blink.Rendering (TextAlign (..))
+import Blink.Controls.Style (plainFillStyle, progressBarMetrics, thumbStyle, toggleGroupMetrics, transparent, valueFillStyle)
 
 -- | The height of the thin filled bar drawn along the middle of the
 -- control's full bounds -- deliberately much shorter than the thumb, so
@@ -49,16 +55,11 @@ trackThickness = 4
 thumbSize :: Double
 thumbSize = 14
 
--- | The width of the focus ring drawn around the whole control while
--- focused.
-focusRingWidth :: Double
-focusRingWidth = 1
-
--- | Horizontal margin, on each side, between the control's own bounds and
--- its track -- so the groove and thumb never touch the control's edge (or
--- its focus ring).
+-- | Horizontal margin, on each side, between the inside of the control's
+-- 1px border and its track -- so the groove and thumb never touch the
+-- border the focus ring is drawn in.
 contentInset :: Double
-contentInset = 6
+contentInset = 5
 
 -- | @bounds@ narrowed by 'contentInset' on the left and right -- the
 -- track's own geometry, and what a mouse position maps to a value
@@ -145,14 +146,13 @@ resolveKeyboardValue s keyEvts v
 -- | Draws the groove (border colour), the filled bar and thumb (text
 -- colour, thumb shaded for hover\/drag), and a focus ring around the whole
 -- control when focused.
-drawTrack :: Style -> Rectangle -> Bool -> Bool -> Bool -> Double -> View e msg ()
-drawTrack s bounds focused hovered dragging v = do
-  forM_ (styleBorderColour s) $ \c -> withBounds groove (fillRect c)
-  withBounds track $ fillRect accent
-  withBounds thumb $ fillRect (thumbColourFor dragging hovered accent)
-  when focused $ strokeRect (soloBorder accent focusRingWidth)
+drawTrack :: Ord e => Rectangle -> Bool -> Bool -> Bool -> Double -> View e msg ()
+drawTrack bounds disabled hovered dragging v = do
+  withBounds groove (drawPart sliderTrackStyleKey valueState)
+  withBounds track  (drawPart sliderFillStyleKey valueState)
+  withBounds thumb  (drawPart sliderThumbStyleKey (Set.singleton (commonState disabled dragging hovered)))
   where
-    accent   = styleTextColour s
+    valueState = Set.singleton (commonState disabled False False)
     tr       = trackRect bounds
     clamped  = clampFraction v
     trackY   = rectY tr + (rectHeight tr - trackThickness) / 2
@@ -182,7 +182,6 @@ slider eid attrs = controlElement (scLayout cfg) (Element (scLayout cfg) noIntri
       , ccElementId = Just eid
       }
     body ci = do
-      s      <- currentStyle
       bounds <- getBounds
       let capturing = ciIsCaptured ci
           value0    = clampFraction (scValue cfg)
@@ -197,7 +196,7 @@ slider eid attrs = controlElement (scLayout cfg) (Element (scLayout cfg) noIntri
 
       when (newValue /= value0) $ runHandlers (scOnValueChanged cfg) newValue
 
-      drawTrack s bounds (ciFocused ci) (ciHovered ci) capturing value0
+      drawTrack bounds (ciDisabled ci) (ciHovered ci) capturing value0
 
 -- * Style
 
@@ -206,6 +205,40 @@ slider eid attrs = controlElement (scLayout cfg) (Element (scLayout cfg) noIntri
 sliderStyleKey :: StyleKey e
 sliderStyleKey = Class "slider"
 
--- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
+-- | The 'StyleKey' the groove the fill runs along resolves its style from.
+sliderTrackStyleKey :: StyleKey e
+sliderTrackStyleKey = Class "sliderTrack"
+
+-- | The 'StyleKey' the filled part of the track, up to the value, resolves
+-- its style from.
+sliderFillStyleKey :: StyleKey e
+sliderFillStyleKey = Class "sliderFill"
+
+-- | The 'StyleKey' the thumb resolves its style from, with the slider's
+-- hover as 'CommonMouseOver' and a drag as 'CommonPressed'.
+sliderThumbStyleKey :: StyleKey e
+sliderThumbStyleKey = Class "sliderThumb"
+
+-- | No background of its own, and a 1px border that's transparent at rest
+-- and draws the focus ring in the accent colour while focused.
+sliderStyle :: Palette -> StyleSet
+sliderStyle p = StyleSet
+  { styleBase = Style
+      { styleBackground = transparent
+      , styleTextColour = paletteTextPrimary p
+      , styleTextAlign  = AlignLeft
+      , styleBorder     = soloBorder transparent 1
+      }
+  , styleOverrides = Map.singleton FocusFocused
+      (\s -> s { styleBorder = withBorderColour (paletteAccent p) (styleBorder s) })
+  }
+
+-- | This control's entries in 'Blink.Style.Defaults.defaultTheme': its
+-- own chrome and each of its parts.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
-defaultStyleEntries p = [ (sliderStyleKey, (progressBarMetrics, sliderStyle p)) ]
+defaultStyleEntries p =
+  [ (sliderStyleKey,      (progressBarMetrics, sliderStyle p))
+  , (sliderTrackStyleKey, (toggleGroupMetrics, plainFillStyle p (paletteBorder p)))
+  , (sliderFillStyleKey,  (toggleGroupMetrics, valueFillStyle p (paletteAccent p)))
+  , (sliderThumbStyleKey, (toggleGroupMetrics, thumbStyle p))
+  ]

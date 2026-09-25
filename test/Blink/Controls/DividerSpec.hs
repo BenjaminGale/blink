@@ -6,12 +6,12 @@ import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
 import Blink.Controls.ControlBehaviour (styleAttributeSpec)
-import Blink.Controls.Divider (DividerConfig, divider, orientation, thickness)
+import Blink.Controls.Divider (DividerConfig, divider, dividerLineStyleKey, orientation, thickness)
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Geometry (Alignment (Center), Orientation (..), Rectangle (..))
 import Blink.Layout.Constraints (exactly)
-import Blink.Rendering (DrawCommand (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..), noBorder, soloBorder)
+import Blink.Rendering (Colour (..), DrawCommand (..))
+import Blink.Style (StyleSet (..), Theme (..))
 import Blink.View
 import Blink.Element (align, runElement, width)
 
@@ -20,26 +20,22 @@ data TestElement = Bar deriving (Eq, Ord, Show)
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
 
--- | Border set (unlike most other controls' test styles) since the drawn
--- line itself -- not some secondary decoration -- is what a divider's
--- border colour means; see 'noLineTheme' for the "nothing set" case.
-testStyle :: Style
-testStyle = (plainStyle testColour) { styleBorder = soloBorder testColour 0 }
-
 testStyleSet :: StyleSet
-testStyleSet = plainStyleSet testStyle
+testStyleSet = plainStyleSet (plainStyle testColour)
+
+-- | The line part in @colour@, everything else in 'testColour'.
+themeWithLine :: Colour -> Theme TestElement
+themeWithLine colour = (mkTestTheme standardMetrics testStyleSet)
+  { themeElementStyles = Map.singleton dividerLineStyleKey (standardMetrics, plainStyleSet (plainStyle colour)) }
 
 testTheme :: Theme TestElement
-testTheme = mkTestTheme standardMetrics testStyleSet
+testTheme = themeWithLine testColour
 
--- | Same as 'testTheme' but with no border colour set, so the "draws
--- nothing" tests below can confirm the line itself goes undrawn -- the
--- chrome background\/border 'control' always draws is unaffected.
+-- | The line part transparent, so the "draws nothing" test below can
+-- confirm the line itself goes undrawn -- the chrome background 'control'
+-- always draws is unaffected.
 noLineTheme :: Theme TestElement
-noLineTheme = Theme
-  { themeElementStyles = Map.empty
-  , themeDefaultStyle  = (standardMetrics, testStyleSet { styleBase = testStyle { styleBorder = noBorder } })
-  }
+noLineTheme = themeWithLine (RGBA 0 0 0 0)
 
 -- | A horizontal divider's own resolved bounds at 'testBounds' with the
 -- default thickness (1) and 'testMetrics': fills the offered width, and is
@@ -79,11 +75,11 @@ spec = describe "Blink.Controls.Divider" $ do
       getDrawCommands ctx `shouldContain` [FillRect contentRect testColour]
 
   describe "rendering" $ do
-    it "fills the content area in the style's border colour by default" $ do
+    it "fills the content area in the line part's colour" $ do
       ctx <- run []
       getDrawCommands ctx `shouldContain` [FillRect contentRect testColour]
 
-    it "draws nothing when no border colour is set, leaving the chrome background alone" $ do
+    it "draws nothing when the line part is transparent, leaving the chrome background alone" $ do
       ctx <- runWith noLineTheme []
       getDrawCommands ctx `shouldNotContain` [FillRect contentRect testColour]
 

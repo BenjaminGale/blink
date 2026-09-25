@@ -42,6 +42,7 @@ module Blink.Controls.ScrollBar
   , scrollBarStyleKey
   , scrollBarButtonStyleKey
   , scrollBarTrackStyleKey
+  , scrollBarThumbStyleKey
   , scrollBar
   , orientation
   , scrollBarThickness
@@ -55,7 +56,8 @@ module Blink.Controls.ScrollBar
   , defaultStyleEntries
   ) where
 
-import Control.Monad (forM_, void, when)
+import Control.Monad (void, when)
+import qualified Data.Set as Set
 
 import Blink.Controls.Button (ButtonConfig (..), onActivated)
 import Blink.Controls.RepeatButton (RepeatButtonConfig (..), defaultRepeatButtonConfig, repeatButtonBase)
@@ -65,10 +67,10 @@ import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (ImagePath)
 import Blink.View
-import Blink.View.Drawing (drawImage, fillRect, withClip)
+import Blink.View.Drawing (drawImage, withClip)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, height, noIntrinsicSize, runElement, width, HasOrientation (..), HasStep (..))
 import Blink.Style
-import Blink.Controls.Style (iconStyle, progressBarMetrics, sliderStyle, thumbColourFor, toggleGroupMetrics, toggleGroupStyle)
+import Blink.Controls.Style (iconStyle, plainFillStyle, progressBarMetrics, thumbStyle, toggleGroupMetrics, toggleGroupStyle)
 
 -- | The thickness (cross-axis extent) of the whole control, and of each
 -- arrow button's extent along the main axis. Both fixed rather than
@@ -212,12 +214,10 @@ grabOffsetAt thumbOrigin0 thumbLen mouseMain
 
 -- | Draws the full-length groove (border colour, if set) and the thumb
 -- (text colour, shaded for hover\/drag) at its position for @v@.
-drawTrack :: Orientation -> Style -> Rectangle -> Bool -> Bool -> Double -> Double -> View e msg ()
-drawTrack o s bounds hovered dragging frac v = do
-  forM_ (styleBorderColour s) $ \c -> withBounds bounds (fillRect c)
-  withBounds thumb $ fillRect (thumbColourFor dragging hovered accent)
+drawThumb :: Ord e => Orientation -> Rectangle -> Bool -> Bool -> Bool -> Double -> Double -> View e msg ()
+drawThumb o bounds disabled hovered dragging frac v =
+  withBounds thumb (drawPart scrollBarThumbStyleKey (Set.singleton (commonState disabled dragging hovered)))
   where
-    accent   = styleTextColour s
     thumbLen = thumbLengthFor o bounds frac
     thumb    = mainRect o bounds (thumbOriginFor o bounds thumbLen v) thumbLen
 
@@ -295,7 +295,6 @@ scrollBar tag attrs = controlElement (sbLayout cfg) box ctrl
       }
 
     trackBody ci = do
-      s      <- currentStyle
       bounds <- getBounds
       value0 <- getScrollState scrollEid
       let trackId  = tag ScrollBarTrack
@@ -315,7 +314,7 @@ scrollBar tag attrs = controlElement (sbLayout cfg) box ctrl
             else pure current
         let newValue = fractionForOrigin o bounds thumbLen (mouseMain - grabOffset)
         when (newValue /= value0) $ requestScrollTo scrollEid newValue
-      drawTrack o s bounds (ciHovered ci) (ciIsCaptured ci) (sbVisibleFraction cfg) value0
+      drawThumb o bounds (ciDisabled ci) (ciHovered ci) (ciIsCaptured ci) (sbVisibleFraction cfg) value0
 
     ctrl = (sbControl cfg)
       { ccElementId   = Just scrollEid
@@ -436,22 +435,26 @@ scrollViewport mkId cfg = do
 -- * Style
 
 -- | 'StyleKey's 'Blink.Controls.ScrollBar.scrollBar' resolves its own
--- chrome, its arrow buttons, and its track from unless overridden via
--- 'Blink.Controls.Control.style'.
+-- chrome, its arrow buttons, and its track (whose background is the
+-- groove) from unless overridden via 'Blink.Controls.Control.style'.
 scrollBarStyleKey, scrollBarButtonStyleKey, scrollBarTrackStyleKey :: StyleKey e
 scrollBarStyleKey       = Class "scrollBar"
 scrollBarButtonStyleKey = Class "scrollBarButton"
 scrollBarTrackStyleKey  = Class "scrollBarTrack"
 
--- | This control's entries in 'Blink.Style.Defaults.defaultTheme' -- three
--- shapes from "Blink.Controls.Style", none of them owned by the scrollbar
--- itself: its outer container reuses the plain wrapper look, its arrow
--- buttons reuse the plain-icon look (no background\/border of their own --
--- just the icon, recolouring on hover), and its track reuses the slider's
--- track look.
+-- | The 'StyleKey' the thumb resolves its style from, with the track's
+-- hover as 'CommonMouseOver' and a drag as 'CommonPressed'.
+scrollBarThumbStyleKey :: StyleKey e
+scrollBarThumbStyleKey = Class "scrollBarThumb"
+
+-- | This control's entries in 'Blink.Style.Defaults.defaultTheme': its
+-- outer container reuses the plain wrapper look, its arrow buttons the
+-- plain-icon look (just the icon, recolouring on hover), its track a flat
+-- groove, and its thumb the same look as a slider's.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
   [ (scrollBarStyleKey,       (toggleGroupMetrics, toggleGroupStyle p))
   , (scrollBarButtonStyleKey, (toggleGroupMetrics, iconStyle p))
-  , (scrollBarTrackStyleKey,  (progressBarMetrics, sliderStyle p))
+  , (scrollBarTrackStyleKey,  (progressBarMetrics, plainFillStyle p (paletteBorder p)))
+  , (scrollBarThumbStyleKey,  (toggleGroupMetrics, thumbStyle p))
   ]

@@ -90,6 +90,11 @@ module Blink.Controls.Control
     -- * Elements
   , chromeElement
   , controlElement
+
+    -- * Parts
+  , commonState
+  , partStyle
+  , drawPart
   ) where
 
 import Control.Monad (forM_, void, when)
@@ -614,15 +619,18 @@ marginInsetBounds m = do
 -- 'ccActiveStates' contributed by a wrapping layer are unioned in.
 intrinsicStates :: Bool -> ControlInteraction e msg -> Set VisualState
 intrinsicStates disabled ci = Set.fromList
-  [ common
+  [ commonState disabled (ciHeld ci) (ciHovered ci)
   , if ciFocused ci then FocusFocused else FocusUnfocused
   ]
-  where
-    common
-      | disabled       = CommonDisabled
-      | ciHeld ci      = CommonPressed
-      | ciHovered ci   = CommonMouseOver
-      | otherwise      = CommonNormal
+
+-- | The common 'VisualState' for something @disabled@, @pressed@, or
+-- @hovered@, checked in that order.
+commonState :: Bool -> Bool -> Bool -> VisualState
+commonState disabled pressed hovered
+  | disabled  = CommonDisabled
+  | pressed   = CommonPressed
+  | hovered   = CommonMouseOver
+  | otherwise = CommonNormal
 
 -- | Draws a control's background and border from its resolved 'Metrics'
 -- and 'Style', then runs @body@ clipped to the remaining space inside the
@@ -913,3 +921,19 @@ chromeElement layout styleKey content run = Element
 -- chrome from the same style key @ctrl@ draws with.
 controlElement :: Ord e => Layout -> Element e msg -> ControlConfig e msg -> Element e msg
 controlElement layout content ctrl = chromeElement layout (ccStyleKey ctrl) content (void (control ctrl))
+
+-- | The style a part of a control draws with: @partKey@'s style resolved for
+-- @states@. A part is a region a control draws inside itself (a slider's
+-- thumb, a progress bar's fill) with its own 'StyleKey', so a theme styles
+-- it separately from the control around it.
+partStyle :: Ord e => StyleKey e -> Set VisualState -> View e msg Style
+partStyle partKey states = do
+  (_, styleSet) <- getStyleSet partKey
+  pure (resolveStyle styleSet states)
+
+-- | Draws a part into the current bounds: the background and border of
+-- @partKey@'s style resolved for @states@ (see 'partStyle').
+drawPart :: Ord e => StyleKey e -> Set VisualState -> View e msg ()
+drawPart partKey states = do
+  s <- partStyle partKey states
+  withBackground (backgroundRadii (styleBorder s)) (styleBackground s) (withBorder (styleBorder s) (pure ()))

@@ -4,8 +4,9 @@ Module: Blink.Controls.Style
 
 The shape vocabulary shared by more than one built-in control -- the
 "bordered box" ('buttonStyle') and "flat row" ('flatRowStyle') looks, the
-track look ('sliderStyle') shared by a slider and a scrollbar's own
-track, and the plain wrapper look ('toggleGroupStyle') shared by a toggle
+fill and thumb looks ('plainFillStyle', 'valueFillStyle', 'thumbStyle')
+shared by the parts of a slider, scrollbar and progress bar, and the plain
+wrapper look ('toggleGroupStyle') shared by a toggle
 group, a radio group, and a scrollbar's own container -- plus the
 'Metrics' each pairs with in 'Blink.Style.Defaults.defaultTheme'.
 Also 'containerStyle', not registered by 'Blink.Style.Defaults.defaultTheme'
@@ -29,13 +30,14 @@ module Blink.Controls.Style
   , toggleGroupMetrics
   , buttonStyle
   , flatRowStyle
-  , sliderStyle
   , toggleGroupStyle
   , containerStyle
   , iconStyleKey
   , iconStyle
   , shade
-  , thumbColourFor
+  , plainFillStyle
+  , valueFillStyle
+  , thumbStyle
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -133,25 +135,6 @@ flatRowStyle p = StyleSet
       ]
   }
 
--- | A track/fill style: transparent background, 'paletteBorder' for the
--- groove (drawn via 'styleBorderColour'), 'paletteAccent' for the filled
--- track and thumb (drawn via 'styleTextColour'). Used for a slider and a
--- scrollbar's own track. No 'FocusFocused' override -- the focus ring is
--- drawn separately, always in accent (see
--- 'Blink.Controls.Slider.drawTrack'), so overriding 'styleBorderColour'
--- here would only recolour the groove.
-sliderStyle :: Palette -> StyleSet
-sliderStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground   = transparent
-      , styleTextColour   = paletteAccent p
-      , styleTextAlign    = AlignLeft
-      , styleBorder       = soloBorder (paletteBorder p) 0
-      }
-  , styleOverrides = Map.fromList
-      [ (CommonDisabled, \s -> s { styleTextColour = paletteTextMuted p }) ]
-  }
-
 -- | A plain, transparent, borderless style for a group's own container --
 -- paired with 'toggleGroupMetrics' alongside it above. Shared by
 -- 'Blink.Controls.ToggleGroup.toggleButtonGroup', 'Blink.Controls.ToggleGroup.radioButtonGroup',
@@ -228,18 +211,36 @@ iconStyle p = StyleSet
 
 -- | Darkens @c@'s RGB toward black by @factor@ (in @[0, 1]@; 1 leaves it
 -- unchanged), leaving alpha alone. Used to shade a thumb on hover\/drag
--- without needing a dedicated theme colour for each -- see 'thumbColourFor'.
+-- without needing a dedicated theme colour for each -- see 'thumbStyle'.
 shade :: Double -> Colour -> Colour
 shade factor (RGBA r g b a) = RGBA (r * factor) (g * factor) (b * factor) a
 
--- | A slider's or scrollbar's thumb colour for this frame: darkened while a
--- drag is in progress (checked first, since a drag can continue after the
--- pointer has moved off the thumb entirely), a lighter darkening on hover,
--- or @accent@ unchanged otherwise. Only ever applied to the thumb -- the
--- groove and any filled track stay @accent@ regardless, so hovering or
--- dragging never recolours anything but the thing being grabbed.
-thumbColourFor :: Bool -> Bool -> Colour -> Colour
-thumbColourFor dragging hovered accent
-  | dragging  = shade 0.7 accent
-  | hovered   = shade 0.85 accent
-  | otherwise = accent
+-- | A flat fill in @colour@, for a part of a control that's only ever a
+-- solid region (a groove, a divider's line). No state changes its look.
+plainFillStyle :: Palette -> Colour -> StyleSet
+plainFillStyle p colour = StyleSet
+  { styleBase = Style
+      { styleBackground = colour
+      , styleTextColour = paletteTextPrimary p
+      , styleTextAlign  = AlignLeft
+      , styleBorder     = noBorder
+      }
+  , styleOverrides = Map.empty
+  }
+
+-- | 'plainFillStyle' for a part showing a value (a progress bar's or
+-- slider's fill), muted while disabled.
+valueFillStyle :: Palette -> Colour -> StyleSet
+valueFillStyle p colour = (plainFillStyle p colour)
+  { styleOverrides = Map.singleton CommonDisabled (\s -> s { styleBackground = paletteTextMuted p }) }
+
+-- | A slider's or scrollbar's thumb: the accent colour, darkened on hover
+-- and further while dragged, muted while disabled.
+thumbStyle :: Palette -> StyleSet
+thumbStyle p = (valueFillStyle p (paletteAccent p))
+  { styleOverrides = Map.fromList
+      [ (CommonMouseOver, \s -> s { styleBackground = shade 0.85 (paletteAccent p) })
+      , (CommonPressed,   \s -> s { styleBackground = shade 0.7 (paletteAccent p) })
+      , (CommonDisabled,  \s -> s { styleBackground = paletteTextMuted p })
+      ]
+  }

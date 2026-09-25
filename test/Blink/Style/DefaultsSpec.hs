@@ -7,7 +7,7 @@ import Test.Hspec
 
 import Blink.Controls.Button (buttonStyleKey)
 import Blink.Controls.Checkbox (checkboxStyleKey)
-import Blink.Controls.Divider (dividerStyleKey)
+import Blink.Controls.Divider (dividerLineStyleKey, dividerStyleKey)
 import Blink.Controls.Style (iconStyleKey, transparent)
 import Blink.Controls.Image (imageStyleKey)
 import Blink.Controls.Label (labelStyleKey)
@@ -15,15 +15,15 @@ import Blink.Controls.List (listItemStyleKey, listStyleKey)
 import Blink.Controls.Menu (menuItemStyleKey)
 import Blink.Controls.MenuBar (menuBarLabelStyleKey, menuBarListStyleKey, menuBarStyleKey)
 import Blink.Controls.MenuButton (menuButtonListStyleKey)
-import Blink.Controls.ProgressBar (progressBarStyleKey)
+import Blink.Controls.ProgressBar (progressBarFillStyleKey, progressBarStyleKey, progressBarTrackStyleKey)
 import Blink.Controls.RadioButton (radioButtonStyleKey)
-import Blink.Controls.ScrollBar (scrollBarButtonStyleKey, scrollBarStyleKey, scrollBarTrackStyleKey)
+import Blink.Controls.ScrollBar (scrollBarButtonStyleKey, scrollBarStyleKey, scrollBarThumbStyleKey, scrollBarTrackStyleKey)
 import Blink.Controls.ScrollPanel (scrollPanelStyleKey)
-import Blink.Controls.Slider (sliderStyleKey)
-import Blink.Controls.TextInput (textInputStyleKey)
+import Blink.Controls.Slider (sliderFillStyleKey, sliderStyleKey, sliderThumbStyleKey, sliderTrackStyleKey)
+import Blink.Controls.TextInput (textInputSelectionStyleKey, textInputStyleKey)
 import Blink.Controls.ToggleButton (toggleButtonStyleKey, toggleChecked)
 import Blink.Controls.ToggleGroup (radioButtonGroupStyleKey, toggleButtonGroupStyleKey)
-import Blink.Controls.Table (tableColumnDividerStyleKey, tableHeaderStyleKey)
+import Blink.Controls.Table (tableColumnDividerLineStyleKey, tableColumnDividerStyleKey, tableHeaderStyleKey)
 import Blink.Controls.Tree (treeChevronStyleKey)
 import Blink.Controls.Fixtures (noInput)
 import Blink.Geometry (Rectangle (..))
@@ -65,13 +65,14 @@ spec = describe "Blink.Style.Defaults" $ do
       Map.keys (themeElementStyles (defaultTheme testPalette :: Theme ()))
         `shouldMatchList`
           [ buttonStyleKey, toggleButtonStyleKey, checkboxStyleKey, radioButtonStyleKey, textInputStyleKey
-          , progressBarStyleKey, sliderStyleKey, dividerStyleKey, imageStyleKey, labelStyleKey
+          , progressBarStyleKey, progressBarTrackStyleKey, progressBarFillStyleKey, sliderStyleKey, sliderTrackStyleKey, sliderFillStyleKey, sliderThumbStyleKey
+          , dividerStyleKey, dividerLineStyleKey, textInputSelectionStyleKey, imageStyleKey, labelStyleKey
           , toggleButtonGroupStyleKey, radioButtonGroupStyleKey
-          , scrollBarStyleKey, scrollBarButtonStyleKey, scrollBarTrackStyleKey
+          , scrollBarStyleKey, scrollBarButtonStyleKey, scrollBarTrackStyleKey, scrollBarThumbStyleKey
           , scrollPanelStyleKey
           , listStyleKey, listItemStyleKey
           , treeChevronStyleKey
-          , tableHeaderStyleKey, tableColumnDividerStyleKey
+          , tableHeaderStyleKey, tableColumnDividerStyleKey, tableColumnDividerLineStyleKey
           , iconStyleKey
           , menuItemStyleKey
           , menuButtonListStyleKey

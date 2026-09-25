@@ -38,11 +38,13 @@ module Blink.Controls.Table
     -- * Style
   , tableHeaderStyleKey
   , tableColumnDividerStyleKey
+  , tableColumnDividerLineStyleKey
   , defaultStyleEntries
   ) where
 
-import Control.Monad (forM_, void, when)
+import Control.Monad (void, when)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 
 import Blink.Controls.Control
 import Blink.Controls.List hiding (defaultStyleEntries)
@@ -54,13 +56,12 @@ import Blink.Geometry (Alignment (TopLeft), Insets (..), Point (pointX), Rectang
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), Length, exactly, fill)
 import Blink.View
-  ( CursorShape (..), Effect, View, currentStyle, getBounds, getExtentState, getMousePos, getStyleSet
+  ( CursorShape (..), Effect, View, getBounds, getExtentState, getMousePos, getStyleSet
   , requestCursor, requestExtentBy, withBounds
   )
-import Blink.View.Drawing (fillRect)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style
-import Blink.Controls.Style (transparent)
+import Blink.Controls.Style (plainFillStyle, transparent)
 
 -- | Identifies one part of a 'table' for the purpose of building
 -- element ids -- every part 'listBase' itself already needs (the root,
@@ -401,9 +402,9 @@ resizeHandle mkDividerId idx = Element
       when dragging $ do
         mouseX <- pointX <$> getMousePos
         requestExtentBy eid (mouseX - (rectX bounds + handleWidth / 2))
-      s <- currentStyle
-      let lineRect = bounds { rectX = rectX bounds + (handleWidth - 1) / 2, rectWidth = 1 }
-      forM_ (styleBorderColour s) (\c -> withBounds lineRect (fillRect c))
+      let lineRect  = bounds { rectX = rectX bounds + (handleWidth - 1) / 2, rectWidth = 1 }
+          lineState = commonState (ciDisabled ci) (ciHeld ci) (ciHovered ci)
+      withBounds lineRect (drawPart tableColumnDividerLineStyleKey (Set.singleton lineState))
 
 -- * Style
 
@@ -454,18 +455,29 @@ tableColumnDividerMetrics = Metrics
   , metricsPadding     = uniform 0
   }
 
--- | A vertical line, 'paletteBorder' by default, tinted on hover the
--- same way a header cell is.
+-- | The 'StyleKey' the 1px line drawn down the middle of each resize
+-- handle resolves its style from, with the handle's hover as
+-- 'CommonMouseOver' and a press on it as 'CommonPressed'.
+tableColumnDividerLineStyleKey :: StyleKey e
+tableColumnDividerLineStyleKey = Class "tableColumnDividerLine"
+
+-- | A resize handle's own chrome: nothing drawn, since its line is a part.
 tableColumnDividerStyle :: Palette -> StyleSet
 tableColumnDividerStyle p = StyleSet
   { styleBase = Style
       { styleBackground   = transparent
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignLeft
-      , styleBorder       = soloBorder (paletteBorder p) 0
+      , styleBorder       = noBorder
       }
-  , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleBorder = withBorderColour (paletteSurfaceHover p) (styleBorder s) })
+  , styleOverrides = Map.empty
   }
+
+-- | A vertical line, 'paletteBorder' by default, tinted on hover the same
+-- way a header cell is.
+tableColumnDividerLineStyle :: Palette -> StyleSet
+tableColumnDividerLineStyle p = (plainFillStyle p (paletteBorder p))
+  { styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleBackground = paletteSurfaceHover p }) }
 
 -- | This control's own entries in 'Blink.Style.Defaults.defaultTheme'.
 -- Needed at all only because 'Blink.Controls.Control.defaultControlConfig'
@@ -477,4 +489,5 @@ defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
   [ (tableHeaderStyleKey, (tableHeaderMetrics, tableHeaderStyle p))
   , (tableColumnDividerStyleKey, (tableColumnDividerMetrics, tableColumnDividerStyle p))
+  , (tableColumnDividerLineStyleKey, (tableColumnDividerMetrics, tableColumnDividerLineStyle p))
   ]

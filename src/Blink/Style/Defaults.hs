@@ -53,9 +53,10 @@ import qualified Data.Map.Strict as Map
 import Blink.Rendering (TextAlign (..))
 import Blink.Style
 import Blink.Controls.Style
-  (buttonStyle, containerStyle, controlMetrics, flatRowStyle, iconStyle, iconStyleKey, sliderStyle
+  (buttonStyle, containerStyle, controlMetrics, flatRowStyle, iconStyle, iconStyleKey
   , toggleGroupMetrics, toggleGroupStyle
   )
+import Blink.Controls.Slider (sliderStyle)
 import Blink.Controls.Divider (dividerStyle)
 import Blink.Controls.Label (labelStyle)
 import Blink.Controls.ProgressBar (progressBarStyle)

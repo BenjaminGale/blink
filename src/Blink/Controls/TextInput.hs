@@ -11,6 +11,7 @@ module Blink.Controls.TextInput
   ( TextInputConfig (..)
   , defaultTextInputConfig
   , textInputStyleKey
+  , textInputSelectionStyleKey
   , textInput
   , value
   , placeholder
@@ -28,6 +29,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement)
@@ -40,7 +42,7 @@ import Blink.View.Drawing (fillRect, drawText)
 import Blink.View.Selection (selectionHasExtent, selectionLow, selectionHigh, cursor, extendActive)
 import Blink.Element (Element (..), HasLayoutConfig (..), HasValue (..))
 import Blink.Style
-import Blink.Controls.Style (buttonStyle, controlMetrics)
+import Blink.Controls.Style (buttonStyle, controlMetrics, plainFillStyle, toggleGroupMetrics)
 
 -- | Every capability 'textInput' resolves: the wrapped 'ControlConfig',
 -- its current value, 'placeholder', 'inputFilter'\/'displayFilter', and
@@ -294,7 +296,7 @@ drawTextInputContent s bounds displayValue placeholderText canEdit ox sel@(Selec
           (rectY bounds)
           (realToFrac (hiX - loX))
           (rectHeight bounds)
-    withBounds selRect $ fillRect (RGBA 0.3 0.5 1.0 0.4)
+    withBounds selRect (drawPart textInputSelectionStyleKey (Set.singleton CommonNormal))
 
   let textBounds = bounds { rectX = rectX bounds - ox }
   if T.null displayValue && not (T.null placeholderText)
@@ -391,6 +393,15 @@ textInputStyle p = base
   where
     base = buttonStyle AlignLeft p
 
--- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
+-- | The 'StyleKey' the highlight behind selected text resolves its style
+-- from.
+textInputSelectionStyleKey :: StyleKey e
+textInputSelectionStyleKey = Class "textInputSelection"
+
+-- | This control's entries in 'Blink.Style.Defaults.defaultTheme': its
+-- own chrome and its selection highlight, a translucent blue.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
-defaultStyleEntries p = [ (textInputStyleKey, (controlMetrics, textInputStyle p)) ]
+defaultStyleEntries p =
+  [ (textInputStyleKey,          (controlMetrics, textInputStyle p))
+  , (textInputSelectionStyleKey, (toggleGroupMetrics, plainFillStyle p (RGBA 0.3 0.5 1.0 0.4)))
+  ]

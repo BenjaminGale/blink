@@ -10,9 +10,10 @@ import Blink.Controls.Fixtures (contentRectFor, focusHeldBy, hitRectFor, mkTestT
 import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Controls.Slider (SliderConfig, onValueChanged, slider, step, value)
+import Blink.Controls.Slider
+  (SliderConfig, onValueChanged, slider, sliderStyleKey, sliderThumbStyleKey, sliderTrackStyleKey, step, value)
 import Blink.Rendering (Colour (..), DrawCommand (..))
-import Blink.Style (Style (..), StyleSet (..), Theme (..), soloBorder)
+import Blink.Style (Style (..), StyleSet (..), Theme (..), VisualState (..), soloBorder)
 import Blink.View
 import Blink.Element (runElement)
 
@@ -32,8 +33,17 @@ testStyle = plainStyle testColour
 testStyleSet :: StyleSet
 testStyleSet = plainStyleSet testStyle
 
+-- | Every part in 'testColour', except the thumb, which darkens on hover
+-- and further while dragged.
 testTheme :: Theme TestElement
-testTheme = mkTestTheme standardMetrics testStyleSet
+testTheme = (mkTestTheme standardMetrics testStyleSet)
+  { themeElementStyles = Map.singleton sliderThumbStyleKey (standardMetrics, thumbStyleSet) }
+
+thumbStyleSet :: StyleSet
+thumbStyleSet = StyleSet testStyle (Map.fromList
+  [ (CommonMouseOver, \st -> st { styleBackground = hoverThumbColour })
+  , (CommonPressed,   \st -> st { styleBackground = dragThumbColour })
+  ])
 
 hitRect :: Rectangle
 hitRect = hitRectFor testBounds
@@ -44,7 +54,7 @@ contentRect = contentRectFor testBounds
 -- | The horizontal margin 'Blink.Controls.Slider.contentInset' leaves
 -- between 'contentRect' and the track on each side.
 trackInset :: Double
-trackInset = 6
+trackInset = 5
 
 -- | The track's own rect: 'contentRect' narrowed by 'trackInset' on the
 -- left and right.
@@ -70,9 +80,7 @@ thumbColouredAt c x = FillRect (contentRect { rectX = x, rectY = rectY contentRe
 thumbAt :: Double -> DrawCommand
 thumbAt = thumbColouredAt testColour
 
--- | 'testColour' darkened toward black by the same factors
--- 'Blink.Controls.Style.thumbColourFor' applies on hover (0.85) and drag
--- (0.7), computed rather than hand-rounded so this matches exactly.
+-- | The thumb's hover and drag colours in 'testTheme'.
 hoverThumbColour, dragThumbColour :: Colour
 hoverThumbColour = RGBA (0.4 * 0.85) (0.4 * 0.85) (0.4 * 0.85) 1
 dragThumbColour  = RGBA (0.4 * 0.7) (0.4 * 0.7) (0.4 * 0.7) 1
@@ -80,22 +88,34 @@ dragThumbColour  = RGBA (0.4 * 0.7) (0.4 * 0.7) (0.4 * 0.7) 1
 -- | The full-width groove, at the same vertical position as the filled
 -- track 'filledAt' draws over.
 groove :: Colour -> DrawCommand
-groove c = FillRect (trackRect { rectY = rectY contentRect + 33, rectHeight = 4 }) c
+groove = FillRect grooveRect
+
+grooveRect :: Rectangle
+grooveRect = trackRect { rectY = rectY contentRect + 33, rectHeight = 4 }
 
 grooveColour :: Colour
 grooveColour = RGBA 0.5 0.5 0.5 1
 
--- | A style identical to 'testStyle' but with a border colour set, so the
--- groove tests below can confirm it's drawn from that colour.
-withGrooveColour :: Theme TestElement
-withGrooveColour = Theme
-  { themeElementStyles = Map.empty
-  , themeDefaultStyle  = (standardMetrics, StyleSet (testStyle { styleBorder = soloBorder grooveColour 0 }) Map.empty)
+-- | 'testTheme' with the track part in @colour@.
+withGrooveColour :: Colour -> Theme TestElement
+withGrooveColour colour = testTheme
+  { themeElementStyles = Map.insert sliderTrackStyleKey (standardMetrics, plainStyleSet (testStyle { styleBackground = colour }))
+      (themeElementStyles testTheme)
   }
 
--- | The focus ring around the whole control.
+-- | 'testTheme' with the slider's own style given a 1px border that's
+-- 'testColour' only while focused.
+withFocusBorder :: Theme TestElement
+withFocusBorder = testTheme
+  { themeElementStyles = Map.insert sliderStyleKey (standardMetrics, focusBorderStyleSet) (themeElementStyles testTheme) }
+  where
+    focusBorderStyleSet = StyleSet (testStyle { styleBorder = soloBorder transparentColour 1 })
+      (Map.singleton FocusFocused (\st -> st { styleBorder = soloBorder testColour 1 }))
+    transparentColour = RGBA 0 0 0 0
+
+-- | The focus ring, on the control's border edge.
 ringAt :: DrawCommand
-ringAt = StrokeBorder contentRect (soloBorder testColour 1)
+ringAt = StrokeBorder hitRect (soloBorder testColour 1)
 
 type Attribute' = Attribute (SliderConfig TestElement String)
 
@@ -105,8 +125,11 @@ seedCtx = emptyViewContext testBounds noInput testTheme
 run :: [Attribute'] -> IO (ViewContext TestElement String)
 run attrs = snd <$> runView (runElement (slider Handle attrs)) seedCtx
 
-runWithGroove :: [Attribute'] -> IO (ViewContext TestElement String)
-runWithGroove attrs = snd <$> runView (runElement (slider Handle attrs)) (emptyViewContext testBounds noInput withGrooveColour)
+runWithGroove :: Colour -> [Attribute'] -> IO (ViewContext TestElement String)
+runWithGroove colour attrs = snd <$> runView (runElement (slider Handle attrs)) (emptyViewContext testBounds noInput (withGrooveColour colour))
+
+runWithFocusBorder :: View TestElement String () -> IO (ViewContext TestElement String)
+runWithFocusBorder v = snd <$> runView v (emptyViewContext testBounds noInput withFocusBorder)
 
 spec :: Spec
 spec = describe "Blink.Controls.Slider" $ do
@@ -115,63 +138,63 @@ spec = describe "Blink.Controls.Slider" $ do
   describe "rendering" $ do
     it "fills the correct proportion and centres the thumb at 0.5" $ do
       ctx <- run [value 0.5]
-      getDrawCommands ctx `shouldContain` [filledAt 29]
+      getDrawCommands ctx `shouldContain` [filledAt 30]
       getDrawCommands ctx `shouldContain` [thumbAt 43]
 
     it "fills nothing and pins the thumb to the start at 0.0" $ do
       ctx <- run [value 0.0]
       getDrawCommands ctx `shouldContain` [filledAt 0]
-      getDrawCommands ctx `shouldContain` [thumbAt 21]
+      getDrawCommands ctx `shouldContain` [thumbAt 20]
 
     it "fills the full track and pins the thumb to the end at 1.0" $ do
       ctx <- run [value 1.0]
-      getDrawCommands ctx `shouldContain` [filledAt 58]
-      getDrawCommands ctx `shouldContain` [thumbAt 65]
+      getDrawCommands ctx `shouldContain` [filledAt 60]
+      getDrawCommands ctx `shouldContain` [thumbAt 66]
 
     it "clamps values above 1.0 to the end" $ do
       ctx <- run [value 1.5]
-      getDrawCommands ctx `shouldContain` [filledAt 58]
-      getDrawCommands ctx `shouldContain` [thumbAt 65]
+      getDrawCommands ctx `shouldContain` [filledAt 60]
+      getDrawCommands ctx `shouldContain` [thumbAt 66]
 
     it "clamps values below 0.0 to the start" $ do
       ctx <- run [value (-0.5)]
       getDrawCommands ctx `shouldContain` [filledAt 0]
-      getDrawCommands ctx `shouldContain` [thumbAt 21]
+      getDrawCommands ctx `shouldContain` [thumbAt 20]
 
   describe "groove" $ do
-    it "draws the full-width groove in the style's border colour when one is set" $ do
-      ctx <- runWithGroove [value 0.3]
+    it "draws the full-width groove in the track part's colour" $ do
+      ctx <- runWithGroove grooveColour [value 0.3]
       getDrawCommands ctx `shouldContain` [groove grooveColour]
 
-    it "draws no full-width groove when no border colour is set" $ do
-      ctx <- run [value 0.3]
-      getDrawCommands ctx `shouldNotContain` [groove testColour]
+    it "draws no groove when the track part is transparent" $ do
+      ctx <- runWithGroove (RGBA 0 0 0 0) [value 0.3]
+      [ d | d@(FillRect r _) <- getDrawCommands ctx, r == grooveRect ] `shouldBe` []
 
   describe "focus ring" $ do
     it "draws a focus ring around the whole control while focused" $ do
-      ctx <- run [value 0.5]
+      ctx <- runWithFocusBorder (runElement (slider Handle [value 0.5]))
       getDrawCommands ctx `shouldContain` [ringAt]
 
     it "draws no focus ring while not focused" $ do
-      ctx <- snd <$> runView (focusHeldBy FocusHolder >> runElement (slider Handle [value 0.5])) seedCtx
+      ctx <- runWithFocusBorder (focusHeldBy FocusHolder >> runElement (slider Handle [value 0.5]))
       getDrawCommands ctx `shouldNotContain` [ringAt]
 
   describe "hover/drag thumb colour" $ do
     it "draws the thumb in the plain colour when neither hovered nor dragging" $ do
       ctx <- run [value 0.5]
       getDrawCommands ctx `shouldContain` [thumbAt 43]
-      getDrawCommands ctx `shouldContain` [filledAt 29]
+      getDrawCommands ctx `shouldContain` [filledAt 30]
 
     it "darkens only the thumb, not the filled track, on hover" $ do
       result <- runInteractions testBounds seedCtx (runElement (slider Handle [value 0.5])) [MoveTo midPoint] []
       let draws = resultDraws result
       draws `shouldContain` [thumbColouredAt hoverThumbColour 43]
-      draws `shouldContain` [filledAt 29]
+      draws `shouldContain` [filledAt 30]
 
     it "darkens the thumb further while dragging than while merely hovering" $ do
       result <- runInteractions testBounds seedCtx (runElement (slider Handle [value 0])) [] [MouseDown midPoint]
       let draws = resultDraws result
-      draws `shouldContain` [thumbColouredAt dragThumbColour 21]
+      draws `shouldContain` [thumbColouredAt dragThumbColour 20]
       draws `shouldContain` [filledAt 0]
 
   describe "dragging" $ do
