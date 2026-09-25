@@ -34,6 +34,8 @@ module Blink.Controls.Style
   , containerStyle
   , iconStyleKey
   , iconStyle
+  , shade
+  , thumbColourFor
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -223,3 +225,21 @@ iconStyle p = StyleSet
       , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
       ]
   }
+
+-- | Darkens @c@'s RGB toward black by @factor@ (in @[0, 1]@; 1 leaves it
+-- unchanged), leaving alpha alone. Used to shade a thumb on hover\/drag
+-- without needing a dedicated theme colour for each -- see 'thumbColourFor'.
+shade :: Double -> Colour -> Colour
+shade factor (RGBA r g b a) = RGBA (r * factor) (g * factor) (b * factor) a
+
+-- | A slider's or scrollbar's thumb colour for this frame: darkened while a
+-- drag is in progress (checked first, since a drag can continue after the
+-- pointer has moved off the thumb entirely), a lighter darkening on hover,
+-- or @accent@ unchanged otherwise. Only ever applied to the thumb -- the
+-- groove and any filled track stay @accent@ regardless, so hovering or
+-- dragging never recolours anything but the thing being grabbed.
+thumbColourFor :: Bool -> Bool -> Colour -> Colour
+thumbColourFor dragging hovered accent
+  | dragging  = shade 0.7 accent
+  | hovered   = shade 0.85 accent
+  | otherwise = accent

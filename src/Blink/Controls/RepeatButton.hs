@@ -14,6 +14,7 @@
 module Blink.Controls.RepeatButton
   ( RepeatButtonConfig (..)
   , defaultRepeatButtonConfig
+  , repeatButtonBase
   , repeatButton
   , initialDelay
   , repeatInterval
@@ -89,17 +90,27 @@ repeatInterval v = Attribute (\rc -> rc { rbInterval = v })
 -- to compute our own cadence from, only a stream of discrete key events at
 -- whatever rate the platform delivers them.
 repeatButton :: Ord e => e -> [Attribute (RepeatButtonConfig e msg)] -> Element e msg
-repeatButton eid attrs = captionedButton btn (void run)
+repeatButton eid attrs =
+  captionedButton (rbButton cfg) (void (repeatButtonBase eid cfg { rbButton = withCaptionContent (rbButton cfg) }))
   where
     cfg = resolve defaultRepeatButtonConfig attrs
+
+-- | Runs @cfg@'s button as 'Blink.Controls.Button.buttonBase', activated
+-- on press rather than release, and fires its
+-- 'Blink.Controls.Button.onActivated' reactions again after
+-- 'rbInitialDelay' and then every 'rbInterval' for as long as it's held.
+-- Draws whatever content @cfg@'s button carries. The shape every
+-- hold-to-repeat button is built from.
+repeatButtonBase :: Ord e => e -> RepeatButtonConfig e msg -> View e msg (ButtonInteraction e msg)
+repeatButtonBase eid cfg = do
+  -- 'buttonBase' itself fires 'onActivated' once already, off
+  -- 'ActivateOnPress' (the press) or Enter-while-focused -- this only
+  -- adds the repeats past that first activation.
+  r <- buttonBase eid btn
+  toFire <- resolveHoldRepeats eid (ciHeld (biControl r)) (rbInitialDelay cfg) (rbInterval cfg)
+  when (toFire > 0) $ replicateM_ toFire (runHandlers (bcOnActivated btn) ())
+  pure r
+  where
     -- Always 'ActivateOnPress' -- fixed behaviour, not a default (same
     -- idiom as 'Blink.Controls.RadioButton.radioButton' forcing 'tgcNext').
     btn = (rbButton cfg) { bcActivation = ActivateOnPress }
-
-    run = do
-      -- 'buttonBase' itself fires 'onActivated' once already, off
-      -- 'ActivateOnPress' (the press) or Enter-while-focused -- this only
-      -- adds the repeats past that first activation.
-      r <- buttonBase eid (withCaptionContent btn)
-      toFire <- resolveHoldRepeats eid (ciHeld (biControl r)) (rbInitialDelay cfg) (rbInterval cfg)
-      when (toFire > 0) $ replicateM_ toFire (runHandlers (bcOnActivated btn) ())

@@ -23,7 +23,7 @@ import Control.Monad (when)
 import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
-import Blink.Geometry (Alignment (TopLeft), Rectangle (..))
+import Blink.Geometry (Alignment (TopLeft), Rectangle (..), clampFraction)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.View
 import Blink.View.Drawing (fillRect)
@@ -110,7 +110,7 @@ progressBar attrs = controlElement (pbLayout cfg) (Element (pbLayout cfg) noIntr
       r <- getBounds
       case pbValue cfg of
         Progress value -> do
-          let clamped   = max 0 (min 1 value)
+          let clamped   = clampFraction value
               fillRect' = r { rectWidth = rectWidth r * clamped }
           withBounds fillRect' $ fillRect (styleTextColour s)
         Indeterminate -> when (not (ciDisabled ci)) $ do

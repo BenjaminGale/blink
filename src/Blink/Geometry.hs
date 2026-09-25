@@ -45,6 +45,8 @@ module Blink.Geometry
   , containsPoint
   , intersectRect
   , alignRect
+    -- * Fractions
+  , clampFraction
     -- * Alignment
   , Alignment (..)
     -- * Popup placement
@@ -325,3 +327,7 @@ overflowsOnSide window rect side = case side of
   SideTop    -> rectY rect < rectY window
   SideRight  -> rectX rect + rectWidth rect > rectX window + rectWidth window
   SideLeft   -> rectX rect < rectX window
+
+-- | Limits a value to the range 0 to 1.
+clampFraction :: Double -> Double
+clampFraction = max 0 . min 1

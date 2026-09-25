@@ -2,10 +2,10 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | A scrollbar: a composite of two repeating arrow buttons (drawing an
--- icon rather than a caption, so built directly over 'buttonBase'\/
--- 'resolveHoldRepeats' rather than 'Blink.Controls.RepeatButton.repeatButton'
--- itself -- see @arrowButton@) straddling a draggable
--- track. Its position is control state, not application data -- 'scrollBar'
+-- icon rather than a caption, so built on
+-- 'Blink.Controls.RepeatButton.repeatButtonBase' rather than
+-- 'Blink.Controls.RepeatButton.repeatButton' itself -- see @arrowButton@)
+-- straddling a draggable track. Its position is control state, not application data -- 'scrollBar'
 -- reads and writes it itself via 'Blink.View.getScrollState'\/'Blink.View.requestScrollTo'\/
 -- 'Blink.View.requestScrollBy', keyed by its own element id, the same way
 -- 'Blink.Controls.TextInput.textInput' owns its own scroll offset
@@ -51,20 +51,20 @@ module Blink.Controls.ScrollBar
   , defaultStyleEntries
   ) where
 
-import Control.Monad (forM_, replicateM_, void, when)
+import Control.Monad (forM_, void, when)
 
-import Blink.Controls.Button
-  (ButtonActivation (..), ButtonConfig (..), ButtonInteraction (..), buttonBase, defaultButtonConfig, onActivated)
+import Blink.Controls.Button (ButtonConfig (..), onActivated)
+import Blink.Controls.RepeatButton (RepeatButtonConfig (..), defaultRepeatButtonConfig, repeatButtonBase)
 import Blink.Controls.Control
-import Blink.Geometry (Alignment (TopLeft), Orientation (..), Point (..), Rectangle (..), insetRect, uniform)
+import Blink.Geometry (Alignment (TopLeft), Orientation (..), Point (..), Rectangle (..), clampFraction, insetRect, uniform)
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
-import Blink.Rendering (Colour (..), ImagePath)
+import Blink.Rendering (ImagePath)
 import Blink.View
 import Blink.View.Drawing (drawImage, fillRect)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, height, noIntrinsicSize, runElement, width)
 import Blink.Style
-import Blink.Controls.Style (iconStyle, progressBarMetrics, sliderStyle, toggleGroupMetrics, toggleGroupStyle)
+import Blink.Controls.Style (iconStyle, progressBarMetrics, sliderStyle, thumbColourFor, toggleGroupMetrics, toggleGroupStyle)
 
 -- | The thickness (cross-axis extent) of the whole control, and of each
 -- arrow button's extent along the main axis. Both fixed rather than
@@ -147,10 +147,6 @@ visibleFraction v = Attribute (\sc -> sc { sbVisibleFraction = v })
 step :: Double -> Attribute (ScrollBarConfig e msg)
 step s = Attribute (\sc -> sc { sbStep = s })
 
--- | Clamps a value to @[0, 1]@.
-clamp01 :: Double -> Double
-clamp01 = max 0 . min 1
-
 -- | @bounds@'s own extent along @o@ -- width for 'Horizontal', height for
 -- 'Vertical'.
 axisLength :: Orientation -> Rectangle -> Double
@@ -179,14 +175,14 @@ mainRect Vertical   bounds origin len = bounds { rectY = origin, rectHeight = le
 thumbLengthFor :: Orientation -> Rectangle -> Double -> Double
 thumbLengthFor o bounds frac =
   let len = axisLength o bounds
-  in min len (max minThumbLength (clamp01 frac * len))
+  in min len (max minThumbLength (clampFraction frac * len))
 
 -- | The pixel offset along @o@ of the thumb's own leading edge (of length
 -- @thumbLen@) for scroll position @v@ within @bounds@ -- the near end of
 -- the track when @v@ is 0, the far end (minus the thumb's own length) when
 -- @v@ is 1.
 thumbOriginFor :: Orientation -> Rectangle -> Double -> Double -> Double
-thumbOriginFor o bounds thumbLen v = axisOrigin o bounds + clamp01 v * travel
+thumbOriginFor o bounds thumbLen v = axisOrigin o bounds + clampFraction v * travel
   where
     travel = max 0 (axisLength o bounds - thumbLen)
 
@@ -197,7 +193,7 @@ thumbOriginFor o bounds thumbLen v = axisOrigin o bounds + clamp01 v * travel
 fractionForOrigin :: Orientation -> Rectangle -> Double -> Double -> Double
 fractionForOrigin o bounds thumbLen originMain
   | travel <= 0 = 0
-  | otherwise   = clamp01 ((originMain - axisOrigin o bounds) / travel)
+  | otherwise   = clampFraction ((originMain - axisOrigin o bounds) / travel)
   where
     travel = axisLength o bounds - thumbLen
 
@@ -209,21 +205,6 @@ grabOffsetAt :: Double -> Double -> Double -> Double
 grabOffsetAt thumbOrigin0 thumbLen mouseMain
   | mouseMain >= thumbOrigin0 && mouseMain <= thumbOrigin0 + thumbLen = mouseMain - thumbOrigin0
   | otherwise = thumbLen / 2
-
--- | Darkens @c@'s RGB toward black by @factor@ (in @[0, 1]@; 1 leaves it
--- unchanged), leaving alpha alone -- see 'Blink.Controls.Slider.shade',
--- which this replicates for the same reason (thumb hover\/drag shading
--- without a dedicated theme colour for each).
-shade :: Double -> Colour -> Colour
-shade factor (RGBA r g b a) = RGBA (r * factor) (g * factor) (b * factor) a
-
--- | The thumb's own colour for this frame -- see
--- 'Blink.Controls.Slider.thumbColourFor', which this replicates.
-thumbColourFor :: Bool -> Bool -> Colour -> Colour
-thumbColourFor dragging hovered accent
-  | dragging  = shade 0.7 accent
-  | hovered   = shade 0.85 accent
-  | otherwise = accent
 
 -- | Draws the full-length groove (border colour, if set) and the thumb
 -- (text colour, shaded for hover\/drag) at its position for @v@.
@@ -242,22 +223,16 @@ arrowLayoutAttrs :: HasLayoutConfig cfg => Orientation -> [Attribute cfg]
 arrowLayoutAttrs Horizontal = [width (exactly scrollBarThickness), height fill]
 arrowLayoutAttrs Vertical   = [width fill, height (exactly scrollBarThickness)]
 
--- | An arrow button: 'Blink.Controls.RepeatButton.repeatButton''s own
+-- | An arrow button: 'Blink.Controls.RepeatButton.repeatButtonBase''s
 -- press-then-hold-repeat behaviour, drawing @path@'s icon (tinted by the
 -- resolved style's text colour) instead of a caption.
--- 'Blink.Controls.RepeatButton.repeatButton' always draws its own
--- caption -- it rebuilds 'ccContent' unconditionally from
--- 'Blink.Controls.Label.text', with no attribute a caller can set to
--- override that -- so this is built directly over the same primitives it
--- is ('buttonBase', 'resolveHoldRepeats'), rather than fighting that.
--- 'Blink.Controls.RepeatButton.initialDelay'\/'Blink.Controls.RepeatButton.repeatInterval'
--- aren't exposed here since a
--- scrollbar's own arrows never customise them either.
-arrowButton :: Ord e => e -> ImagePath -> [Attribute (ButtonConfig e msg)] -> Element e msg
+arrowButton :: Ord e => e -> ImagePath -> [Attribute (RepeatButtonConfig e msg)] -> Element e msg
 arrowButton eid path attrs =
-  chromeElement (bcLayout btn) (ccStyleKey (bcControl btn)) (elementWithLayout (bcLayout btn) (pure ())) (void run)
+  chromeElement (bcLayout btn) (ccStyleKey (bcControl btn)) (elementWithLayout (bcLayout btn) (pure ()))
+    (void (repeatButtonBase eid cfg { rbButton = btn { bcControl = ctrl } }))
   where
-    btn  = (resolve defaultButtonConfig attrs) { bcActivation = ActivateOnPress }
+    cfg  = resolve defaultRepeatButtonConfig attrs
+    btn  = rbButton cfg
     ctrl = (bcControl btn) { ccContent = const drawArrow }
 
     -- | Draws a couple of pixels past the button's own bounds on every
@@ -269,11 +244,6 @@ arrowButton eid path attrs =
       s      <- currentStyle
       bounds <- getBounds
       withBounds (insetRect (uniform (-2)) bounds) (drawImage (styleTextColour s) path)
-
-    run = do
-      r      <- buttonBase eid btn { bcControl = ctrl }
-      toFire <- resolveHoldRepeats eid (ciHeld (biControl r)) 0.4 0.08
-      when (toFire > 0) $ replicateM_ toFire (runHandlers (bcOnActivated btn) ())
 
 -- | A scrollbar (see the module header). Clicking the bare track jumps the
 -- thumb to (and centres it under) the pointer, the same way

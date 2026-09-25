@@ -71,7 +71,7 @@ thumbAt :: Double -> DrawCommand
 thumbAt = thumbColouredAt testColour
 
 -- | 'testColour' darkened toward black by the same factors
--- 'Blink.Controls.Slider.thumbColourFor' applies on hover (0.85) and drag
+-- 'Blink.Controls.Style.thumbColourFor' applies on hover (0.85) and drag
 -- (0.7), computed rather than hand-rounded so this matches exactly.
 hoverThumbColour, dragThumbColour :: Colour
 hoverThumbColour = RGBA (0.4 * 0.85) (0.4 * 0.85) (0.4 * 0.85) 1

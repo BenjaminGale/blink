@@ -72,7 +72,6 @@ module Blink.Controls
     -- * Slider
   , slider
   , onValueChanged
-  , thumbColourFor
     -- * Divider
   , divider
   , orientation
@@ -143,7 +142,7 @@ import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.RepeatButton (initialDelay, repeatButton, repeatInterval)
 import Blink.Controls.ScrollBar (scrollBar, scrollBarOrientation, visibleFraction)
 import Blink.Controls.ScrollPanel (scrollPanel)
-import Blink.Controls.Slider (onValueChanged, slider, thumbColourFor)
+import Blink.Controls.Slider (onValueChanged, slider)
 import Blink.Controls.TextInput (displayFilter, inputFilter, onInput, onSubmit, placeholder, textInput, value)
 import Blink.Controls.ToggleButton (isSelected, onSelectedChanged, toggleButton)
 import Blink.Controls.ToggleGroup

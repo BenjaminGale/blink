@@ -146,7 +146,7 @@ import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Blink.Rendering (DrawCommand, CursorShape (..), Measurers (..), noOpMeasurers, TextMeasurer (..), ImageMeasurer (..), ImagePath)
-import Blink.Geometry (Edge, Rectangle, Side, Size)
+import Blink.Geometry (Edge, Rectangle, Side, Size, clampFraction)
 import Blink.Input
   ( Key (..), KeyEvent (..), Modifier (..), InputState (..)
   , Mouse (..), emptyMouse, advanceButton, advanceHover, mnemonicActivated
@@ -387,7 +387,7 @@ newtype ScrollState = ScrollState { scrollPosition :: Double }
 
 -- | Clamp a scroll position to @[0, 1]@.
 clampScrollPos :: Double -> Double
-clampScrollPos = max 0 . min 1
+clampScrollPos = clampFraction
 
 -- | An accumulated offset for one element, in whatever unit the caller
 -- gives it (e.g. pixels) -- unlike 'ScrollState', never clamped to

@@ -19,7 +19,6 @@ module Blink.Controls.Slider
   , value
   , step
   , onValueChanged
-  , thumbColourFor
     -- * Style
   , defaultStyleEntries
   ) where
@@ -28,15 +27,14 @@ import Control.Monad (forM_, when)
 import Data.Maybe (fromMaybe)
 
 import Blink.Controls.Control
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), clampFraction)
 import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Layout.Constraints (Layout (..), fill)
-import Blink.Rendering (Colour (..))
 import Blink.View
 import Blink.View.Drawing (fillRect, strokeRect)
 import Blink.Element (Element (..), HasLayoutConfig (..), noIntrinsicSize)
 import Blink.Style
-import Blink.Controls.Style (progressBarMetrics, sliderStyle)
+import Blink.Controls.Style (progressBarMetrics, sliderStyle, thumbColourFor)
 
 -- | The height of the thin filled bar drawn along the middle of the
 -- control's full bounds -- deliberately much shorter than the thumb, so
@@ -70,24 +68,6 @@ trackRect bounds = bounds
   { rectX     = rectX bounds + contentInset
   , rectWidth = max 0 (rectWidth bounds - 2 * contentInset)
   }
-
--- | Darkens @c@'s RGB toward black by @factor@ (in @[0, 1]@; 1 leaves it
--- unchanged), leaving alpha alone. Used to shade the thumb on hover\/drag
--- without needing a dedicated theme colour for each -- see 'thumbColourFor'.
-shade :: Double -> Colour -> Colour
-shade factor (RGBA r g b a) = RGBA (r * factor) (g * factor) (b * factor) a
-
--- | The thumb's own colour for this frame: darkened while a drag is in
--- progress (checked first, since a drag can continue after the pointer
--- has moved off the thumb entirely), a lighter darkening on hover, or
--- @accent@ unchanged otherwise. Only ever applied to the thumb -- the
--- groove and the filled track stay @accent@ regardless, so hovering or
--- dragging never recolours anything but the thing being grabbed.
-thumbColourFor :: Bool -> Bool -> Colour -> Colour
-thumbColourFor dragging hovered accent
-  | dragging  = shade 0.7 accent
-  | hovered   = shade 0.85 accent
-  | otherwise = accent
 
 -- | Every capability 'slider' resolves: the wrapped 'ControlConfig', its
 -- current value, the increment arrow keys move it by, and its
@@ -142,10 +122,6 @@ step s = Attribute (\sc -> sc { scStep = s })
 onValueChanged :: (Double -> [Effect e msg]) -> Attribute (SliderConfig e msg)
 onValueChanged f = Attribute (\sc -> sc { scOnValueChanged = scOnValueChanged sc ++ [f] })
 
--- | Clamps a value to @[0, 1]@.
-clamp01 :: Double -> Double
-clamp01 = max 0 . min 1
-
 -- | The @[0, 1]@ fraction along @bounds@ that horizontal position @x@ maps
 -- to, clamped to stay within the track even when the pointer has moved
 -- outside it -- the same "capture holds past the edge" behaviour dragging
@@ -153,15 +129,15 @@ clamp01 = max 0 . min 1
 fractionAt :: Rectangle -> Double -> Double
 fractionAt bounds x
   | rectWidth bounds <= 0 = 0
-  | otherwise             = clamp01 ((x - rectX bounds) / rectWidth bounds)
+  | otherwise             = clampFraction ((x - rectX bounds) / rectWidth bounds)
 
 -- | The value an arrow key press this frame moves @v@ to, if any: Left\/Down
 -- decrease by @s@, Right\/Up increase by @s@, both clamped to @[0, 1]@.
 -- 'Nothing' when neither was pressed.
 resolveKeyboardValue :: Double -> [KeyEvent] -> Double -> Maybe Double
 resolveKeyboardValue s keyEvts v
-  | pressed KeyLeft  || pressed KeyDown = Just (clamp01 (v - s))
-  | pressed KeyRight || pressed KeyUp   = Just (clamp01 (v + s))
+  | pressed KeyLeft  || pressed KeyDown = Just (clampFraction (v - s))
+  | pressed KeyRight || pressed KeyUp   = Just (clampFraction (v + s))
   | otherwise                           = Nothing
   where
     pressed k = any ((== k) . key) keyEvts
@@ -178,7 +154,7 @@ drawTrack s bounds focused hovered dragging v = do
   where
     accent   = styleTextColour s
     tr       = trackRect bounds
-    clamped  = clamp01 v
+    clamped  = clampFraction v
     trackY   = rectY tr + (rectHeight tr - trackThickness) / 2
     groove   = Rectangle (rectX tr) trackY (rectWidth tr) trackThickness
     track    = groove { rectWidth = rectWidth tr * clamped }
@@ -217,7 +193,7 @@ slider eid attrs = controlElement (scLayout cfg) (Element (scLayout cfg) noIntri
       hovered   <- wasMouseOverLastFrame eid
       input     <- getInput
 
-      let value0   = clamp01 (scValue cfg)
+      let value0   = clampFraction (scValue cfg)
           keyEvts  = if not disabled && focused then inputKeyEvents input else []
           fromKeys = resolveKeyboardValue (scStep cfg) keyEvts value0
 

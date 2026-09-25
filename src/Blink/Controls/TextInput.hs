@@ -31,7 +31,7 @@ import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), clampFraction)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Rendering (Colour (..), TextAlign (..))
@@ -271,7 +271,7 @@ maxScrollPixels contentW viewportW = max 0 (contentW - viewportW)
 -- nothing to scroll.
 scrollFraction :: Double -> Double -> Double
 scrollFraction maxPx px
-  | maxPx > 0 = max 0 (min 1 (px / maxPx))
+  | maxPx > 0 = clampFraction (px / maxPx)
   | otherwise = 0
 
 -- | The inverse of 'scrollFraction': converts a stored @[0, 1]@ fraction
@@ -288,7 +288,7 @@ scrollPixels maxPx frac = frac * maxPx
 -- faded toward a dark background), where mixing toward white would
 -- instead make it stand out more than the value text. RGB rather than
 -- alpha, since text is rasterized to a texture that may not
--- alpha-blend on copy -- see 'Blink.Controls.Slider.shade' for the
+-- alpha-blend on copy -- see 'Blink.Controls.Style.shade' for the
 -- same trick run with a fixed factor instead of a target colour.
 muted :: Colour -> Colour -> Colour
 muted (RGBA tr tg tb a) (RGBA br bg bb _) = RGBA (mix tr br) (mix tg bg) (mix tb bb) a
