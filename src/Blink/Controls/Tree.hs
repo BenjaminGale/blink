@@ -35,9 +35,9 @@ module Blink.Controls.Tree
     -- | For a widget built on 'listBase' whose rows are a flattened
     -- forest, with an indent and expand\/collapse chevron per row, the way
     -- 'tree' and 'Blink.Controls.TreeTable.treeTable' do.
-  , visibleNodes
-  , indentAndChevron
+  , TreeListConfig (..)
   , treeListBase
+  , indentAndChevron
     -- * Style
   , treeChevronStyleKey
   , defaultStyleEntries
@@ -211,43 +211,58 @@ tree mkId attrs =
   where
     cfg     = resolve defaultTreeConfig attrs
     td      = tcTreeData cfg
-    listCfg = (tcList cfg) { lcRenderItem = renderRow }
+    listCfg = tcList cfg
 
-    visRows  = visibleNodes (tdForest td) (tdExpanded td)
-    nodeInfo = Map.fromList [ (x, (depth, hasChildren)) | (x, depth, hasChildren) <- visRows ]
+    run = treeListBase (mkId . TreeRow) TreeListConfig
+      { tlList      = listCfg
+      , tlTreeData  = td
+      , tlRenderRow = renderRow
+      }
 
-    run = treeListBase (mkId . TreeRow) td visRows listCfg
+    renderRow tis = hBox [children (indentAndChevron (mkId . TreeChevron) td tis ++ [tcRenderNode cfg tis])]
 
-    renderRow st = hBox [children (indentAndChevron (mkId . TreeChevron) td depth hasChildren x ++ [tcRenderNode cfg tis])]
-      where
-        x                     = isItem st
-        (depth, hasChildren) = Map.findWithDefault (0, False) x nodeInfo
-        tis                   = TreeItemState st depth hasChildren (Set.member x (tdExpanded td))
+-- | Every capability 'treeListBase' resolves: the list its rows are shown
+-- in, the forest and expansion state they're flattened from, and how a
+-- row draws its content given its node's 'TreeItemState'.
+data TreeListConfig sel e msg a = TreeListConfig
+  { tlList      :: ListConfig sel e msg a
+  , tlTreeData  :: TreeDataConfig e msg a
+  , tlRenderRow :: TreeItemState a -> Element e msg
+  }
 
--- | Runs @listCfg@ as 'listBase', then handles Left\/Right against the
--- visible rows @visRows@ (see 'visibleNodes'): expanding or collapsing the
--- node under the cursor, or moving the cursor to its first child or its
--- parent.
+-- | Runs @cfg@'s list as 'listBase', with one row per visible node of its
+-- forest, each drawn by 'tlRenderRow'. Left\/Right additionally expand or
+-- collapse the node under the cursor, or move the cursor to its first
+-- child or its parent. Reports the list's own 'ListInteraction'.
 treeListBase
   :: (Ord e, Ord a, SelectionModel sel, Eq (sel a))
   => (ListPart a -> e)
-  -> TreeDataConfig e msg a
-  -> [(a, Int, Bool)]
-  -> ListConfig sel e msg a
-  -> View e msg ()
-treeListBase mkRowId td visRows listCfg = do
+  -> TreeListConfig sel e msg a
+  -> View e msg (ListInteraction sel e msg a)
+treeListBase mkRowId cfg = do
   li <- listBase mkRowId listCfg
-  mapM_ (handleExpansionKey mkRowId listCfg visRows (tdExpanded td) (tdOnExpansionChanged td) (liViewportHeight li))
+  mapM_ (handleExpansionKey mkRowId listCfg visRows nodeInfo (tdExpanded td) (tdOnExpansionChanged td) (liViewportHeight li))
     (ciKeysPressed (liControl li))
+  pure li
+  where
+    td       = tlTreeData cfg
+    visRows  = visibleNodes (tdForest td) (tdExpanded td)
+    nodeInfo = Map.fromList [ (x, (depth, hasChildren)) | (x, depth, hasChildren) <- visRows ]
+    listCfg  = (tlList cfg) { lcRenderItem = tlRenderRow cfg . itemState }
 
--- | The indent (proportional to @depth@) and, when @hasChildren@, a
--- clickable chevron reflecting whether @x@ is expanded in @td@, to go
+    itemState st = TreeItemState st depth hasChildren (Set.member x (tdExpanded td))
+      where
+        x                    = isItem st
+        (depth, hasChildren) = Map.findWithDefault (0, False) x nodeInfo
+
+-- | The indent (proportional to the node's depth) and, when the node has
+-- children, a clickable chevron showing whether it's expanded, to go
 -- before a row's own content. Clicking the chevron fires @td@'s
--- expansion reactions with @x@'s membership toggled.
+-- expansion reactions with the node's membership toggled.
 indentAndChevron
   :: (Ord e, Ord a)
-  => (a -> e) -> TreeDataConfig e msg a -> Int -> Bool -> a -> [Element e msg]
-indentAndChevron mkChevronId td depth hasChildren x =
+  => (a -> e) -> TreeDataConfig e msg a -> TreeItemState a -> [Element e msg]
+indentAndChevron mkChevronId td tis =
   [indentCell, chevronCell]
   where
     indentCell = elementWithLayout (Layout (exactly (fromIntegral depth * treeStepWidth)) fill TopLeft) (pure ())
@@ -269,6 +284,9 @@ indentAndChevron mkChevronId td depth hasChildren x =
               }
           }
 
+    x                   = isItem (tisState tis)
+    depth               = tisDepth tis
+    hasChildren         = tisHasChildren tis
     expanded0           = tdExpanded td
     onExpansionChanged0 = tdOnExpansionChanged td
 
@@ -299,12 +317,13 @@ handleExpansionKey
   => (ListPart a -> e)
   -> ListConfig sel e msg a
   -> [(a, Int, Bool)]
+  -> Map.Map a (Int, Bool)
   -> Set a
   -> [Set a -> [Effect e msg]]
   -> Double
   -> KeyEvent
   -> View e msg ()
-handleExpansionKey mkRowId listCfg visRows expanded0 onExpansionChanged0 viewportHeight ev =
+handleExpansionKey mkRowId listCfg visRows nodeInfo expanded0 onExpansionChanged0 viewportHeight ev =
   case (key ev, cursorItem s0) of
     (KeyRight, Just x) -> case Map.lookup x nodeInfo of
       Just (_, True) | not (Set.member x expanded0) -> setExpanded (Set.insert x expanded0)
@@ -316,7 +335,6 @@ handleExpansionKey mkRowId listCfg visRows expanded0 onExpansionChanged0 viewpor
     _ -> pure ()
   where
     s0       = lcSelection listCfg
-    nodeInfo = Map.fromList [ (x, (depth, hasChildren)) | (x, depth, hasChildren) <- visRows ]
 
     setExpanded s'  = runHandlers onExpansionChanged0 s'
     moveCursorTo s' = when (s' /= s0) $ do

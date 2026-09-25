@@ -20,7 +20,6 @@ module Blink.Controls.TreeTable
   ) where
 
 import Control.Monad (void)
-import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
 import Blink.Controls.List
@@ -29,8 +28,8 @@ import Blink.Controls.Table
   , defaultColumnsConfig, onColumnSortRequested, sortedBy, withColumns
   )
 import Blink.Controls.Tree
-  ( HasTreeDataConfig (..), TreeDataConfig (..), defaultTreeDataConfig, expanded, forest, indentAndChevron
-  , onExpansionChanged, treeListBase, visibleNodes
+  ( HasTreeDataConfig (..), TreeDataConfig (..), TreeItemState (..), TreeListConfig (..), defaultTreeDataConfig
+  , expanded, forest, indentAndChevron, onExpansionChanged, treeListBase
   )
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, runElement)
 import Blink.Geometry (Alignment (TopLeft))
@@ -101,21 +100,21 @@ treeTable mkId attrs =
     td         = ttTreeData cfg
     hasColumns = not (null (csColumns cols))
 
-    visRows  = visibleNodes (tdForest td) (tdExpanded td)
-    nodeInfo = Map.fromList [ (x, (depth, hasChildren)) | (x, depth, hasChildren) <- visRows ]
-
     run = do
-      listCfg <- withColumns (mkId . TTHeaderCell) (mkId . TTColumnDivider) cols renderRow (ttList cfg)
-      treeListBase (mkId . TTRow) td visRows listCfg
+      (widths, listCfg) <- withColumns (mkId . TTHeaderCell) (mkId . TTColumnDivider) cols (ttList cfg)
+      treeListBase (mkId . TTRow) TreeListConfig
+        { tlList      = listCfg
+        , tlTreeData  = td
+        , tlRenderRow = renderRow widths
+        }
 
     -- Column 0 gets the indent\/chevron treatment 'tree' itself gives a
     -- whole row; every other column is a plain 'columnCell'.
-    renderRow widths st = columnRow widths (csColumns cols) cellFor
+    renderRow widths tis = columnRow widths (csColumns cols) cellFor
       where
-        x                     = isItem st
-        (depth, hasChildren) = Map.findWithDefault (0, False) x nodeInfo
+        st = tisState tis
 
         cellFor 0 w c = elementWithLayout (Layout w fill TopLeft) $
           runElement $ hBox
-            [ children (indentAndChevron (mkId . TTChevron) td depth hasChildren x ++ [colCell c st]) ]
+            [ children (indentAndChevron (mkId . TTChevron) td tis ++ [colCell c st]) ]
         cellFor _ w c = columnCell w c st

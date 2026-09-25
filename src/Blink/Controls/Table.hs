@@ -227,32 +227,30 @@ table mkId attrs =
     hasColumns = not (null (csColumns cols))
 
     run = do
-      listCfg <- withColumns (mkId . TableHeaderCell) (mkId . TableColumnDivider) cols renderRow (tbList cfg)
-      listBase (mkId . TableRow) listCfg
+      (widths, listCfg) <- withColumns (mkId . TableHeaderCell) (mkId . TableColumnDivider) cols (tbList cfg)
+      listBase (mkId . TableRow) listCfg { lcRenderItem = renderRow widths }
 
     renderRow widths st = columnRow widths (csColumns cols) (\_ w c -> columnCell w c st)
 
--- | @listCfg@ with a header row built from @cols@ (when there are any
--- columns) and each row drawn by @renderRow@, both at the columns'
--- current widths. The widths depend on how far each divider has been
--- dragged, so they're resolved once here per frame and shared by the
--- header and every row.
+-- | The columns' current widths, and @listCfg@ with a header row built
+-- from @cols@ at those widths (when there are any columns). The widths
+-- depend on how far each divider has been dragged, so they're resolved
+-- once here per frame, for the caller to lay out every row's cells at
+-- (see 'columnRow').
 withColumns
   :: Ord e
   => (Int -> e)                                   -- ^ header cell id, by column index
   -> (Int -> e)                                   -- ^ resize handle id, by the index of the column before it
   -> ColumnsConfig e msg a
-  -> ([Length] -> ItemState a -> Element e msg)   -- ^ a row, given the columns' current widths
   -> ListConfig sel e msg a
-  -> View e msg (ListConfig sel e msg a)
-withColumns mkHeaderId mkDividerId cols renderRow listCfg = do
+  -> View e msg ([Length], ListConfig sel e msg a)
+withColumns mkHeaderId mkDividerId cols listCfg = do
   widths <- resolveColumnWidths mkDividerId (csColumns cols)
-  pure listCfg
-    { lcRenderItem = renderRow widths
-    , lcHeader     = if null (csColumns cols) then Nothing else
+  pure (widths, listCfg
+    { lcHeader = if null (csColumns cols) then Nothing else
         Just (columnHeaderRow mkHeaderId mkDividerId
                 (requestColumnSort (csSort cols) (csOnColumnSortRequested cols)) widths (csColumns cols))
-    }
+    })
 
 -- | A row's cells at the given widths, with a gap between each pair the
 -- width of the header's resize handle, so every column's boundary lands at
