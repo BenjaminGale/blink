@@ -7,7 +7,7 @@ import Blink.Controls.Control (Attribute)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.Fixtures
   (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
-import Blink.Controls.ScrollBar (ScrollBarPart (..))
+import Blink.Controls.ScrollBar (ScrollBarPart (..), ScrollViewportPart (..))
 import Blink.Controls.ScrollPanel
 import Blink.Element (Element (..), runElement)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
@@ -24,8 +24,8 @@ tag :: ScrollPanelPart -> TestElem
 tag = Part
 
 hScrollEid, vScrollEid :: TestElem
-hScrollEid = tag (ScrollPanelHBar ScrollBar)
-vScrollEid = tag (ScrollPanelVBar ScrollBar)
+hScrollEid = tag (ScrollPanelViewport (ViewportHorizontalBar ScrollBar))
+vScrollEid = tag (ScrollPanelViewport (ViewportVerticalBar ScrollBar))
 
 testTheme :: Theme TestElem
 testTheme = mkTestTheme zeroMetrics (plainStyleSet (plainStyle testColour))

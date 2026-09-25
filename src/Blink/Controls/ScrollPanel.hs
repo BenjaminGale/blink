@@ -5,17 +5,15 @@
 -- larger than the space the panel is given -- typically a layout like
 -- 'Blink.Layout.Box.vBox' stacking several rows or sections. Shows a
 -- vertical and\/or horizontal 'Blink.Controls.ScrollBar.scrollBar' along
--- whichever edge(s) the content overflows.
+-- whichever edge(s) the content overflows, via
+-- 'Blink.Controls.ScrollBar.scrollViewport'.
 --
 -- Unlike 'Blink.Controls.List.list', the child isn't virtualised: it has
 -- no fixed row shape to skip cheaply, so every part of it is built and
 -- laid out every frame, only clipped\/offset at draw time.
 --
 -- @
--- scrollPanel --> vBox --> hBox --> content (clipped, offset)
---                       |        \\-> vertical scrollBar (if content overflows vertically)
---                       \\-> hBox --> horizontal scrollBar (if content overflows horizontally)
---                                \\-> corner spacer (if both bars show)
+-- control --> scrollViewport --> content
 -- @
 module Blink.Controls.ScrollPanel
   ( ScrollPanelPart (..)
@@ -28,26 +26,21 @@ module Blink.Controls.ScrollPanel
   , defaultStyleEntries
   ) where
 
-import Control.Monad (when)
 
 import Blink.Controls.Control
-import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBar, scrollBarOrientation, scrollBarThickness, visibleFraction)
-import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, height, runElement, width)
-import Blink.Geometry (Alignment (TopLeft), Orientation (..), Rectangle (..), Size (..))
-import Blink.Layout.Box (children, hBox, vBox)
-import Blink.Layout.Constraints (Available (..), Layout (..), MeasureCtx (..), exactly, fill)
-import Blink.View
-import Blink.View.Drawing (withClip)
+import Blink.Controls.ScrollBar (ScrollViewportConfig (..), ScrollViewportPart, scrollViewport)
+import Blink.Element (Element (..), HasLayoutConfig (..), emptyElement, runElement)
+import Blink.Geometry (Alignment (TopLeft), Orientation (..), Size (..))
+import Blink.Layout.Constraints (Available (..), Layout (..), MeasureCtx (..), fill)
 import Blink.Style
 import Blink.Controls.Style (toggleGroupMetrics, toggleGroupStyle)
 
 -- | Identifies one part of a 'scrollPanel' for the purpose of building
--- element ids: the panel's own root, or a part of one of the two
--- scrollbars it can composite in.
+-- element ids: the panel's own root, or a part of its
+-- 'Blink.Controls.ScrollBar.scrollViewport'.
 data ScrollPanelPart
   = ScrollPanel
-  | ScrollPanelHBar ScrollBarPart
-  | ScrollPanelVBar ScrollBarPart
+  | ScrollPanelViewport ScrollViewportPart
   deriving (Eq, Ord, Show)
 
 -- | Every capability 'scrollPanel' resolves.
@@ -90,9 +83,6 @@ scrollPanel tag attrs = controlElement (spLayout cfg) measureEl ctrl
     cfg   = resolve defaultScrollPanelConfig attrs
     child = spContent cfg
 
-    hScrollEid = tag (ScrollPanelHBar ScrollBar)
-    vScrollEid = tag (ScrollPanelVBar ScrollBar)
-
     -- Every other 'elMeasure' caller offers real, bounded space; this asks
     -- the child for its size with no limit on either axis, since that's
     -- what decides whether it needs to scroll at all. A 'fill' child (e.g.
@@ -106,7 +96,7 @@ scrollPanel tag attrs = controlElement (spLayout cfg) measureEl ctrl
     naturalSize = do
       w <- sizeWidth  <$> childNaturalSize (MeasureCtx Horizontal Unbounded Unbounded)
       h <- sizeHeight <$> childNaturalSize (MeasureCtx Vertical Unbounded Unbounded)
-      pure (w, h)
+      pure (Size w h)
 
     ctrl = (spControl cfg)
       { ccElementId   = Just (tag ScrollPanel)
@@ -114,79 +104,13 @@ scrollPanel tag attrs = controlElement (spLayout cfg) measureEl ctrl
       , ccContent     = const viewport
       }
 
-    -- A scrollbar shown on one axis takes space from the other, which can
-    -- itself tip that axis into overflow -- so the overflow check runs
-    -- twice: once against the full bounds, once against what's left after
-    -- the first pass's own bar(s).
     viewport = do
-      bounds <- getBounds
-      (contentW, contentH) <- naturalSize
-      let viewportW0 = rectWidth bounds
-          viewportH0 = rectHeight bounds
-          showV0     = contentH > viewportH0
-          showH0     = contentW > viewportW0
-          viewportW  = viewportW0 - (if showV0 then scrollBarThickness else 0)
-          viewportH  = viewportH0 - (if showH0 then scrollBarThickness else 0)
-          showV      = contentH > viewportH
-          showH      = contentW > viewportW
-      if not showV && not showH
-        then runElement child
-        else runElement (scrollableArea contentW contentH viewportW viewportH showV showH)
-
-    scrollableArea contentW contentH viewportW viewportH showV showH = vBox
-      [ children
-          ( hBox
-              [ children
-                  ( elementWithLayout (Layout fill fill TopLeft)
-                      (clippedContent contentW contentH viewportW viewportH showV showH)
-                    : [ vBar | showV ]
-                  )
-              ]
-            : [ hBox
-                  [ height (exactly scrollBarThickness)
-                  , children (hBar : [ corner | showV ])
-                  ]
-              | showH
-              ]
-          )
-      ]
-      where
-        vBar = scrollBar (tag . ScrollPanelVBar)
-          [ scrollBarOrientation Vertical, height fill, visibleFraction (viewportH / contentH) ]
-        hBar = scrollBar (tag . ScrollPanelHBar)
-          [ scrollBarOrientation Horizontal, width fill, visibleFraction (viewportW / contentW) ]
-        corner = elementWithLayout (Layout (exactly scrollBarThickness) (exactly scrollBarThickness) TopLeft) (pure ())
-
-    -- 'withClip' must capture this bounds -- the viewport's own, not yet
-    -- offset -- before the child moves within it.
-    clippedContent contentW contentH viewportW viewportH showV showH = do
-      applyWheel contentW contentH viewportW viewportH showV showH
-      bounds <- getBounds
-      hFrac  <- if showH then getScrollState hScrollEid else pure 0
-      vFrac  <- if showV then getScrollState vScrollEid else pure 0
-      let offsetX = if showH then hFrac * (contentW - viewportW) else 0
-          offsetY = if showV then vFrac * (contentH - viewportH) else 0
-          contentBounds = bounds
-            { rectX      = rectX bounds - offsetX
-            , rectY      = rectY bounds - offsetY
-            , rectWidth  = if showH then contentW else rectWidth bounds
-            , rectHeight = if showV then contentH else rectHeight bounds
-            }
-      withClip $ withBounds contentBounds (runElement child)
-
-    -- Only a vertical wheel delta exists in the input model, so it drives
-    -- whichever axis actually scrolls, favouring vertical.
-    applyWheel contentW contentH viewportW viewportH showV showH = do
-      wheel <- getWheelDelta
-      when (wheel /= 0) $ do
-        over <- isRegionHit
-        when over $ case (showV, showH) of
-          (True, _)      -> scrollBy vScrollEid (contentH - viewportH) wheel
-          (False, True)  -> scrollBy hScrollEid (contentW - viewportW) wheel
-          (False, False) -> pure ()
-
-    scrollBy eid maxOffset wheel =
-      when (maxOffset > 0) $ requestScrollBy eid (wheel * wheelStepPx / maxOffset)
+      contentSize <- naturalSize
+      scrollViewport (tag . ScrollPanelViewport) ScrollViewportConfig
+        { svWheelStep   = wheelStepPx
+        , svContentSize = contentSize
+        , svContent     = const (runElement child)
+        }
 
 -- * Style
 

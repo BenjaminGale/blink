@@ -8,7 +8,7 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, postWith, resolve)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
-import Blink.Controls.ScrollBar (ScrollBarPart (..))
+import Blink.Controls.ScrollBar (ScrollBarPart (..), ScrollViewportPart (..))
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
 import Blink.Element (Element (..), height, measureElement, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
@@ -416,11 +416,11 @@ scrollItems :: [Int]
 scrollItems = [1, 2, 3, 4, 5]
 
 -- | The id 'Blink.Controls.List.list' itself reads\/writes its scrollbar's
--- position under (see its module header) -- the same @tag ('ListScrollBar'
--- 'ScrollBar')@ pattern 'Blink.Controls.ScrollBar.scrollBar' documents for
+-- position under -- the same @tag ('ListViewport' ('ViewportVerticalBar'
+-- 'ScrollBar'))@ pattern 'Blink.Controls.ScrollBar.scrollBar' documents for
 -- its own composite.
 listScrollEid :: TestElem
-listScrollEid = Part (ListScrollBar ScrollBar)
+listScrollEid = Part (ListViewport (ViewportVerticalBar ScrollBar))
 
 renderScrollList :: (SelectionModel sel, EmptySelection sel, Eq (sel Int)) => [Attribute (ListConfig sel TestElem String Int)] -> View TestElem String ()
 renderScrollList attrs = runElement $ list Part

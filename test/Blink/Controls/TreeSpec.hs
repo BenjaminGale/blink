@@ -12,7 +12,7 @@ import Blink.Controls.List
   ( Direction (..), ListPart (..), MultiSelection, SingleSelection, isItem, listStyleKey, moveCursor, multiSelected
   , onSelectionChanged, rowHeight, selectItem, selectedItems, selection, unselected
   )
-import Blink.Controls.ScrollBar (ScrollBarPart (..))
+import Blink.Controls.ScrollBar (ScrollBarPart (..), ScrollViewportPart (..))
 import Blink.Controls.Tree
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
 import Blink.Element (Element (..), height, measureElement, runElement, width)
@@ -297,10 +297,10 @@ multiKeyboardSpec = describe "tree keyboard with MultiSelection" $
     selectedItems expected `shouldBe` ["src"]
 
 -- | The tree's own scrollbar id -- 'tree' reads\/writes its position
--- under @mkId (TreeRow (ListScrollBar ScrollBar))@, the same @tag@
+-- under @mkId (TreeRow (ListViewport (ViewportVerticalBar ScrollBar)))@, the same @tag@
 -- pattern 'Blink.Controls.List.list' documents for its own.
 treeScrollEid :: TestElem
-treeScrollEid = Part (TreeRow (ListScrollBar ScrollBar))
+treeScrollEid = Part (TreeRow (ListViewport (ViewportVerticalBar ScrollBar)))
 
 -- | Narrower than 'testBounds' -- with both "src" and "src/Controls"
 -- expanded there are 5 rows (100px), so a 40px viewport (2 rows) is

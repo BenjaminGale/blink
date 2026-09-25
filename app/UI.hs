@@ -11,7 +11,7 @@ import qualified Blink.Controls.List as List (isItem, onSelectionChanged)
 import qualified Blink.Controls.MenuBar as MenuBar (itemAttrs, submenuItems)
 import qualified Blink.Controls.MenuButton as MenuButton (items)
 import Blink.Controls.ProgressBar (ProgressValue (..))
-import Blink.Controls.ScrollBar (ScrollBarPart (..))
+import Blink.Controls.ScrollBar (ScrollBarPart (..), ScrollViewportPart (..))
 import qualified Blink.Controls.ScrollPanel as ScrollPanel (content)
 import qualified Blink.Controls.Slider as Slider (value)
 import Blink.Controls.Table
@@ -227,7 +227,7 @@ updateApp msg = case msg of
     modify $ \s -> s { backgroundStatus = Fetching }
     cmd fetchDemoFile
   FetchFinished contents -> modify $ \s -> s { backgroundStatus = Fetched contents }
-  JumpToLongListEnd -> requestScrollTo (LongList (ListScrollBar ScrollBar)) 1
+  JumpToLongListEnd -> requestScrollTo (LongList (ListViewport (ViewportVerticalBar ScrollBar))) 1
   SetImageFitWidthEnabled v  -> modify $ \s -> s { imageFitWidthEnabled = v }
   SetImageFitWidth v          -> modify $ \s -> s { imageFitWidth = v }
   SetImageFitHeightEnabled v -> modify $ \s -> s { imageFitHeightEnabled = v }

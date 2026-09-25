@@ -133,17 +133,14 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
 import Blink.Controls.Control
-import Blink.Controls.ScrollBar (ScrollBarPart (..), scrollBar, scrollBarThickness, visibleFraction)
-import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, height, noIntrinsicSize, runElement)
+import Blink.Controls.ScrollBar
+  (ScrollBarPart (..), ScrollViewportConfig (..), ScrollViewportPart (..), scrollBarThickness, scrollViewport)
+import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, emptyElement, noIntrinsicSize, runElement)
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..), insetRect)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Shift))
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
-import Blink.View
-  ( Effect, View, getBounds, getCursorIndex, getScrollState, getStyleSet, getWheelDelta, isRegionHit
-  , requestScrollBy, setCursorIndex, setScrollStateNow, withBounds
-  )
-import Blink.View.Drawing (withClip)
+import Blink.View (Effect, View, getBounds, getCursorIndex, getScrollState, getStyleSet, setCursorIndex, setScrollStateNow)
 import Blink.Style
 import Blink.Controls.Style (containerStyle, controlMetrics, flatRowMetrics, flatRowStyle)
 
@@ -507,17 +504,17 @@ rangeFrom anchor cursor xs = case (elemIndex anchor xs, elemIndex cursor xs) of
 -- value rather than its position in the list -- so
 -- reordering\/inserting\/removing items elsewhere in the list never
 -- disturbs another row's hover\/focus\/capture state), or a part of the
--- vertical scrollbar composited in once the rows overflow the list's own
--- bounds (see 'listBase'). The same pattern
+-- 'Blink.Controls.ScrollBar.scrollViewport' the rows scroll in once they
+-- overflow the list's own bounds (see 'listBase'). The same pattern
 -- 'Blink.Controls.ToggleGroup.ToggleGroupPart'\/'Blink.Controls.ScrollBar.ScrollBarPart'
 -- already use: every part's id is built from one @mkId@ function (see
--- 'listBase'), so the root, its rows, and its scrollbar's own parts are
+-- 'listBase'), so the root, its rows, and its scrollbars' own parts are
 -- visibly related and can't collide, rather than being independently
 -- chosen, unrelated ids.
 data ListPart a
   = List
   | ListItem a
-  | ListScrollBar ScrollBarPart
+  | ListViewport ScrollViewportPart
   deriving (Eq, Ord, Show)
 
 -- | Every capability 'list' resolves: the wrapped 'ControlConfig'\/
@@ -567,8 +564,7 @@ instance HasListConfig sel e msg a (ListConfig sel e msg a) where
 defaultRowHeight :: Double
 defaultRowHeight = 32
 
--- | How many rows a single mouse-wheel notch scrolls -- see @applyWheel@
--- in 'virtualizedRows'.
+-- | How many rows a single mouse-wheel notch scrolls.
 wheelRowsPerNotch :: Double
 wheelRowsPerNotch = 3
 
@@ -659,85 +655,6 @@ data ListInteraction sel e msg a = ListInteraction
   , liViewportHeight :: Double
   }
 
--- | Renders @itemCount@ fixed-@rowHeight@ rows inside the current
--- bounds: plain if they already fit, otherwise a virtualized, scrollable
--- viewport composited with a vertical scrollbar (an 'hBox' of the two,
--- the L-shaped arrangement 'Blink.Controls.ScrollBar.scrollBar's own
--- module header points to as the pattern any real scrolling viewport
--- uses). Only the rows intersecting the viewport are ever requested from
--- @renderRows@, so a row off-screen is never built or hit-tested; a
--- spacer above and below keeps the total height at @itemCount * rowHeight@
--- regardless of which rows are currently skipped, so the scrollbar's
--- thumb geometry never shifts as the visible set changes.
---
--- @renderRows viewportHeight lo hi@ must return exactly @hi - lo@
--- elements, the rows at positions @[lo .. hi - 1]@, each already laid
--- out for @rowHeight@ and aware of @viewportHeight@ (needed for e.g. a
--- click handler's own 'scrollRowIntoView' call) -- the plain,
--- fits-without-scrolling path passes @itemCount * rowHeight@ itself as
--- @viewportHeight@, which guarantees 'scrollRowIntoView' always no-ops
--- there, correctly.
-virtualizedRows
-  :: Ord e
-  => (ScrollBarPart -> e)
-  -> Int
-  -> Double
-  -> (Double -> Int -> Int -> [Element e msg])
-  -> View e msg ()
-virtualizedRows scrollBarTag itemCount rh renderRows = do
-  bounds <- getBounds
-  let viewportHeight = rectHeight bounds
-  if contentHeight > viewportHeight
-    then runElement (scrollableRows viewportHeight)
-    else runElement (vBox [children (renderRows contentHeight 0 itemCount)])
-  where
-    contentHeight = totalRowsHeight rh itemCount
-    listScrollEid = scrollBarTag ScrollBar
-
-    scrollableRows viewportHeight = hBox
-      [ children
-          [ elementWithLayout (Layout fill fill TopLeft) (clippedRows viewportHeight)
-          , scrollBar scrollBarTag [ height fill, visibleFraction (viewportHeight / contentHeight) ]
-          ]
-      ]
-
-    -- 'withClip' captures /this/ bounds (the viewport's own, not yet
-    -- offset) as the clip region before the rows move within it, the
-    -- same ordering 'Blink.Layout.Box.hBox'\/'vBox' use for their own
-    -- children.
-    clippedRows viewportHeight = do
-      applyWheel viewportHeight
-      bounds     <- getBounds
-      scrollFrac <- getScrollState listScrollEid
-      let offsetY    = scrollFrac * (contentHeight - viewportHeight)
-          rowsBounds = bounds { rectY = rectY bounds - offsetY, rectHeight = contentHeight }
-      withClip $ withBounds rowsBounds (runElement (visibleRows offsetY viewportHeight))
-
-    -- Mouse-wheel scrolling: moves the position by a fixed number of rows
-    -- per wheel notch while the pointer is over the (unscrolled) viewport
-    -- -- 'isRegionHit' is checked against 'getBounds' as it stands here,
-    -- before 'clippedRows' offsets it for the content. Deferred via
-    -- 'requestScrollBy', like every other user gesture (see
-    -- 'Blink.View.Scroll.setScrollStateNow' for why this isn't applied
-    -- immediately the way a keyboard/click-driven scroll correction is).
-    applyWheel viewportHeight = do
-      wheel <- getWheelDelta
-      let maxOffset = contentHeight - viewportHeight
-      when (wheel /= 0 && maxOffset > 0) $ do
-        over <- isRegionHit
-        when over $ requestScrollBy listScrollEid (wheel * wheelStepPx / maxOffset)
-
-    wheelStepPx = rh * wheelRowsPerNotch
-
-    visibleRows offsetY viewportHeight =
-      vBox [children (spacer topSkipped : renderRows viewportHeight loIdx hiIdx ++ [spacer bottomSkipped])]
-      where
-        loIdx         = max 0 (floor (offsetY / rh))
-        hiIdx         = min itemCount (ceiling ((offsetY + viewportHeight) / rh))
-        topSkipped    = fromIntegral loIdx * rh
-        bottomSkipped = fromIntegral (itemCount - hiIdx) * rh
-        spacer h      = elementWithLayout (Layout fill (exactly h) TopLeft) (pure ())
-
 -- | Everything 'list' does, minus being an 'Element': one 'Focusable'
 -- stop (unless the 'Blink.Controls.Control.ccFocusPolicy' in 'lcControl' says otherwise)
 -- whose rows are never tab stops. Up\/Down move the cursor, Shift-Up\/Down
@@ -782,8 +699,6 @@ listBase mkId cfg = do
     -- lays the header out above the rows.
     headerHeight = maybe 0 (const (lcRowHeight cfg)) (lcHeader cfg)
 
-    scrollBarTag = mkId . ListScrollBar
-
     fireSelectionChanged s = when (s /= s0) $ runHandlers (lcOnSelectionChanged cfg) s
     fireItemActivated      = runHandlers (lcOnItemActivated cfg)
 
@@ -811,7 +726,7 @@ listBase mkId cfg = do
     -- The fixed header composited above the rows, reserving the same
     -- 'scrollBarThickness' gutter on the right that the rows themselves
     -- reserve for the vertical scrollbar once they scroll (see
-    -- 'virtualizedRows') -- the header has no scrollbar of its own, so it
+    -- @renderViewport@) -- the header has no scrollbar of its own, so it
     -- must reserve the gutter here too or its columns drift out of
     -- alignment with the rows beneath it.
     headerArea headerEl finalModel = do
@@ -836,8 +751,7 @@ listBase mkId cfg = do
     -- Keyboard-driven scroll adjustment plus the rows themselves --
     -- composed via a real 'vBox' rather than manual bounds math when a
     -- header is present (see 'lcHeader'), so 'getBounds' here already
-    -- reflects the space left after it, the same way it already does
-    -- for 'virtualizedRows's own hBox split.
+    -- reflects the space left after it.
     rowsArea finalModel = do
       trackCursor finalModel
       renderViewport
@@ -858,11 +772,32 @@ listBase mkId cfg = do
           Nothing -> pure ()
         setCursorIndex (mkId List) mIdx
 
-    -- The row-building side of 'virtualizedRows': slices the item states
-    -- for whichever range it asks for, and builds each into a row at the
-    -- viewport height it's given.
-    renderViewport = virtualizedRows scrollBarTag itemCount (lcRowHeight cfg) renderRows
-      where renderRows vh lo hi = zipWith (row vh) [lo ..] (take (hi - lo) (drop lo (itemStates s0)))
+    -- The rows scrolling vertically within a 'scrollViewport'. Only the
+    -- rows in view are built, so an off-screen row is never built or
+    -- hit-tested; a spacer above and below keeps the total height at
+    -- every row's, so the scrollbar's thumb geometry never shifts as the
+    -- visible set changes. The content has no width of its own, so it
+    -- never scrolls horizontally.
+    renderViewport = scrollViewport (mkId . ListViewport) ScrollViewportConfig
+      { svWheelStep   = lcRowHeight cfg * wheelRowsPerNotch
+      , svContentSize = Size 0 (totalRowsHeight (lcRowHeight cfg) itemCount)
+      , svContent     = runElement . visibleRows
+      }
+
+    -- Each row is told the viewport's height, for its own click to scroll
+    -- it fully into view (see @rowActivated@).
+    visibleRows inView =
+      vBox [children (spacer topSkipped : zipWith (row viewportHeight) [loIdx ..] inViewStates ++ [spacer bottomSkipped])]
+      where
+        rh             = lcRowHeight cfg
+        offsetY        = rectY inView
+        viewportHeight = rectHeight inView
+        loIdx          = max 0 (floor (offsetY / rh))
+        hiIdx          = min itemCount (ceiling ((offsetY + viewportHeight) / rh))
+        inViewStates   = take (hiIdx - loIdx) (drop loIdx (itemStates s0))
+        topSkipped     = fromIntegral loIdx * rh
+        bottomSkipped  = fromIntegral (itemCount - hiIdx) * rh
+        spacer h       = elementWithLayout (Layout fill (exactly h) TopLeft) (pure ())
 
     stepKey (s, activated) ev = case key ev of
       KeyUp                        -> (move Prev, activated)
@@ -879,8 +814,8 @@ listBase mkId cfg = do
           Nothing -> (s, activated)
 
     -- A click always lands on a row that's at least partly visible (an
-    -- off-screen, virtualised-out row is never built, so never hit-tested
-    -- -- see 'virtualizedRows'), but that row can still be only partially
+    -- off-screen row is never built, so never hit-tested -- see
+    -- @renderViewport@), but that row can still be only partially
     -- within the viewport, straddling its top or bottom edge. Scrolling
     -- it fully into view on the same click, via 'scrollRowIntoView',
     -- matches keyboard navigation already doing the same for the cursor.
@@ -984,7 +919,7 @@ scrollRowIntoView mkId cfg itemCount viewportHeight idx = when (maxOffset > 0) $
         | otherwise                            = Nothing
   mapM_ (setScrollStateNow listScrollEid) newFrac
   where
-    listScrollEid = mkId (ListScrollBar ScrollBar)
+    listScrollEid = mkId (ListViewport (ViewportVerticalBar ScrollBar))
     contentHeight = totalRowsHeight (lcRowHeight cfg) itemCount
     maxOffset     = contentHeight - viewportHeight
 

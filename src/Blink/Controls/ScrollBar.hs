@@ -47,6 +47,10 @@ module Blink.Controls.ScrollBar
   , scrollBarThickness
   , visibleFraction
   , step
+    -- * Scrollable viewports
+  , ScrollViewportPart (..)
+  , ScrollViewportConfig (..)
+  , scrollViewport
     -- * Style
   , defaultStyleEntries
   ) where
@@ -56,12 +60,12 @@ import Control.Monad (forM_, void, when)
 import Blink.Controls.Button (ButtonConfig (..), onActivated)
 import Blink.Controls.RepeatButton (RepeatButtonConfig (..), defaultRepeatButtonConfig, repeatButtonBase)
 import Blink.Controls.Control
-import Blink.Geometry (Alignment (TopLeft), Orientation (..), Point (..), Rectangle (..), clampFraction, insetRect, uniform)
+import Blink.Geometry (Alignment (TopLeft), Orientation (..), Point (..), Rectangle (..), Size (..), clampFraction, insetRect, uniform)
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (ImagePath)
 import Blink.View
-import Blink.View.Drawing (drawImage, fillRect)
+import Blink.View.Drawing (drawImage, fillRect, withClip)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, height, noIntrinsicSize, runElement, width)
 import Blink.Style
 import Blink.Controls.Style (iconStyle, progressBarMetrics, sliderStyle, thumbColourFor, toggleGroupMetrics, toggleGroupStyle)
@@ -321,6 +325,116 @@ scrollBar tag attrs = controlElement (sbLayout cfg) box ctrl
       , ccFocusPolicy = NotFocusable
       , ccContent     = const (runElement box)
       }
+
+-- * Scrollable viewports
+
+-- | Identifies one of the two scrollbars a 'scrollViewport' can show, and a
+-- part of it. Each bar's own root id ('ScrollBar') is also where its
+-- position is stored.
+data ScrollViewportPart
+  = ViewportVerticalBar ScrollBarPart
+  | ViewportHorizontalBar ScrollBarPart
+  deriving (Eq, Ord, Show)
+
+-- | Every capability 'scrollViewport' resolves: how far a wheel notch
+-- scrolls, the content's full size, and how to draw it.
+data ScrollViewportConfig e msg = ScrollViewportConfig
+  { svWheelStep   :: Double
+    -- ^ Pixels one mouse-wheel notch scrolls.
+  , svContentSize :: Size
+    -- ^ The content's full size. Along an axis where it fits, the content
+    -- is laid out at the viewport's own size instead.
+  , svContent     :: Rectangle -> View e msg ()
+    -- ^ Draws the content into the current bounds (its full, scrolled
+    -- rectangle), given the part of it currently in view, in the content's
+    -- own coordinates.
+  }
+
+-- | A clipped area showing @cfg@'s content, with a 'scrollBar' along each
+-- axis the content overflows (and a blank corner where both meet). The
+-- mouse wheel scrolls the vertical axis while it overflows, otherwise the
+-- horizontal one. @mkId@ builds every part id of both bars.
+scrollViewport :: Ord e => (ScrollViewportPart -> e) -> ScrollViewportConfig e msg -> View e msg ()
+scrollViewport mkId cfg = do
+  bounds <- getBounds
+  -- A scrollbar shown on one axis takes space from the other, which can
+  -- itself tip that axis into overflow -- so the overflow check runs
+  -- twice: once against the full bounds, once against what's left after
+  -- the first pass's own bar(s).
+  let viewportW0 = rectWidth bounds
+      viewportH0 = rectHeight bounds
+      showV0     = overflows contentH viewportH0
+      showH0     = overflows contentW viewportW0
+      viewportW  = viewportW0 - (if showV0 then scrollBarThickness else 0)
+      viewportH  = viewportH0 - (if showH0 then scrollBarThickness else 0)
+      showV      = overflows contentH viewportH
+      showH      = overflows contentW viewportW
+  if not showV && not showH
+    then svContent cfg (Rectangle 0 0 viewportW0 viewportH0)
+    else runElement (scrollableArea viewportW viewportH showV showH)
+  where
+    Size contentW contentH = svContentSize cfg
+    vScrollEid = mkId (ViewportVerticalBar ScrollBar)
+    hScrollEid = mkId (ViewportHorizontalBar ScrollBar)
+
+    overflows content viewport = content > max 0 viewport
+
+    scrollableArea viewportW viewportH showV showH = vBox
+      [ children
+          ( hBox
+              [ children
+                  ( elementWithLayout (Layout fill fill TopLeft) (clippedContent viewportW viewportH showV showH)
+                    : [ vBar | showV ]
+                  )
+              ]
+            : [ hBox
+                  [ height (exactly scrollBarThickness)
+                  , children (hBar : [ corner | showV ])
+                  ]
+              | showH
+              ]
+          )
+      ]
+      where
+        vBar = scrollBar (mkId . ViewportVerticalBar)
+          [ scrollBarOrientation Vertical, height fill, visibleFraction (viewportH / contentH) ]
+        hBar = scrollBar (mkId . ViewportHorizontalBar)
+          [ scrollBarOrientation Horizontal, width fill, visibleFraction (viewportW / contentW) ]
+        corner = elementWithLayout (Layout (exactly scrollBarThickness) (exactly scrollBarThickness) TopLeft) (pure ())
+
+    -- 'withClip' must capture this bounds -- the viewport's own, not yet
+    -- offset -- before the content moves within it.
+    clippedContent viewportW viewportH showV showH = do
+      applyWheel viewportW viewportH showV showH
+      bounds <- getBounds
+      hFrac  <- if showH then getScrollState hScrollEid else pure 0
+      vFrac  <- if showV then getScrollState vScrollEid else pure 0
+      let offsetX = if showH then hFrac * (contentW - viewportW) else 0
+          offsetY = if showV then vFrac * (contentH - viewportH) else 0
+          contentBounds = bounds
+            { rectX      = rectX bounds - offsetX
+            , rectY      = rectY bounds - offsetY
+            , rectWidth  = if showH then contentW else rectWidth bounds
+            , rectHeight = if showV then contentH else rectHeight bounds
+            }
+          inView = Rectangle offsetX offsetY (rectWidth bounds) (rectHeight bounds)
+      withClip $ withBounds contentBounds (svContent cfg inView)
+
+    -- Only a vertical wheel delta exists in the input model, so it drives
+    -- whichever axis actually scrolls, favouring vertical. Checked against
+    -- the viewport's own (unscrolled) bounds, and deferred via
+    -- 'requestScrollBy' like every other user gesture.
+    applyWheel viewportW viewportH showV showH = do
+      wheel <- getWheelDelta
+      when (wheel /= 0) $ do
+        over <- isRegionHit
+        when over $ case (showV, showH) of
+          (True, _)      -> scrollBy vScrollEid (contentH - viewportH) wheel
+          (False, True)  -> scrollBy hScrollEid (contentW - viewportW) wheel
+          (False, False) -> pure ()
+
+    scrollBy eid maxOffset wheel =
+      when (maxOffset > 0) $ requestScrollBy eid (wheel * svWheelStep cfg / maxOffset)
 
 -- * Style
 
