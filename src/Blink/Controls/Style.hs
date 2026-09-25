@@ -6,8 +6,7 @@ The shape vocabulary shared by more than one built-in control -- the
 "bordered box" ('buttonStyle') and "flat row" ('flatRowStyle') looks, the
 fill and thumb looks ('plainFillStyle', 'valueFillStyle', 'thumbStyle')
 shared by the parts of a slider, scrollbar and progress bar, and the plain
-wrapper look ('toggleGroupStyle') shared by a toggle
-group, a radio group, and a scrollbar's own container -- plus the
+look ('plainStyle') for anything with no look of its own -- plus the
 'Metrics' each pairs with in 'Blink.Style.Defaults.defaultTheme'.
 Also 'containerStyle', not registered by 'Blink.Style.Defaults.defaultTheme'
 itself (no built-in control needs it) but exported the same way
@@ -26,11 +25,11 @@ module Blink.Controls.Style
   ( transparent
   , controlMetrics
   , flatRowMetrics
-  , progressBarMetrics
-  , toggleGroupMetrics
+  , trackMetrics
+  , zeroMetrics
   , buttonStyle
   , flatRowStyle
-  , toggleGroupStyle
+  , plainStyle
   , containerStyle
   , iconStyleKey
   , iconStyle
@@ -71,23 +70,22 @@ flatRowMetrics = Metrics
   , metricsPadding     = uniform 4
   }
 
--- | Shared by 'Blink.Controls.ProgressBar', 'Blink.Controls.Slider',
--- and 'Blink.Controls.ScrollBar's track -- despite the name, this is
--- the generic track metrics, not something owned by the progress bar.
-progressBarMetrics :: Metrics
-progressBarMetrics = Metrics
+-- | A margin with no padding, for a track-shaped control (a progress bar,
+-- a slider, a scrollbar's track) whose content runs right up to its
+-- chrome.
+trackMetrics :: Metrics
+trackMetrics = Metrics
   { metricsMargin      = uniform 3
   , metricsPadding     = uniform 0
   }
 
--- | No margin\/padding\/border of its own -- a
--- 'Blink.Controls.ToggleGroup.toggleButtonGroup'\/'Blink.Controls.ToggleGroup.radioButtonGroup'
--- is just a plain wrapper around its items; any chrome belongs on the
--- items themselves ('Blink.Controls.Button.buttonStyleKey'\/'Blink.Controls.RadioButton.radioButtonStyleKey'),
--- not doubled up on their container. Shared by
--- 'Blink.Controls.ScrollBar's own outer container for the same reason.
-toggleGroupMetrics :: Metrics
-toggleGroupMetrics = Metrics
+-- | No margin or padding, for a wrapper whose chrome belongs to what it
+-- holds (a toggle group's items, a scrollbar's buttons and track), for a
+-- control that sits flush in space its parent reserves for it (a tree
+-- chevron, an image), and for every part (see
+-- 'Blink.Controls.Control.drawPart'), which never uses metrics.
+zeroMetrics :: Metrics
+zeroMetrics = Metrics
   { metricsMargin      = uniform 0
   , metricsPadding     = uniform 0
   }
@@ -135,17 +133,12 @@ flatRowStyle p = StyleSet
       ]
   }
 
--- | A plain, transparent, borderless style for a group's own container --
--- paired with 'toggleGroupMetrics' alongside it above. Shared by
--- 'Blink.Controls.ToggleGroup.toggleButtonGroup', 'Blink.Controls.ToggleGroup.radioButtonGroup',
--- and a scrollbar's own outer container; the items inside still resolve
--- their own look from 'buttonStyle'\/'flatRowStyle'. No 'FocusFocused'
--- override either -- unlike 'containerStyle' below, none of these three
--- containers ever holds keyboard focus itself (each is
--- 'Blink.Controls.Control.NotFocusable', fixed), so a ring here
--- would never actually draw.
-toggleGroupStyle :: Palette -> StyleSet
-toggleGroupStyle p = StyleSet
+-- | Transparent, borderless, primary-coloured left-aligned text, and no
+-- change with state: the look of anything with no look of its own (a
+-- group's container, a progress bar or divider whose visible parts are
+-- styled separately, an image), and the base other styles adjust.
+plainStyle :: Palette -> StyleSet
+plainStyle p = StyleSet
   { styleBase = Style
       { styleBackground   = transparent
       , styleTextColour   = paletteTextPrimary p
@@ -161,10 +154,10 @@ toggleGroupStyle p = StyleSet
 -- should read (no fill tint, no press fill). Keeps 'CommonDisabled' and
 -- 'FocusFocused' too -- the latter is a state such a container does
 -- reach: a composite built on 'Blink.View.Focus.withFocusScope' (unlike
--- 'toggleGroupStyle's wrappers above) reads as focused whenever any child
+-- 'plainStyle's wrappers above) reads as focused whenever any child
 -- inside it does, so its own border still needs to answer that. Paired
 -- with 'controlMetrics' (real border width, so both overrides have
--- something to draw into) rather than 'toggleGroupMetrics'.
+-- something to draw into) rather than 'zeroMetrics'.
 containerStyle :: Palette -> StyleSet
 containerStyle p = StyleSet
   { styleBase = Style

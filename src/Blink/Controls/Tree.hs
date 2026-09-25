@@ -57,7 +57,7 @@ import Blink.Element
   ( Element (..), HasLayoutConfig (..), HasSelection (..), HasSelectionChanged (..), elementWithLayout, emptyElement
   , noIntrinsicSize
   )
-import Blink.Geometry (Alignment (TopLeft), uniform)
+import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
@@ -65,7 +65,7 @@ import Blink.Rendering (ImagePath, TextAlign (..))
 import Blink.View (Effect, View, currentStyle)
 import Blink.View.Drawing (drawImage)
 import Blink.Style
-import Blink.Controls.Style (transparent)
+import Blink.Controls.Style (iconStyle, zeroMetrics)
 
 -- | Every currently visible row of @forest@, in document order, paired
 -- with its depth (0 for a root). A node's children are only ever visited
@@ -368,33 +368,11 @@ handleExpansionKey mkRowId listCfg visRows nodeInfo expanded0 onExpansionChanged
 treeChevronStyleKey :: StyleKey e
 treeChevronStyleKey = Class "tree-chevron"
 
--- | No margin\/padding\/border -- the chevron already sits in a fixed,
--- narrow column 'Blink.Controls.Tree.tree' reserves for it, so any
--- chrome inset would just crowd its glyph.
-treeChevronMetrics :: Metrics
-treeChevronMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 0
-  }
-
--- | A plain, transparent, centred icon with no border -- the same shape
--- 'Blink.Controls.Label.labelStyle' has, just with no padding of
--- its own. Uses 'paletteIcon'\/'paletteIconHover' (the same colours
--- 'Blink.Controls.Checkbox.checkbox'\/'Blink.Controls.RadioButton.radioButton'
--- tint their own icons with), since the chevron is nothing but an icon.
+-- | 'Blink.Controls.Style.iconStyle', centred -- the chevron is nothing
+-- but an icon, tinted the same way a checkbox's or radio button's is.
 treeChevronStyle :: Palette -> StyleSet
-treeChevronStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground   = transparent
-      , styleTextColour   = paletteIcon p
-      , styleTextAlign    = AlignCenter
-      , styleBorder       = noBorder
-      }
-  , styleOverrides = Map.fromList
-      [ (CommonMouseOver, \s -> s { styleTextColour = paletteIconHover p })
-      , (CommonDisabled,  \s -> s { styleTextColour = paletteTextMuted p })
-      ]
-  }
+treeChevronStyle p = icon { styleBase = (styleBase icon) { styleTextAlign = AlignCenter } }
+  where icon = iconStyle p
 
 -- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
 -- Needed at all only because 'Blink.Controls.Control.defaultControlConfig'
@@ -403,4 +381,7 @@ treeChevronStyle p = StyleSet
 -- without it, the chevron would draw with a button's full
 -- border\/background chrome instead of sitting flush in its narrow column.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
-defaultStyleEntries p = [ (treeChevronStyleKey, (treeChevronMetrics, treeChevronStyle p)) ]
+defaultStyleEntries p =
+  -- No margin or padding: the chevron sits in a fixed, narrow column 'tree'
+  -- reserves for it, so any inset would crowd its icon.
+  [ (treeChevronStyleKey, (zeroMetrics, treeChevronStyle p)) ]

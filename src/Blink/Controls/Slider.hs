@@ -40,7 +40,7 @@ import Blink.View
 import Blink.Element (Element (..), HasLayoutConfig (..), noIntrinsicSize, HasStep (..), HasValue (..))
 import Blink.Style
 import Blink.Rendering (TextAlign (..))
-import Blink.Controls.Style (plainFillStyle, progressBarMetrics, thumbStyle, toggleGroupMetrics, transparent, valueFillStyle)
+import Blink.Controls.Style (plainFillStyle, trackMetrics, thumbStyle, zeroMetrics, transparent, valueFillStyle)
 
 -- | The height of the thin filled bar drawn along the middle of the
 -- control's full bounds -- deliberately much shorter than the thumb, so
@@ -237,8 +237,8 @@ sliderStyle p = StyleSet
 -- own chrome and each of its parts.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
-  [ (sliderStyleKey,      (progressBarMetrics, sliderStyle p))
-  , (sliderTrackStyleKey, (toggleGroupMetrics, plainFillStyle p (paletteBorder p)))
-  , (sliderFillStyleKey,  (toggleGroupMetrics, valueFillStyle p (paletteAccent p)))
-  , (sliderThumbStyleKey, (toggleGroupMetrics, thumbStyle p))
+  [ (sliderStyleKey,      (trackMetrics, sliderStyle p))
+  , (sliderTrackStyleKey, (zeroMetrics, plainFillStyle p (paletteBorder p)))
+  , (sliderFillStyleKey,  (zeroMetrics, valueFillStyle p (paletteAccent p)))
+  , (sliderThumbStyleKey, (zeroMetrics, thumbStyle p))
   ]

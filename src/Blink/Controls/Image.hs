@@ -26,22 +26,20 @@ module Blink.Controls.Image
   , preserveRatio
   , resolveImageSize
     -- * Style
-  , imageStyle
   , defaultStyleEntries
   ) where
 
 import Data.Maybe (fromMaybe)
-import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
-import Blink.Geometry (Alignment (TopLeft), Size (..), uniform)
+import Blink.Geometry (Alignment (TopLeft), Size (..))
 import Blink.Layout.Constraints (Layout (..), fitContent)
-import Blink.Rendering (Colour (..), ImagePath, TextAlign (..))
+import Blink.Rendering (Colour (..), ImagePath)
 import Blink.View (measureImage)
 import Blink.View.Drawing (drawImage)
 import Blink.Element (Element (..), HasLayoutConfig (..))
 import Blink.Style
-import Blink.Controls.Style (transparent)
+import Blink.Controls.Style (plainStyle, zeroMetrics)
 
 -- | Every capability 'image' resolves: the wrapped 'ControlConfig', the
 -- image to draw, its fit dimensions, and whether they preserve aspect
@@ -138,29 +136,6 @@ image attrs = controlElement (icLayout cfg) (Element (icLayout cfg) intrinsicSiz
 imageStyleKey :: StyleKey e
 imageStyleKey = Class "image"
 
--- | No margin\/padding\/border of its own -- an image draws itself with
--- no chrome by default, the same reasoning as
--- 'Blink.Controls.Style.toggleGroupMetrics'.
-imageMetrics :: Metrics
-imageMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 0
-  }
-
--- | Fully transparent and borderless -- an app that wants a border or
--- background around an image overrides this via 'Blink.Controls.Control.style',
--- the same as any other control.
-imageStyle :: Palette -> StyleSet
-imageStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground   = transparent
-      , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleBorder       = noBorder
-      }
-  , styleOverrides = Map.empty
-  }
-
 -- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
-defaultStyleEntries p = [ (imageStyleKey, (imageMetrics, imageStyle p)) ]
+defaultStyleEntries p = [ (imageStyleKey, (zeroMetrics, plainStyle p)) ]

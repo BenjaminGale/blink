@@ -52,7 +52,7 @@ import Blink.Element
   ( Element (..), HasLayoutConfig (..), HasSelection (..), HasSelectionChanged (..), elementWithLayout, emptyElement
   , noIntrinsicSize, runElement
   )
-import Blink.Geometry (Alignment (TopLeft), Insets (..), Point (pointX), Rectangle (..), insetRect, uniform)
+import Blink.Geometry (Alignment (TopLeft), Insets (..), Point (pointX), Rectangle (..), insetRect)
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), Length, exactly, fill)
 import Blink.View
@@ -61,7 +61,7 @@ import Blink.View
   )
 import Blink.Rendering (TextAlign (..))
 import Blink.Style
-import Blink.Controls.Style (plainFillStyle, transparent)
+import Blink.Controls.Style (plainFillStyle, plainStyle, zeroMetrics)
 
 -- | Identifies one part of a 'table' for the purpose of building
 -- element ids -- every part 'listBase' itself already needs (the root,
@@ -437,41 +437,11 @@ tableHeaderStyle p = StyleSet
   , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleBackground = paletteSurfaceHover p })
   }
 
--- | No margin\/padding of its own -- the header row is inset once as a
--- whole, by the same chrome a data row gets, rather than padding each
--- header cell individually; padding here too would double up on that and
--- push a header cell's content further right than the matching row cell's.
-tableHeaderMetrics :: Metrics
-tableHeaderMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 0
-  }
-
--- | No margin (unlike 'Blink.Controls.Divider.divider') -- the handle's
--- whole few-pixel width has to stay both hittable and drawable.
-tableColumnDividerMetrics :: Metrics
-tableColumnDividerMetrics = Metrics
-  { metricsMargin      = uniform 0
-  , metricsPadding     = uniform 0
-  }
-
 -- | The 'StyleKey' the 1px line drawn down the middle of each resize
 -- handle resolves its style from, with the handle's hover as
 -- 'CommonMouseOver' and a press on it as 'CommonPressed'.
 tableColumnDividerLineStyleKey :: StyleKey e
 tableColumnDividerLineStyleKey = Class "tableColumnDividerLine"
-
--- | A resize handle's own chrome: nothing drawn, since its line is a part.
-tableColumnDividerStyle :: Palette -> StyleSet
-tableColumnDividerStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground   = transparent
-      , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleBorder       = noBorder
-      }
-  , styleOverrides = Map.empty
-  }
 
 -- | A vertical line, 'paletteBorder' by default, tinted on hover the same
 -- way a header cell is.
@@ -487,7 +457,11 @@ tableColumnDividerLineStyle p = (plainFillStyle p (paletteBorder p))
 -- of a header that reads distinctly from the rows beneath it.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
-  [ (tableHeaderStyleKey, (tableHeaderMetrics, tableHeaderStyle p))
-  , (tableColumnDividerStyleKey, (tableColumnDividerMetrics, tableColumnDividerStyle p))
-  , (tableColumnDividerLineStyleKey, (tableColumnDividerMetrics, tableColumnDividerLineStyle p))
+  [ -- No padding: the header row is inset once as a whole, by the same
+    -- chrome a data row gets, so padding each cell too would push its
+    -- content right of the matching row cell's.
+    (tableHeaderStyleKey, (zeroMetrics, tableHeaderStyle p))
+    -- No margin: the handle's few pixels of width have to stay hittable.
+  , (tableColumnDividerStyleKey, (zeroMetrics, plainStyle p))
+  , (tableColumnDividerLineStyleKey, (zeroMetrics, tableColumnDividerLineStyle p))
   ]

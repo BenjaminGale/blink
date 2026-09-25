@@ -6,7 +6,7 @@ coherent, usable look out of the box just by supplying a 'Palette' --
 see 'defaultTheme'.
 
 Each control shape is also exported on its own
-('buttonStyle', 'flatRowStyle', 'progressBarStyle', 'sliderStyle', 'labelStyle'), so an
+('buttonStyle', 'flatRowStyle', 'sliderStyle', 'labelStyle', 'plainStyle'), so an
 app that wants the built-in look for every control /except/ one state on
 one control doesn't have to rebuild a whole 'StyleSet' by hand -- take the
 built-in one and replace a single entry in its sparse 'styleOverrides'
@@ -30,7 +30,7 @@ passed via 'Blink.Controls.Control.style') in 'themeElementStyles'.
 Each built-in control's own registration in 'defaultTheme' is the
 @defaultStyleEntries@ exported from that control's module (e.g.
 "Blink.Controls.Checkbox"), which is also where a control's own shape
-lives if it has one (e.g. 'Blink.Controls.ProgressBar.progressBarStyle').
+lives if it has one (e.g. 'Blink.Controls.Slider.sliderStyle').
 A shape shared by more than one control lives in "Blink.Controls.Style"
 instead, since no single control's module could own it. This module only
 assembles those pieces into one 'Theme' -- see any of the modules above
@@ -40,11 +40,9 @@ module Blink.Style.Defaults
   ( defaultTheme
   , buttonStyle
   , flatRowStyle
-  , progressBarStyle
   , sliderStyle
-  , dividerStyle
   , labelStyle
-  , toggleGroupStyle
+  , plainStyle
   , containerStyle
   ) where
 
@@ -54,12 +52,10 @@ import Blink.Rendering (TextAlign (..))
 import Blink.Style
 import Blink.Controls.Style
   (buttonStyle, containerStyle, controlMetrics, flatRowStyle, iconStyle, iconStyleKey
-  , toggleGroupMetrics, toggleGroupStyle
+  , plainStyle, zeroMetrics
   )
 import Blink.Controls.Slider (sliderStyle)
-import Blink.Controls.Divider (dividerStyle)
 import Blink.Controls.Label (labelStyle)
-import Blink.Controls.ProgressBar (progressBarStyle)
 
 import qualified Blink.Controls.Button as Button
 import qualified Blink.Controls.Checkbox as Checkbox
@@ -108,7 +104,7 @@ defaultTheme p = Theme
       , Menu.defaultStyleEntries p
       , MenuButton.defaultStyleEntries p
       , MenuBar.defaultStyleEntries p
-      , [ (iconStyleKey, (toggleGroupMetrics, iconStyle p)) ]
+      , [ (iconStyleKey, (zeroMetrics, iconStyle p)) ]
       ])
   , themeDefaultStyle = (controlMetrics, buttonStyle AlignCenter p)
   }

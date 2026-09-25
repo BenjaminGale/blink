@@ -47,7 +47,7 @@ import Blink.Element
   , HasSelectionChanged (..), runElement
   )
 import Blink.Style
-import Blink.Controls.Style (toggleGroupMetrics, toggleGroupStyle)
+import Blink.Controls.Style (zeroMetrics, plainStyle)
 
 -- | Identifies one part of a 'toggleButtonGroup'\/'radioButtonGroup' for the
 -- purpose of building element ids: the group's own container
@@ -267,6 +267,6 @@ radioButtonGroupStyleKey = Class "radioButtonGroup"
 -- 'Blink.Controls.Button.buttonStyleKey'\/'Blink.Controls.RadioButton.radioButtonStyleKey'.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
-  [ (toggleButtonGroupStyleKey, (toggleGroupMetrics, toggleGroupStyle p))
-  , (radioButtonGroupStyleKey,  (toggleGroupMetrics, toggleGroupStyle p))
+  [ (toggleButtonGroupStyleKey, (zeroMetrics, plainStyle p))
+  , (radioButtonGroupStyleKey,  (zeroMetrics, plainStyle p))
   ]

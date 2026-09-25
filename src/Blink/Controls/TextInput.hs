@@ -42,7 +42,7 @@ import Blink.View.Drawing (fillRect, drawText)
 import Blink.View.Selection (selectionHasExtent, selectionLow, selectionHigh, cursor, extendActive)
 import Blink.Element (Element (..), HasLayoutConfig (..), HasValue (..))
 import Blink.Style
-import Blink.Controls.Style (buttonStyle, controlMetrics, plainFillStyle, toggleGroupMetrics)
+import Blink.Controls.Style (buttonStyle, controlMetrics, plainFillStyle, zeroMetrics)
 
 -- | Every capability 'textInput' resolves: the wrapped 'ControlConfig',
 -- its current value, 'placeholder', 'inputFilter'\/'displayFilter', and
@@ -403,5 +403,5 @@ textInputSelectionStyleKey = Class "textInputSelection"
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
   [ (textInputStyleKey,          (controlMetrics, textInputStyle p))
-  , (textInputSelectionStyleKey, (toggleGroupMetrics, plainFillStyle p (RGBA 0.3 0.5 1.0 0.4)))
+  , (textInputSelectionStyleKey, (zeroMetrics, plainFillStyle p (RGBA 0.3 0.5 1.0 0.4)))
   ]

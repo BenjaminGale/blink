@@ -50,7 +50,7 @@ import Blink.View (View, charOffset, currentStyle, getBounds, getCurrentScope, g
 import Blink.View.Drawing (drawText, fillRect)
 import Blink.Element (Element (..), HasLayoutConfig (..))
 import Blink.Style
-import Blink.Controls.Style (transparent)
+import Blink.Controls.Style (plainStyle)
 
 -- * Caption fragment
 
@@ -216,17 +216,10 @@ labelMetrics = Metrics
   , metricsPadding     = uniform 6
   }
 
--- | A plain, transparent label style with no border.
+-- | 'Blink.Controls.Style.plainStyle' with muted text while disabled.
 labelStyle :: Palette -> StyleSet
-labelStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground   = transparent
-      , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleBorder       = noBorder
-      }
-  , styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p })
-  }
+labelStyle p = (plainStyle p)
+  { styleOverrides = Map.singleton CommonDisabled (\s -> s { styleTextColour = paletteTextMuted p }) }
 
 -- | This control's one entry in 'Blink.Style.Defaults.defaultTheme'.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]

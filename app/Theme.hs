@@ -28,8 +28,7 @@ import Blink.Controls.Table (TablePart)
 import Blink.Controls.Tree (TreePart)
 import Blink.Controls.TreeTable (TreeTablePart)
 import Blink.Style
-import Blink.Style.Defaults (defaultTheme)
-import Blink.Controls.Divider (dividerStyle)
+import Blink.Style.Defaults (defaultTheme, plainStyle)
 import Blink.Controls.Style (transparent)
 
 -- | Which of the demo's sidebar-selected pages is showing.
@@ -124,12 +123,11 @@ statusBarMetrics = Metrics
 topOnly :: EdgeVisibility
 topOnly = allEdgesVisible { edgeRightVisible = False, edgeBottomVisible = False, edgeLeftVisible = False }
 
--- | The colours from 'dividerStyle', with its width-0 border layer (see
--- its doc comment for why) swapped for a real, visible, top-only one.
+-- | 'plainStyle' with a visible, top-only border.
 statusBarStyle :: Palette -> StyleSet
 statusBarStyle p = base { styleBase = (styleBase base) { styleBorder = topRule } }
   where
-    base    = dividerStyle p
+    base    = plainStyle p
     topRule = map (\l -> l { layerVisible = topOnly }) (soloBorder (paletteBorder p) 1)
 
 -- | Inserts the status bar's look -- an 'ElementId'-keyed entry, not a

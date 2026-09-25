@@ -17,12 +17,10 @@ module Blink.Controls.ProgressBar
   , bandSpeed
   , bandWidth
     -- * Style
-  , progressBarStyle
   , defaultStyleEntries
   ) where
 
 import Control.Monad (when)
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
 import Blink.Controls.Control
@@ -30,9 +28,8 @@ import Blink.Geometry (Alignment (TopLeft), Rectangle (..), clampFraction)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.View
 import Blink.Element (Element (..), HasLayoutConfig (..), noIntrinsicSize)
-import Blink.Rendering (TextAlign (..))
 import Blink.Style
-import Blink.Controls.Style (plainFillStyle, progressBarMetrics, toggleGroupMetrics, transparent, valueFillStyle)
+import Blink.Controls.Style (plainFillStyle, plainStyle, trackMetrics, valueFillStyle, zeroMetrics)
 
 -- | The value passed to 'progressBar' via 'progress'.
 data ProgressValue
@@ -141,24 +138,11 @@ progressBarTrackStyleKey = Class "progressBarTrack"
 progressBarFillStyleKey :: StyleKey e
 progressBarFillStyleKey = Class "progressBarFill"
 
--- | A progress bar's own chrome: no background or border of its own, since
--- its track and fill are parts.
-progressBarStyle :: Palette -> StyleSet
-progressBarStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground   = transparent
-      , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleBorder       = noBorder
-      }
-  , styleOverrides = Map.empty
-  }
-
 -- | This control's entries in 'Blink.Style.Defaults.defaultTheme': its
 -- own chrome and each of its parts.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
-  [ (progressBarStyleKey,      (progressBarMetrics, progressBarStyle p))
-  , (progressBarTrackStyleKey, (toggleGroupMetrics, plainFillStyle p (paletteSurface p)))
-  , (progressBarFillStyleKey,  (toggleGroupMetrics, valueFillStyle p (paletteAccent p)))
+  [ (progressBarStyleKey,      (trackMetrics, plainStyle p))
+  , (progressBarTrackStyleKey, (zeroMetrics, plainFillStyle p (paletteSurface p)))
+  , (progressBarFillStyleKey,  (zeroMetrics, valueFillStyle p (paletteAccent p)))
   ]

@@ -33,7 +33,7 @@ import Blink.Element (Element (..), HasLayoutConfig (..), emptyElement, runEleme
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Size (..))
 import Blink.Layout.Constraints (Available (..), Layout (..), MeasureCtx (..), fill)
 import Blink.Style
-import Blink.Controls.Style (toggleGroupMetrics, toggleGroupStyle)
+import Blink.Controls.Style (zeroMetrics, plainStyle)
 
 -- | Identifies one part of a 'scrollPanel' for the purpose of building
 -- element ids: the panel's own root, or a part of its
@@ -120,11 +120,11 @@ scrollPanelStyleKey :: StyleKey e
 scrollPanelStyleKey = Class "scrollPanel"
 
 -- | This control's entry in 'Blink.Style.Defaults.defaultTheme':
--- 'Blink.Controls.Style.toggleGroupStyle', the same transparent, borderless
+-- 'Blink.Controls.Style.plainStyle', the same transparent, borderless
 -- wrapper look 'Blink.Controls.ScrollBar.scrollBar' uses for its own outer
 -- container. A scroll panel exists to make existing content scrollable, not
 -- to impose a visual boundary of its own, and, being
 -- 'Blink.Controls.Control.NotFocusable', never needs a focus ring either.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
-  [ (scrollPanelStyleKey, (toggleGroupMetrics, toggleGroupStyle p)) ]
+  [ (scrollPanelStyleKey, (zeroMetrics, plainStyle p)) ]

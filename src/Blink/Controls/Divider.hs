@@ -15,20 +15,17 @@ module Blink.Controls.Divider
   , orientation
   , thickness
     -- * Style
-  , dividerStyle
   , defaultStyleEntries
   ) where
 
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
 import Blink.Controls.Control
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Size (..), uniform)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Element (Element (..), HasLayoutConfig (..), HasOrientation (..))
-import Blink.Rendering (TextAlign (..))
 import Blink.Style
-import Blink.Controls.Style (plainFillStyle, toggleGroupMetrics, transparent)
+import Blink.Controls.Style (plainFillStyle, plainStyle, zeroMetrics)
 
 -- | Every capability 'divider' resolves: the wrapped 'ControlConfig', the
 -- axis it runs along, its thickness across that axis, and the 'Layout'
@@ -126,23 +123,10 @@ dividerMetrics = Metrics
 dividerLineStyleKey :: StyleKey e
 dividerLineStyleKey = Class "dividerLine"
 
--- | A divider's own chrome: no background or border of its own, since its
--- line is a part.
-dividerStyle :: Palette -> StyleSet
-dividerStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground   = transparent
-      , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleBorder       = noBorder
-      }
-  , styleOverrides = Map.empty
-  }
-
 -- | This control's entries in 'Blink.Style.Defaults.defaultTheme': its
 -- own chrome and its line.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
-  [ (dividerStyleKey,     (dividerMetrics, dividerStyle p))
-  , (dividerLineStyleKey, (toggleGroupMetrics, plainFillStyle p (paletteBorder p)))
+  [ (dividerStyleKey,     (dividerMetrics, plainStyle p))
+  , (dividerLineStyleKey, (zeroMetrics, plainFillStyle p (paletteBorder p)))
   ]

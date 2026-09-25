@@ -48,8 +48,7 @@ import Blink.Layout.Constraints (Layout (..), atLeast, fill, fitContent)
 import Blink.Popup (Edge (Start), Side (SideRight), content, placement, popup)
 import Blink.View
 import Blink.Element (Element (..), height, width)
-import Blink.Controls.Style (transparent)
-import Blink.Rendering (TextAlign (..))
+import Blink.Controls.Style (plainStyle)
 import Blink.Style
 
 -- | Runs @toggleCfg@ as a menu's trigger, with 'tgcSelected' as whether
@@ -365,14 +364,8 @@ menuItemMetrics = Metrics
 -- | No 'CommonMouseOver' look: hovering an item moves the highlight onto
 -- it, so 'FocusFocused' alone marks the one highlighted item.
 menuItemStyle :: Palette -> StyleSet
-menuItemStyle p = StyleSet
-  { styleBase = Style
-      { styleBackground = transparent
-      , styleTextColour = paletteTextPrimary p
-      , styleTextAlign  = AlignLeft
-      , styleBorder     = []
-      }
-  , styleOverrides = Map.fromList
+menuItemStyle p = (plainStyle p)
+  { styleOverrides = Map.fromList
       [ (CommonDisabled,      \s -> s { styleTextColour = paletteTextMuted p })
       , (FocusFocused,        \s -> s { styleBackground = paletteSurfaceHover p })
       , (menuItemSubmenuOpen, \s -> s { styleBackground = paletteSurfaceHover p })

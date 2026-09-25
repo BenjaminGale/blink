@@ -70,7 +70,7 @@ import Blink.View
 import Blink.View.Drawing (drawImage, withClip)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, height, noIntrinsicSize, runElement, width, HasOrientation (..), HasStep (..))
 import Blink.Style
-import Blink.Controls.Style (iconStyle, plainFillStyle, progressBarMetrics, thumbStyle, toggleGroupMetrics, toggleGroupStyle)
+import Blink.Controls.Style (iconStyle, plainFillStyle, trackMetrics, thumbStyle, zeroMetrics, plainStyle)
 
 -- | The thickness (cross-axis extent) of the whole control, and of each
 -- arrow button's extent along the main axis. Both fixed rather than
@@ -453,8 +453,8 @@ scrollBarThumbStyleKey = Class "scrollBarThumb"
 -- groove, and its thumb the same look as a slider's.
 defaultStyleEntries :: Ord e => Palette -> [(StyleKey e, (Metrics, StyleSet))]
 defaultStyleEntries p =
-  [ (scrollBarStyleKey,       (toggleGroupMetrics, toggleGroupStyle p))
-  , (scrollBarButtonStyleKey, (toggleGroupMetrics, iconStyle p))
-  , (scrollBarTrackStyleKey,  (progressBarMetrics, plainFillStyle p (paletteBorder p)))
-  , (scrollBarThumbStyleKey,  (toggleGroupMetrics, thumbStyle p))
+  [ (scrollBarStyleKey,       (zeroMetrics, plainStyle p))
+  , (scrollBarButtonStyleKey, (zeroMetrics, iconStyle p))
+  , (scrollBarTrackStyleKey,  (trackMetrics, plainFillStyle p (paletteBorder p)))
+  , (scrollBarThumbStyleKey,  (zeroMetrics, thumbStyle p))
   ]
