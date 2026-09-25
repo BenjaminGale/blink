@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | A tree control built on 'listBase': the caller's own hierarchy (a
@@ -18,11 +19,11 @@
 -- already have for the selection model.
 module Blink.Controls.Tree
   ( flattenVisible
-  , visibleNodes
-  , indentAndChevron
-  , handleExpansionKey
   , TreePart (..)
   , TreeItemState (..)
+  , TreeDataConfig (..)
+  , HasTreeDataConfig (..)
+  , defaultTreeDataConfig
   , TreeConfig (..)
   , defaultTreeConfig
   , tree
@@ -30,6 +31,13 @@ module Blink.Controls.Tree
   , expanded
   , renderNode
   , onExpansionChanged
+    -- * Building tree-shaped lists
+    -- | For a widget built on 'listBase' whose rows are a flattened
+    -- forest, with an indent and expand\/collapse chevron per row, the way
+    -- 'tree' and 'Blink.Controls.TreeTable.treeTable' do.
+  , visibleNodes
+  , indentAndChevron
+  , treeListBase
     -- * Style
   , treeChevronStyleKey
   , defaultStyleEntries
@@ -95,17 +103,39 @@ data TreeItemState a = TreeItemState
   , tisExpanded    :: Bool
   }
 
+-- | A widget's forest, which of its nodes are expanded, and the reactions
+-- to that set changing.
+data TreeDataConfig e msg a = TreeDataConfig
+  { tdForest             :: Forest a
+  , tdExpanded           :: Set a
+  , tdOnExpansionChanged :: [Set a -> [Effect e msg]]
+  }
+
+-- | An empty forest, nothing expanded, and no expansion reactions.
+defaultTreeDataConfig :: TreeDataConfig e msg a
+defaultTreeDataConfig = TreeDataConfig
+  { tdForest             = []
+  , tdExpanded           = Set.empty
+  , tdOnExpansionChanged = []
+  }
+
+-- | Implemented by any config type that nests a 'TreeDataConfig', letting
+-- 'forest'\/'expanded'\/'onExpansionChanged' be applied to it directly.
+class HasTreeDataConfig e msg a cfg | cfg -> e msg a where
+  overTreeData :: Attribute (TreeDataConfig e msg a) -> Attribute cfg
+
+instance HasTreeDataConfig e msg a (TreeDataConfig e msg a) where
+  overTreeData = id
+
 -- | Every capability 'tree' resolves: the embedded 'ListConfig' (for
 -- 'Blink.Controls.List.selection'\/'Blink.Controls.List.rowHeight'\/etc,
--- via 'HasListConfig'), the forest and expansion state, how a node draws
--- its own content (indent and chevron are added around this by 'tree'
--- itself), and the expansion reactions.
+-- via 'HasListConfig'), the forest and expansion state (via
+-- 'HasTreeDataConfig'), and how a node draws its own content (indent and
+-- chevron are added around this by 'tree' itself).
 data TreeConfig sel e msg a = TreeConfig
-  { tcList              :: ListConfig sel e msg a
-  , tcForest            :: Forest a
-  , tcExpanded          :: Set a
-  , tcRenderNode        :: TreeItemState a -> Element e msg
-  , tcOnExpansionChanged :: [Set a -> [Effect e msg]]
+  { tcList       :: ListConfig sel e msg a
+  , tcTreeData   :: TreeDataConfig e msg a
+  , tcRenderNode :: TreeItemState a -> Element e msg
   }
 
 instance HasControlConfig e msg (TreeConfig sel e msg a) where
@@ -119,24 +149,25 @@ instance HasLayoutConfig (TreeConfig sel e msg a) where
 instance HasListConfig sel e msg a (TreeConfig sel e msg a) where
   overList attr = Attribute (\tc -> tc { tcList = runAttribute attr (tcList tc) })
 
--- | 'defaultListConfig', an empty forest, nothing expanded, no per-node
--- render (draws nothing), and no expansion reactions.
+instance HasTreeDataConfig e msg a (TreeConfig sel e msg a) where
+  overTreeData attr = Attribute (\tc -> tc { tcTreeData = runAttribute attr (tcTreeData tc) })
+
+-- | 'defaultListConfig', 'defaultTreeDataConfig', and no per-node render
+-- (draws nothing).
 defaultTreeConfig :: (SelectionModel sel, EmptySelection sel) => TreeConfig sel e msg a
 defaultTreeConfig = TreeConfig
-  { tcList               = defaultListConfig
-  , tcForest             = []
-  , tcExpanded           = Set.empty
-  , tcRenderNode         = const emptyElement
-  , tcOnExpansionChanged = []
+  { tcList       = defaultListConfig
+  , tcTreeData   = defaultTreeDataConfig
+  , tcRenderNode = const emptyElement
   }
 
--- | The tree's own data, as a plain 'Forest' of the caller's item type.
-forest :: Forest a -> Attribute (TreeConfig sel e msg a)
-forest f = Attribute (\c -> c { tcForest = f })
+-- | The widget's own data, as a plain 'Forest' of the caller's item type.
+forest :: HasTreeDataConfig e msg a cfg => Forest a -> Attribute cfg
+forest f = overTreeData (Attribute (\c -> c { tdForest = f }))
 
 -- | Which nodes are currently expanded -- see the module header.
-expanded :: Set a -> Attribute (TreeConfig sel e msg a)
-expanded s = Attribute (\c -> c { tcExpanded = s })
+expanded :: HasTreeDataConfig e msg a cfg => Set a -> Attribute cfg
+expanded s = overTreeData (Attribute (\c -> c { tdExpanded = s }))
 
 -- | How a node draws its own content; 'tree' adds the indent and chevron
 -- around whatever this returns.
@@ -148,8 +179,8 @@ renderNode f = Attribute (\c -> c { tcRenderNode = f })
 -- back in next frame, the same relationship
 -- 'Blink.Controls.List.onSelectionChanged' has to
 -- 'Blink.Controls.List.selection'.
-onExpansionChanged :: (Set a -> [Effect e msg]) -> Attribute (TreeConfig sel e msg a)
-onExpansionChanged h = Attribute (\c -> c { tcOnExpansionChanged = tcOnExpansionChanged c ++ [h] })
+onExpansionChanged :: HasTreeDataConfig e msg a cfg => (Set a -> [Effect e msg]) -> Attribute cfg
+onExpansionChanged h = overTreeData (Attribute (\c -> c { tdOnExpansionChanged = tdOnExpansionChanged c ++ [h] }))
 
 -- | The width of one level of indent, and of the chevron column every
 -- row reserves regardless of whether it actually draws one -- so a leaf
@@ -179,31 +210,44 @@ tree mkId attrs =
   chromeElement (lcLayout listCfg) (ccStyleKey (lcControl listCfg)) (listMeasure False listCfg) (void run)
   where
     cfg     = resolve defaultTreeConfig attrs
+    td      = tcTreeData cfg
     listCfg = (tcList cfg) { lcRenderItem = renderRow }
 
-    visRows  = visibleNodes (tcForest cfg) (tcExpanded cfg)
+    visRows  = visibleNodes (tdForest td) (tdExpanded td)
     nodeInfo = Map.fromList [ (x, (depth, hasChildren)) | (x, depth, hasChildren) <- visRows ]
 
-    run = do
-      li <- listBase (mkId . TreeRow) listCfg
-      mapM_ (handleExpansionKey (mkId . TreeRow) listCfg visRows (tcExpanded cfg) (tcOnExpansionChanged cfg) (liViewportHeight li))
-        (ciKeysPressed (liControl li))
+    run = treeListBase (mkId . TreeRow) td visRows listCfg
 
-    renderRow st = hBox [children (indentAndChevron (mkId . TreeChevron) (tcOnExpansionChanged cfg) (tcExpanded cfg) depth hasChildren x ++ [tcRenderNode cfg tis])]
+    renderRow st = hBox [children (indentAndChevron (mkId . TreeChevron) td depth hasChildren x ++ [tcRenderNode cfg tis])]
       where
         x                     = isItem st
         (depth, hasChildren) = Map.findWithDefault (0, False) x nodeInfo
-        tis                   = TreeItemState st depth hasChildren (Set.member x (tcExpanded cfg))
+        tis                   = TreeItemState st depth hasChildren (Set.member x (tdExpanded td))
+
+-- | Runs @listCfg@ as 'listBase', then handles Left\/Right against the
+-- visible rows @visRows@ (see 'visibleNodes'): expanding or collapsing the
+-- node under the cursor, or moving the cursor to its first child or its
+-- parent.
+treeListBase
+  :: (Ord e, Ord a, SelectionModel sel, Eq (sel a))
+  => (ListPart a -> e)
+  -> TreeDataConfig e msg a
+  -> [(a, Int, Bool)]
+  -> ListConfig sel e msg a
+  -> View e msg ()
+treeListBase mkRowId td visRows listCfg = do
+  li <- listBase mkRowId listCfg
+  mapM_ (handleExpansionKey mkRowId listCfg visRows (tdExpanded td) (tdOnExpansionChanged td) (liViewportHeight li))
+    (ciKeysPressed (liControl li))
 
 -- | The indent (proportional to @depth@) and, when @hasChildren@, a
--- clickable chevron reflecting whether @x@ is a member of @expanded@ --
--- prepended before a row's own content by 'tree' and
--- 'Blink.Controls.TreeTable.treeTable' alike. Clicking the chevron fires
--- @onExpansionChanged@ with @x@'s membership toggled.
+-- clickable chevron reflecting whether @x@ is expanded in @td@, to go
+-- before a row's own content. Clicking the chevron fires @td@'s
+-- expansion reactions with @x@'s membership toggled.
 indentAndChevron
   :: (Ord e, Ord a)
-  => (a -> e) -> [Set a -> [Effect e msg]] -> Set a -> Int -> Bool -> a -> [Element e msg]
-indentAndChevron mkChevronId onExpansionChanged0 expanded0 depth hasChildren x =
+  => (a -> e) -> TreeDataConfig e msg a -> Int -> Bool -> a -> [Element e msg]
+indentAndChevron mkChevronId td depth hasChildren x =
   [indentCell, chevronCell]
   where
     indentCell = elementWithLayout (Layout (exactly (fromIntegral depth * treeStepWidth)) fill TopLeft) (pure ())
@@ -225,6 +269,9 @@ indentAndChevron mkChevronId onExpansionChanged0 expanded0 depth hasChildren x =
               }
           }
 
+    expanded0           = tdExpanded td
+    onExpansionChanged0 = tdOnExpansionChanged td
+
     toggleMembership y
       | Set.member y expanded0 = Set.delete y expanded0
       | otherwise               = Set.insert y expanded0
@@ -238,7 +285,7 @@ indentAndChevron mkChevronId onExpansionChanged0 expanded0 depth hasChildren x =
 -- change to the expansion set or the selection is reported the same way
 -- clicking a chevron\/pressing Up\/Down already reports one, and a moved
 -- cursor is scrolled into view the same way one moved by Up\/Down
--- already is. Shared by 'tree' and 'Blink.Controls.TreeTable.treeTable'.
+-- already is.
 --
 -- Both moves reach the target purely via 'moveCursor' -- stepped once
 -- for Right, as many times as needed to reach the parent for Left --

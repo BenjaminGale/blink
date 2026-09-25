@@ -21,22 +21,21 @@ module Blink.Controls.TreeTable
 
 import Control.Monad (void)
 import qualified Data.Map.Strict as Map
-import Data.Set (Set)
-import qualified Data.Set as Set
-import Data.Tree (Forest)
 
 import Blink.Controls.Control
 import Blink.Controls.List
 import Blink.Controls.Table
-  ( ColumnConfig (..), SortDirection (..), columnCell, columnHeaderRow, columnSpacer, requestColumnSort
-  , resolveColumnWidths, weaveColumns
+  ( ColumnConfig (..), ColumnsConfig (..), HasColumnsConfig (..), columnCell, columnRow, columns
+  , defaultColumnsConfig, onColumnSortRequested, sortedBy, withColumns
   )
-import Blink.Controls.Tree (handleExpansionKey, indentAndChevron, visibleNodes)
+import Blink.Controls.Tree
+  ( HasTreeDataConfig (..), TreeDataConfig (..), defaultTreeDataConfig, expanded, forest, indentAndChevron
+  , onExpansionChanged, treeListBase, visibleNodes
+  )
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, runElement)
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill)
-import Blink.View (Effect)
 
 -- | Identifies one part of a 'treeTable' for the purpose of building
 -- element ids -- every part 'listBase' itself already needs, plus a
@@ -50,18 +49,14 @@ data TreeTablePart a
   | TTChevron a
   deriving (Eq, Ord, Show)
 
--- | Every capability 'treeTable' resolves: the embedded 'ListConfig',
--- its columns and caller-owned current sort (as
--- 'Blink.Controls.Table.TableConfig' has), and the forest\/expansion
--- state and reactions (as 'Blink.Controls.Tree.TreeConfig' has).
+-- | Every capability 'treeTable' resolves: the embedded 'ListConfig', its
+-- columns and sort (via 'HasColumnsConfig', as
+-- 'Blink.Controls.Table.TableConfig' has), and its forest and expansion
+-- state (via 'HasTreeDataConfig', as 'Blink.Controls.Tree.TreeConfig' has).
 data TreeTableConfig sel e msg a = TreeTableConfig
-  { ttList                  :: ListConfig sel e msg a
-  , ttColumns               :: [ColumnConfig e msg a]
-  , ttSort                  :: Maybe (Int, SortDirection)
-  , ttOnColumnSortRequested :: [(Int, SortDirection) -> [Effect e msg]]
-  , ttForest                :: Forest a
-  , ttExpanded              :: Set a
-  , ttOnExpansionChanged    :: [Set a -> [Effect e msg]]
+  { ttList     :: ListConfig sel e msg a
+  , ttColumns  :: ColumnsConfig e msg a
+  , ttTreeData :: TreeDataConfig e msg a
   }
 
 instance HasControlConfig e msg (TreeTableConfig sel e msg a) where
@@ -75,47 +70,20 @@ instance HasLayoutConfig (TreeTableConfig sel e msg a) where
 instance HasListConfig sel e msg a (TreeTableConfig sel e msg a) where
   overList attr = Attribute (\tc -> tc { ttList = runAttribute attr (ttList tc) })
 
--- | 'defaultListConfig', no columns, no sort, an empty forest, and
--- nothing expanded.
+instance HasColumnsConfig e msg a (TreeTableConfig sel e msg a) where
+  overColumns attr = Attribute (\tc -> tc { ttColumns = runAttribute attr (ttColumns tc) })
+
+instance HasTreeDataConfig e msg a (TreeTableConfig sel e msg a) where
+  overTreeData attr = Attribute (\tc -> tc { ttTreeData = runAttribute attr (ttTreeData tc) })
+
+-- | 'defaultListConfig', 'defaultColumnsConfig', and
+-- 'defaultTreeDataConfig'.
 defaultTreeTableConfig :: (SelectionModel sel, EmptySelection sel) => TreeTableConfig sel e msg a
 defaultTreeTableConfig = TreeTableConfig
-  { ttList                  = defaultListConfig
-  , ttColumns               = []
-  , ttSort                  = Nothing
-  , ttOnColumnSortRequested = []
-  , ttForest                = []
-  , ttExpanded              = Set.empty
-  , ttOnExpansionChanged    = []
+  { ttList     = defaultListConfig
+  , ttColumns  = defaultColumnsConfig
+  , ttTreeData = defaultTreeDataConfig
   }
-
--- | The tree table's own columns, in order -- see
--- 'Blink.Controls.Table.columns'.
-columns :: [ColumnConfig e msg a] -> Attribute (TreeTableConfig sel e msg a)
-columns cs = Attribute (\c -> c { ttColumns = cs })
-
--- | Which column is currently sorted and which direction, if any -- see
--- 'Blink.Controls.Table.sortedBy'.
-sortedBy :: Maybe (Int, SortDirection) -> Attribute (TreeTableConfig sel e msg a)
-sortedBy s = Attribute (\c -> c { ttSort = s })
-
--- | Reacts to a sortable column's header click -- see
--- 'Blink.Controls.Table.onColumnSortRequested'.
-onColumnSortRequested :: ((Int, SortDirection) -> [Effect e msg]) -> Attribute (TreeTableConfig sel e msg a)
-onColumnSortRequested h = Attribute (\c -> c { ttOnColumnSortRequested = ttOnColumnSortRequested c ++ [h] })
-
--- | The tree table's own data, as a plain 'Forest' -- see
--- 'Blink.Controls.Tree.forest'.
-forest :: Forest a -> Attribute (TreeTableConfig sel e msg a)
-forest f = Attribute (\c -> c { ttForest = f })
-
--- | Which nodes are currently expanded -- see 'Blink.Controls.Tree.expanded'.
-expanded :: Set a -> Attribute (TreeTableConfig sel e msg a)
-expanded s = Attribute (\c -> c { ttExpanded = s })
-
--- | Reacts to a chevron click -- see
--- 'Blink.Controls.Tree.onExpansionChanged'.
-onExpansionChanged :: (Set a -> [Effect e msg]) -> Attribute (TreeTableConfig sel e msg a)
-onExpansionChanged h = Attribute (\c -> c { ttOnExpansionChanged = ttOnExpansionChanged c ++ [h] })
 
 -- | A table whose column 0 is also a tree (see the module header).
 -- @mkId@ builds every part's element id from a 'TreeTablePart', the
@@ -126,36 +94,28 @@ treeTable
   -> [Attribute (TreeTableConfig sel e msg a)]
   -> Element e msg
 treeTable mkId attrs =
-  chromeElement (lcLayout (ttList cfg)) (ccStyleKey (lcControl (ttList cfg))) (listMeasure (not (null (ttColumns cfg))) (ttList cfg)) (void run)
+  chromeElement (lcLayout (ttList cfg)) (ccStyleKey (lcControl (ttList cfg))) (listMeasure hasColumns (ttList cfg)) (void run)
   where
-    cfg = resolve defaultTreeTableConfig attrs
+    cfg        = resolve defaultTreeTableConfig attrs
+    cols       = ttColumns cfg
+    td         = ttTreeData cfg
+    hasColumns = not (null (csColumns cols))
 
-    visRows  = visibleNodes (ttForest cfg) (ttExpanded cfg)
+    visRows  = visibleNodes (tdForest td) (tdExpanded td)
     nodeInfo = Map.fromList [ (x, (depth, hasChildren)) | (x, depth, hasChildren) <- visRows ]
 
     run = do
-      widths <- resolveColumnWidths (mkId . TTColumnDivider) (ttColumns cfg)
-      let listCfg = (ttList cfg)
-            { lcRenderItem = renderRow widths
-            , lcHeader     = if null (ttColumns cfg) then Nothing else
-                Just (columnHeaderRow (mkId . TTHeaderCell) (mkId . TTColumnDivider)
-                        (requestColumnSort (ttSort cfg) (ttOnColumnSortRequested cfg)) widths (ttColumns cfg))
-            }
-      li <- listBase (mkId . TTRow) listCfg
-      mapM_ (handleExpansionKey (mkId . TTRow) listCfg visRows (ttExpanded cfg) (ttOnExpansionChanged cfg) (liViewportHeight li))
-        (ciKeysPressed (liControl li))
+      listCfg <- withColumns (mkId . TTHeaderCell) (mkId . TTColumnDivider) cols renderRow (ttList cfg)
+      treeListBase (mkId . TTRow) td visRows listCfg
 
     -- Column 0 gets the indent\/chevron treatment 'tree' itself gives a
     -- whole row; every other column is a plain 'columnCell'.
-    renderRow widths st = hBox
-      [children (weaveColumns (const columnSpacer) (zipWith cellFor [0 :: Int ..] (zip widths (ttColumns cfg))))]
+    renderRow widths st = columnRow widths (csColumns cols) cellFor
       where
         x                     = isItem st
         (depth, hasChildren) = Map.findWithDefault (0, False) x nodeInfo
 
-        cellFor 0 (w, c) = elementWithLayout (Layout w fill TopLeft) $
+        cellFor 0 w c = elementWithLayout (Layout w fill TopLeft) $
           runElement $ hBox
-            [ children (indentAndChevron (mkId . TTChevron) (ttOnExpansionChanged cfg) (ttExpanded cfg) depth hasChildren x
-                ++ [colCell c st])
-            ]
-        cellFor _ (w, c) = columnCell w c st
+            [ children (indentAndChevron (mkId . TTChevron) td depth hasChildren x ++ [colCell c st]) ]
+        cellFor _ w c = columnCell w c st

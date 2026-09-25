@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 -- | A table built on 'listBase': each row lays out one cell per
 -- 'columns' entry, sized to that column's own width, with a header row
@@ -18,22 +19,22 @@ module Blink.Controls.Table
   , cell
   , sortable
   , SortDirection (..)
+  , ColumnsConfig (..)
+  , HasColumnsConfig (..)
+  , defaultColumnsConfig
   , TableConfig (..)
   , defaultTableConfig
   , table
   , columns
   , sortedBy
   , onColumnSortRequested
-    -- * Shared column machinery
-    -- | Used by 'table' itself and by 'Blink.Controls.TreeTable.treeTable'
-    -- to lay out and resize the same kind of columns without duplicating
-    -- the logic.
-  , resolveColumnWidths
+    -- * Building column-based lists
+    -- | For a widget built on 'listBase' that lays its rows out in
+    -- resizable, sortable columns under a header, the way 'table' and
+    -- 'Blink.Controls.TreeTable.treeTable' do.
+  , withColumns
+  , columnRow
   , columnCell
-  , columnHeaderRow
-  , requestColumnSort
-  , weaveColumns
-  , columnSpacer
     -- * Style
   , tableHeaderStyleKey
   , tableColumnDividerStyleKey
@@ -125,15 +126,36 @@ sortable s = Attribute (\c -> c { colSortable = s })
 data SortDirection = Ascending | Descending
   deriving (Eq, Show)
 
+-- | A widget's columns, in order, and the caller-owned current sort with
+-- its reactions.
+data ColumnsConfig e msg a = ColumnsConfig
+  { csColumns               :: [ColumnConfig e msg a]
+  , csSort                  :: Maybe (Int, SortDirection)
+  , csOnColumnSortRequested :: [(Int, SortDirection) -> [Effect e msg]]
+  }
+
+-- | No columns, no sort, and no sort reactions.
+defaultColumnsConfig :: ColumnsConfig e msg a
+defaultColumnsConfig = ColumnsConfig
+  { csColumns               = []
+  , csSort                  = Nothing
+  , csOnColumnSortRequested = []
+  }
+
+-- | Implemented by any config type that nests a 'ColumnsConfig', letting
+-- 'columns'\/'sortedBy'\/'onColumnSortRequested' be applied to it directly.
+class HasColumnsConfig e msg a cfg | cfg -> e msg a where
+  overColumns :: Attribute (ColumnsConfig e msg a) -> Attribute cfg
+
+instance HasColumnsConfig e msg a (ColumnsConfig e msg a) where
+  overColumns = id
+
 -- | Every capability 'table' resolves: the embedded 'ListConfig' (for
 -- 'Blink.Controls.List.selection'\/'Blink.Controls.List.rowHeight'\/etc,
--- via 'HasListConfig'), its columns, and the caller-owned current sort
--- (see 'sortedBy').
+-- via 'HasListConfig') and its columns and sort (via 'HasColumnsConfig').
 data TableConfig sel e msg a = TableConfig
-  { tbList                  :: ListConfig sel e msg a
-  , tbColumns               :: [ColumnConfig e msg a]
-  , tbSort                  :: Maybe (Int, SortDirection)
-  , tbOnColumnSortRequested :: [(Int, SortDirection) -> [Effect e msg]]
+  { tbList    :: ListConfig sel e msg a
+  , tbColumns :: ColumnsConfig e msg a
   }
 
 instance HasControlConfig e msg (TableConfig sel e msg a) where
@@ -147,33 +169,34 @@ instance HasLayoutConfig (TableConfig sel e msg a) where
 instance HasListConfig sel e msg a (TableConfig sel e msg a) where
   overList attr = Attribute (\tc -> tc { tbList = runAttribute attr (tbList tc) })
 
--- | 'defaultListConfig', no columns, no sort.
+instance HasColumnsConfig e msg a (TableConfig sel e msg a) where
+  overColumns attr = Attribute (\tc -> tc { tbColumns = runAttribute attr (tbColumns tc) })
+
+-- | 'defaultListConfig' and 'defaultColumnsConfig'.
 defaultTableConfig :: (SelectionModel sel, EmptySelection sel) => TableConfig sel e msg a
 defaultTableConfig = TableConfig
-  { tbList                  = defaultListConfig
-  , tbColumns               = []
-  , tbSort                  = Nothing
-  , tbOnColumnSortRequested = []
+  { tbList    = defaultListConfig
+  , tbColumns = defaultColumnsConfig
   }
 
--- | The table's own columns, in order -- both a row's cells and the
+-- | The widget's own columns, in order -- both a row's cells and the
 -- header row are built from this same list, so they always line up.
-columns :: [ColumnConfig e msg a] -> Attribute (TableConfig sel e msg a)
-columns cs = Attribute (\c -> c { tbColumns = cs })
+columns :: HasColumnsConfig e msg a cfg => [ColumnConfig e msg a] -> Attribute cfg
+columns cs = overColumns (Attribute (\c -> c { csColumns = cs }))
 
 -- | Which column is currently sorted and which direction, if any --
 -- caller-owned, the same stateless relationship 'Blink.Controls.List.selection'
--- has to the selection model: 'table' never sorts rows itself, only
+-- has to the selection model: the widget never sorts rows itself, only
 -- reports the user's requested sort via 'onColumnSortRequested' for the
 -- app to store, re-sort by, and pass back in here.
-sortedBy :: Maybe (Int, SortDirection) -> Attribute (TableConfig sel e msg a)
-sortedBy s = Attribute (\c -> c { tbSort = s })
+sortedBy :: HasColumnsConfig e msg a cfg => Maybe (Int, SortDirection) -> Attribute cfg
+sortedBy s = overColumns (Attribute (\c -> c { csSort = s }))
 
 -- | Reacts when clicking a sortable column's header cell (see
 -- 'colSortable') requests a sort: 'Ascending' for a column not already
 -- sorted, otherwise the opposite of its current direction.
-onColumnSortRequested :: ((Int, SortDirection) -> [Effect e msg]) -> Attribute (TableConfig sel e msg a)
-onColumnSortRequested h = Attribute (\c -> c { tbOnColumnSortRequested = tbOnColumnSortRequested c ++ [h] })
+onColumnSortRequested :: HasColumnsConfig e msg a cfg => ((Int, SortDirection) -> [Effect e msg]) -> Attribute cfg
+onColumnSortRequested h = overColumns (Attribute (\c -> c { csOnColumnSortRequested = csOnColumnSortRequested c ++ [h] }))
 
 -- | Never let a drag squeeze a column narrower than this, however far
 -- past it the pointer moves -- a column can always be dragged back out
@@ -197,34 +220,54 @@ table
   -> [Attribute (TableConfig sel e msg a)]
   -> Element e msg
 table mkId attrs =
-  chromeElement (lcLayout (tbList cfg)) (ccStyleKey (lcControl (tbList cfg))) (listMeasure (not (null (tbColumns cfg))) (tbList cfg)) (void run)
+  chromeElement (lcLayout (tbList cfg)) (ccStyleKey (lcControl (tbList cfg))) (listMeasure hasColumns (tbList cfg)) (void run)
   where
-    cfg = resolve defaultTableConfig attrs
+    cfg        = resolve defaultTableConfig attrs
+    cols       = tbColumns cfg
+    hasColumns = not (null (csColumns cols))
 
-    -- Column widths depend on host-owned drag state (see
-    -- 'resolveColumnWidths'), so they're resolved once per frame here,
-    -- ahead of 'listBase', and closed over by both the header and every
-    -- row's own cells -- never re-derived per row.
     run = do
-      widths <- resolveColumnWidths (mkId . TableColumnDivider) (tbColumns cfg)
-      let listCfg = (tbList cfg)
-            { lcRenderItem = \st -> hBox
-                [children (weaveColumns (const columnSpacer) (zipWith (\w c -> columnCell w c st) widths (tbColumns cfg)))]
-            , lcHeader     = if null (tbColumns cfg) then Nothing else
-                Just (columnHeaderRow (mkId . TableHeaderCell) (mkId . TableColumnDivider)
-                        (requestColumnSort (tbSort cfg) (tbOnColumnSortRequested cfg)) widths (tbColumns cfg))
-            }
+      listCfg <- withColumns (mkId . TableHeaderCell) (mkId . TableColumnDivider) cols renderRow (tbList cfg)
       listBase (mkId . TableRow) listCfg
 
+    renderRow widths st = columnRow widths (csColumns cols) (\_ w c -> columnCell w c st)
+
+-- | @listCfg@ with a header row built from @cols@ (when there are any
+-- columns) and each row drawn by @renderRow@, both at the columns'
+-- current widths. The widths depend on how far each divider has been
+-- dragged, so they're resolved once here per frame and shared by the
+-- header and every row.
+withColumns
+  :: Ord e
+  => (Int -> e)                                   -- ^ header cell id, by column index
+  -> (Int -> e)                                   -- ^ resize handle id, by the index of the column before it
+  -> ColumnsConfig e msg a
+  -> ([Length] -> ItemState a -> Element e msg)   -- ^ a row, given the columns' current widths
+  -> ListConfig sel e msg a
+  -> View e msg (ListConfig sel e msg a)
+withColumns mkHeaderId mkDividerId cols renderRow listCfg = do
+  widths <- resolveColumnWidths mkDividerId (csColumns cols)
+  pure listCfg
+    { lcRenderItem = renderRow widths
+    , lcHeader     = if null (csColumns cols) then Nothing else
+        Just (columnHeaderRow mkHeaderId mkDividerId
+                (requestColumnSort (csSort cols) (csOnColumnSortRequested cols)) widths (csColumns cols))
+    }
+
+-- | A row's cells at the given widths, with a gap between each pair the
+-- width of the header's resize handle, so every column's boundary lands at
+-- the same x under the header and in a row. @cellFor@ builds column @i@'s
+-- cell.
+columnRow :: [Length] -> [ColumnConfig e msg a] -> (Int -> Length -> ColumnConfig e msg a -> Element e msg) -> Element e msg
+columnRow widths cols cellFor = hBox [children (weaveColumns (const columnSpacer) (zipWith3 cellFor [0 ..] widths cols))]
+
 -- | One cell, sized to its column's own resolved width, drawing its
--- 'colCell' content -- shared by 'table' and
--- 'Blink.Controls.TreeTable.treeTable'.
+-- 'colCell' content.
 columnCell :: Length -> ColumnConfig e msg a -> ItemState a -> Element e msg
 columnCell w c st = elementWithLayout (Layout w fill TopLeft) (runElement (colCell c st))
 
 -- | 'Ascending' for a column not already sorted, otherwise the opposite
--- of whatever direction it's currently sorted in -- shared by 'table'
--- and 'Blink.Controls.TreeTable.treeTable'.
+-- of whatever direction it's currently sorted in.
 requestColumnSort :: Maybe (Int, SortDirection) -> [(Int, SortDirection) -> [Effect e msg]] -> Int -> View e msg ()
 requestColumnSort currentSort handlers idx = runHandlers handlers (idx, nextDirection)
   where
@@ -238,8 +281,7 @@ requestColumnSort currentSort handlers idx = runHandlers handlers (idx, nextDire
 -- the index of the element just before it -- the header's own
 -- @resizeHandle@s, and (via 'columnSpacer') the inert gap a row's cells
 -- need at those same positions, so a column's boundary always lands at
--- the same x whether it's under the header or a row. Shared by 'table'
--- and 'Blink.Controls.TreeTable.treeTable'.
+-- the same x whether it's under the header or a row.
 weaveColumns :: (Int -> Element e msg) -> [Element e msg] -> [Element e msg]
 weaveColumns between = go 0
   where
@@ -249,8 +291,7 @@ weaveColumns between = go 0
 
 -- | An inert gap the width of @resizeHandle@, dropped between a row's
 -- own cells (via 'weaveColumns') so each column lines up under its
--- header cell despite the draggable handle woven into the header alone
--- -- shared by 'table' and 'Blink.Controls.TreeTable.treeTable'.
+-- header cell despite the draggable handle woven into the header alone.
 columnSpacer :: Element e msg
 columnSpacer = elementWithLayout (Layout (exactly handleWidth) fill TopLeft) (pure ())
 
@@ -261,8 +302,7 @@ columnSpacer = elementWithLayout (Layout (exactly handleWidth) fill TopLeft) (pu
 -- whole row is inset once by the same chrome a data row gets from its
 -- own control (@listItemStyleKey@) -- each header /cell/ carries none of
 -- its own (see 'tableHeaderStyleKey'), so every column's content starts
--- at the same x under the header as it does in its row. Shared by
--- 'table' and 'Blink.Controls.TreeTable.treeTable'.
+-- at the same x under the header as it does in its row.
 columnHeaderRow
   :: Ord e
   => (Int -> e) -> (Int -> e) -> (Int -> View e msg ()) -> [Length] -> [ColumnConfig e msg a] -> Element e msg
@@ -312,8 +352,7 @@ rowChromeInset = do
 -- divider (its own index) moves right, shrinking when its left-hand
 -- divider (the previous index) does, and never below @minColumnWidth@.
 -- A 'ColumnFill' column is never adjusted directly; it simply absorbs
--- whatever its neighbours give up. Shared by 'table' and
--- 'Blink.Controls.TreeTable.treeTable'.
+-- whatever its neighbours give up.
 resolveColumnWidths :: Ord e => (Int -> e) -> [ColumnConfig e msg a] -> View e msg [Length]
 resolveColumnWidths mkDividerId cols = do
   extents <- mapM (\i -> getExtentState (mkDividerId i)) [0 .. length cols - 2]
@@ -390,11 +429,10 @@ tableHeaderStyle p = StyleSet
   , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleBackground = paletteSurfaceHover p })
   }
 
--- | No margin\/padding of its own -- 'Blink.Controls.Table.columnHeaderRow'
--- insets the whole header row once, by the same chrome a data row gets,
--- rather than padding each header cell individually; padding here too
--- would double up on that and push a header cell's content further right
--- than the matching row cell's.
+-- | No margin\/padding of its own -- the header row is inset once as a
+-- whole, by the same chrome a data row gets, rather than padding each
+-- header cell individually; padding here too would double up on that and
+-- push a header cell's content further right than the matching row cell's.
 tableHeaderMetrics :: Metrics
 tableHeaderMetrics = Metrics
   { metricsMargin      = uniform 0
