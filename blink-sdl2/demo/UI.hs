@@ -158,6 +158,7 @@ updateApp msg = case msg of
   SetFileMenuOpen v       -> modify $ \s -> s { fileMenuOpen = v }
   FileMenuItemActivated v -> modify $ \s -> s { fileMenuLastAction = v }
   SetMenuBarOpenMenu v    -> modify $ \s -> s { menuBarOpenMenu = v }
+  MenuBarItemActivated "Quit" -> quit
   MenuBarItemActivated v  -> modify $ \s -> s { menuBarLastAction = v }
   SetInputText t       -> modify $ \s -> s { inputText = t }
   SetPasswordText t    -> modify $ \s -> s { passwordText = t }
@@ -1009,7 +1010,7 @@ menuBarLabelMnemonic "View" = 'V'
 menuBarLabelMnemonic m      = T.head m
 
 menuBarItemsFor :: Text -> [Text]
-menuBarItemsFor "File" = ["New", "Open", "Save", "Export"]
+menuBarItemsFor "File" = ["New", "Open", "Save", "Export", "Quit"]
 menuBarItemsFor "Edit" = ["Cut", "Copy", "Paste"]
 menuBarItemsFor "View" = ["Zoom In", "Zoom Out"]
 menuBarItemsFor _      = []

@@ -73,8 +73,10 @@ render the final frame before exiting.
 
 = Quit flow
 
-Set 'quitRequested' in 'FrameInput' when the platform detects a close signal
-(e.g. the window's close button). 'stepFrame' returns 'Quit' on the same frame.
+'stepFrame' returns 'Quit' on the frame the application asks to end: either
+the backend sets 'quitRequested' in 'FrameInput' because the platform
+signalled a close (e.g. the window's close button), or an @update@ handler
+calls 'Blink.Update.quit'.
 
 = Commands
 
@@ -88,11 +90,11 @@ supplies one, typically built on "Control.Concurrent.STM"'s @TBQueue@.
 
 = UI effects
 
-An 'Blink.Update.Update' handler can also request a 'UiEffect' -- the same
+An 'Blink.Update.Update' handler can also request a 'Blink.View.UiEffect' -- the same
 'Blink.View.requestScrollTo'\/'Blink.View.requestFocus'-style functions
 view code uses, since 'Blink.Update.Update' shares their @HasUiEffect@
 typeclass -- as a reaction to a message instead of an input event. It takes
-effect from the next frame onward, the same way any other 'UiEffect' does.
+effect from the next frame onward, the same way any other 'Blink.View.UiEffect' does.
 
 = Measurement
 
@@ -124,6 +126,7 @@ module Blink.App
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Monad (foldM, when, void)
 import Data.IORef
+import Data.List (foldl')
 import Data.Text (Text)
 import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
@@ -138,7 +141,7 @@ import Blink.View.Context
   ( View (..), ViewContext, ctxMouse
   , emptyViewContext, withMeasurers, nextFrameContext, rerenderContext
   , getDrawCommands, getCursorShape, getMessages, hasPendingUiEffects
-  , UiEffect, queueUiEffects
+  , queueUiEffects
   , contextRequiresAnimation
   , PendingPopup (popupId, popupAnchor, popupSize, popupPlacement, popupOffset, popupRun, popupOriginScope)
   , getPendingPopups, clearPendingPopups
@@ -148,7 +151,7 @@ import Blink.View.Context
 import Blink.View.Focus (withFocusScopeAt)
 import Blink.View.Mouse (markPopupFloor)
 import Blink.Element (Element, runElement)
-import Blink.Update (Update, runUpdateEffects)
+import Blink.Update (Update, UpdateResult (..), runUpdateEffects)
 
 -- | Describes a complete Blink application.
 --
@@ -169,7 +172,7 @@ data App e msg s = App
     -- ^ Folds one message emitted by 'view' into the application state.
     -- Every message queued during a frame is applied in emission order. May
     -- request a 'Cmd' via 'Blink.Update.cmd' (see \"Commands\" above) or a
-    -- 'UiEffect' via 'Blink.View.requestScrollTo' and its siblings (see
+    -- 'Blink.View.UiEffect' via 'Blink.View.requestScrollTo' and its siblings (see
     -- \"UI effects\" above).
   }
 
@@ -277,8 +280,9 @@ data FrameResult s
     -- ^ Normal frame. Render the draw commands, apply the requested cursor
     -- shape, and loop with the new state.
   | Quit [DrawCommand] CursorShape s
-    -- ^ The application has quit. Render the draw commands (the final frame)
-    -- then exit the loop.
+    -- ^ The application has quit, through 'quitRequested' or
+    -- 'Blink.Update.quit'. Render the draw commands (the final frame) then
+    -- exit the loop.
 
 -- | Mutable state carried between frames, allocated once at configure time
 -- and threaded through every 'stepFrame' call via closure.
@@ -341,14 +345,17 @@ drainPopups ctx0 = do
       maybe run (`withFocusScopeAt` run) (popupOriginScope p)
 
 -- | Folds a batch of messages into state via @update@, in order, collecting
--- every 'Cmd' and 'UiEffect' any of them requested along the way.
-foldMsgs :: App e msg s -> s -> [msg] -> (s, [Cmd msg], [UiEffect e])
-foldMsgs app = go [] []
+-- every 'Cmd' and 'Blink.View.UiEffect' any of them requested along the way, and
+-- whether any of them called 'Blink.Update.quit'.
+foldMsgs :: App e msg s -> s -> [msg] -> UpdateResult s e msg
+foldMsgs app s0 = foldl' step (UpdateResult s0 [] [] False)
   where
-    go cs us s []       = (s, cs, us)
-    go cs us s (m : ms) =
-      let (s', cs', us') = runUpdateEffects (update app m) s
-      in go (cs ++ cs') (us ++ us') s' ms
+    step acc m =
+      let r = runUpdateEffects (update app m) (resultState acc)
+      in r { resultCmds      = resultCmds acc ++ resultCmds r
+           , resultUiEffects = resultUiEffects acc ++ resultUiEffects r
+           , resultQuit      = resultQuit acc || resultQuit r
+           }
 
 -- | Forks each 'Cmd', posting its result to @queue@ and calling @notify@
 -- once it completes -- the same wake-up path 'forkAnimationTicker' already
@@ -368,7 +375,7 @@ runFrame
   -> MsgQueue msg
   -> IO ()
   -> FrameInput
-  -> IO (ViewContext e msg, s)
+  -> IO (ViewContext e msg, s, Bool)
 runFrame app refs queue notify input = do
   let winRect    = rectFromSize (windowSize input)
       inputState = toInputState input
@@ -383,7 +390,7 @@ runFrame app refs queue notify input = do
   -- Cmd results that completed since the last frame are treated as having
   -- happened before this frame's own view emissions.
   pending <- drainMsgs queue
-  let (state', cmds, uiEffs) = foldMsgs app state (pending ++ getMessages ctx')
+  let UpdateResult state' cmds uiEffs quitting = foldMsgs app state (pending ++ getMessages ctx')
       -- Queued as though the view itself had queued them, so the existing
       -- 'hasPendingUiEffects'/settling machinery picks them up unchanged --
       -- including, in event-driven mode, triggering the same-frame second
@@ -393,31 +400,31 @@ runFrame app refs queue notify input = do
   dispatchCmds queue notify cmds
   writeIORef (refsState refs) state'
 
-  pure (ctx'', state')
+  pure (ctx'', state', quitting)
 
 doStepContinuous :: Ord e => App e msg s -> AppRefs e msg s -> MsgQueue msg -> FrameInput -> IO (FrameResult s)
 doStepContinuous app refs queue input = do
-  (ctx', state') <- runFrame app refs queue (pure ()) input
+  (ctx', state', quitting) <- runFrame app refs queue (pure ()) input
   writeIORef (refsCtx refs) ctx'
-  pure $ toResult input (getDrawCommands ctx') (getCursorShape ctx') state'
+  pure $ toResult (quitting || quitRequested input) (getDrawCommands ctx') (getCursorShape ctx') state'
 
 doStepEventDriven :: Ord e => App e msg s -> AppRefs e msg s -> MsgQueue msg -> IO () -> FrameInput -> IO (FrameResult s)
 doStepEventDriven app refs queue notify input = do
-  (firstPassCtx, state1) <- runFrame app refs queue notify input
-  (renderedCtx, state2) <-
+  (firstPassCtx, state1, quitting1) <- runFrame app refs queue notify input
+  (renderedCtx, state2, quitting2) <-
     if isAnimationTick input
       -- The ticker is about to fire again next frame regardless of what's
       -- drawn now, so the one-tick lag a correcting pass exists to avoid is
       -- as imperceptible here as continuous mode's inherent one-frame lag
       -- (see 'doStepContinuous'). Skipping it halves render cost for the
       -- whole time an animation is running.
-      then pure (firstPassCtx, state1)
+      then pure (firstPassCtx, state1, False)
       else if null (getMessages firstPassCtx) && not (hasPendingUiEffects firstPassCtx)
       -- Nothing was queued, so nothing about the app or view state changed —
       -- a second pass would run the same view against the same state and
       -- input and produce byte-identical output. Reuse the first pass's
       -- context and draws instead of paying for a pointless re-render.
-      then pure (firstPassCtx, state1)
+      then pure (firstPassCtx, state1, False)
       else rerenderPass app queue notify input firstPassCtx state1
   writeIORef (refsCtx refs) renderedCtx
   writeIORef (refsState refs) state2
@@ -426,10 +433,10 @@ doStepEventDriven app refs queue notify input = do
   writeIORef (refsAnimActive refs) nowActive
   when (not wasActive && nowActive) $
     forkAnimationTicker (refsAnimActive refs) notify
-  pure $ toResult input (getDrawCommands renderedCtx) (getCursorShape renderedCtx) state2
+  pure $ toResult (quitting1 || quitting2 || quitRequested input) (getDrawCommands renderedCtx) (getCursorShape renderedCtx) state2
 
 -- | Re-renders the view against @state1@ so the displayed frame reflects
--- messages or 'UiEffect's the first pass queued, folding whatever this
+-- messages or 'Blink.View.UiEffect's the first pass queued, folding whatever this
 -- second pass itself queues into the state too.
 rerenderPass
   :: Ord e
@@ -439,7 +446,7 @@ rerenderPass
   -> FrameInput
   -> ViewContext e msg
   -> s
-  -> IO (ViewContext e msg, s)
+  -> IO (ViewContext e msg, s, Bool)
 rerenderPass app queue notify input firstPassCtx state1 = do
   let winRect     = rectFromSize (windowSize input)
       inputState  = toInputState input
@@ -451,9 +458,9 @@ rerenderPass app queue notify input firstPassCtx state1 = do
   -- rerenderContext re-emits the same gained/lost messages, so looping
   -- would never converge. This frame's draws can lag the fold by one
   -- frame instead -- the same staleness continuous mode already has.
-  let (state2, cmds2, uiEffs2) = foldMsgs app state1 (getMessages ctx2)
+  let UpdateResult state2 cmds2 uiEffs2 quitting = foldMsgs app state1 (getMessages ctx2)
   dispatchCmds queue notify cmds2
-  pure (queueUiEffects uiEffs2 ctx2, state2)
+  pure (queueUiEffects uiEffs2 ctx2, state2, quitting)
 
 -- | Collapses a fresh button edge ('Blink.Input.ButtonDown', 'Blink.Input.ButtonReleased')
 -- into its continuing counterpart ('Blink.Input.ButtonHeld', 'Blink.Input.ButtonUp') as
@@ -475,10 +482,10 @@ suppressFreshMouseEdges input ctx =
   where
     isDown = inputLeftButtonDown input
 
-toResult :: FrameInput -> [DrawCommand] -> CursorShape -> s -> FrameResult s
-toResult input draws cursor state
-  | quitRequested input = Quit draws cursor state
-  | otherwise           = Continue draws cursor state
+toResult :: Bool -> [DrawCommand] -> CursorShape -> s -> FrameResult s
+toResult quitting draws cursor state
+  | quitting  = Quit draws cursor state
+  | otherwise = Continue draws cursor state
 
 toInputState :: FrameInput -> InputState
 toInputState fi = InputState

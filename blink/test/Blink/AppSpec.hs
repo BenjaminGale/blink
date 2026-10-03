@@ -28,7 +28,7 @@ import Blink.Controls.Control
 import Blink.Controls.ToggleButton (isSelected, onSelectedChanged)
 import qualified Blink.Controls.Slider as Slider
 import qualified Blink.Controls.TextInput as TextInput
-import Blink.Update (cmd, modify, put)
+import Blink.Update (cmd, modify, put, quit)
 
 -- | Every test app below fills the whole test bounds; only the body of the
 -- wrapped action varies per app.
@@ -38,9 +38,9 @@ fullView = elementWithLayout (Layout fill fill TopLeft) . void
 -- Test infrastructure
 
 mkInput :: Bool -> Bool -> FrameInput
-mkInput quit animTick = emptyFrameInput
+mkInput closing animTick = emptyFrameInput
   { windowSize      = Size 100 100
-  , quitRequested   = quit
+  , quitRequested   = closing
   , isAnimationTick = animTick
   }
 
@@ -377,6 +377,30 @@ viewCountApp emits = App
   , update         = \_ -> pure ()
   }
 
+-- | Calls 'quit' from 'update' in reply to a message its view emits every
+-- frame.
+quitApp :: App () () ()
+quitApp = App
+  { startUp = pure ()
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \_ -> fullView (emit ())
+  , update  = const quit
+  }
+
+data ArmMsg = Arm | QuitNow
+
+-- | Emits 'Arm' until its state is set, then 'QuitNow' -- so in
+-- event-driven mode the quit only comes from the second render pass.
+quitOnSecondPassApp :: App () ArmMsg Bool
+quitOnSecondPassApp = App
+  { startUp = pure False
+  , theme   = const (emptyTheme (testMetrics, testStyleSet))
+  , view    = \armed -> fullView (emit (if armed then QuitNow else Arm))
+  , update  = \m -> case m of
+      Arm     -> put True
+      QuitNow -> quit
+  }
+
 data CmdMsg = Start | Done Text
 
 -- | Requests a 'Cmd' the first time it's rendered with empty state, and
@@ -426,6 +450,11 @@ spec = do
       it "returns Quit when quitRequested is True" $ do
         handle <- configureContinuous counterApp nullMsgQueue nullMeasurers
         result <- stepFrame handle (mkInput True False)
+        isQuit result `shouldBe` True
+
+      it "returns Quit when update calls quit" $ do
+        handle <- configureContinuous quitApp nullMsgQueue nullMeasurers
+        result <- stepFrame handle normalInput
         isQuit result `shouldBe` True
 
       it "draw commands from the view appear in the result" $ do
@@ -506,6 +535,16 @@ spec = do
       it "returns Quit when quitRequested is True" $ do
         handle <- configureEventDriven counterApp nullMsgQueue (pure ()) nullMeasurers
         result <- stepFrame handle (mkInput True False)
+        isQuit result `shouldBe` True
+
+      it "returns Quit when update calls quit" $ do
+        handle <- configureEventDriven quitApp nullMsgQueue (pure ()) nullMeasurers
+        result <- stepFrame handle normalInput
+        isQuit result `shouldBe` True
+
+      it "returns Quit when update calls quit for a message from the second pass" $ do
+        handle <- configureEventDriven quitOnSecondPassApp nullMsgQueue (pure ()) nullMeasurers
+        result <- stepFrame handle normalInput
         isQuit result `shouldBe` True
 
       it "draw commands reflect the post-dispatch app state" $ do

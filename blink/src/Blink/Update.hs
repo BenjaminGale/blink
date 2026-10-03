@@ -51,6 +51,16 @@ update FetchClicked = do
 update (FileLoaded result) = modify (\\s -> s { status = Loaded result })
 @
 
+= Quitting
+
+'quit' ends the application once the frame finishes, the same way closing
+the window does:
+
+@
+update :: Msg -> Update AppState ElementId Msg ()
+update QuitClicked = quit
+@
+
 = Requesting a UI effect
 
 'Update' is a 'Blink.View.HasUiEffect' instance, so the same
@@ -77,37 +87,48 @@ module Blink.Update
   , gets
   , modify
   , cmd
+  , quit
+  , UpdateResult (..)
   ) where
 
 import Blink.Cmd (Cmd (..))
 import Blink.View.Context (ControlId (..), HasUiEffect (..), UiEffect)
 
 -- | A pure, state-threading computation over the application state @s@,
--- producing a result @a@ and, via 'cmd' or one of the 'HasUiEffect'
--- request functions, zero or more 'Cmd's carrying messages of type @msg@
--- and 'UiEffect's addressing elements of type @e@. Compose with the
--- 'Functor'\/'Applicative'\/'Monad' instances; run with 'runUpdate' or
--- 'runUpdateEffects'.
-newtype Update s e msg a = Update { runUpdateM :: s -> (a, s, [Cmd msg], [UiEffect e]) }
+-- producing a result @a@ and, via 'cmd', 'quit' or one of the
+-- 'HasUiEffect' request functions, zero or more 'Cmd's carrying messages
+-- of type @msg@, 'UiEffect's addressing elements of type @e@, and a request
+-- to quit. Compose with the 'Functor'\/'Applicative'\/'Monad' instances;
+-- run with 'runUpdate' or 'runUpdateEffects'.
+newtype Update s e msg a = Update { runUpdateM :: s -> (a, s, Requests e msg) }
+
+-- | Everything an 'Update' asked for besides the new state.
+data Requests e msg = Requests [Cmd msg] [UiEffect e] Bool
+
+instance Semigroup (Requests e msg) where
+  Requests cs1 us1 q1 <> Requests cs2 us2 q2 = Requests (cs1 ++ cs2) (us1 ++ us2) (q1 || q2)
+
+instance Monoid (Requests e msg) where
+  mempty = Requests [] [] False
 
 instance Functor (Update s e msg) where
-  fmap f (Update g) = Update $ \s -> let (a, s', cs, us) = g s in (f a, s', cs, us)
+  fmap f (Update g) = Update $ \s -> let (a, s', r) = g s in (f a, s', r)
 
 instance Applicative (Update s e msg) where
-  pure a = Update $ \s -> (a, s, [], [])
+  pure a = Update $ \s -> (a, s, mempty)
   Update f <*> Update g = Update $ \s ->
-    let (h, s', cs1, us1)  = f s
-        (a, s'', cs2, us2) = g s'
-    in (h a, s'', cs1 ++ cs2, us1 ++ us2)
+    let (h, s', r1)  = f s
+        (a, s'', r2) = g s'
+    in (h a, s'', r1 <> r2)
 
 instance Monad (Update s e msg) where
   Update g >>= f = Update $ \s ->
-    let (a, s', cs1, us1)  = g s
-        (b, s'', cs2, us2) = runUpdateM (f a) s'
-    in (b, s'', cs1 ++ cs2, us1 ++ us2)
+    let (a, s', r1)  = g s
+        (b, s'', r2) = runUpdateM (f a) s'
+    in (b, s'', r1 <> r2)
 
 instance HasUiEffect e (Update s e msg) where
-  queueEffect u = Update $ \s -> ((), s, [], [u])
+  queueEffect u = Update $ \s -> ((), s, Requests [] [u] False)
   controlIdFor        = pure . Control
 
 -- | The current application state.
@@ -116,31 +137,49 @@ get = gets id
 
 -- | Replaces the application state.
 put :: s -> Update s e msg ()
-put s = Update $ const ((), s, [], [])
+put s = Update $ const ((), s, mempty)
 
 -- | Projects a value out of the current application state.
 gets :: (s -> a) -> Update s e msg a
-gets f = Update $ \s -> (f s, s, [], [])
+gets f = Update $ \s -> (f s, s, mempty)
 
 -- | Applies a function to the current application state.
 modify :: (s -> s) -> Update s e msg ()
-modify f = Update $ \s -> ((), f s, [], [])
+modify f = Update $ \s -> ((), f s, mempty)
 
 -- | Requests that an 'IO' action be run as a 'Blink.Cmd.Cmd'. Its result is folded
 -- back into the state as an ordinary message, on whichever later frame the
 -- backend's 'Blink.App.MsgQueue' delivers it.
 cmd :: IO msg -> Update s e msg ()
-cmd io = Update $ \s -> ((), s, [Cmd io], [])
+cmd io = Update $ \s -> ((), s, Requests [Cmd io] [] False)
+
+-- | Ends the application once this frame finishes: 'Blink.App.stepFrame'
+-- returns 'Blink.App.Quit', as it does when the window is closed.
+quit :: Update s e msg ()
+quit = Update $ \s -> ((), s, Requests [] [] True)
 
 -- | Runs an 'Update' computation from a starting state, discarding its
 -- result and any requested 'Cmd's\/'UiEffect's, keeping only the final
 -- state.
 runUpdate :: Update s e msg a -> s -> s
-runUpdate act s = let (_, s', _, _) = runUpdateM act s in s'
+runUpdate act s = let (_, s', _) = runUpdateM act s in s'
 
--- | Like 'runUpdate', but also returns any 'Cmd's and 'UiEffect's the
--- computation requested via 'cmd' or a 'HasUiEffect' request function.
--- This is what the frame loop uses; application code driving an 'Update'
--- directly usually only needs 'runUpdate'.
-runUpdateEffects :: Update s e msg a -> s -> (s, [Cmd msg], [UiEffect e])
-runUpdateEffects act s = let (_, s', cs, us) = runUpdateM act s in (s', cs, us)
+-- | What running an 'Update' produced: the new state and everything it
+-- requested.
+data UpdateResult s e msg = UpdateResult
+  { resultState     :: s
+  , resultCmds      :: [Cmd msg]
+    -- ^ Requested with 'cmd'.
+  , resultUiEffects :: [UiEffect e]
+    -- ^ Requested with a 'HasUiEffect' request function.
+  , resultQuit      :: Bool
+    -- ^ Whether 'quit' was called.
+  }
+
+-- | Like 'runUpdate', but also returns everything the computation
+-- requested. This is what the frame loop uses; application code driving
+-- an 'Update' directly usually only needs 'runUpdate'.
+runUpdateEffects :: Update s e msg a -> s -> UpdateResult s e msg
+runUpdateEffects act s =
+  let (_, s', Requests cs us q) = runUpdateM act s
+  in UpdateResult { resultState = s', resultCmds = cs, resultUiEffects = us, resultQuit = q }

@@ -38,3 +38,15 @@ spec = describe "Update" $ do
           put n)
         (1 :: Int)
         `shouldBe` 2
+
+  describe "quit" $ do
+    let quitRequested act = resultQuit (runUpdateEffects (act :: Update Int () () ()) 0)
+
+    it "is requested by quit" $
+      quitRequested quit `shouldBe` True
+
+    it "is not requested by an update that never calls quit" $
+      quitRequested (modify (+1)) `shouldBe` False
+
+    it "stays requested when later steps follow it" $
+      quitRequested (quit >> modify (+1)) `shouldBe` True

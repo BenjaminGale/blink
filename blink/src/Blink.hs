@@ -50,6 +50,7 @@ module Blink
   , gets
   , modify
   , cmd
+  , quit
   , runUpdate
     -- ** Requesting UI changes from update
   , requestScrollTo
@@ -90,5 +91,5 @@ import Blink.Rendering (TextAlign (..))
 import Blink.Style hiding (VisualState (..))
 import Blink.Style (VisualState (CommonNormal, CommonMouseOver, CommonPressed, CommonDisabled, FocusFocused, FocusUnfocused))
 import Blink.Style.Defaults (defaultTheme)
-import Blink.Update (Update, cmd, get, gets, modify, put, runUpdate)
+import Blink.Update (Update, cmd, get, gets, modify, put, quit, runUpdate)
 import Blink.View (Selection (..), requestClearFocus, requestFocus, requestScrollBy, requestScrollTo, requestSelectionAt)
