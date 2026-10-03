@@ -61,7 +61,8 @@ import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (ImagePath, TextAlign (..))
-import Blink.View (ControlId, Effect, View, controlIdOf, currentStyle)
+import Blink.View (ControlId, View, controlIdOf, currentStyle)
+import Blink.View.Context (Effect (..))
 import Blink.View.Drawing (drawImage)
 import Blink.Style
 import Blink.Controls.Style (iconStyle, zeroMetrics)
@@ -183,8 +184,8 @@ renderNode f = Attribute (\c -> c { tcRenderNode = f })
 -- back in next frame, the same relationship
 -- 'Blink.Controls.List.onSelectionChanged' has to
 -- 'Blink.Controls.List.selection'.
-onExpansionChanged :: HasTreeDataConfig e msg a cfg => (Set a -> [Effect e msg]) -> Attribute cfg
-onExpansionChanged = overTreeData . appendTo tdOnExpansionChanged (\c hs -> c { tdOnExpansionChanged = hs })
+onExpansionChanged :: HasTreeDataConfig e msg a cfg => (Set a -> msg) -> Attribute cfg
+onExpansionChanged f = overTreeData (appendTo tdOnExpansionChanged (\c hs -> c { tdOnExpansionChanged = hs }) (pure . EffectMsg . f))
 
 -- | The width of one level of indent, and of the chevron column every
 -- row reserves regardless of whether it actually draws one -- so a leaf

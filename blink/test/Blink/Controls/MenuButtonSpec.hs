@@ -13,7 +13,7 @@ import Blink.Controls.Button (onActivated)
 import Blink.Controls.Control
   ( Attribute, ControlInteraction (ciMouseDown)
   , control, defaultControlConfig, elementId, isEnabled, onFocusGained, onFocusLost, onMouseEntered
-  , post, postWith, resolve
+  , resolve
   )
 import Blink.Controls.Label (text)
 import Blink.Controls.MenuButton (MenuButtonConfig, isOpen, itemAttrs, items, menuButton, onOpenChanged)
@@ -47,7 +47,7 @@ menuAppWith extraAttrs = App
       (menuButton TheMenu (
         [ text "File"
         , isOpen open
-        , onOpenChanged (postWith id)
+        , onOpenChanged id
         , items [Open, Save]
         , itemAttrs (\i -> [text (T.pack (show i))])
         ] ++ extraAttrs)) { elLayout = Layout fill fill TopLeft }
@@ -82,15 +82,15 @@ navAppWith itemWidth = App
       (menuButton TheMenu
         [ text "File"
         , isOpen open
-        , onOpenChanged (postWith SetOpen)
-        , onFocusGained (post (Logged "Trigger focused"))
+        , onOpenChanged SetOpen
+        , onFocusGained (Logged "Trigger focused")
         , items [Open, Save]
         , itemAttrs (\i ->
             [ text (T.pack (show i))
             , width (exactly (itemWidth i)), height (exactly 20)
-            , onFocusGained  (post (Logged (T.pack (show i) <> " focused")))
-            , onActivated    (post (Logged (T.pack (show i) <> " activated")))
-            , onMouseEntered (post (Logged (T.pack (show i) <> " hovered")))
+            , onFocusGained  (Logged (T.pack (show i) <> " focused"))
+            , onActivated    (Logged (T.pack (show i) <> " activated"))
+            , onMouseEntered (Logged (T.pack (show i) <> " hovered"))
             ])
         ]) { elLayout = Layout (exactly 40) (exactly 20) TopLeft }
   , update  = \m -> modify $ \(open, log') -> case m of
@@ -125,7 +125,7 @@ clickThroughApp = App
       when (ciMouseDown ci) (emit True)
       runElement
         ((menuButton Menu
-          [ text "File", isOpen True, onOpenChanged (const [])
+          [ text "File", isOpen True
           , items [Open, Save]
           , itemAttrs (\i -> [text (T.pack (show i)), width (exactly 40), height (exactly 20)])
           ]) { elLayout = Layout (exactly 40) (exactly 20) TopLeft })
@@ -157,7 +157,7 @@ hoverApp = App
   , view    = \_ -> fullView $
       runElement
         ((menuButton TheMenu
-          [ text "File", isOpen True, onOpenChanged (const [])
+          [ text "File", isOpen True
           , items [Open, Save]
           , itemAttrs (\i -> [text (T.pack (show i)), width (exactly 40), height (exactly 20)])
           ]) { elLayout = Layout (exactly 40) (exactly 20) TopLeft })
@@ -181,9 +181,9 @@ twoMenusApp = App
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
   , view    = \(openA, openB, _) -> fullView $ do
       withBounds (Rectangle 0 0 40 20) $ void $
-        runElement (oneMenu MenuAPart "A" openA (postWith SetOpenA))
+        runElement (oneMenu MenuAPart "A" openA SetOpenA)
       withBounds (Rectangle 100 0 40 20) $ void $
-        runElement (oneMenu MenuBPart "B" openB (postWith SetOpenB))
+        runElement (oneMenu MenuBPart "B" openB SetOpenB)
   , update  = \m -> modify $ \(openA, openB, log') -> case m of
       SetOpenA b     -> (b, openB, log')
       SetOpenB b     -> (openA, b, log')
@@ -195,11 +195,11 @@ twoMenusApp = App
         [ text label
         , isOpen open
         , onOpenChanged onOpen
-        , onFocusGained (post (TwoMenuLogged (label <> " trigger focused")))
+        , onFocusGained (TwoMenuLogged (label <> " trigger focused"))
         , items [Open]
         , itemAttrs (const
             [ text "X", width (exactly 40), height (exactly 20)
-            , onFocusGained (post (TwoMenuLogged (label <> " item focused")))
+            , onFocusGained (TwoMenuLogged (label <> " item focused"))
             ])
         ]) { elLayout = Layout (exactly 40) (exactly 20) TopLeft }
 
@@ -269,28 +269,28 @@ navSiblingApp = App
   , view    = \(open, _) -> fullView $ do
       withBounds (Rectangle 0 0 40 20) $ void $ control $ resolve defaultControlConfig
         [ elementId SiblingBefore
-        , onFocusGained (post (SiblingLog "Before focused"))
-        , onFocusLost   (post (SiblingLog "Before lost"))
+        , onFocusGained (SiblingLog "Before focused")
+        , onFocusLost   (SiblingLog "Before lost")
         ]
       withBounds (Rectangle 50 0 40 20) $ void $ runElement
         ((menuButton SiblingMenu
           [ text "File"
           , isOpen open
-          , onOpenChanged (postWith SiblingOpen)
-          , onFocusGained (post (SiblingLog "Trigger focused"))
-          , onFocusLost   (post (SiblingLog "Trigger lost"))
+          , onOpenChanged SiblingOpen
+          , onFocusGained (SiblingLog "Trigger focused")
+          , onFocusLost   (SiblingLog "Trigger lost")
           , items [Open, Save]
           , itemAttrs (\i ->
               [ text (T.pack (show i))
               , width (exactly 40), height (exactly 20)
-              , onFocusGained (post (SiblingLog (T.pack (show i) <> " focused")))
-              , onFocusLost   (post (SiblingLog (T.pack (show i) <> " lost")))
+              , onFocusGained (SiblingLog (T.pack (show i) <> " focused"))
+              , onFocusLost   (SiblingLog (T.pack (show i) <> " lost"))
               ])
           ]) { elLayout = Layout (exactly 40) (exactly 20) TopLeft })
       withBounds (Rectangle 100 0 40 20) $ void $ control $ resolve defaultControlConfig
         [ elementId SiblingAfter
-        , onFocusGained (post (SiblingLog "After focused"))
-        , onFocusLost   (post (SiblingLog "After lost"))
+        , onFocusGained (SiblingLog "After focused")
+        , onFocusLost   (SiblingLog "After lost")
         ]
   , update  = \m -> modify $ \(open, log') -> case m of
       SiblingOpen b -> (b, log' ++ ["Open=" <> T.pack (show b)])

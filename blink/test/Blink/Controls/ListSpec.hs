@@ -5,7 +5,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (fromJust)
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute, postWith, resolve)
+import Blink.Controls.Control (Attribute, resolve)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
@@ -339,8 +339,8 @@ activatedMsg x = "Activated:" ++ show x
 
 reactions :: (Show (sel Int)) => [Attribute (ListConfig sel TestElem String Int)]
 reactions =
-  [ onSelectionChanged (postWith (\s -> (selectedMsg s)))
-  , onItemActivated (postWith (\x -> (activatedMsg x)))
+  [ onSelectionChanged selectedMsg
+  , onItemActivated activatedMsg
   ]
 
 -- | Real margin, unlike 'testTheme', for the hit-region contract below.

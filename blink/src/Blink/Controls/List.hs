@@ -133,7 +133,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
 import Blink.Controls.Control
-import Blink.View.Context (ControlId, HasUiEffect (..), UiEffect (..), controlIdOf, gets, modify, partId, withPart, writeScrollState)
+import Blink.View.Context (ControlId, Effect (..), HasUiEffect (..), UiEffect (..), controlIdOf, gets, modify, partId, withPart, writeScrollState)
 import Blink.View.Scroll (contextScrollState)
 import Blink.Controls.ScrollBar
   (ScrollViewportConfig (..), scrollBarThickness, scrollViewport, verticalBarOf)
@@ -145,7 +145,7 @@ import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..), insetRect
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Shift))
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
-import Blink.View (Effect, View, getBounds, getCursorIndex, getStyleSet, setCursorIndex)
+import Blink.View (View, getBounds, getCursorIndex, getStyleSet, setCursorIndex)
 import Blink.Style
 import Blink.Controls.Style (containerStyle, controlMetrics, flatRowMetrics, flatRowStyle)
 
@@ -663,7 +663,7 @@ rowHeight h = overList (Attribute (\c -> c { lstRowHeight = h }))
 -- 'list'), but the app never learns of it, so next frame's 'selection'
 -- puts it right back -- the list is then read-only in practice.
 instance HasSelectionChanged e msg (sel a) (ListConfig sel e msg a) where
-  onSelectionChanged = appendTo lstOnSelectionChanged (\c hs -> c { lstOnSelectionChanged = hs })
+  onSelectionChanged f = appendTo lstOnSelectionChanged (\c hs -> c { lstOnSelectionChanged = hs }) (pure . EffectMsg . f)
 
 -- | Reacts when the user acts on a specific item: a click on its row, or
 -- Enter\/Space with the cursor on it. Fires whether or not that action
@@ -671,8 +671,8 @@ instance HasSelectionChanged e msg (sel a) (ListConfig sel e msg a) where
 -- fires this) -- "the user chose this, act on it", distinct from
 -- 'onSelectionChanged' keeping selection state in sync. Arrowing never
 -- fires this.
-onItemActivated :: HasListConfig sel e msg a cfg => (a -> [Effect e msg]) -> Attribute cfg
-onItemActivated = overList . appendTo lstOnItemActivated (\c hs -> c { lstOnItemActivated = hs })
+onItemActivated :: HasListConfig sel e msg a cfg => (a -> msg) -> Attribute cfg
+onItemActivated f = overList (appendTo lstOnItemActivated (\c hs -> c { lstOnItemActivated = hs }) (pure . EffectMsg . f))
 
 -- | What 'listBase' reports back: the underlying 'control' call's own
 -- 'ControlInteraction' (so a control built on top of 'listBase' -- e.g. a

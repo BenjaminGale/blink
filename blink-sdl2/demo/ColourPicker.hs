@@ -23,6 +23,6 @@ colourPicker pickerId (RGBA r g b a) onChange =
       part pickerId name $
         slider pickerId
           [ value current
-          , onValueChanged (postWith (onChange . set))
+          , onValueChanged (onChange . set)
           , height (exactly 24)
           ]

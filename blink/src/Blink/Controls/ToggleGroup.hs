@@ -36,11 +36,11 @@ module Blink.Controls.ToggleGroup
 
 import Blink.Controls.Control
 import Blink.Controls.RadioButton (radioButton)
-import Blink.Controls.ToggleButton (ToggleConfig, isSelected, onSelectedChanged, toggleButton)
+import Blink.Controls.ToggleButton (ToggleConfig (..), isSelected, toggleButton)
 import Blink.Geometry (Alignment (TopLeft), Orientation (..))
 import Blink.Layout.Box (children, hBox, spacing, vBox)
 import Blink.Layout.Constraints (Layout (..), fill)
-import Blink.View (Effect)
+import Blink.View.Context (Effect (..))
 import Blink.Element
   ( Element (..), HasItemAttrs (..), HasItems (..), HasLayoutConfig (..), HasOrientation (..), HasSelection (..)
   , HasSelectionChanged (..), part, runElement
@@ -108,7 +108,7 @@ instance HasItems a (ToggleGroupConfig e a msg) where
 -- 'Blink.Controls.Label.text', 'Blink.Controls.Control.isEnabled',
 -- 'Blink.Controls.Control.style', sizing), computed once per item
 -- rather than written out by hand for each. Resolved before the group's own
--- 'isSelected'\/'onSelectedChanged' (see 'toggleGroup'), so nothing here
+-- selection attributes (see 'toggleGroup'), so nothing here
 -- can override the selection invariant.
 instance HasItemAttrs (a -> [Attribute (ToggleConfig e msg)]) (ToggleGroupConfig e a msg) where
   itemAttrs f = Attribute (\c -> c { tggToggleAttrs = f })
@@ -142,7 +142,7 @@ allowDeselect b = Attribute (\c -> c { tggAllowDeselect = b })
 -- | Reacts when selecting or clearing an item actually changes the group's
 -- selection -- see 'toggleGroup' for exactly which clicks fire this.
 instance HasSelectionChanged e msg (Maybe a) (ToggleGroupConfig e a msg) where
-  onSelectionChanged = appendTo tggOnSelectionChanged (\c hs -> c { tggOnSelectionChanged = hs })
+  onSelectionChanged f = appendTo tggOnSelectionChanged (\c hs -> c { tggOnSelectionChanged = hs }) (pure . EffectMsg . f)
 
 -- | A row (or column, see 'orientation') of
 -- 'Blink.Controls.ToggleButton.toggleButton's built from 'items', one
@@ -215,7 +215,7 @@ toggleGroup styleKey widget gid attrs = controlElement (tggLayout cfg) box ccfg
     toItem i item = part gid (partName (Item i)) $ widget gid
       ( tggToggleAttrs cfg item
       ++ [ isSelected (Just item == tggSelected cfg)
-         , onSelectedChanged (onItemToggled cfg item)
+         , appendTo tgcOnSelectedChanged (\t hs -> t { tgcOnSelectedChanged = hs }) (onItemToggled cfg item)
          ]
       )
     ccfg = (tggControl cfg)

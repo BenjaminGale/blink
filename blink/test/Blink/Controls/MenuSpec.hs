@@ -9,7 +9,7 @@ import Test.Hspec
 import Blink.App
 import Blink.AppFixtures (drawnTexts, resultDraws, resultState, solidPalette, startApp, testMetrics, testStyleSet)
 import Blink.Controls.Button (ButtonConfig, onActivated)
-import Blink.Controls.Control (onFocusGained, post)
+import Blink.Controls.Control (onFocusGained)
 import Blink.Controls.Label (mnemonic, text)
 import Blink.Controls.Menu (MenuItems (..), defaultStyleEntries, menuListWithSubmenus)
 import Blink.Element (Attribute, elLayout, elementWithLayout, height, runElement, width)
@@ -82,8 +82,8 @@ menuApp = App
     itemAttrsFor :: Item -> [Attribute (ButtonConfig MenuId Event)]
     itemAttrsFor item =
       [ text (T.pack (show item)), mnemonic (itemMnemonic item), width (exactly 40), height (exactly 20)
-      , onFocusGained (post (Logged (T.pack (show item) <> " focused")))
-      , onActivated    (post (Logged (T.pack (show item) <> " activated")))
+      , onFocusGained (Logged (T.pack (show item) <> " focused"))
+      , onActivated    (Logged (T.pack (show item) <> " activated"))
       ]
 
 -- | The chrome-less test style for everything but the items, which get the

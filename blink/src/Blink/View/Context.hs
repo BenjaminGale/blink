@@ -580,7 +580,7 @@ data ControlId e
 -- Constructors are exposed to sibling feature modules (e.g.
 -- "Blink.View.Focus" constructs @Focus@\/@ClearFocus@) but not re-exported
 -- from "Blink.View": produced only via 'Blink.View.Scroll.requestScrollTo',
--- 'Blink.View.Scroll.requestScrollBy', 'Blink.View.Scroll.postScrollBy',
+-- 'Blink.View.Scroll.requestScrollBy', 'Blink.Controls.ScrollBar.scrollBar''s arrows,
 -- 'Blink.View.Extent.requestExtentBy', 'Blink.View.Selection.requestSelectionAt',
 -- @Blink.View.Focus.requestFocus@, or @Blink.View.Focus.requestClearFocus@ --
 -- each of which, via 'HasUiEffect', also works from a
@@ -600,7 +600,7 @@ data UiEffect e
     -- constructor is only ever used in the normalised @[0, 1]@ convention.
     -- Composes with other @ScrollBy@ effects queued in the same frame for
     -- the same element rather than last-write-wins. See
-    -- 'Blink.View.Scroll.requestScrollBy'\/'Blink.View.Scroll.postScrollBy'.
+    -- 'Blink.View.Scroll.requestScrollBy'.
   | AdjustExtent (ControlId e) Double
     -- ^ Adjusts an element's 'ExtentState' by a delta, unclamped —
     -- composes with other @AdjustExtent@ effects queued in the same

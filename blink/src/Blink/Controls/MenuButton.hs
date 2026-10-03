@@ -99,7 +99,7 @@ isOpen = nested mbToggle (\c t -> c { mbToggle = t }) . isSelected
 -- | Reacts when the list should open or close, with the new value: from
 -- activating the trigger, or 'False' whenever the open list closes for any
 -- other reason. Store it and pass it back via 'isOpen'.
-onOpenChanged :: (Bool -> [Effect e msg]) -> Attribute (MenuButtonConfig e a msg)
+onOpenChanged :: (Bool -> msg) -> Attribute (MenuButtonConfig e a msg)
 onOpenChanged = nested mbToggle (\c t -> c { mbToggle = t }) . onSelectedChanged
 
 -- | A button labelled via 'Blink.Controls.Label.text' that opens a dropdown

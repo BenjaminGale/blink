@@ -5,7 +5,7 @@ import qualified Data.Text as T
 import Data.Char (isDigit)
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute, post, postWith)
+import Blink.Controls.Control (Attribute)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.Fixtures (contentRectFor, fullSizeAt, hitRectFor, mkTestTheme, monospaceTextMeasurer, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Geometry (Point (..), Rectangle (..))
@@ -109,38 +109,38 @@ spec = describe "Blink.Controls.TextInput" $ do
     -- user would before typing or backspacing -- to exercise plain
     -- (non-selection) editing.
     it "appends typed characters to the value and fires onInput" $ do
-      let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "hello", onInput T.unpack]
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], TypeText "!"]
       resultMessages result `shouldBe` ["hello!"]
 
     it "removes the last character on backspace" $ do
-      let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "hello", onInput T.unpack]
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], PressKey KeyBackspace []]
       resultMessages result `shouldBe` ["hell"]
 
     it "removes the character after the cursor on delete" $ do
-      let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "hello", onInput T.unpack]
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyLeft [], PressKey KeyDelete []]
       resultMessages result `shouldBe` ["ello"]
 
     it "does nothing on delete at the end of the value" $ do
-      let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "hello", onInput T.unpack]
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], PressKey KeyDelete []]
       resultMessages result `shouldBe` []
 
     it "does not fire onInput when there is no input" $ do
-      let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "hello", onInput T.unpack]
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] []
       resultMessages result `shouldBe` []
 
     it "does not process input when a different element is focused" $ do
-      let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "hello", onInput T.unpack]
       result <- runInteractions testBounds seedCtx (unfocused attrs) [] [PressKey KeyBackspace []]
       resultMessages result `shouldBe` []
 
   describe "disabled" $
     it "does not process input when disabled" $ do
-      let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "hello", onInput T.unpack]
       focused <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [ClickAt focusPt]
       result  <- runInteractions testBounds (resultContext focused) (disableWhen True (fullSizeTextInput Field attrs)) [] [TypeText "!"]
       resultMessages result `shouldBe` []
@@ -273,19 +273,19 @@ spec = describe "Blink.Controls.TextInput" $ do
           pure (resultContext settled)
 
     it "deletes the selected range on backspace" $ do
-      let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "hello", onInput T.unpack]
       base   <- seeded 1 3 attrs
       result <- runInteractions testBounds base (fullSizeTextInput Field attrs) [] [PressKey KeyBackspace []]
       resultMessages result `shouldBe` ["hlo"]
 
     it "deletes the selected range on delete" $ do
-      let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "hello", onInput T.unpack]
       base   <- seeded 1 3 attrs
       result <- runInteractions testBounds base (fullSizeTextInput Field attrs) [] [PressKey KeyDelete []]
       resultMessages result `shouldBe` ["hlo"]
 
     it "replaces the selected range with typed text" $ do
-      let attrs = [value "hello", onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "hello", onInput T.unpack]
       base   <- seeded 1 3 attrs
       result <- runInteractions testBounds base (fullSizeTextInput Field attrs) [] [TypeText "X"]
       resultMessages result `shouldBe` ["hXlo"]
@@ -298,17 +298,17 @@ spec = describe "Blink.Controls.TextInput" $ do
 
   describe "inputFilter" $ do
     it "inserts only the characters the filter accepts" $ do
-      let attrs = [value "12", inputFilter (T.filter isDigit), onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "12", inputFilter (T.filter isDigit), onInput T.unpack]
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], TypeText "a3b"]
       resultMessages result `shouldBe` ["123"]
 
     it "does not fire onInput when every typed character is rejected" $ do
-      let attrs = [value "12", inputFilter (T.filter isDigit), onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "12", inputFilter (T.filter isDigit), onInput T.unpack]
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], TypeText "!"]
       resultMessages result `shouldBe` []
 
     it "still allows backspace regardless of the filter" $ do
-      let attrs = [value "12", inputFilter (T.filter isDigit), onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "12", inputFilter (T.filter isDigit), onInput T.unpack]
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], PressKey KeyBackspace []]
       resultMessages result `shouldBe` ["1"]
 
@@ -320,7 +320,7 @@ spec = describe "Blink.Controls.TextInput" $ do
       resultDraws result `shouldNotContain` [DrawText contentRect "hunter2" defaultFont testColour AlignLeft]
 
     it "still edits and reports the real (unfiltered) value" $ do
-      let attrs = [value "hunter2", displayFilter (T.map (const '*')), onInput (postWith (\t -> (T.unpack t)))]
+      let attrs = [value "hunter2", displayFilter (T.map (const '*')), onInput T.unpack]
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyRight [], TypeText "!"]
       resultMessages result `shouldBe` ["hunter2!"]
 
@@ -331,11 +331,11 @@ spec = describe "Blink.Controls.TextInput" $ do
 
   describe "onSubmit" $ do
     it "fires when Enter is pressed while focused" $ do
-      let attrs = [value "hello", onSubmit (post ("submitted" :: String))]
+      let attrs = [value "hello", onSubmit ("submitted" :: String)]
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [PressKey KeyReturn []]
       resultMessages result `shouldBe` ["submitted"]
 
     it "does not fire when a different element is focused" $ do
-      let attrs = [value "hello", onSubmit (post ("submitted" :: String))]
+      let attrs = [value "hello", onSubmit ("submitted" :: String)]
       result <- runInteractions testBounds seedCtx (unfocused attrs) [] [PressKey KeyReturn []]
       resultMessages result `shouldBe` []

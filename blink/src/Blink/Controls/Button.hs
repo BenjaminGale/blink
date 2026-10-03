@@ -36,6 +36,7 @@ import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input (Key (KeyReturn), KeyEvent (..))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.View (View)
+import Blink.View.Context (Effect (..))
 import Blink.Element (Element (..), HasLayoutConfig (..))
 import Blink.Rendering (TextAlign (..))
 import Blink.Style
@@ -79,7 +80,7 @@ data ButtonConfig e msg = ButtonConfig
   , bcLabelled    :: LabelledConfig e msg
   , bcLayout      :: Layout
   , bcActivation  :: ButtonActivation
-  , bcOnActivated :: [EventHandler e msg]
+  , bcOnActivated :: [Effect e msg]
   }
 
 -- | 'defaultControlConfig' (styled via 'buttonStyleKey'), an empty caption,
@@ -118,8 +119,8 @@ instance HasButtonConfig e msg (ButtonConfig e msg) where
 -- 'Blink.Controls.RadioButton.radioButton' actually want callers to bind for "the control was
 -- activated" -- see 'onClicked' for the mouse-only, element-level event
 -- this is split from.
-onActivated :: HasButtonConfig e msg cfg => EventHandler e msg -> Attribute cfg
-onActivated = overButton . appendTo bcOnActivated (\bc hs -> bc { bcOnActivated = hs })
+onActivated :: HasButtonConfig e msg cfg => msg -> Attribute cfg
+onActivated = overButton . appendTo bcOnActivated (\bc hs -> bc { bcOnActivated = hs }) . EffectMsg
 
 -- | Which raw event counts as activating the control -- see
 -- 'ButtonActivation'. Defaults to 'ActivateOnClick'.
@@ -153,7 +154,7 @@ buttonBase eid cfg = do
         ActivateOnClick -> ciClicked e
         ActivateOnPress -> ciMouseDown e
       activated = mouseHit || (ciFocused e && enter)
-  when activated $ runHandlers (bcOnActivated cfg) ()
+  when activated $ runEffects (bcOnActivated cfg)
   pure (ButtonInteraction r activated)
 
 -- | A clickable button labelled via 'Blink.Controls.Label.text'. Fires every 'onActivated'

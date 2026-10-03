@@ -20,7 +20,7 @@ module Blink.Controls.ButtonBehaviour
 import Test.Hspec
 
 import Blink.Controls.Button (HasButtonConfig, onActivated)
-import Blink.Controls.Control (Attribute, HasControlConfig, HasEventHandlers, post)
+import Blink.Controls.Control (Attribute, HasControlConfig, HasEventHandlers)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.Fixtures (focusHeldBy)
@@ -33,7 +33,7 @@ import Blink.Testing
 -- | Every raw\/focus reaction (including 'Blink.Controls.Control.onClicked',
 -- via 'tagged'), plus a tagged reaction to 'onActivated'.
 taggedActivated :: (HasControlConfig e String cfg, HasEventHandlers cfg, HasButtonConfig e String cfg) => [Attribute cfg]
-taggedActivated = onActivated (post "Activated") : tagged
+taggedActivated = onActivated "Activated" : tagged
 
 -- | How a control's Enter-activation deviates from the plain
 -- ('Blink.Controls.Button.ActivateOnClick'-based) default -- passed by

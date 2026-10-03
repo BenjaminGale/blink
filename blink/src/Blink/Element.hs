@@ -47,7 +47,7 @@ import Blink.Layout.Constraints
   )
 import Data.Text (Text)
 
-import Blink.View (Effect, View, getBounds, withPart)
+import Blink.View (View, getBounds, withPart)
 
 -- | The layout-facing pairing of a component's size request, its measure,
 -- and its frame action. A container consumes a list of these to arrange a
@@ -242,7 +242,7 @@ class HasSelection s cfg | cfg -> s where
 class HasSelectionChanged e msg s cfg | cfg -> e msg s where
   -- | Reacts with the new selection whenever the user changes it. Store it
   -- and pass it back via 'selection'.
-  onSelectionChanged :: (s -> [Effect e msg]) -> Attribute cfg
+  onSelectionChanged :: (s -> msg) -> Attribute cfg
 
 -- | A widget that shows a single child element.
 class HasContent e msg cfg | cfg -> e msg where

@@ -31,15 +31,15 @@ todoView s = vBox
       ( hBox
           [ height (exactly 30)
           , children
-              [ textInput NewItemInput [value (newItemText s), onInput (postWith SetNewItemText), width fill, height fill]
+              [ textInput NewItemInput [value (newItemText s), onInput SetNewItemText, width fill, height fill]
               , button AddButton
-                  [ text "Add", onActivated (post AddItem), isEnabled (not (T.null (newItemText s)))
+                  [ text "Add", onActivated AddItem, isEnabled (not (T.null (newItemText s)))
                   , style (Class "accent"), width (exactly 80), height fill
                   ]
               ]
           ]
       : [ checkbox (ItemCheckbox i)
-            [text itemLabel, isSelected done, onSelectedChanged (postWith (ToggleItem i)), width fill, height (exactly 24)]
+            [text itemLabel, isSelected done, onSelectedChanged (ToggleItem i), width fill, height (exactly 24)]
         | (i, (itemLabel, done)) <- zip [0 ..] (todoItems s)
         ]
       )
@@ -94,13 +94,13 @@ firstItemAt = Point 10 42
 
 spec :: Spec
 spec = describe "an application written against import Blink alone" $ do
-  it "reports typed text through a postWith handler" $ do
+  it "reports typed text through an onInput handler" $ do
     handle <- start (Todos "" [])
     _      <- stepFrame handle (frame (Point 0 0) False)
     result <- stepFrame handle (frame (Point 0 0) False) { typedText = ["Milk"] }
     newItemText (stateOf result) `shouldBe` "Milk"
 
-  it "reports a click through a post handler" $ do
+  it "reports a click through an onActivated handler" $ do
     handle <- start (Todos "Milk" [])
     result <- clickAt handle addButtonAt
     stateOf result `shouldBe` Todos "" [("Milk", False)]
@@ -110,7 +110,7 @@ spec = describe "an application written against import Blink alone" $ do
     result <- clickAt handle addButtonAt
     todoItems (stateOf result) `shouldBe` []
 
-  it "reports a toggle with its new value through a postWith handler" $ do
+  it "reports a toggle with its new value through an onSelectedChanged handler" $ do
     handle <- start (Todos "" [("Milk", False)])
     result <- clickAt handle firstItemAt
     todoItems (stateOf result) `shouldBe` [("Milk", True)]

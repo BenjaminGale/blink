@@ -37,6 +37,7 @@ import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), clampFra
 import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.View
+import Blink.View.Context (Effect (..))
 import Blink.Element (Element (..), HasLayoutConfig (..), noIntrinsicSize, HasStep (..), HasValue (..))
 import Blink.Style
 import Blink.Controls.Style (plainFillStyle, trackMetrics, thumbStyle, zeroMetrics, transparent, valueFillStyle)
@@ -119,8 +120,8 @@ instance HasStep (SliderConfig e msg) where
 -- | Reacts with the new value whenever dragging, clicking the track, or an
 -- arrow key press would change it. It's up to the reaction to actually
 -- store the new value and pass it back in via 'value' next frame.
-onValueChanged :: (Double -> [Effect e msg]) -> Attribute (SliderConfig e msg)
-onValueChanged = appendTo scOnValueChanged (\sc hs -> sc { scOnValueChanged = hs })
+onValueChanged :: (Double -> msg) -> Attribute (SliderConfig e msg)
+onValueChanged f = appendTo scOnValueChanged (\sc hs -> sc { scOnValueChanged = hs }) (pure . EffectMsg . f)
 
 -- | The @[0, 1]@ fraction along @bounds@ that horizontal position @x@ maps
 -- to, clamped to stay within the track even when the pointer has moved

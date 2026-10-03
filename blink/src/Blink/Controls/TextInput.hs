@@ -38,6 +38,7 @@ import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.View
+import Blink.View.Context (Effect (..))
 import Blink.View.Drawing (fillRect, drawText)
 import Blink.Element (Element (..), HasLayoutConfig (..), HasValue (..))
 import Blink.Style
@@ -53,7 +54,7 @@ data TextInputConfig e msg = TextInputConfig
   , ticInputFilter   :: Text -> Text
   , ticDisplayFilter :: Text -> Text
   , ticOnInput       :: [Text -> [Effect e msg]]
-  , ticOnSubmit      :: [EventHandler e msg]
+  , ticOnSubmit      :: [Effect e msg]
   , ticLayout        :: Layout
   }
 
@@ -111,12 +112,12 @@ displayFilter :: (Text -> Text) -> Attribute (TextInputConfig e msg)
 displayFilter f = Attribute (\tc -> tc { ticDisplayFilter = f })
 
 -- | Reacts with the new value whenever a keystroke changes it.
-onInput :: (Text -> [Effect e msg]) -> Attribute (TextInputConfig e msg)
-onInput = appendTo ticOnInput (\tc hs -> tc { ticOnInput = hs })
+onInput :: (Text -> msg) -> Attribute (TextInputConfig e msg)
+onInput f = appendTo ticOnInput (\tc hs -> tc { ticOnInput = hs }) (pure . EffectMsg . f)
 
 -- | Reacts when Enter is pressed while the field is focused and enabled.
-onSubmit :: EventHandler e msg -> Attribute (TextInputConfig e msg)
-onSubmit = appendTo ticOnSubmit (\tc hs -> tc { ticOnSubmit = hs })
+onSubmit :: msg -> Attribute (TextInputConfig e msg)
+onSubmit = appendTo ticOnSubmit (\tc hs -> tc { ticOnSubmit = hs }) . EffectMsg
 
 -- | Click sets both selection ends at the clicked character; dragging
 -- extends only the active end, keeping the anchor from before the drag
@@ -239,7 +240,7 @@ resolveSelectionAndEdit cfg eid bounds canEdit ci currentValue displayValue scro
 
       submitted = canEdit && any (\e -> key e == KeyReturn) keyEvts
 
-  when submitted $ runHandlers (ticOnSubmit cfg) ()
+  when submitted $ runEffects (ticOnSubmit cfg)
   forM_ edited $ \t -> runHandlers (ticOnInput cfg) t
 
   when (canEdit && selFinal /= selInit) $ requestSelectionAt eid selFinal

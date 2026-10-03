@@ -23,7 +23,7 @@ import Blink.Element (Element, elLayout, elementWithLayout)
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Control
   ( ControlInteraction (ciClicked, ciMouseDown)
-  , control, defaultControlConfig, elementId, onFocusGained, onFocusLost, post, postWith, resolve
+  , control, defaultControlConfig, elementId, onFocusGained, onFocusLost, resolve
   )
 import Blink.Controls.ToggleButton (isSelected, onSelectedChanged)
 import qualified Blink.Controls.Slider as Slider
@@ -297,7 +297,7 @@ checkboxApp = App
   { startUp = pure False
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
   , view    = \checked ->
-      (checkbox () [isSelected checked, onSelectedChanged (postWith (\b -> (const b)))])
+      (checkbox () [isSelected checked, onSelectedChanged const])
         { elLayout = Layout fill fill TopLeft }
   , update  = modify
   }
@@ -309,7 +309,7 @@ sliderApp = App
   { startUp = pure 0
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
   , view    = \v ->
-      (Slider.slider () [Slider.value v, Slider.onValueChanged (postWith (\v' -> const v'))])
+      (Slider.slider () [Slider.value v, Slider.onValueChanged (\v' -> const v')])
         { elLayout = Layout fill fill TopLeft }
   , update  = modify
   }
@@ -321,7 +321,7 @@ textInputApp = App
   { startUp = pure ""
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
   , view    = \t ->
-      (TextInput.textInput () [TextInput.value t, TextInput.onInput (postWith (\t' -> const t'))])
+      (TextInput.textInput () [TextInput.value t, TextInput.onInput (\t' -> const t')])
         { elLayout = Layout fill fill TopLeft }
   , update  = modify
   }
@@ -349,12 +349,12 @@ focusApp = App
   , view    = \_ -> fullView $ do
       withBounds (Rectangle 0 0 50 100) $ void $ control $ resolve defaultControlConfig
         [ elementId FocusA
-        , onFocusGained (post "A gained")
-        , onFocusLost   (post "A lost")
+        , onFocusGained "A gained"
+        , onFocusLost   "A lost"
         ]
       withBounds (Rectangle 50 0 50 100) $ void $ control $ resolve defaultControlConfig
         [ elementId FocusB
-        , onFocusGained (post "B gained")
+        , onFocusGained "B gained"
         ]
   , update  = \m -> modify (++ [m])
   }

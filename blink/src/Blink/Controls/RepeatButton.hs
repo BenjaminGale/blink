@@ -108,7 +108,7 @@ repeatButtonBase eid cfg = do
   -- adds the repeats past that first activation.
   r <- buttonBase eid btn
   toFire <- resolveHoldRepeats eid (ciHeld (biControl r)) (rbInitialDelay cfg) (rbInterval cfg)
-  when (toFire > 0) $ replicateM_ toFire (runHandlers (bcOnActivated btn) ())
+  when (toFire > 0) $ replicateM_ toFire (runEffects (bcOnActivated btn))
   pure r
   where
     -- Always 'ActivateOnPress' -- fixed behaviour, not a default (same

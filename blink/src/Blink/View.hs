@@ -45,13 +45,9 @@ and folds them into its own state via "Blink.Update".
 A control queues two kinds of thing during a frame, both riding in the
 same 'Effect' queue: a @msg@ via 'emit', for the application, and a
 'UiEffect' via 'emitUi', for Blink's own presentation state, never seen by
-the application. 'Effect' is opaque — a
-handler builds its @['Effect' e msg]@ result with
-'Blink.Controls.Control.post' or 'Blink.Controls.Control.postWith' (see
-'Blink.Controls.Table.onColumnSortRequested' for an example), and can
-queue both kinds from the same reaction: the message that tells the
-application what happened, and an effect reacting to it on the
-presentation side.
+the application. Handler attributes such as
+'Blink.Controls.Button.onActivated' take the application's message and
+queue it when the event fires.
 
 'emitUi' only appends a 'UiEffect' to the queue; it does not change the
 running 'Blink.Testing.ViewContext'. 'Blink.Testing.nextFrameContext' (or, mid-frame,
@@ -250,7 +246,6 @@ module Blink.View
   , clampScrollPos
   , requestScrollTo
   , requestScrollBy
-  , postScrollBy
   , setScrollStateNow
     -- * Extent state
   , ExtentState

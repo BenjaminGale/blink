@@ -8,7 +8,7 @@ import Test.QuickCheck.Monadic (assert, monadicIO, run)
 
 import Blink.Controls.Button (onActivated)
 import Blink.Controls.ButtonBehaviour (ButtonBehaviourConfig (..), buttonBehaviourSpec, defaultButtonBehaviourConfig)
-import Blink.Controls.Control (Attribute, post)
+import Blink.Controls.Control (Attribute)
 import Blink.Controls.Fixtures (fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.RepeatButton (RepeatButtonConfig, initialDelay, repeatButton, repeatInterval)
 import Blink.Geometry (Point (..), Rectangle (..))
@@ -46,7 +46,7 @@ renderWithId :: [Attribute'] -> View TestElement String ()
 renderWithId attrs = fullSizeAt (repeatButton Ok attrs)
 
 taggedActivated :: [Attribute']
-taggedActivated = [onActivated (post "Activated")]
+taggedActivated = [onActivated "Activated"]
 
 action :: View TestElement String ()
 action = renderWithId taggedActivated

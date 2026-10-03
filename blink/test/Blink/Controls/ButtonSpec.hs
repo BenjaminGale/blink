@@ -5,7 +5,7 @@ import Test.Hspec
 
 import Blink.Controls.Button (ButtonActivation (..), ButtonConfig, activation, button, buttonStyleKey, onActivated)
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec, defaultButtonBehaviourConfig)
-import Blink.Controls.Control (Attribute, post)
+import Blink.Controls.Control (Attribute)
 import Blink.Controls.Fixtures
   ( contentRectFor, fullSizeAt, hitRectFor, mkTestTheme, monospaceTextMeasurer, noInput, plainStyle, plainStyleSet, standardMetrics
   , startAt, testColour, zeroMetrics
@@ -94,7 +94,7 @@ spec = describe "Blink.Controls.Button" $ do
     -- 'Blink.Controls.RepeatButton.repeatButton', honours the
     -- 'ActivateOnPress' override 'activation' exposes.
     let insidePoint = Point 50 50
-        taggedActivated = [activation ActivateOnPress, onActivated (post "Activated")]
+        taggedActivated = [activation ActivateOnPress, onActivated "Activated"]
 
     it "fires onActivated immediately on press, not on release" $ do
       result <- runInteractions testBounds seedCtx (fullSize taggedActivated) [] [MouseDown insidePoint]

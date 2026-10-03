@@ -9,7 +9,7 @@ import Test.Hspec
 import Blink.App
 import Blink.AppFixtures (drawnTexts, logAddedBetween, resultState, startApp, testMetrics, testStyleSet)
 import Blink.Controls.Button (ButtonConfig)
-import Blink.Controls.Control (Attribute, control, defaultControlConfig, elementId, onFocusGained, onFocusLost, post, postWith, resolve)
+import Blink.Controls.Control (Attribute, control, defaultControlConfig, elementId, onFocusGained, onFocusLost, resolve)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec, styleAttributeSpec)
 import Blink.Controls.Fixtures (contentRectFor, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.Label (mnemonic, text)
@@ -73,7 +73,7 @@ menuBarAppWith
 menuBarAppWith extraAttrs = App
   { startUp = pure Nothing
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
-  , view    = \open -> testMenuBar TheBar (const []) ([openMenu open, onOpenMenuChanged (postWith id)] ++ extraAttrs)
+  , view    = \open -> testMenuBar TheBar (const []) ([openMenu open, onOpenMenuChanged id] ++ extraAttrs)
   , update  = put
   }
 
@@ -89,12 +89,12 @@ focusLoggingApp = App
   { startUp = pure (Nothing, [])
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
   , view    = \(open, _) -> elementWithLayout (Layout fill fill TopLeft) $ do
-      runElement $ testMenuBar BarPart (\m -> [onFocusGained (post (Logged (labelText m <> " focused")))])
-        [openMenu open, onOpenMenuChanged (postWith SetOpen)]
+      runElement $ testMenuBar BarPart (\m -> [onFocusGained (Logged (labelText m <> " focused"))])
+        [openMenu open, onOpenMenuChanged SetOpen]
       withBounds (Rectangle 0 70 40 20) $ void $ control $ resolve defaultControlConfig
         [ elementId Sibling
-        , onFocusGained (post (Logged "Sibling focused"))
-        , onFocusLost   (post (Logged "Sibling lost"))
+        , onFocusGained (Logged "Sibling focused")
+        , onFocusLost   (Logged "Sibling lost")
         ]
   , update  = \msg -> modify $ \(open, log') -> case msg of
       SetOpen m -> (m, log')

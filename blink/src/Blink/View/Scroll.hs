@@ -14,7 +14,6 @@ module Blink.View.Scroll
   , contextScrollState
   , requestScrollTo
   , requestScrollBy
-  , postScrollBy
   , setScrollStateNow
   ) where
 
@@ -47,12 +46,6 @@ requestScrollTo eid v = controlIdFor eid >>= \k -> queueEffect (ScrollTo k v)
 -- 'Blink.Update.Update' -- see 'HasUiEffect'.
 requestScrollBy :: (Ord e, Monad m, HasUiEffect e m) => e -> Double -> m ()
 requestScrollBy eid dv = controlIdFor eid >>= \k -> queueEffect (ScrollBy k dv)
-
--- | 'requestScrollBy' as a handler reaction, ignoring the triggering
--- event's own data. Takes the full 'ControlId', since a handler runs
--- outside the view and so can't look up which part it was built in.
-postScrollBy :: ControlId e -> Double -> a -> [Effect e msg]
-postScrollBy eid dv = const [EffectUi (ScrollBy eid dv)]
 
 -- | Sets the given element's scroll position, clamped to @[0, 1]@,
 -- immediately -- visible to a later 'getScrollState' read in this same

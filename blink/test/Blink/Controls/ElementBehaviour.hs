@@ -20,7 +20,7 @@ import Blink.Controls.Control
   ( Attribute, HasControlConfig, HasEventHandlers
   , onMouseEntered, onMouseExited, onMouseDown, onMouseUp, onClicked, onKeyPressed
   , onFocusGained, onFocusLost
-  , post
+  
   )
 import Blink.Generators (genPointIn)
 import Blink.Geometry (Point, Rectangle)
@@ -35,14 +35,14 @@ import Blink.Testing
 -- caller.
 tagged :: (HasControlConfig e String cfg, HasEventHandlers cfg) => [Attribute cfg]
 tagged =
-  [ onMouseEntered (post "MouseEntered")
-  , onMouseExited  (post "MouseExited")
-  , onMouseDown    (post "MouseDown")
-  , onMouseUp      (post "MouseUp")
-  , onClicked      (post "Clicked")
-  , onKeyPressed   (post "KeyPressed")
-  , onFocusGained  (post "FocusGained")
-  , onFocusLost    (post "FocusLost")
+  [ onMouseEntered "MouseEntered"
+  , onMouseExited  "MouseExited"
+  , onMouseDown    "MouseDown"
+  , onMouseUp      "MouseUp"
+  , onClicked      "Clicked"
+  , onKeyPressed   (const "KeyPressed")
+  , onFocusGained  "FocusGained"
+  , onFocusLost    "FocusLost"
   ]
 
 -- | The raw-event contract: given how to render the thing under test with

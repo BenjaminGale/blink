@@ -14,11 +14,8 @@
 -- can appear in type signatures (e.g. a helper returning
 -- @['Blink.Element.Attribute' ('ButtonConfig' e msg)]@).
 module Blink.Controls
-  ( -- * Building handlers
-    post
-  , postWith
-    -- * Attributes every widget accepts
-  , isEnabled
+  ( -- * Attributes every widget accepts
+    isEnabled
   , style
     -- * Attributes shared across widgets
   , value
@@ -183,7 +180,7 @@ module Blink.Controls
   ) where
 
 import Blink.Element (content, itemAttrs, items, onSelectionChanged, orientation, selection, step, value)
-import Blink.Controls.Control (isEnabled, post, postWith, style)
+import Blink.Controls.Control (isEnabled, style)
 import Blink.Controls.Button (ButtonActivation (..), ButtonConfig, activation, button, onActivated)
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Divider (DividerConfig, divider, thickness)

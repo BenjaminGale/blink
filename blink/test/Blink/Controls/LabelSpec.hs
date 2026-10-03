@@ -3,7 +3,7 @@ module Blink.Controls.LabelSpec (spec) where
 
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute, onClicked, post)
+import Blink.Controls.Control (Attribute, onClicked)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.Fixtures
   (fullSizeAt, hitRectFor, mkTestTheme, monospaceTextMeasurer, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
@@ -132,7 +132,7 @@ spec = describe "Blink.Controls.Label" $ do
       getDrawCommands ctx `shouldContain` [FillRect (Rectangle 90 34 10 1) testColour]
 
   it "raises no events without a target, having no id of its own" $ do
-    result <- runInteractions testBounds seedCtx (fullSize [onClicked (post ("Clicked" :: String))]) [] [ClickAt onCaption]
+    result <- runInteractions testBounds seedCtx (fullSize [onClicked ("Clicked" :: String)]) [] [ClickAt onCaption]
     resultMessages result `shouldBe` []
 
   it "never claims focus, even with nothing else focused" $ do

@@ -6,7 +6,7 @@ import qualified Data.Set as Set
 import Data.Tree (Tree (..))
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute, postWith)
+import Blink.Controls.Control (Attribute)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
   ( Direction (..), MultiSelection, SingleSelection, itemValue, listStyleKey, moveCursor, multiSelected
@@ -193,7 +193,7 @@ widgetSpec = describe "tree" $ do
       (renderSilentTree
         [ expanded (Set.singleton "src")
         , selection (unselected items)
-        , onExpansionChanged (postWith (\s -> ("Expanded:" ++ show (Set.toList s))))
+        , onExpansionChanged (\s -> "Expanded:" ++ show (Set.toList s))
         ])
       [MoveTo (atRow 1 8)]
       [ClickAt (atRow 1 8)]
@@ -204,7 +204,7 @@ widgetSpec = describe "tree" $ do
       (renderSilentTree
         [ expanded (Set.singleton "src")
         , selection (unselected items)
-        , onExpansionChanged (postWith (\s -> ("Expanded:" ++ show (Set.toList s))))
+        , onExpansionChanged (\s -> "Expanded:" ++ show (Set.toList s))
         ])
       [MoveTo (atRow 2 24)]
       [ClickAt (atRow 2 24)]
@@ -240,8 +240,8 @@ selectedMsg s = "Selected:" ++ show s
 
 keyReactions :: [Attribute (TreeConfig SingleSelection TestElem String String)]
 keyReactions =
-  [ onExpansionChanged (postWith (\s -> (expandedMsg s)))
-  , onSelectionChanged (postWith (\s -> (selectedMsg s)))
+  [ onExpansionChanged expandedMsg
+  , onSelectionChanged selectedMsg
   ]
 
 keyboardSpec :: Spec
@@ -289,7 +289,7 @@ multiKeyboardSpec = describe "tree keyboard with MultiSelection" $
       (render'
         [ expanded (Set.singleton "src")
         , selection cursorOnFirstChild
-        , onSelectionChanged (postWith (\s -> ("Selected:" ++ show s)))
+        , onSelectionChanged (\s -> "Selected:" ++ show s)
         ])
       []
       [PressKey KeyLeft []]
@@ -329,7 +329,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
       (renderSilentTree
         [ expanded expandedBoth
         , selection cursorOnButton
-        , onSelectionChanged (postWith (\s -> (selectedMsg s)))
+        , onSelectionChanged selectedMsg
         ])
       []
       [PressKey KeyLeft []]
@@ -348,7 +348,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
       (renderSilentTree
         [ expanded expandedBoth
         , selection cursorOnChild
-        , onSelectionChanged (postWith (\s -> (selectedMsg s)))
+        , onSelectionChanged selectedMsg
         ])
       []
       [PressKey KeyRight []]
@@ -380,7 +380,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
       (renderSilentTree
         [ expanded expandedSrc
         , selection cursorOnControls
-        , onExpansionChanged (postWith (\s -> (expandedMsg s)))
+        , onExpansionChanged expandedMsg
         ])
       []
       [PressKey KeyRight []]
@@ -396,7 +396,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
       (renderSilentTree
         [ expanded expandedBoth
         , selection cursorOnControls'
-        , onSelectionChanged (postWith (\s -> (selectedMsg s)))
+        , onSelectionChanged selectedMsg
         ])
       []
       [PressKey KeyRight []]
@@ -422,7 +422,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
       (renderSilentTree
         [ expanded expandedBoth
         , selection cursorOnButton
-        , onSelectionChanged (postWith (\s -> (selectedMsg s)))
+        , onSelectionChanged selectedMsg
         ])
       []
       [PressKey KeyRight []]
@@ -444,7 +444,7 @@ chromeSpec = describe "tree keyboard scrolling with list chrome" $
       (renderSilentTree
         [ expanded expandedBoth
         , selection cursorOnSrc
-        , onSelectionChanged (postWith (\s -> (selectedMsg s)))
+        , onSelectionChanged selectedMsg
         ])
       []
       [PressKey KeyRight []]

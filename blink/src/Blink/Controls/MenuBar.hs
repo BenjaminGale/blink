@@ -55,7 +55,7 @@ import Blink.Input (InputState (inputKeyEvents), Key (KeyLeft, KeyRight), KeyEve
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.View
-import Blink.View.Context (UiEffect (..))
+import Blink.View.Context (Effect (..), UiEffect (..))
 import Blink.Element (Element (..), HasItemAttrs (..), HasLayoutConfig (..), height, runElement, width)
 import Blink.Controls.Style (containerStyle, transparent)
 import Blink.Rendering (TextAlign (..))
@@ -157,8 +157,8 @@ openMenu m = Attribute (\c -> c { mbrOpenMenu = m })
 -- | Reacts when the open menu should change, with the new value: from a
 -- label click, or 'Nothing' whenever the open menu closes for any other
 -- reason. Store it and pass it back via 'openMenu'.
-onOpenMenuChanged :: (Maybe a -> [Effect e msg]) -> Attribute (MenuBarConfig e a b msg)
-onOpenMenuChanged = appendTo mbrOnOpenMenuChanged (\c hs -> c { mbrOnOpenMenuChanged = hs })
+onOpenMenuChanged :: (Maybe a -> msg) -> Attribute (MenuBarConfig e a b msg)
+onOpenMenuChanged f = appendTo mbrOnOpenMenuChanged (\c hs -> c { mbrOnOpenMenuChanged = hs }) (pure . EffectMsg . f)
 
 -- | A row of labels, one per 'menus', each opening a dropdown list of
 -- items (built from 'menuItems') when clicked. The bar is identified by

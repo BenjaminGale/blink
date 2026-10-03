@@ -12,6 +12,7 @@ import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import GHC.Clock (getMonotonicTimeNSec)
 import Data.List (sortOn)
+import Data.Maybe (fromMaybe)
 import Data.Ord (Down (..))
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -70,7 +71,7 @@ data Msg
   | AddClick
   | ResetClicks
   | SetToggle Bool
-  | PickRadio Text
+  | PickRadio (Maybe Text)
   | SetFileMenuOpen Bool
   | FileMenuItemActivated Text
   | SetMenuBarOpenMenu (Maybe Text)
@@ -153,7 +154,7 @@ updateApp msg = case msg of
   AddClick             -> modify $ \s -> s { clickCount = min 50 (clickCount s + 1) }
   ResetClicks           -> modify $ \s -> s { clickCount = 0 }
   SetToggle v          -> modify $ \s -> s { toggleOn = v }
-  PickRadio v          -> modify $ \s -> s { radioChoice = Just v }
+  PickRadio v          -> modify $ \s -> s { radioChoice = v }
   SetFileMenuOpen v       -> modify $ \s -> s { fileMenuOpen = v }
   FileMenuItemActivated v -> modify $ \s -> s { fileMenuLastAction = v }
   SetMenuBarOpenMenu v    -> modify $ \s -> s { menuBarOpenMenu = v }
@@ -266,12 +267,12 @@ rowLayout = [width fill, height pageRowHeight, align TopLeft]
 
 rowDarkMode :: AppState -> Element ControlId Msg
 rowDarkMode s =
-  checkbox DarkModeCheckbox [height pageRowHeight, text "Dark mode", isSelected (darkMode s), onSelectedChanged (postWith SetDarkMode)]
+  checkbox DarkModeCheckbox [height pageRowHeight, text "Dark mode", isSelected (darkMode s), onSelectedChanged SetDarkMode]
 
 rowEditing :: AppState -> Element ControlId Msg
 rowEditing s =
   checkbox EditingCheckbox
-    [height pageRowHeight, text "Enable editing", isSelected (editingEnabled s), onSelectedChanged (postWith SetEditingEnabled)]
+    [height pageRowHeight, text "Enable editing", isSelected (editingEnabled s), onSelectedChanged SetEditingEnabled]
 
 -- | A plain full-width separator between the settings checkboxes above and
 -- the interactive controls below -- 'divider's own default orientation and
@@ -285,10 +286,10 @@ rowButtons s =
     ( rowLayout ++
       [ spacing 8
       , children
-          [ button ClickButton [text "Click me", onActivated (post AddClick), isEnabled (editingEnabled s), width (exactly 100), height fill]
+          [ button ClickButton [text "Click me", onActivated AddClick, isEnabled (editingEnabled s), width (exactly 100), height fill]
           , repeatButton HoldButton
-              [text "Hold me", onActivated (post AddClick), isEnabled (editingEnabled s), width (exactly 100), height fill]
-          , button ResetButton [text "Reset", onActivated (post ResetClicks), isEnabled (editingEnabled s), width (exactly 100), height fill]
+              [text "Hold me", onActivated AddClick, isEnabled (editingEnabled s), width (exactly 100), height fill]
+          , button ResetButton [text "Reset", onActivated ResetClicks, isEnabled (editingEnabled s), width (exactly 100), height fill]
           , divider [orientation Vertical, height fill]
           , caption ("Clicks: " <> T.pack (show (clickCount s))) [width fill, height fill, align MiddleLeft]
           ]
@@ -302,7 +303,7 @@ rowToggle s =
       [ spacing 8
       , children
           [ toggleButton ToggleCtl
-              [ text "Toggle me", isSelected (toggleOn s), onSelectedChanged (postWith SetToggle)
+              [ text "Toggle me", isSelected (toggleOn s), onSelectedChanged SetToggle
               , isEnabled (editingEnabled s), width (exactly 160), height fill
               ]
           , caption (if toggleOn s then "On" else "Off") [width fill, height fill, align MiddleLeft]
@@ -321,7 +322,7 @@ rowRadio s =
       , items radioOptions
       , itemAttrs (\opt -> [text opt, width (exactly 100), height fill, align MiddleLeft])
       , selection (radioChoice s)
-      , onSelectionChanged (maybe [] (postWith PickRadio))
+      , onSelectionChanged PickRadio
       , isEnabled (editingEnabled s)
       ]
     )
@@ -339,9 +340,9 @@ rowMenuButton s =
       [ spacing 8
       , children
           [ menuButton FileMenuButton
-              [ text "File", isOpen (fileMenuOpen s), onOpenChanged (postWith SetFileMenuOpen)
+              [ text "File", isOpen (fileMenuOpen s), onOpenChanged SetFileMenuOpen
               , items fileMenuActions
-              , itemAttrs (\a -> [text a, onActivated (post (FileMenuItemActivated a))])
+              , itemAttrs (\a -> [text a, onActivated (FileMenuItemActivated a)])
               , isEnabled (editingEnabled s), width (exactly 120), height fill
               ]
           , caption statusText [width fill, height fill, align MiddleLeft]
@@ -355,7 +356,7 @@ rowTextInput :: AppState -> Element ControlId Msg
 rowTextInput s =
   field rowLayout (editingEnabled s) TextInputCtl "Text input"
     (textInput TextInputCtl
-        [ value (inputText s), placeholder "Type something", onInput (postWith SetInputText)
+        [ value (inputText s), placeholder "Type something", onInput SetInputText
         , isEnabled (editingEnabled s), height fill
         ])
 
@@ -363,14 +364,14 @@ rowPasswordInput :: AppState -> Element ControlId Msg
 rowPasswordInput s =
   field rowLayout (editingEnabled s) PasswordInputCtl "Password input"
     (textInput PasswordInputCtl
-        [ value (passwordText s), placeholder "Password", displayFilter (T.map (const '\8226')), onInput (postWith SetPasswordText)
+        [ value (passwordText s), placeholder "Password", displayFilter (T.map (const '\8226')), onInput SetPasswordText
         , isEnabled (editingEnabled s), height fill
         ])
 
 rowAnimate :: AppState -> Element ControlId Msg
 rowAnimate s =
   checkbox AnimateCheckbox
-    [height pageRowHeight, text "Animate progress bar", isSelected (animating s), onSelectedChanged (postWith SetAnimating), isEnabled (editingEnabled s)]
+    [height pageRowHeight, text "Animate progress bar", isSelected (animating s), onSelectedChanged SetAnimating, isEnabled (editingEnabled s)]
 
 rowProgress :: AppState -> Element ControlId Msg
 rowProgress s =
@@ -386,7 +387,7 @@ rowSlider s =
     ( hBox
         [ spacing 8, alignment Center
         , children
-            [ slider SliderCtl [value (sliderValue s), onValueChanged (postWith SetSlider), isEnabled (editingEnabled s), height fill]
+            [ slider SliderCtl [value (sliderValue s), onValueChanged SetSlider, isEnabled (editingEnabled s), height fill]
             , caption (T.pack (show (round (sliderValue s * 100) :: Int)) <> "%") [width (exactly 60), height fill, align MiddleLeft]
             ]
         ]
@@ -473,7 +474,7 @@ sidebar s =
             , items (map fst pages)
             , itemAttrs (\page -> [text (pageLabel page), width fill, height (exactly 32)])
             , selection (Just (currentPage s))
-            , onSelectionChanged (maybe [] (postWith SetPage))
+            , onSelectionChanged (SetPage . fromMaybe (currentPage s))
             ]
         ]
     ]
@@ -527,8 +528,8 @@ fruitListElem s =
   list FruitList
     [ selection (fruitSelection s)
     , renderItem (listCaption . itemValue)
-    , onSelectionChanged (postWith FruitSelectionChanged)
-    , onItemActivated (postWith FruitActivated)
+    , onSelectionChanged FruitSelectionChanged
+    , onItemActivated FruitActivated
     , height fill
     ]
 
@@ -552,7 +553,7 @@ groceryListElem s =
   list GroceryList
     [ selection (groceryList s)
     , renderItem (listCaption . itemValue)
-    , onSelectionChanged (postWith GroceryListChanged)
+    , onSelectionChanged GroceryListChanged
     , height fill
     ]
 
@@ -583,7 +584,7 @@ longListElem s =
   list LongList
     [ selection (longListSelection s)
     , renderItem (listCaption . (\n -> "Item " <> T.pack (show n)) . itemValue)
-    , onSelectionChanged (postWith LongListChanged)
+    , onSelectionChanged LongListChanged
     , width fill, height (exactly 200)
     ]
 
@@ -592,7 +593,7 @@ longListElem s =
 -- that message rather than directly from the click itself.
 longListJumpButton :: Element ControlId Msg
 longListJumpButton =
-  button LongListJumpButton [text "Jump to end", onActivated (post JumpToLongListEnd), width fill, height (exactly 28)]
+  button LongListJumpButton [text "Jump to end", onActivated JumpToLongListEnd, width fill, height (exactly 28)]
 
 longListSection :: AppState -> Element ControlId Msg
 longListSection s =
@@ -665,8 +666,8 @@ fileTreeElem s =
     , expanded (fileTreeExpanded s)
     , selection (fileTreeSelection s)
     , renderNode (listCaption . itemValue . tisState)
-    , onSelectionChanged (postWith FileTreeSelectionChanged)
-    , onExpansionChanged (postWith FileTreeExpansionChanged)
+    , onSelectionChanged FileTreeSelectionChanged
+    , onExpansionChanged FileTreeExpansionChanged
     , width fill, height (exactly 200)
     ]
 
@@ -726,9 +727,9 @@ groceryTableElem s =
   table GroceryTable
     [ columns groceryTableColumns
     , selection (groceryTableSelection s)
-    , onSelectionChanged (postWith GroceryTableSelectionChanged)
+    , onSelectionChanged GroceryTableSelectionChanged
     , sortedBy (groceryTableSort s)
-    , onColumnSortRequested (postWith GroceryTableSortRequested)
+    , onColumnSortRequested GroceryTableSortRequested
     , width fill, height (exactly 200)
     ]
 
@@ -808,10 +809,10 @@ fileSizeTreeTableElem s =
     , forest (sortedFileForest (fileSizeTreeSort s))
     , expanded (fileSizeTreeExpanded s)
     , selection (fileSizeTreeSelection s)
-    , onSelectionChanged (postWith FileSizeTreeSelectionChanged)
-    , onExpansionChanged (postWith FileSizeTreeExpansionChanged)
+    , onSelectionChanged FileSizeTreeSelectionChanged
+    , onExpansionChanged FileSizeTreeExpansionChanged
     , sortedBy (fileSizeTreeSort s)
-    , onColumnSortRequested (postWith FileSizeTreeSortRequested)
+    , onColumnSortRequested FileSizeTreeSortRequested
     , width fill, height (exactly 200)
     ]
 
@@ -851,7 +852,7 @@ backgroundPage s =
               [ spacing 8
               , children
                   [ button BackgroundStartButton
-                      [ text "Fetch file", onActivated (post StartFetch)
+                      [ text "Fetch file", onActivated StartFetch
                       , isEnabled (editingEnabled s && not fetching), width (exactly 120), height fill
                       ]
                   , caption statusText [width fill, height fill, align MiddleLeft]
@@ -906,7 +907,7 @@ imagePage s =
             ImageFitHeightSlider (imageFitHeight s) SetImageFitHeight
         , checkbox ImagePreserveRatioCheckbox
             [ height pageRowHeight, text "Preserve ratio", isSelected (imagePreserveRatio s)
-            , onSelectedChanged (postWith SetImagePreserveRatio)
+            , onSelectedChanged SetImagePreserveRatio
             ]
         , image (imageAttrs ++ [align TopLeft])
         ]
@@ -933,13 +934,13 @@ imagePage s =
                   [ width (exactly 140), height fill
                   , children
                       [ checkbox checkboxId
-                          [ text caption', isSelected enabled, onSelectedChanged (postWith onEnabled)
+                          [ text caption', isSelected enabled, onSelectedChanged onEnabled
                           , height fill
                           ]
                       ]
                   ]
               , slider sliderId
-                  [ value frac, onValueChanged (postWith onFrac)
+                  [ value frac, onValueChanged onFrac
                   , isEnabled enabled, width fill, height fill
                   ]
               , caption (T.pack (show (round (fitSliderPixels frac) :: Int)) <> "px")
@@ -1030,10 +1031,10 @@ topMenuBar s =
     [ menus menuBarMenus
     , labelAttrs (\m -> [text m, mnemonic (menuBarLabelMnemonic m)])
     , menuItems menuBarItemsFor
-    , itemAttrs (\_ i -> [text i, onActivated (post (MenuBarItemActivated i))])
+    , itemAttrs (\_ i -> [text i, onActivated (MenuBarItemActivated i)])
     , submenuItems menuBarSubmenuItemsFor
     , openMenu (menuBarOpenMenu s)
-    , onOpenMenuChanged (postWith SetMenuBarOpenMenu)
+    , onOpenMenuChanged SetMenuBarOpenMenu
     ]
 
 demoView :: AppState -> Element ControlId Msg

@@ -9,7 +9,7 @@ import Blink.Controls.Control
   ( Attribute, ControlConfig (..), FocusOptions (..), FocusPolicy (..)
   , chromeInsets, control, defaultControlConfig, defaultFocusOptions, elementId, focusTargetOnClick, isEnabled, focusPolicy
   , onClicked, onFocusGained, onFocusLost, onKeyPressed
-  , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, post, postWith, resolve
+  , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, resolve
   )
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig, focusPolicyAttributeSpec)
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
@@ -114,12 +114,12 @@ chromeFill colour rect = FillRect (insetRect (uniform 10) rect) colour
 -- it loses focus and B posts "B gained" when it gains focus -- for tracking
 -- a focus handoff between them.
 focusHandoffRender :: View TestElement String ()
-focusHandoffRender = both [onFocusLost (post ("A lost" :: String))] [onFocusGained (post ("B gained" :: String))]
+focusHandoffRender = both [onFocusLost ("A lost" :: String)] [onFocusGained ("B gained" :: String)]
 
 -- | Attrs that post "<e> gained"/"<e> lost" via 'onFocusGained'/'onFocusLost',
 -- for tracking which element focus moves through.
 tagged :: TestElement -> [Attribute']
-tagged e = [onFocusGained (post (show e ++ " gained")), onFocusLost (post (show e ++ " lost"))]
+tagged e = [onFocusGained (show e ++ " gained"), onFocusLost (show e ++ " lost")]
 
 spec :: Spec
 spec = describe "Blink.Controls.Control.control" $ do
@@ -183,7 +183,7 @@ spec = describe "Blink.Controls.Control.control" $ do
 
       it "raises no click event from the child, even though only the container has isEnabled False" $ do
         result <- runInteractions testBounds seedCtx
-          (containerDisabledWithChild [onClicked (post ("B clicked" :: String))])
+          (containerDisabledWithChild [onClicked ("B clicked" :: String)])
           [MoveTo childClickPoint] [MouseDown childClickPoint, MouseUp childClickPoint]
         resultMessages result `shouldBe` []
 
@@ -254,19 +254,19 @@ spec = describe "Blink.Controls.Control.control" $ do
       getDrawCommands (resultContext result) `shouldNotContain` [chromeFill pressedColour testBounds]
 
     it "raises no focus gained event by rendering first, even though nothing else is focused" $ do
-      let attrs = [onFocusGained (post ("gained" :: String))]
+      let attrs = [onFocusGained ("gained" :: String)]
       result <- runInteractions testBounds seedCtx (renderNoId attrs) [] []
       resultMessages result `shouldBe` []
 
     it "raises no click event for a press and release over it" $ do
-      let attrs = [onClicked (post ("clicked" :: String))]
+      let attrs = [onClicked ("clicked" :: String)]
       result <- runInteractions testBounds seedCtx (renderNoId attrs) [] [ClickAt (Point 50 50)]
       resultMessages result `shouldBe` []
 
   describe "auto-claim" $
     it "raises a focus gained event for only the first of several simultaneously-eligible controls" $ do
-      let attrsA = [onFocusGained (post ("A gained" :: String))]
-          attrsB = [onFocusGained (post ("B gained" :: String))]
+      let attrsA = [onFocusGained ("A gained" :: String)]
+          attrsB = [onFocusGained ("B gained" :: String)]
       result <- runInteractions testBounds seedCtx (both attrsA attrsB) [] []
       resultMessages result `shouldBe` ["A gained"]
 
@@ -280,21 +280,21 @@ spec = describe "Blink.Controls.Control.control" $ do
       -- as a click for the second.
       let attrsA =
             [ focusPolicy NotFocusable
-            , onMouseEntered (post ("A entered" :: String))
-            , onMouseExited  (post "A exited")
-            , onMouseDown    (post "A down")
+            , onMouseEntered ("A entered" :: String)
+            , onMouseExited  "A exited"
+            , onMouseDown    "A down"
             ]
           attrsB =
             [ focusPolicy NotFocusable
-            , onMouseEntered (post ("B entered" :: String))
-            , onMouseUp      (post "B up")
+            , onMouseEntered ("B entered" :: String)
+            , onMouseUp      "B up"
             ]
       result <- runInteractions testBounds seedCtx (both attrsA attrsB) []
         [MouseDown onA, DragTo onB, MouseUp onB]
       resultMessages result `shouldBe` ["A entered", "A down", "A exited", "B up"]
 
   describe "capture suppresses hover elsewhere" $ do
-    let attrsB = [focusPolicy NotFocusable, onMouseEntered (post ("B entered" :: String))]
+    let attrsB = [focusPolicy NotFocusable, onMouseEntered ("B entered" :: String)]
 
     it "does not fire a sibling's mouse-entered event while another element holds capture" $ do
       result <- runInteractions testBounds seedCtx (both [] attrsB) []
@@ -316,7 +316,7 @@ spec = describe "Blink.Controls.Control.control" $ do
     let mousePos  = Point 50 50 -- inside ElemA's margin-inset hit area
         elsewhere = Point 200 200
         popupRect = testBounds
-        attrsA    = [focusPolicy NotFocusable, onMouseEntered (post ("A entered" :: String))]
+        attrsA    = [focusPolicy NotFocusable, onMouseEntered ("A entered" :: String)]
         withOverlay markFloorFirst = do
           renderAt ElemA attrsA
           if markFloorFirst
@@ -349,22 +349,22 @@ spec = describe "Blink.Controls.Control.control" $ do
 
   describe "focusTargetOnClick" $ do
     it "does not redirect on the mouse-down's own frame" $ do
-      let taggedB = [onFocusGained (post ("B gained" :: String))]
+      let taggedB = [onFocusGained ("B gained" :: String)]
       result <- runInteractions testBounds seedCtx (renderRedirect ElemA [] ElemB taggedB) [] [MouseDown onA]
       resultMessages result `shouldBe` []
 
     it "does not redirect on mouse-down alone, even a frame later -- only a full click" $ do
-      let taggedB = [onFocusGained (post ("B gained" :: String))]
+      let taggedB = [onFocusGained ("B gained" :: String)]
       result <- runInteractions testBounds seedCtx (renderRedirect ElemA [] ElemB taggedB) [] [MouseDown onA, Wait 1]
       resultMessages result `shouldBe` []
 
     it "redirects focus to the named element one frame after a full click" $ do
-      let taggedB = [onFocusGained (post ("B gained" :: String))]
+      let taggedB = [onFocusGained ("B gained" :: String)]
       result <- runInteractions testBounds seedCtx (renderRedirect ElemA [] ElemB taggedB) [] [ClickAt onA, Wait 1]
       resultMessages result `shouldBe` ["B gained"]
 
     it "does not redirect focus onto a disabled element" $ do
-      let taggedB = [isEnabled False, onFocusGained (post ("B gained" :: String))]
+      let taggedB = [isEnabled False, onFocusGained ("B gained" :: String)]
       result <- runInteractions testBounds seedCtx (renderRedirect ElemA [] ElemB taggedB) [] [ClickAt onA, Wait 1]
       resultMessages result `shouldBe` []
       contextFocus (resultContext result) `shouldBe` Nothing
@@ -434,17 +434,17 @@ spec = describe "Blink.Controls.Control.control" $ do
       resultMessages result `shouldBe` ["A lost", "B gained"]
 
     it "does not report Tab as a key event to the control it moves focus away from" $ do
-      let keyAttrs = [onKeyPressed (postWith (\k -> (show k)))]
+      let keyAttrs = [onKeyPressed show]
       result <- runInteractions testBounds seedCtx (both keyAttrs []) [Wait 1] [Tab]
       resultMessages result `shouldBe` []
 
     it "does not report Shift-Tab as a key event to the control it moves focus away from" $ do
-      let keyAttrs = [onKeyPressed (postWith (\k -> (show k)))]
+      let keyAttrs = [onKeyPressed show]
       result <- runInteractions testBounds seedCtx (both keyAttrs []) [Wait 1] [ShiftTab]
       resultMessages result `shouldBe` []
 
     it "reports an ordinary key press with its triggering KeyEvent" $ do
-      let keyAttrs = [onKeyPressed (postWith (\k -> (show k)))]
+      let keyAttrs = [onKeyPressed show]
       result <- runInteractions testBounds seedCtx (renderControl keyAttrs) [Wait 1] [PressKey KeyReturn []]
       resultMessages result `shouldBe` [show (KeyEvent KeyReturn [] False)]
 

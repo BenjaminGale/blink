@@ -300,7 +300,7 @@ handleMnemonics menu closeBehaviour =
     case submenuOf menu item of
       Just (subId, _) -> focusInList menu subId
       Nothing         -> do
-        runHandlers (bcOnActivated (itemConfig menu item)) ()
+        runEffects (bcOnActivated (itemConfig menu item))
         closeAll closeBehaviour)
   where
     itemMnemonic = lcMnemonic . bcLabelled . itemConfig menu

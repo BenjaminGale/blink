@@ -3,7 +3,7 @@ module Blink.Controls.TableSpec (spec) where
 
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute, postWith)
+import Blink.Controls.Control (Attribute)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
   ( ItemState, SingleSelection, itemValue, onSelectionChanged, rowHeight, selectAt, selectFirst
@@ -210,7 +210,7 @@ scrollingSpec = describe "table header" $ do
     result <- runInteractions shortBounds seedCtx
       (renderSilentTable
         [ selection (unselected items)
-        , onSelectionChanged (postWith (\s -> ("Selected:" ++ show s)))
+        , onSelectionChanged (\s -> "Selected:" ++ show s)
         ])
       [MoveTo (at 10 10)]
       [ClickAt (at 10 10)]
@@ -272,7 +272,7 @@ sortingSpec :: Spec
 sortingSpec = describe "table column-click sorting" $
   it "cycles Ascending/Descending on repeat clicks of a column, resets to Ascending on a different one" $ do
     let headerClick x = at x 10
-        onSort        = onColumnSortRequested (postWith (\s -> ("Sort:" ++ show s)))
+        onSort        = onColumnSortRequested (\s -> "Sort:" ++ show s)
 
     step1 <- runInteractions testBounds seedCtx
       (renderSortableTable [selection (unselected items), onSort])

@@ -59,7 +59,7 @@ module Blink.Controls.ScrollBar
 import Control.Monad (void, when)
 import qualified Data.Set as Set
 
-import Blink.Controls.Button (ButtonConfig (..), onActivated)
+import Blink.Controls.Button (ButtonConfig (..), HasButtonConfig (..))
 import Blink.Controls.RepeatButton (RepeatButtonConfig (..), defaultRepeatButtonConfig, repeatButtonBase)
 import Blink.Controls.Control
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Point (..), Rectangle (..), Size (..), clampFraction, insetRect, uniform)
@@ -67,7 +67,7 @@ import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (ImagePath)
 import Blink.View
-import Blink.View.Context (UiEffect (..), gets)
+import Blink.View.Context (Effect (..), UiEffect (..), gets)
 import Blink.View.Scroll (contextScrollState)
 import Blink.View.Drawing (drawImage, withClip)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, height, noIntrinsicSize, part, runElement, width, HasOrientation (..), HasStep (..))
@@ -280,7 +280,7 @@ scrollBar eid attrs = controlElement (scrollBarLayout cfg) (box (Control eid)) c
       (if o == Horizontal then "assets/icons/arrow_left.svg" else "assets/icons/arrow_drop_up.svg")
       ( [ style scrollBarButtonStyleKey
         , overControl (focusPolicy NotFocusable)
-        , onActivated (postScrollBy barId (negate (sbStep cfg)))
+        , scrollOnActivated barId (negate (sbStep cfg))
         ] ++ arrowLayoutAttrs o
       )
 
@@ -288,9 +288,12 @@ scrollBar eid attrs = controlElement (scrollBarLayout cfg) (box (Control eid)) c
       (if o == Horizontal then "assets/icons/arrow_right.svg" else "assets/icons/arrow_drop_down.svg")
       ( [ style scrollBarButtonStyleKey
         , overControl (focusPolicy NotFocusable)
-        , onActivated (postScrollBy barId (sbStep cfg))
+        , scrollOnActivated barId (sbStep cfg)
         ] ++ arrowLayoutAttrs o
       )
+
+    scrollOnActivated barId dv =
+      overButton (appendTo bcOnActivated (\bc hs -> bc { bcOnActivated = hs }) (EffectUi (ScrollBy barId dv)))
 
     trackEl barId = part eid (partName Track) $
       controlElement (Layout fill fill TopLeft) (Element (Layout fill fill TopLeft) noIntrinsicSize (pure ())) (trackCtrl barId)

@@ -50,8 +50,6 @@ module Blink.Controls.Control
   , appendTo
 
     -- * Raw events
-  , EventHandler
-  , KeyEventHandler
   , MouseActivation (..)
   , elementId
   , onMouseEntered
@@ -63,9 +61,8 @@ module Blink.Controls.Control
   , onFocusGained
   , onFocusLost
   , mouseActivation
+  , runEffects
   , runHandlers
-  , post
-  , postWith
 
     -- * Control
   , ControlConfig (..)
@@ -130,12 +127,6 @@ partName = T.pack . show
 
 -- * Raw events
 
--- | A handler for an element event with no data of its own.
-type EventHandler e msg = () -> [Effect e msg]
-
--- | A handler for 'onKeyPressed', with the triggering 'KeyEvent'.
-type KeyEventHandler e msg = KeyEvent -> [Effect e msg]
-
 -- | How a control's own mouse-button activity translates into 'ciClicked'
 -- -- and, transitively, into 'control's own click-to-focus. A control
 -- declares this once, up front, as part of its own interaction model; it
@@ -156,13 +147,13 @@ data MouseActivation
     -- just be a drag with no activation at all.
   deriving (Eq, Show)
 
--- | Appends a handler to whichever 'ControlConfig' field @get@\/@set@
+-- | Appends @msg@ to whichever 'ControlConfig' field @get@\/@set@
 -- address, wrapping the result as an 'Attribute'. The shared plumbing
--- behind every @onX@ builder below.
+-- behind the @onX@ attributes below whose events carry no data.
 addHandler :: (HasControlConfig e msg cfg, HasEventHandlers cfg)
-           => (ControlConfig e msg -> [h]) -> (ControlConfig e msg -> [h] -> ControlConfig e msg)
-           -> h -> Attribute cfg
-addHandler get set = overControl . appendTo get set
+           => (ControlConfig e msg -> [Effect e msg]) -> (ControlConfig e msg -> [Effect e msg] -> ControlConfig e msg)
+           -> msg -> Attribute cfg
+addHandler get set = overControl . appendTo get set . EffectMsg
 
 -- | Gives the control a stable identity, keying its hover\/capture\/focus
 -- tracking across frames -- see 'control'. Unset by default, in which case
@@ -172,21 +163,21 @@ elementId :: e -> Attribute (ControlConfig e msg)
 elementId eid = Attribute (\cc -> cc { ccElementId = Just eid })
 
 -- | Reacts when the pointer starts being over the control this frame.
-onMouseEntered :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
+onMouseEntered :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => msg -> Attribute cfg
 onMouseEntered = addHandler ccOnMouseEntered (\cc hs -> cc { ccOnMouseEntered = hs })
 
 -- | Reacts when the pointer stops being over the control this frame.
-onMouseExited :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
+onMouseExited :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => msg -> Attribute cfg
 onMouseExited = addHandler ccOnMouseExited (\cc hs -> cc { ccOnMouseExited = hs })
 
 -- | Reacts when the mouse button goes down while the control is hit.
-onMouseDown :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
+onMouseDown :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => msg -> Attribute cfg
 onMouseDown = addHandler ccOnMouseDown (\cc hs -> cc { ccOnMouseDown = hs })
 
 -- | Reacts when the mouse button comes up while the control is hit, even
 -- if the press started elsewhere. See 'onClicked' for the click-only
 -- version.
-onMouseUp :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
+onMouseUp :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => msg -> Attribute cfg
 onMouseUp = addHandler ccOnMouseUp (\cc hs -> cc { ccOnMouseUp = hs })
 
 -- | Reacts when the control is clicked -- by default (see
@@ -195,20 +186,20 @@ onMouseUp = addHandler ccOnMouseUp (\cc hs -> cc { ccOnMouseUp = hs })
 -- while it still holds capture, even outside its bounds. Mouse-only -- see
 -- 'Blink.Controls.Button.onActivated' for the event that also fires on
 -- Enter while a button-like control holds focus.
-onClicked :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
+onClicked :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => msg -> Attribute cfg
 onClicked = addHandler ccOnClicked (\cc hs -> cc { ccOnClicked = hs })
 
--- | Reacts to a key event while the control holds focus, with the
--- triggering 'KeyEvent'.
-onKeyPressed :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => KeyEventHandler e msg -> Attribute cfg
-onKeyPressed = addHandler ccOnKeyPressed (\cc hs -> cc { ccOnKeyPressed = hs })
+-- | Reacts to each key event the control receives while it holds focus
+-- and doesn't use itself, with the triggering 'KeyEvent'.
+onKeyPressed :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => (KeyEvent -> msg) -> Attribute cfg
+onKeyPressed f = overControl (appendTo ccOnKeyPressed (\cc hs -> cc { ccOnKeyPressed = hs }) (pure . EffectMsg . f))
 
 -- | Reacts when the control is named the winner of a focus transfer.
-onFocusGained :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
+onFocusGained :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => msg -> Attribute cfg
 onFocusGained = addHandler ccOnFocusGained (\cc hs -> cc { ccOnFocusGained = hs })
 
 -- | Reacts when the control loses focus, whether to a transfer or a clear.
-onFocusLost :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => EventHandler e msg -> Attribute cfg
+onFocusLost :: (HasControlConfig e msg cfg, HasEventHandlers cfg) => msg -> Attribute cfg
 onFocusLost = addHandler ccOnFocusLost (\cc hs -> cc { ccOnFocusLost = hs })
 
 -- | Which way this control's own mouse-button activity turns into a click
@@ -216,23 +207,16 @@ onFocusLost = addHandler ccOnFocusLost (\cc hs -> cc { ccOnFocusLost = hs })
 mouseActivation :: MouseActivation -> Attribute (ControlConfig e msg)
 mouseActivation a = Attribute (\cc -> cc { ccMouseActivation = a })
 
--- | Runs every handler in @hs@ on @a@, dispatching the resulting 'Effect's.
-runHandlers :: [a -> [Effect e msg]] -> a -> View e msg ()
-runHandlers hs a = mapM_ dispatch (concatMap ($ a) hs)
+-- | Dispatches @effs@: messages to the app, UI effects to the view.
+runEffects :: [Effect e msg] -> View e msg ()
+runEffects = mapM_ dispatch
   where
     dispatch (EffectMsg msg) = emit msg
     dispatch (EffectUi eff)  = emitUi eff
 
--- | Builds a reaction (an 'EventHandler'\/'Blink.Controls.ToggleButton.onSelectedChanged'-shaped
--- function into @['Effect' e msg]@) that emits @msg@, ignoring whatever data
--- the triggering event carried.
-post :: msg -> a -> [Effect e msg]
-post msg = const [EffectMsg msg]
-
--- | Builds a reaction that emits @f a@ -- uses the triggering event's own
--- data to build the message.
-postWith :: (a -> msg) -> a -> [Effect e msg]
-postWith f a = [EffectMsg (f a)]
+-- | Runs every handler in @hs@ on @a@, dispatching the resulting 'Effect's.
+runHandlers :: [a -> [Effect e msg]] -> a -> View e msg ()
+runHandlers hs a = runEffects (concatMap ($ a) hs)
 
 -- | 'True' when nothing else holds mouse capture, or this control itself
 -- does (a drag in progress on this control doesn't count as contention), or
@@ -366,7 +350,7 @@ watchFocus eid disabled = do
 -- events are dispatched, run once every flag has been computed.
 fireElementEvents :: ControlConfig e msg -> ControlInteraction e msg -> View e msg ()
 fireElementEvents cc ci = do
-  mapM_ (\(fired, hs) -> when fired $ runHandlers hs ()) events
+  mapM_ (\(fired, effs) -> when fired $ runEffects effs) events
   mapM_ (runHandlers (ccOnKeyPressed cc)) (ciKeysPressed ci)
   where
     events =
@@ -442,14 +426,14 @@ defaultFocusOptions = FocusOptions
 -- its content.
 data ControlConfig e msg = ControlConfig
   { ccElementId       :: Maybe e
-  , ccOnMouseEntered  :: [EventHandler e msg]
-  , ccOnMouseExited   :: [EventHandler e msg]
-  , ccOnMouseDown     :: [EventHandler e msg]
-  , ccOnMouseUp       :: [EventHandler e msg]
-  , ccOnClicked       :: [EventHandler e msg]
-  , ccOnKeyPressed    :: [KeyEventHandler e msg]
-  , ccOnFocusGained   :: [EventHandler e msg]
-  , ccOnFocusLost     :: [EventHandler e msg]
+  , ccOnMouseEntered  :: [Effect e msg]
+  , ccOnMouseExited   :: [Effect e msg]
+  , ccOnMouseDown     :: [Effect e msg]
+  , ccOnMouseUp       :: [Effect e msg]
+  , ccOnClicked       :: [Effect e msg]
+  , ccOnKeyPressed    :: [KeyEvent -> [Effect e msg]]
+  , ccOnFocusGained   :: [Effect e msg]
+  , ccOnFocusLost     :: [Effect e msg]
   , ccMouseActivation :: MouseActivation
   , ccIsEnabled       :: Bool
   , ccStyleKey        :: StyleKey e
@@ -613,8 +597,8 @@ focusTransition was now
 -- @Focus@\/@ClearFocus@ 'UiEffect' that deferred detection watches for.
 fireFocusChangeDirect :: ControlConfig e msg -> FocusTransition -> View e msg ()
 fireFocusChangeDirect cc t = case t of
-  GainedFocus    -> runHandlers (ccOnFocusGained cc) ()
-  LostFocus      -> runHandlers (ccOnFocusLost cc) ()
+  GainedFocus    -> runEffects (ccOnFocusGained cc)
+  LostFocus      -> runEffects (ccOnFocusLost cc)
   FocusUnchanged -> pure ()
 
 -- | The control-specific hit area: the current bounds inset by the

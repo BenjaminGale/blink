@@ -4,7 +4,6 @@ module Blink.PartSpec (spec) where
 import Test.Hspec
 
 import Blink.Controls.Button (button, onActivated)
-import Blink.Controls.Control (post)
 import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
 import Blink.Controls.Label (text)
 import Blink.Element (Element, height, part, runElement)
@@ -35,7 +34,7 @@ side els = runElement (hBox [children els])
 -- | A button filling its slot's height, so it can be clicked even though
 -- the test's text measurer gives its caption no size.
 btn :: TestElement -> String -> Element TestElement String
-btn eid msg = button eid [text "B", height fill, onActivated (post msg)]
+btn eid msg = button eid [text "B", height fill, onActivated msg]
 
 -- | Rendered first, so it takes focus by itself; focus only moves to the
 -- control under test if the click reaches it.

@@ -58,7 +58,7 @@ import Blink.View
   ( ControlId, CursorShape (..), Effect, View, controlIdOf, getBounds, getMousePos, getStyleSet
   , requestCursor, requestExtentBy, withBounds
   )
-import Blink.View.Context (gets, partId)
+import Blink.View.Context (Effect (..), gets, partId)
 import Blink.View.Extent (contextExtentState)
 import Blink.Style
 import Blink.Controls.Style (plainFillStyle, plainStyle, zeroMetrics)
@@ -200,8 +200,8 @@ sortedBy s = overColumns (Attribute (\c -> c { csSort = s }))
 -- | Reacts when clicking a sortable column's header cell (see
 -- 'colSortable') requests a sort: 'Ascending' for a column not already
 -- sorted, otherwise the opposite of its current direction.
-onColumnSortRequested :: HasColumnsConfig e msg a cfg => ((Int, SortDirection) -> [Effect e msg]) -> Attribute cfg
-onColumnSortRequested = overColumns . appendTo csOnColumnSortRequested (\c hs -> c { csOnColumnSortRequested = hs })
+onColumnSortRequested :: HasColumnsConfig e msg a cfg => ((Int, SortDirection) -> msg) -> Attribute cfg
+onColumnSortRequested f = overColumns (appendTo csOnColumnSortRequested (\c hs -> c { csOnColumnSortRequested = hs }) (pure . EffectMsg . f))
 
 -- | Never let a drag squeeze a column narrower than this, however far
 -- past it the pointer moves -- a column can always be dragged back out

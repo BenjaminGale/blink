@@ -5,7 +5,7 @@ import qualified Data.Text as Text
 import Test.Hspec
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 
-import Blink.Controls.Control (Attribute, StyleKey (..), control, defaultControlConfig, elementId, isEnabled, postWith, resolve)
+import Blink.Controls.Control (Attribute, StyleKey (..), control, defaultControlConfig, elementId, isEnabled, resolve)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.Label (text)
 import Blink.Controls.ToggleGroup
@@ -81,7 +81,7 @@ render attrs = runElement $ toggleButtonGroup Group
   )
 
 selectionAttr :: Attribute'
-selectionAttr = onSelectionChanged (postWith (\m -> ("SelectionChanged:" ++ show m)))
+selectionAttr = onSelectionChanged (\m -> "SelectionChanged:" ++ show m)
 
 -- | Scene bounds wide enough for 'Before' (0-100) followed by the group
 -- (100-400), for tests about Tab moving in and out of the group.
