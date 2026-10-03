@@ -57,13 +57,13 @@ module Blink.Controls
   , target
     -- * List
   , ListConfig
-  , ListPart (..)
   , ItemState (..)
   , list
   , requiredList
   , renderItem
   , rowHeight
   , onItemActivated
+  , scrollListTo
     -- ** Selection models
   , SelectionModel (..)
   , EmptySelection (..)
@@ -97,7 +97,6 @@ module Blink.Controls
   , rangeEnd
     -- * Tree
   , TreeConfig
-  , TreePart (..)
   , TreeItemState (..)
   , tree
   , forest
@@ -107,7 +106,6 @@ module Blink.Controls
   , flattenVisible
     -- * Table
   , TableConfig
-  , TablePart (..)
   , table
   , columns
   , sortedBy
@@ -122,7 +120,6 @@ module Blink.Controls
   , sortable
     -- * TreeTable
   , TreeTableConfig
-  , TreeTablePart (..)
   , treeTable
     -- * ProgressBar
   , ProgressBarConfig
@@ -165,20 +162,17 @@ module Blink.Controls
   , scrollPanelTo
     -- * ToggleGroup
   , ToggleGroupConfig
-  , ToggleGroupPart (..)
   , toggleButtonGroup
   , radioButtonGroup
   , itemSpacing
   , allowDeselect
     -- * MenuButton
   , MenuButtonConfig
-  , MenuButtonPart (..)
   , menuButton
   , isOpen
   , onOpenChanged
     -- * MenuBar
   , MenuBarConfig
-  , MenuBarPart (..)
   , menuBar
   , menus
   , labelAttrs
@@ -196,15 +190,15 @@ import Blink.Controls.Divider (DividerConfig, divider, thickness)
 import Blink.Controls.Image (ImageConfig, image, source, fitWidth, fitHeight, preserveRatio)
 import Blink.Controls.Label (LabelConfig, label, mnemonic, target, text)
 import Blink.Controls.List
-  ( Direction (..), EmptySelection (..), End (..), ItemState (..), ListConfig, ListPart (..), MultiSelection
+  ( Direction (..), EmptySelection (..), End (..), ItemState (..), ListConfig, MultiSelection
   , RangeSelection, RequiredSelection, SelectionModel (..), SingleSelection
   , cursorItem, list, multiItems, multiSelected, multiSelectedAt, multiSelection, noRange, onItemActivated
   , rangeAt, rangeAtPositions, rangeEnd, rangeFrom, rangeItems, renderItem, requireAt, requireFirst, requireItem
-  , requiredItems, requiredList, rowHeight, selectAt, selectFirst, selectItem, selectedItems, singleItems
+  , requiredItems, requiredList, rowHeight, scrollListTo, selectAt, selectFirst, selectItem, selectedItems, singleItems
   , singleSelection, unselected
   )
-import Blink.Controls.MenuBar (MenuBarConfig, MenuBarPart (..), labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu, submenuItems)
-import Blink.Controls.MenuButton (MenuButtonConfig, MenuButtonPart (..), isOpen, menuButton, onOpenChanged)
+import Blink.Controls.MenuBar (MenuBarConfig, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu, submenuItems)
+import Blink.Controls.MenuButton (MenuButtonConfig, isOpen, menuButton, onOpenChanged)
 import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, bandWidth, progress, progressBar)
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.RepeatButton (RepeatButtonConfig, initialDelay, repeatButton, repeatInterval)
@@ -213,10 +207,10 @@ import Blink.Controls.ScrollPanel (ScrollPanelConfig, scrollPanel, scrollPanelTo
 import Blink.Controls.Slider (SliderConfig, onValueChanged, slider)
 import Blink.Controls.TextInput (TextInputConfig, displayFilter, inputFilter, onInput, onSubmit, placeholder, textInput)
 import Blink.Controls.ToggleButton (ToggleConfig, isSelected, onSelectedChanged, toggleButton)
-import Blink.Controls.ToggleGroup (ToggleGroupConfig, ToggleGroupPart (..), allowDeselect, itemSpacing, radioButtonGroup, toggleButtonGroup)
+import Blink.Controls.ToggleGroup (ToggleGroupConfig, allowDeselect, itemSpacing, radioButtonGroup, toggleButtonGroup)
 import Blink.Controls.Table
-  ( ColumnConfig, ColumnWidth (..), SortDirection (..), TableConfig, TablePart (..)
+  ( ColumnConfig, ColumnWidth (..), SortDirection (..), TableConfig
   , cell, cellWidth, column, columns, header, onColumnSortRequested, sortable, sortedBy, table
   )
-import Blink.Controls.Tree (TreeConfig, TreeItemState (..), TreePart (..), expanded, flattenVisible, forest, onExpansionChanged, renderNode, tree)
-import Blink.Controls.TreeTable (TreeTableConfig, TreeTablePart (..), treeTable)
+import Blink.Controls.Tree (TreeConfig, TreeItemState (..), expanded, flattenVisible, forest, onExpansionChanged, renderNode, tree)
+import Blink.Controls.TreeTable (TreeTableConfig, treeTable)

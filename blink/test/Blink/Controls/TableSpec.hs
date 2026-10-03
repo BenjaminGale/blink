@@ -6,7 +6,7 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
-  ( ItemState, ListPart (List), SingleSelection, itemValue, onSelectionChanged, rowHeight, selectAt, selectFirst
+  ( ItemState, SingleSelection, itemValue, onSelectionChanged, rowHeight, selectAt, selectFirst
   , selection, unselected
   )
 import Blink.Controls.Table
@@ -22,7 +22,7 @@ import Blink.Style.Defaults (defaultTheme)
 import Blink.View hiding (ControlId (..))
 import Blink.Testing
 
-data TestElem = Part (TablePart Int) | FocusHolder deriving (Eq, Ord, Show)
+data TestElem = TestTable | FocusHolder deriving (Eq, Ord, Show)
 
 -- | Three 20px rows (60px content), a 30px header -- 90px total, so an
 -- 80px-tall scene forces scrolling (see 'scrollingSpec') while a 90px
@@ -64,7 +64,7 @@ testColumns =
   ]
 
 renderTable :: [Attribute (TableConfig SingleSelection TestElem String Int)] -> View TestElem String ()
-renderTable attrs = runElement $ table Part
+renderTable attrs = runElement $ table TestTable
   ( columns testColumns
   : width (exactly 100)
   : rowHeight 20
@@ -89,7 +89,7 @@ renderEmptyTable attrs = renderTable (columns [] : selection (unselected []) : h
 -- | 'table' discards any elementId in favour of its own root id.
 contractSpec :: Spec
 contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
-  testBounds contractCtx (Part (TableRow List)) FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyTable
+  testBounds contractCtx TestTable FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyTable
 
 silentColumns :: [ColumnConfig TestElem String Int]
 silentColumns =
@@ -106,7 +106,7 @@ sortableColumns =
 -- | Like 'renderSilentTable', but with both columns sortable -- for
 -- 'sortingSpec'.
 renderSortableTable :: [Attribute (TableConfig SingleSelection TestElem String Int)] -> View TestElem String ()
-renderSortableTable attrs = runElement $ table Part
+renderSortableTable attrs = runElement $ table TestTable
   ( columns sortableColumns
   : width (exactly 100)
   : rowHeight 20
@@ -122,7 +122,7 @@ sortableMarkedColumns =
   ]
 
 renderSortableMarkedTable :: [Attribute (TableConfig SingleSelection TestElem String Int)] -> View TestElem String ()
-renderSortableMarkedTable attrs = runElement $ table Part
+renderSortableMarkedTable attrs = runElement $ table TestTable
   ( columns sortableMarkedColumns
   : width (exactly 100)
   : rowHeight 20
@@ -134,7 +134,7 @@ renderSortableMarkedTable attrs = runElement $ table Part
 -- simulated frame re-renders every cell, so 'marker' would otherwise
 -- add a message per cell per frame).
 renderSilentTable :: [Attribute (TableConfig SingleSelection TestElem String Int)] -> View TestElem String ()
-renderSilentTable attrs = runElement $ table Part
+renderSilentTable attrs = runElement $ table TestTable
   ( columns silentColumns
   : width (exactly 100)
   : rowHeight 20
@@ -144,7 +144,7 @@ renderSilentTable attrs = runElement $ table Part
 widgetSpec :: Spec
 widgetSpec = describe "table" $ do
   it "measures its height as a header row plus one row per item when sized to its content" $ do
-    (sz, _) <- runView (measureElement (Rectangle 0 0 100 400) (table Part [columns testColumns, selection (unselected [1, 2, 3]), rowHeight 20, height fitContent])) seedCtx
+    (sz, _) <- runView (measureElement (Rectangle 0 0 100 400) (table TestTable [columns testColumns, selection (unselected [1, 2, 3]), rowHeight 20, height fitContent])) seedCtx
     sizeHeight sz `shouldBe` 80
 
   it "renders one cell per column at each column's own width, with a header aligned to them" $ do
@@ -353,7 +353,7 @@ columnCountEdgeSpec :: Spec
 columnCountEdgeSpec = describe "table column count edge cases" $ do
   it "renders no header and no cells at all when there are no columns" $ do
     result <- runInteractions testBounds seedCtx
-      (runElement $ table Part [columns [], selection (unselected items), width (exactly 100), rowHeight 20])
+      (runElement $ table TestTable [columns [], selection (unselected items), width (exactly 100), rowHeight 20])
       []
       [Wait 1]
     resultMessages result `shouldBe` []
@@ -361,7 +361,7 @@ columnCountEdgeSpec = describe "table column count edge cases" $ do
   it "renders a single column with no divider woven in" $ do
     let oneColumn = [ column [header (marker "H-Solo"), cellWidth (ColumnFixed 40), cell (cellMarker "Solo")] ]
     result <- runInteractions testBounds seedCtx
-      (runElement $ table Part [columns oneColumn, selection (unselected items), width (exactly 100), rowHeight 20])
+      (runElement $ table TestTable [columns oneColumn, selection (unselected items), width (exactly 100), rowHeight 20])
       []
       [Wait 1]
     resultMessages result `shouldBe`

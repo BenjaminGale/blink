@@ -16,7 +16,6 @@
 -- @
 module Blink.Controls.ToggleGroup
   ( ToggleGroupConfig (..)
-  , ToggleGroupPart (..)
   , defaultToggleGroupConfig
   , toggleGroup
   , toggleButtonGroup
@@ -44,23 +43,16 @@ import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.View (Effect)
 import Blink.Element
   ( Element (..), HasItemAttrs (..), HasItems (..), HasLayoutConfig (..), HasOrientation (..), HasSelection (..)
-  , HasSelectionChanged (..), runElement
+  , HasSelectionChanged (..), part, runElement
   )
 import Blink.Style
 import Blink.Controls.Style (zeroMetrics, plainStyle)
 
--- | Identifies one part of a 'toggleButtonGroup'\/'radioButtonGroup' for the
--- purpose of building element ids: the group's own container
--- ('ToggleGroup'), or one of its items, tagged by the item's own data
--- value rather than its position in the list -- so
--- reordering\/inserting\/removing items elsewhere in the list never
--- disturbs another item's hover\/focus\/capture state. Requires distinct
--- item values (see 'items') the same way 'selection' already does, since
--- two equal items would otherwise build the same id.
-data ToggleGroupPart a
-  = ToggleGroup
-  | ToggleGroupItem a
-  deriving (Eq, Ord, Show)
+-- | The parts a group is made of, besides itself: one per item, by
+-- position. Hover and focus belong to a position, so reordering the items
+-- while one is hovered or focused leaves that state on the same position.
+newtype ToggleGroupPart = Item Int
+  deriving Show
 
 -- | Every capability 'toggleButtonGroup'\/'radioButtonGroup' resolve: the
 -- group's own control (style, enabled state, raw mouse\/key events -- never
@@ -164,7 +156,7 @@ instance HasSelectionChanged e msg (Maybe a) (ToggleGroupConfig e a msg) where
 -- for exactly how the selection invariant is enforced, and what each
 -- attribute does. The engine is exported directly should a caller want to
 -- build a group from some other toggle-shaped widget of their own.
-toggleButtonGroup :: (Ord e, Ord a) => (ToggleGroupPart a -> e) -> [Attribute (ToggleGroupConfig e a msg)] -> Element e msg
+toggleButtonGroup :: (Ord e, Eq a) => e -> [Attribute (ToggleGroupConfig e a msg)] -> Element e msg
 toggleButtonGroup = toggleGroup toggleButtonGroupStyleKey toggleButton
 
 -- | A row (or column, see 'orientation') of
@@ -173,7 +165,7 @@ toggleButtonGroup = toggleGroup toggleButtonGroupStyleKey toggleButton
 -- 'toggleButtonGroup' for the flat-button-styled equivalent, and
 -- 'toggleGroup' for how both share their selection logic. 'allowDeselect'
 -- has no effect here -- see its own docs.
-radioButtonGroup :: (Ord e, Ord a) => (ToggleGroupPart a -> e) -> [Attribute (ToggleGroupConfig e a msg)] -> Element e msg
+radioButtonGroup :: (Ord e, Eq a) => e -> [Attribute (ToggleGroupConfig e a msg)] -> Element e msg
 radioButtonGroup = toggleGroup radioButtonGroupStyleKey radioButton
 
 -- | The shared engine behind 'toggleButtonGroup' and 'radioButtonGroup':
@@ -206,30 +198,28 @@ radioButtonGroup = toggleGroup radioButtonGroupStyleKey radioButton
 -- fixed, not attr-settable): Tab moves directly between its items, each
 -- independently focusable, exactly as if the group weren't there.
 --
--- @mkId@ builds every part's element id from a 'ToggleGroupPart': the group's
--- own container id from 'ToggleGroup', and each item's id from
--- 'ToggleGroupItem' applied to the item's own data -- so the caller never
--- writes a per-item id by hand.
+-- The group is identified by @gid@, and each item is a part of it (see
+-- 'Blink.Element.part'), so the caller never writes a per-item id.
 toggleGroup
-  :: (Ord e, Ord a)
+  :: (Ord e, Eq a)
   => StyleKey e
   -> (e -> [Attribute (ToggleConfig e msg)] -> Element e msg)
-  -> (ToggleGroupPart a -> e)
+  -> e
   -> [Attribute (ToggleGroupConfig e a msg)]
   -> Element e msg
-toggleGroup styleKey widget mkId attrs = controlElement (tggLayout cfg) box ccfg
+toggleGroup styleKey widget gid attrs = controlElement (tggLayout cfg) box ccfg
   where
     cfg = resolve (defaultToggleGroupConfig styleKey) attrs
     box = (if tggOrientation cfg == Horizontal then hBox else vBox)
-            [ spacing (tggItemSpacing cfg), children (map toItem (tggItems cfg)) ]
-    toItem item = widget (mkId (ToggleGroupItem item))
+            [ spacing (tggItemSpacing cfg), children (zipWith toItem [0 ..] (tggItems cfg)) ]
+    toItem i item = part gid (partName (Item i)) $ widget gid
       ( tggToggleAttrs cfg item
       ++ [ isSelected (Just item == tggSelected cfg)
          , onSelectedChanged (onItemToggled cfg item)
          ]
       )
     ccfg = (tggControl cfg)
-      { ccElementId   = Just (mkId ToggleGroup)
+      { ccElementId   = Just gid
       , ccFocusPolicy = NotFocusable
       , ccContent     = const (runElement box)
       }

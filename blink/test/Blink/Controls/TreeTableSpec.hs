@@ -8,7 +8,7 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
-  ( Direction (..), ItemState, ListPart (List), SingleSelection, itemValue, moveCursor, onSelectionChanged, rowHeight
+  ( Direction (..), ItemState, SingleSelection, itemValue, moveCursor, onSelectionChanged, rowHeight
   , selectItem, selection, unselected
   )
 import Blink.Controls.Table (ColumnConfig (..), ColumnWidth (..), cell, cellWidth, column, sortable)
@@ -33,7 +33,7 @@ forest0 =
   , Node "test" []
   ]
 
-data TestElem = Part (TreeTablePart String) | FocusHolder deriving (Eq, Ord, Show)
+data TestElem = TestTreeTable | FocusHolder deriving (Eq, Ord, Show)
 
 testTheme :: Theme TestElem
 testTheme = mkTestTheme zeroMetrics (plainStyleSet (plainStyle testColour))
@@ -82,7 +82,7 @@ items :: [String]
 items = ["src", "src/List.hs", "test"]
 
 renderTreeTable :: [Attribute (TreeTableConfig SingleSelection TestElem String String)] -> View TestElem String ()
-renderTreeTable attrs = runElement $ treeTable Part
+renderTreeTable attrs = runElement $ treeTable TestTreeTable
   ( columns testColumns
   : width (exactly 100)
   : rowHeight 20
@@ -93,7 +93,7 @@ renderTreeTable attrs = runElement $ treeTable Part
 -- | Like 'renderTreeTable', but with silent cells\/header -- for tests
 -- that only care about a click or key's reaction.
 renderSilentTreeTable :: [Attribute (TreeTableConfig SingleSelection TestElem String String)] -> View TestElem String ()
-renderSilentTreeTable attrs = runElement $ treeTable Part
+renderSilentTreeTable attrs = runElement $ treeTable TestTreeTable
   ( columns silentColumns
   : width (exactly 100)
   : rowHeight 20
@@ -120,12 +120,12 @@ renderEmptyTreeTable attrs =
 -- | 'treeTable' discards any elementId in favour of its own root id.
 contractSpec :: Spec
 contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
-  testBounds contractCtx (Part (TTRow List)) FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyTreeTable
+  testBounds contractCtx TestTreeTable FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyTreeTable
 
 widgetSpec :: Spec
 widgetSpec = describe "treeTable" $ do
   it "measures its height as a header row plus one row per visible item when sized to its content" $ do
-    (sz, _) <- runView (measureElement (Rectangle 0 0 100 400) (treeTable Part [columns testColumns, selection (unselected ["a", "b", "c"]), rowHeight 20, height fitContent])) seedCtx
+    (sz, _) <- runView (measureElement (Rectangle 0 0 100 400) (treeTable TestTreeTable [columns testColumns, selection (unselected ["a", "b", "c"]), rowHeight 20, height fitContent])) seedCtx
     sizeHeight sz `shouldBe` 80
 
   it "indents column 0 by depth while column 1+ cells stay aligned across depths" $ do

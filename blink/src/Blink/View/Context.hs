@@ -50,6 +50,7 @@ module Blink.View.Context
   , controlIdOf
   , controlIdIn
   , withPart
+  , withControlId
   , partId
   , HasUiEffect (..)
   , emit
@@ -1146,6 +1147,18 @@ withPart :: Ord e => e -> Text -> View e msg a -> View e msg a
 withPart owner name (View f) = View $ \ctx -> do
   let path = maybe name (`joinPath` name) (Map.lookup owner (ctxParts ctx))
   (a, ctx') <- f ctx { ctxParts = Map.insert owner path (ctxParts ctx) }
+  pure (a, ctx' { ctxParts = ctxParts ctx })
+
+-- | Runs @v@ with the id of @cid@'s owner standing for @cid@ itself: the
+-- whole control for 'Control', that part for 'Part'. Lets a composite
+-- act on one of its parts from anywhere -- including from inside another
+-- of its parts -- with the ordinary id-taking functions.
+withControlId :: Ord e => ControlId e -> View e msg a -> View e msg a
+withControlId cid (View f) = View $ \ctx -> do
+  let parts = case cid of
+        Control owner   -> Map.delete owner (ctxParts ctx)
+        Part owner path -> Map.insert owner path (ctxParts ctx)
+  (a, ctx') <- f ctx { ctxParts = parts }
   pure (a, ctx' { ctxParts = ctxParts ctx })
 
 -- | The id of the part named @name@ of the control or part @cid@ -- where

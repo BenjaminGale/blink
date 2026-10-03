@@ -9,7 +9,7 @@ import Blink.Controls.Control (Attribute, StyleKey (..), control, defaultControl
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.Label (text)
 import Blink.Controls.ToggleGroup
-  ( ToggleGroupConfig, ToggleGroupPart (..), allowDeselect, defaultToggleGroupConfig
+  ( ToggleGroupConfig, allowDeselect, defaultToggleGroupConfig
   , items, onSelectionChanged, selection, tggSelected, itemAttrs, toggleButtonGroup
   )
 import Blink.Controls.Fixtures
@@ -34,11 +34,8 @@ sizes = [minBound .. maxBound]
 -- | The element ids a test group's items resolve to, plus 'Before' -- a
 -- plain unrelated control preceding the group in some tests, standing in
 -- for the rest of a real form.
-data TestElement = Before | Group | Item Size | FocusHolder deriving (Eq, Ord, Show)
+data TestElement = Before | Group | FocusHolder deriving (Eq, Ord, Show)
 
-tag :: ToggleGroupPart Size -> TestElement
-tag ToggleGroup         = Group
-tag (ToggleGroupItem s) = Item s
 
 testTheme :: Theme TestElement
 testTheme = mkTestTheme zeroMetrics (plainStyleSet (plainStyle testColour))
@@ -77,7 +74,7 @@ inSlot Medium = Point 150 50
 inSlot Large  = Point 250 50
 
 render :: [Attribute'] -> View TestElement String ()
-render attrs = runElement $ toggleButtonGroup tag
+render attrs = runElement $ toggleButtonGroup Group
   ( items sizes
   : itemAttrs (\s -> [text (Text.pack (show s)), width (exactly 100), height fill])
   : attrs
@@ -102,10 +99,10 @@ renderScene attrs = do
   withBounds rectBefore (() <$ control (resolve defaultControlConfig [elementId Before]))
   withBounds rectGroup (render attrs)
 
-focusedOn :: TestElement -> InteractionResult TestElement String a -> Bool
+focusedOn :: ControlId TestElement -> InteractionResult TestElement String a -> Bool
 focusedOn eid result = case contextFocusChain (resultContext result) of
   [] -> False
-  xs -> last xs == Control eid
+  xs -> last xs == eid
 
 spec :: Spec
 spec = describe "Blink.Controls.ToggleGroup" $ do
@@ -180,13 +177,13 @@ spec = describe "Blink.Controls.ToggleGroup" $ do
   describe "focus" $ do
     it "is not itself a tab stop -- Tab from before lands directly on the first item" $ do
       result <- runInteractions sceneBounds seedCtx (renderScene [selection Nothing]) [Wait 1] [Tab, Wait 1]
-      focusedOn (Item Small) result `shouldBe` True
+      focusedOn (Part Group "Item 0") result `shouldBe` True
 
     it "items remain independently focusable -- Tab moves from one item straight to the next" $ do
       result <- runInteractions sceneBounds seedCtx (renderScene [selection Nothing])
         [Wait 1, Tab, Wait 1] [Tab, Wait 1]
-      focusedOn (Item Medium) result `shouldBe` True
+      focusedOn (Part Group "Item 1") result `shouldBe` True
 
     it "Shift-Tab leaves the group for Before, regardless of which item is selected" $ do
       result <- runInteractions sceneBounds seedCtx (renderScene [selection (Just Medium)]) [Wait 1, Tab, Wait 1] [ShiftTab, Wait 1]
-      focusedOn Before result `shouldBe` True
+      focusedOn (Control Before) result `shouldBe` True

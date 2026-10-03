@@ -88,7 +88,6 @@ module Blink.Controls.List
   , rangeEnd
 
     -- * The list widget
-  , ListPart (..)
   , ListConfig (..)
   , defaultListConfig
   , requiredListConfig
@@ -99,6 +98,7 @@ module Blink.Controls.List
   , requiredList
   , listMeasure
   , scrollRowIntoView
+  , scrollListTo
   , selection
   , renderItem
   , rowHeight
@@ -133,13 +133,13 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
 import Blink.Controls.Control
-import Blink.View.Context (controlIdOf, gets, modify, writeScrollState)
+import Blink.View.Context (ControlId, HasUiEffect (..), UiEffect (..), controlIdOf, gets, modify, partId, withPart, writeScrollState)
 import Blink.View.Scroll (contextScrollState)
 import Blink.Controls.ScrollBar
   (ScrollViewportConfig (..), scrollBarThickness, scrollViewport, verticalBarOf)
 import Blink.Element
   ( Element (..), HasLayoutConfig (..), HasSelection (..), HasSelectionChanged (..), elementWithLayout, emptyElement
-  , noIntrinsicSize, runElement
+  , noIntrinsicSize, part, runElement
   )
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..), insetRect)
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Shift))
@@ -504,23 +504,12 @@ rangeFrom anchor cursor xs = case (elemIndex anchor xs, elemIndex cursor xs) of
 
 -- * The list widget
 
--- | Identifies one part of a 'list' for the purpose of building element
--- ids: the list's own root, one of its rows (tagged by the row's own item
--- value rather than its position in the list -- so
--- reordering\/inserting\/removing items elsewhere in the list never
--- disturbs another row's hover\/focus\/capture state), or a part of the
--- 'Blink.Controls.ScrollBar.scrollViewport' the rows scroll in once they
--- overflow the list's own bounds (see 'listBase'). The same pattern
--- 'Blink.Controls.ToggleGroup.ToggleGroupPart'\/'Blink.Controls.ScrollBar.ScrollBarPart'
--- already use: every part's id is built from one @mkId@ function (see
--- 'listBase'), so the root, its rows, and its scrollbars' own parts are
--- visibly related and can't collide, rather than being independently
--- chosen, unrelated ids.
-data ListPart a
-  = List
-  | ListItem a
-  | ListViewport
-  deriving (Eq, Ord, Show)
+-- | The parts a list is made of, besides itself: the viewport its rows
+-- scroll in, and each row by its item's position. Hover and press belong
+-- to a position, which is all they need: they only last while the
+-- pointer is on the row.
+data ListPart = Viewport | Row Int
+  deriving Show
 
 -- | Every capability 'list' resolves: the wrapped 'ControlConfig'\/
 -- 'Layout', the whole model (items and selection together), how a row
@@ -671,23 +660,22 @@ data ListInteraction sel e msg a = ListInteraction
 -- 'lstOnItemActivated' report the result for the app to store and pass
 -- back in next frame.
 --
--- @mkId@ builds every part's element id from a 'ListPart': the list's own
--- root id from 'List', and each row's id from 'ListItem' applied to the
--- row's own item value -- so the caller never writes a per-row id by
--- hand, and can't accidentally give the root and a row the same id (see
--- 'ListPart'). Any 'Blink.Controls.Control.ccElementId' already set on
--- 'lstControl' is replaced by @mkId List@, the same as
+-- The list is identified by @lid@; its viewport and rows are parts of it
+-- (see 'Blink.Element.part'), so the caller never writes a per-row id.
+-- Any 'Blink.Controls.Control.ccElementId' already set on 'lstControl' is
+-- replaced by @lid@, the same as
 -- 'Blink.Controls.ToggleGroup.toggleButtonGroup'.
 --
 -- The shape every list-like control ('list', and
 -- table\/tree\/tree-table wrappers built on top of it) resolves from.
 listBase
   :: (Ord e, Eq a, SelectionModel sel, Eq (sel a))
-  => (ListPart a -> e)
+  => e
   -> ListConfig sel e msg a
   -> View e msg (ListInteraction sel e msg a)
-listBase mkId cfg = do
-  r             <- control ccfg
+listBase lid cfg = do
+  self          <- controlIdOf lid
+  r             <- control (ccfg self)
   (m, styleSet) <- getStyleSet (ccStyleKey (lstControl cfg))
   outer         <- getBounds
   let (finalModel, activated) = keyboardResult (ciKeysPressed r)
@@ -719,13 +707,15 @@ listBase mkId cfg = do
     -- side-effect-free.
     keyboardResult = foldl stepKey (s0, [])
 
-    ccfg = (lstControl cfg)
-      { ccElementId = Just (mkId List)
+    -- @self@ is the list's own id as stored this frame. Code inside the
+    -- viewport or a row can't look it up: there, @lid@ means that part.
+    ccfg self = (lstControl cfg)
+      { ccElementId = Just lid
       , ccContent = \ci -> do
           let (finalModel, activated) = keyboardResult (ciKeysPressed ci)
           fireSelectionChanged finalModel
           mapM_ fireItemActivated activated
-          maybe (rowsArea finalModel) (`headerArea` finalModel) (lstHeader cfg)
+          maybe (rowsArea self finalModel) (\headerEl -> headerArea self headerEl finalModel) (lstHeader cfg)
       }
 
     -- The fixed header composited above the rows, reserving the same
@@ -734,7 +724,7 @@ listBase mkId cfg = do
     -- @renderViewport@) -- the header has no scrollbar of its own, so it
     -- must reserve the gutter here too or its columns drift out of
     -- alignment with the rows beneath it.
-    headerArea headerEl finalModel = do
+    headerArea self headerEl finalModel = do
       bounds <- getBounds
       let rowsHeight = rectHeight bounds - lstRowHeight cfg
           rowsScroll = totalRowsHeight (lstRowHeight cfg) itemCount > rowsHeight
@@ -749,7 +739,7 @@ listBase mkId cfg = do
       runElement $ vBox
         [ children
             [ elementWithLayout (Layout fill (exactly (lstRowHeight cfg)) TopLeft) (runElement headerRow)
-            , elementWithLayout (Layout fill fill TopLeft) (rowsArea finalModel)
+            , elementWithLayout (Layout fill fill TopLeft) (rowsArea self finalModel)
             ]
         ]
 
@@ -757,25 +747,25 @@ listBase mkId cfg = do
     -- composed via a real 'vBox' rather than manual bounds math when a
     -- header is present (see 'lstHeader'), so 'getBounds' here already
     -- reflects the space left after it.
-    rowsArea finalModel = do
-      trackCursor finalModel
-      renderViewport
+    rowsArea self finalModel = do
+      trackCursor self finalModel
+      renderViewport self
 
     -- Scrolls the cursor into view whenever its row index differs from
     -- the last one recorded for this list -- covers a keyboard move and
     -- also a cursor that jumped for a reason outside this frame's own
     -- handling (e.g. the caller re-sorting its items). Ignores the very
     -- first observation so mounting doesn't force an initial scroll.
-    trackCursor finalModel = do
+    trackCursor self finalModel = do
       let mIdx = findIndex itemHasCursor (itemStates finalModel)
-      lastIdx <- getCursorIndex (mkId List)
+      lastIdx <- getCursorIndex lid
       when (mIdx /= lastIdx) $ do
         case lastIdx of
           Just _  -> do
             bounds <- getBounds
-            mapM_ (scrollRowIntoView mkId cfg itemCount (rectHeight bounds)) mIdx
+            mapM_ (scrollRowIntoView self cfg itemCount (rectHeight bounds)) mIdx
           Nothing -> pure ()
-        setCursorIndex (mkId List) mIdx
+        setCursorIndex lid mIdx
 
     -- The rows scrolling vertically within a 'scrollViewport'. Only the
     -- rows in view are built, so an off-screen row is never built or
@@ -783,16 +773,16 @@ listBase mkId cfg = do
     -- every row's, so the scrollbar's thumb geometry never shifts as the
     -- visible set changes. The content has no width of its own, so it
     -- never scrolls horizontally.
-    renderViewport = scrollViewport (mkId ListViewport) ScrollViewportConfig
+    renderViewport self = withPart lid (partName Viewport) $ scrollViewport lid ScrollViewportConfig
       { svWheelStep   = lstRowHeight cfg * wheelRowsPerNotch
       , svContentSize = Size 0 (totalRowsHeight (lstRowHeight cfg) itemCount)
-      , svContent     = runElement . visibleRows
+      , svContent     = runElement . visibleRows self
       }
 
     -- Each row is told the viewport's height, for its own click to scroll
     -- it fully into view (see @rowActivated@).
-    visibleRows inView =
-      vBox [children (spacer topSkipped : zipWith (row viewportHeight) [loIdx ..] inViewStates ++ [spacer bottomSkipped])]
+    visibleRows self inView =
+      vBox [children (spacer topSkipped : zipWith (row self viewportHeight) [loIdx ..] inViewStates ++ [spacer bottomSkipped])]
       where
         rh             = lstRowHeight cfg
         offsetY        = rectY inView
@@ -824,27 +814,27 @@ listBase mkId cfg = do
     -- within the viewport, straddling its top or bottom edge. Scrolling
     -- it fully into view on the same click, via 'scrollRowIntoView',
     -- matches keyboard navigation already doing the same for the cursor.
-    rowActivated viewportHeight idx item = do
+    rowActivated self viewportHeight idx item = do
       let s' = activate item s0
       fireSelectionChanged s'
       fireItemActivated item
-      scrollRowIntoView mkId cfg itemCount viewportHeight idx
+      scrollRowIntoView self cfg itemCount viewportHeight idx
 
     rowStates st = Set.fromList
       [ if itemSelected st then listSelected else listUnselected
       , if itemHasCursor st then listCursor   else listNoCursor
       ]
 
-    row viewportHeight idx st = Element
+    row self viewportHeight idx st = part lid (partName (Row idx)) Element
       { elLayout  = Layout fill (exactly (lstRowHeight cfg)) TopLeft
       , elMeasure = noIntrinsicSize
       , elRun     = void $ control defaultControlConfig
-          { ccElementId    = Just (mkId (ListItem (itemValue st)))
+          { ccElementId    = Just lid
           , ccStyleKey     = listItemStyleKey
           , ccFocusPolicy  = NotFocusable
           , ccActiveStates = rowStates st
           , ccContent      = \rci -> do
-              when (ciClicked rci) (rowActivated viewportHeight idx (itemValue st))
+              when (ciClicked rci) (rowActivated self viewportHeight idx (itemValue st))
               runElement (lstRenderItem cfg st)
           }
       }
@@ -862,29 +852,37 @@ listBase mkId cfg = do
 -- -- use 'requiredList' for that model instead.
 list
   :: (Ord e, Eq a, SelectionModel sel, EmptySelection sel, Eq (sel a))
-  => (ListPart a -> e)
+  => e
   -> [Attribute (ListConfig sel e msg a)]
   -> Element e msg
-list mkId attrs = listFrom mkId (resolve defaultListConfig attrs)
+list lid attrs = listFrom lid (resolve defaultListConfig attrs)
 
 -- | 'list' for 'RequiredSelection', which has no 'EmptySelection' instance
 -- to seed a default config with -- @sel0@ is the starting selection
 -- instead, required up front rather than defaulted.
 requiredList
   :: (Ord e, Eq a)
-  => (ListPart a -> e)
+  => e
   -> RequiredSelection a
   -> [Attribute (ListConfig RequiredSelection e msg a)]
   -> Element e msg
-requiredList mkId sel0 attrs = listFrom mkId (resolve (requiredListConfig sel0) attrs)
+requiredList lid sel0 attrs = listFrom lid (resolve (requiredListConfig sel0) attrs)
 
 listFrom
   :: (Ord e, Eq a, SelectionModel sel, Eq (sel a))
-  => (ListPart a -> e)
+  => e
   -> ListConfig sel e msg a
   -> Element e msg
-listFrom mkId cfg =
-  chromeElement (lstLayout cfg) (ccStyleKey (lstControl cfg)) (listMeasure (isJust (lstHeader cfg)) cfg) (void (listBase mkId cfg))
+listFrom lid cfg =
+  chromeElement (lstLayout cfg) (ccStyleKey (lstControl cfg)) (listMeasure (isJust (lstHeader cfg)) cfg) (void (listBase lid cfg))
+
+-- | Scrolls the list (or tree, table or tree-table) @lid@ to @position@,
+-- from @0@ (top) to @1@ (bottom), from the next frame onward. Callable
+-- from 'View' or 'Blink.Update.Update'.
+scrollListTo :: (Ord e, Monad m, HasUiEffect e m) => e -> Double -> m ()
+scrollListTo lid position = do
+  self <- controlIdFor lid
+  queueEffect (ScrollTo (verticalBarOf (partId self (partName Viewport))) position)
 
 -- | Brings row @idx@ (0-based, into a flat list of @itemCount@ rows at
 -- @cfg@'s own 'lstRowHeight') into a @viewportHeight@-tall viewport --
@@ -911,10 +909,9 @@ listFrom mkId cfg =
 -- -- a row's own nested 'control' sees only its own, much smaller,
 -- bounds, not its list's, so the read has to happen at the right level
 -- and be passed down.
-scrollRowIntoView :: Ord e => (ListPart a -> e) -> ListConfig sel e msg a -> Int -> Double -> Int -> View e msg ()
-scrollRowIntoView mkId cfg itemCount viewportHeight idx = when (maxOffset > 0) $ do
-  viewportId <- controlIdOf (mkId ListViewport)
-  let barId = verticalBarOf viewportId
+scrollRowIntoView :: Ord e => ControlId e -> ListConfig sel e msg a -> Int -> Double -> Int -> View e msg ()
+scrollRowIntoView self cfg itemCount viewportHeight idx = when (maxOffset > 0) $ do
+  let barId = verticalBarOf (partId self (partName Viewport))
   scrollFrac <- gets (contextScrollState barId)
   let rh        = lstRowHeight cfg
       rowTop    = fromIntegral idx * rh

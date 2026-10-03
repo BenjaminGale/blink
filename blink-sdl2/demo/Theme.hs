@@ -16,7 +16,6 @@ module Theme
 
 import qualified Data.Map.Strict as Map
 
-import Data.Text (Text)
 import Blink
 import Blink.Controls.Style (transparent)
 import Blink.Style.Defaults (plainStyle)
@@ -30,28 +29,28 @@ data Page
 data ControlId = Label
              | FieldLabel ControlId
              | StatusBar
-             | SidebarPageButton (ToggleGroupPart Page)
+             | SidebarPages
              | DarkModeCheckbox
              | EditingCheckbox
              | ClickButton
              | HoldButton
              | ResetButton
              | ToggleCtl
-             | RadioOption (ToggleGroupPart Text)
-             | FileMenuButton (MenuButtonPart Text)
-             | DemoMenuBar (MenuBarPart Text Text)
+             | RadioGroup
+             | FileMenuButton
+             | DemoMenuBar
              | TextInputCtl
              | PasswordInputCtl
              | AnimateCheckbox
              | SliderCtl
              | MainListScroll
              | ColourPickerCtl
-             | FruitList (ListPart Text)
-             | GroceryList (ListPart Text)
-             | LongList (ListPart Int)
-             | FileTree (TreePart Text)
-             | GroceryTable (TablePart Text)
-             | FileSizeTreeTable (TreeTablePart Text)
+             | FruitList
+             | GroceryList
+             | LongList
+             | FileTree
+             | GroceryTable
+             | FileSizeTreeTable
              | BackgroundStartButton
              | LongListJumpButton
              | ImageFitWidthCheckbox

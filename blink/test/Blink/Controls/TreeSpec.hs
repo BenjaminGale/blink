@@ -9,10 +9,9 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, postWith)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
-  ( Direction (..), ListPart (..), MultiSelection, SingleSelection, itemValue, listStyleKey, moveCursor, multiSelected
-  , onSelectionChanged, rowHeight, selectItem, selectedItems, selection, unselected
+  ( Direction (..), MultiSelection, SingleSelection, itemValue, listStyleKey, moveCursor, multiSelected
+  , onSelectionChanged, rowHeight, scrollListTo, selectItem, selectedItems, selection, unselected
   )
-import Blink.Controls.ScrollBar (scrollViewportTo)
 import Blink.Controls.Tree
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
 import Blink.Element (Element (..), height, measureElement, runElement, width)
@@ -67,7 +66,7 @@ flattenVisibleSpec = describe "flattenVisible" $ do
 
 -- * Widget behaviour
 
-data TestElem = Part (TreePart String) | FocusHolder deriving (Eq, Ord, Show)
+data TestElem = TestTree | FocusHolder deriving (Eq, Ord, Show)
 
 -- | Rows are 20px tall, and with "src" expanded there are exactly four
 -- visible rows (see 'flattenVisibleSpec' above), so an 80px-tall scene
@@ -128,7 +127,7 @@ markerNode tis = Element
   }
 
 renderTree :: [Attribute (TreeConfig SingleSelection TestElem String String)] -> View TestElem String ()
-renderTree attrs = runElement $ tree Part
+renderTree attrs = runElement $ tree TestTree
   ( renderNode markerNode
   : width (exactly 100)
   : rowHeight 20
@@ -141,7 +140,7 @@ renderTree attrs = runElement $ tree Part
 -- simulated frame re-renders every row, so 'markerNode' would otherwise
 -- add a marker message per row per frame).
 renderSilentTree :: [Attribute (TreeConfig SingleSelection TestElem String String)] -> View TestElem String ()
-renderSilentTree attrs = runElement $ tree Part
+renderSilentTree attrs = runElement $ tree TestTree
   ( width (exactly 100)
   : rowHeight 20
   : forest forest0
@@ -169,12 +168,12 @@ renderEmptyTree attrs = renderSilentTree (forest [] : selection (unselected []) 
 -- | 'tree' discards any elementId in favour of its own root id.
 contractSpec :: Spec
 contractSpec = controlBehaviourSpec defaultControlBehaviourConfig
-  testBounds contractCtx (Part (TreeRow List)) FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyTree
+  testBounds contractCtx TestTree FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyTree
 
 widgetSpec :: Spec
 widgetSpec = describe "tree" $ do
   it "measures its height as one row per visible item when sized to its content" $ do
-    (sz, _) <- runView (measureElement (Rectangle 0 0 100 400) (tree Part [selection (unselected ["a", "b", "c"]), rowHeight 20, height fitContent])) seedCtx
+    (sz, _) <- runView (measureElement (Rectangle 0 0 100 400) (tree TestTree [selection (unselected (["a", "b", "c"] :: [String])), rowHeight 20, height fitContent])) seedCtx
     sizeHeight sz `shouldBe` 60
 
   it "indents each row's content proportional to its depth, past a fixed chevron column" $ do
@@ -285,7 +284,7 @@ multiKeyboardSpec = describe "tree keyboard with MultiSelection" $
   it "Left's parent-jump moves the cursor without toggling the parent's checked state" $ do
     let cursorOnFirstChild = moveCursor Next (multiSelected items ["src"])
         render' :: [Attribute (TreeConfig MultiSelection TestElem String String)] -> View TestElem String ()
-        render' attrs = runElement $ tree Part (width (exactly 100) : rowHeight 20 : forest forest0 : attrs)
+        render' attrs = runElement $ tree TestTree (width (exactly 100) : rowHeight 20 : forest forest0 : attrs)
     result <- runInteractions testBounds seedCtx
       (render'
         [ expanded (Set.singleton "src")
@@ -298,11 +297,10 @@ multiKeyboardSpec = describe "tree keyboard with MultiSelection" $
     resultMessages result `shouldBe` ["Selected:" ++ show expected]
     selectedItems expected `shouldBe` ["src"]
 
--- | The tree's own scrollbar id -- 'tree' reads\/writes its position
--- under @mkId (TreeRow (ListViewport (ViewportVerticalBar ScrollBar)))@, the same @tag@
--- pattern 'Blink.Controls.List.list' documents for its own.
+-- | Where the tree stores its vertical scroll position: its viewport's
+-- vertical scroll bar, as a list does.
 treeScrollEid :: V.ControlId TestElem
-treeScrollEid = V.Part (Part (TreeRow ListViewport)) "VerticalBar"
+treeScrollEid = V.Part TestTree "Viewport/VerticalBar"
 
 -- | Narrower than 'testBounds' -- with both "src" and "src/Controls"
 -- expanded there are 5 rows (100px), so a 40px viewport (2 rows) is
@@ -320,7 +318,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
     -- Scrolled all the way down: rows 0-2 ("src".."src/Controls") are out
     -- of view, cursor starts on the last row, "src/Controls/Button.hs".
     seeded <- resultContext <$> runInteractions scrollTestBounds seedCtx
-      (scrollViewportTo (Part (TreeRow ListViewport)) 1)
+      (scrollListTo TestTree 1)
       []
       []
 
@@ -371,7 +369,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
     -- the 40px window (y 20-60) -- at the bottom edge, still fully
     -- visible, before it has any children of its own in view.
     step1 <- runInteractions scrollTestBounds seedCtx
-      (scrollViewportTo (Part (TreeRow ListViewport)) (1 / 2))
+      (scrollListTo TestTree (1 / 2))
       []
       []
 
@@ -416,7 +414,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
     -- expanded, simply the next later sibling, pushed down by "src" and
     -- "src/Controls" both being expanded -- sits just below the window.
     seeded <- resultContext <$> runInteractions scrollTestBounds seedCtx
-      (scrollViewportTo (Part (TreeRow ListViewport)) (2 / 3))
+      (scrollListTo TestTree (2 / 3))
       []
       []
 

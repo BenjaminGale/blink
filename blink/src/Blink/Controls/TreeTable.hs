@@ -7,8 +7,7 @@
 -- and chevron a plain tree row has; every other column is a plain
 -- per-column cell, both from the same underlying node.
 module Blink.Controls.TreeTable
-  ( TreeTablePart (..)
-  , TreeTableConfig (..)
+  ( TreeTableConfig (..)
   , defaultTreeTableConfig
   , treeTable
   , columns
@@ -35,18 +34,6 @@ import Blink.Element (Element (..), HasLayoutConfig (..), HasSelection (..), Has
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill)
-
--- | Identifies one part of a 'treeTable' for the purpose of building
--- element ids -- every part 'listBase' itself already needs, plus a
--- header cell and a column-resize handle (both by column index, as
--- 'Blink.Controls.Table.TablePart' has), and a node's own
--- expand\/collapse chevron (as 'Blink.Controls.Tree.TreePart' has).
-data TreeTablePart a
-  = TTRow (ListPart a)
-  | TTHeaderCell Int
-  | TTColumnDivider Int
-  | TTChevron a
-  deriving (Eq, Ord, Show)
 
 -- | Every capability 'treeTable' resolves: the embedded 'ListConfig', its
 -- columns and sort (via 'HasColumnsConfig', as
@@ -90,15 +77,16 @@ defaultTreeTableConfig = TreeTableConfig
   , ttTreeData = defaultTreeDataConfig
   }
 
--- | A table whose column 0 is also a tree (see the module header).
--- @mkId@ builds every part's element id from a 'TreeTablePart', the
--- same relationship 'listBase's own @mkId@ has to 'ListPart'.
+-- | A table whose column 0 is also a tree (see the module header),
+-- identified by @tid@; its rows, header cells, resize handles and
+-- chevrons are parts of it, as in 'Blink.Controls.Table.table' and
+-- 'Blink.Controls.Tree.tree'.
 treeTable
   :: (Ord e, Ord a, SelectionModel sel, EmptySelection sel, Eq (sel a))
-  => (TreeTablePart a -> e)
+  => e
   -> [Attribute (TreeTableConfig sel e msg a)]
   -> Element e msg
-treeTable mkId attrs =
+treeTable tid attrs =
   chromeElement (lstLayout (ttList cfg)) (ccStyleKey (lstControl (ttList cfg))) (listMeasure hasColumns (ttList cfg)) (void run)
   where
     cfg        = resolve defaultTreeTableConfig attrs
@@ -107,8 +95,8 @@ treeTable mkId attrs =
     hasColumns = not (null (csColumns cols))
 
     run = do
-      (widths, listCfg) <- withColumns (mkId . TTHeaderCell) (mkId . TTColumnDivider) cols (ttList cfg)
-      treeListBase (mkId . TTRow) TreeListConfig
+      (widths, listCfg) <- withColumns tid cols (ttList cfg)
+      treeListBase tid TreeListConfig
         { tlList      = listCfg
         , tlTreeData  = td
         , tlRenderRow = renderRow widths
@@ -122,5 +110,5 @@ treeTable mkId attrs =
 
         cellFor 0 w c = elementWithLayout (Layout w fill TopLeft) $
           runElement $ hBox
-            [ children (indentAndChevron (mkId . TTChevron) td tis ++ [colCell c st]) ]
+            [ children (indentAndChevron tid td tis ++ [colCell c st]) ]
         cellFor _ w c = columnCell w c st

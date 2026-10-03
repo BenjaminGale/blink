@@ -19,7 +19,6 @@
 -- takes focus itself.
 module Blink.Controls.MenuButton
   ( MenuButtonConfig
-  , MenuButtonPart (..)
   , defaultMenuButtonConfig
   , menuButton
   , items
@@ -43,16 +42,10 @@ import Blink.Element (Element (..), HasItemAttrs (..), HasItems (..), HasLayoutC
 import Blink.Style
 import Blink.Controls.Style (containerStyle)
 
--- | Identifies one part of a 'menuButton': the trigger button itself
--- ('MenuButtonTrigger'), the item list's own focus scope
--- ('MenuButtonList'), or one of its items. Items are tagged by their data,
--- so reordering keeps per-item state, as with
--- 'Blink.Controls.ToggleGroup.ToggleGroupPart'.
-data MenuButtonPart a
-  = MenuButtonTrigger
-  | MenuButtonList
-  | MenuButtonItem a
-  deriving (Eq, Ord, Show)
+-- | The parts a 'menuButton' is made of, besides itself: its dropdown
+-- list, whose items are parts of the list.
+data MenuButtonPart = List
+  deriving Show
 
 -- | Every capability 'menuButton' resolves: the trigger's config (a
 -- 'ToggleConfig', see 'isOpen'), the data to build each item from, and how
@@ -119,31 +112,31 @@ onOpenChanged = nested mbToggle (\c t -> c { mbToggle = t }) . onSelectedChanged
 -- caption, the same as 'Blink.Controls.Button.button'; override with
 -- 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 --
--- @mkId@ builds every part's element id from a 'MenuButtonPart': the
--- trigger's own id from 'MenuButtonTrigger', its item list's own focus
--- scope id from 'MenuButtonList', and each item's id from 'MenuButtonItem'
--- applied to the item's own data.
-menuButton :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> [Attribute (MenuButtonConfig e a msg)] -> Element e msg
-menuButton mkId attrs = captionedButton btn (void (runMenuButton mkId cfg))
+-- The button is identified by @mid@; its dropdown list and the list's
+-- items are parts of it (see 'Blink.Element.part').
+menuButton :: (Ord e, Ord a) => e -> [Attribute (MenuButtonConfig e a msg)] -> Element e msg
+menuButton mid attrs = captionedButton btn (void (runMenuButton mid cfg))
   where
     cfg = resolve defaultMenuButtonConfig attrs
     btn = tgcButton (mbToggle cfg)
 
-runMenuButton :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg (ToggleInteraction e msg)
-runMenuButton mkId cfg = do
+runMenuButton :: (Ord e, Ord a) => e -> MenuButtonConfig e a msg -> View e msg (ToggleInteraction e msg)
+runMenuButton mid cfg = do
   onTrigger <- isRegionHit
-  menuTrigger (mkId MenuButtonTrigger) (mkId MenuButtonList) (mbToggle cfg) (\close -> itemsElement mkId cfg close onTrigger)
+  self      <- controlIdOf mid
+  let listId = partId self (partName List)
+  menuTrigger mid self listId (mbToggle cfg) (\close -> itemsElement mid listId cfg close onTrigger)
 
 -- | The open item list. @onTrigger@ is whether the pointer is on the
 -- trigger, so a press there toggles the menu rather than counting as an
 -- outside press.
-itemsElement :: (Ord e, Ord a) => (MenuButtonPart a -> e) -> MenuButtonConfig e a msg -> View e msg () -> Bool -> Element e msg
-itemsElement mkId cfg close onTrigger =
+itemsElement :: (Ord e, Ord a) => e -> ControlId e -> MenuButtonConfig e a msg -> View e msg () -> Bool -> Element e msg
+itemsElement mid listId cfg close onTrigger =
   menuList menuButtonListStyleKey menu close onTrigger
   where
     menu = MenuItems
-      { miListId    = mkId MenuButtonList
-      , miItemId    = mkId . MenuButtonItem
+      { miOwner     = mid
+      , miListId    = listId
       , miItems     = mbItems cfg
       , miItemAttrs = mbItemAttrs cfg
       , miSubmenu   = const Nothing

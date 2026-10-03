@@ -233,6 +233,7 @@ module Blink.View
   , ControlId (..)
   , controlIdOf
   , withPart
+  , withControlId
   , partId
     -- * Messages and effects
   , Effect

@@ -13,7 +13,7 @@ import Blink.Controls.Control (Attribute, control, defaultControlConfig, element
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec, styleAttributeSpec)
 import Blink.Controls.Fixtures (contentRectFor, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
 import Blink.Controls.Label (mnemonic, text)
-import Blink.Controls.MenuBar (MenuBarConfig, MenuBarPart (..), itemAttrs, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu, submenuItems)
+import Blink.Controls.MenuBar (MenuBarConfig, itemAttrs, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu, submenuItems)
 import Blink.Element (Element, elLayout, elementWithLayout, height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (KeyChar, KeyLeft, KeyRight), KeyEvent (..), Modifier (Alt))
@@ -43,40 +43,43 @@ itemsFor EditMenu = [Cut, Copy]
 -- each label a fixed 40x20, laid out left to right, so File sits at
 -- (0,0)-(40,20) and Edit at (40,0)-(80,20). Each menu's own dropdown,
 -- placed below its label by default, spans (0,20)-(40,60) for File and
--- (40,20)-(80,60) for Edit (two 40x20 items stacked). @tag@ builds the
--- bar's element ids, @extraLabelAttrs@ adds to each label's own
+-- (40,20)-(80,60) for Edit (two 40x20 items stacked). @bid@ is the
+-- bar's id, @extraLabelAttrs@ adds to each label's own
 -- attributes, @extraAttrs@ to the bar's.
 testMenuBar
   :: Ord e
-  => (MenuBarPart TopMenu Item -> e)
+  => e
   -> (TopMenu -> [Attribute (ButtonConfig e msg)])
   -> [Attribute (MenuBarConfig e TopMenu Item msg)]
   -> Element e msg
-testMenuBar tag extraLabelAttrs extraAttrs =
-  (menuBar tag (
+testMenuBar bid extraLabelAttrs extraAttrs =
+  (menuBar bid (
     [ menus [FileMenu, EditMenu]
     , labelAttrs (\m -> [text (labelText m), mnemonic (labelMnemonic m), width (exactly 40), height (exactly 20)] ++ extraLabelAttrs m)
     , menuItems itemsFor
     , itemAttrs (\_ i -> [text (T.pack (show i)), width (exactly 40), height (exactly 20)])
     ] ++ extraAttrs)) { elLayout = Layout (exactly 80) (exactly 20) TopLeft }
 
-menuBarApp :: App (MenuBarPart TopMenu Item) (Maybe TopMenu) (Maybe TopMenu)
+-- | The id of the one menu bar most tests render.
+data BarId = TheBar deriving (Eq, Ord, Show)
+
+menuBarApp :: App BarId (Maybe TopMenu) (Maybe TopMenu)
 menuBarApp = menuBarAppWith []
 
 -- | 'menuBarApp' with @extraAttrs@ appended to the bar's own attributes.
 menuBarAppWith
-  :: [Attribute (MenuBarConfig (MenuBarPart TopMenu Item) TopMenu Item (Maybe TopMenu))]
-  -> App (MenuBarPart TopMenu Item) (Maybe TopMenu) (Maybe TopMenu)
+  :: [Attribute (MenuBarConfig BarId TopMenu Item (Maybe TopMenu))]
+  -> App BarId (Maybe TopMenu) (Maybe TopMenu)
 menuBarAppWith extraAttrs = App
   { startUp = pure Nothing
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
-  , view    = \open -> testMenuBar id (const []) ([openMenu open, onOpenMenuChanged (postWith id)] ++ extraAttrs)
+  , view    = \open -> testMenuBar TheBar (const []) ([openMenu open, onOpenMenuChanged (postWith id)] ++ extraAttrs)
   , update  = put
   }
 
 data BarEvent = SetOpen (Maybe TopMenu) | Logged T.Text
 
-data FocusElem = BarPart (MenuBarPart TopMenu Item) | Sibling deriving (Eq, Ord, Show)
+data FocusElem = BarPart | Sibling deriving (Eq, Ord, Show)
 
 -- | 'menuBarApp' that logs each label gaining focus, plus a focusable
 -- control below both dropdowns at (0,70)-(40,90) that logs its own focus
@@ -99,7 +102,7 @@ focusLoggingApp = App
   }
 
 -- | 'menuBarApp' with File's Save item carrying a submenu of Cut and Copy.
-submenuApp :: App (MenuBarPart TopMenu Item) (Maybe TopMenu) (Maybe TopMenu)
+submenuApp :: App BarId (Maybe TopMenu) (Maybe TopMenu)
 submenuApp = menuBarAppWith [submenuItems (\m i -> if m == FileMenu && i == Save then [Cut, Copy] else [])]
 
 mkInput :: Point -> Bool -> FrameInput
@@ -139,7 +142,7 @@ keyInput k = (mkInput fileTriggerPoint False) { keyEvents = [KeyEvent k [] False
 altKeyInput :: Char -> FrameInput
 altKeyInput c = (mkInput (Point 90 90) False) { keyEvents = [KeyEvent (KeyChar (toUpper c)) [Alt] False] }
 
-data ContractElem = ContractPart (MenuBarPart Int Int) | FocusHolder deriving (Eq, Ord, Show)
+data ContractElem = ContractPart | FocusHolder deriving (Eq, Ord, Show)
 
 -- | Real margin, unlike 'testMetrics', for the hit-region contract below.
 contractTheme :: Theme ContractElem
@@ -169,13 +172,13 @@ labelContractBounds = Rectangle 0 0 100 100
 -- it through 'labelAttrs'.
 renderSingleLabel :: [Attribute (ButtonConfig ContractElem String)] -> View ContractElem String ()
 renderSingleLabel attrs = runElement $ menuBar ContractPart
-  [menus [0], height fill, labelAttrs (const (width fill : height fill : attrs))]
+  [menus [0 :: Int], menuItems (const ([] :: [Int])), height fill, labelAttrs (const (width fill : height fill : attrs))]
 
 -- | The bar's own container is fixed 'NotFocusable'.
 contractSpec :: Spec
 contractSpec = do
   controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    contractBounds contractCtx (ContractPart MenuBar) FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyMenuBar
+    contractBounds contractCtx ContractPart FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyMenuBar
   describe "label" $
     styleAttributeSpec labelContractBounds contractCtx (hitRectFor (contentRectFor labelContractBounds)) renderSingleLabel
 

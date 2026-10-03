@@ -16,7 +16,7 @@ import Blink.Controls.Control
   , post, postWith, resolve
   )
 import Blink.Controls.Label (text)
-import Blink.Controls.MenuButton (MenuButtonConfig, MenuButtonPart (..), isOpen, itemAttrs, items, menuButton, onOpenChanged)
+import Blink.Controls.MenuButton (MenuButtonConfig, isOpen, itemAttrs, items, menuButton, onOpenChanged)
 import Blink.Element (Element, elLayout, elementWithLayout, height, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Input (Key (KeyDown, KeyEscape, KeyReturn, KeyTab, KeyUp), KeyEvent (..), Modifier (Shift))
@@ -31,17 +31,20 @@ data Item = Open | Save deriving (Eq, Ord, Show)
 
 -- | A single menu button, filling the whole window so any point in it
 -- reliably hits the trigger, with two items -- 'Open' and 'Save'.
-menuApp :: App (MenuButtonPart Item) Bool Bool
+-- | The id of the one menu button most tests render.
+data MenuId = TheMenu deriving (Eq, Ord, Show)
+
+menuApp :: App MenuId Bool Bool
 menuApp = menuAppWith []
 
 -- | 'menuApp' with @extraAttrs@ appended to the menu button's own
 -- attributes.
-menuAppWith :: [Attribute (MenuButtonConfig (MenuButtonPart Item) Item Bool)] -> App (MenuButtonPart Item) Bool Bool
+menuAppWith :: [Attribute (MenuButtonConfig MenuId Item Bool)] -> App MenuId Bool Bool
 menuAppWith extraAttrs = App
   { startUp = pure False
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
   , view    = \open ->
-      (menuButton id (
+      (menuButton TheMenu (
         [ text "File"
         , isOpen open
         , onOpenChanged (postWith id)
@@ -53,7 +56,7 @@ menuAppWith extraAttrs = App
 
 -- | 'menuApp', but disabled -- clicking its trigger must not open it, the
 -- same as any other disabled control refusing to activate.
-disabledMenuApp :: App (MenuButtonPart Item) Bool Bool
+disabledMenuApp :: App MenuId Bool Bool
 disabledMenuApp = menuAppWith [isEnabled False]
 
 -- | What changes the open flag, or logs a keyboard-navigation event, in
@@ -67,16 +70,16 @@ data NavEvent = SetOpen Bool | Logged Text
 -- Unlike 'menuApp', the trigger and each item have real, fixed sizes (not
 -- fill-the-window) so a click can land unambiguously on one of them, or on
 -- neither -- see 'navTriggerPoint', 'navItemPoint', and 'navOutsidePoint'.
-navApp :: App (MenuButtonPart Item) NavEvent (Bool, [Text])
+navApp :: App MenuId NavEvent (Bool, [Text])
 navApp = navAppWith (const 40)
 
 -- | 'navApp' with @itemWidth@ giving each item's own width.
-navAppWith :: (Item -> Double) -> App (MenuButtonPart Item) NavEvent (Bool, [Text])
+navAppWith :: (Item -> Double) -> App MenuId NavEvent (Bool, [Text])
 navAppWith itemWidth = App
   { startUp = pure (False, [])
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
   , view    = \(open, _) ->
-      (menuButton id
+      (menuButton TheMenu
         [ text "File"
         , isOpen open
         , onOpenChanged (postWith SetOpen)
@@ -99,7 +102,7 @@ navAppWith itemWidth = App
 fullView :: View e msg a -> Element e msg
 fullView = elementWithLayout (Layout fill fill TopLeft) . void
 
-data ClickThroughElem = Background | Menu (MenuButtonPart Item) deriving (Eq, Ord, Show)
+data ClickThroughElem = Background | Menu deriving (Eq, Ord, Show)
 
 -- | An arbitrary palette -- this app needs the library's real
 -- 'defaultTheme', not this file's usual chrome-less 'testStyleSet', so the
@@ -147,13 +150,13 @@ hoverStyleSet = testStyleSet
 -- | Same geometry as 'navApp' (40x20 trigger, two 40x20 items below it),
 -- always open, with a hover-distinguishing style so a test can tell
 -- whether an item's hover style is actually being drawn.
-hoverApp :: App (MenuButtonPart Item) Bool Bool
+hoverApp :: App MenuId Bool Bool
 hoverApp = App
   { startUp = pure False
   , theme   = const (emptyTheme (testMetrics, hoverStyleSet))
   , view    = \_ -> fullView $
       runElement
-        ((menuButton id
+        ((menuButton TheMenu
           [ text "File", isOpen True, onOpenChanged (const [])
           , items [Open, Save]
           , itemAttrs (\i -> [text (T.pack (show i)), width (exactly 40), height (exactly 20)])
@@ -167,7 +170,7 @@ hoverApp = App
 -- trigger sits at (0,0)-(40,20) with its item at (0,20)-(40,40); menu B's
 -- at (100,0)-(140,20) and (100,20)-(140,40), far enough apart that a click
 -- on one is unambiguously "outside" the other.
-data TwoMenuElem = MenuAPart (MenuButtonPart Item) | MenuBPart (MenuButtonPart Item)
+data TwoMenuElem = MenuAPart | MenuBPart
   deriving (Eq, Ord, Show)
 
 data TwoMenuEvent = SetOpenA Bool | SetOpenB Bool | TwoMenuLogged Text
@@ -249,7 +252,7 @@ keyInput :: Key -> FrameInput
 keyInput k = (mkInput triggerPoint False) { keyEvents = [KeyEvent k [] False] }
 
 -- | A plain focusable control on either side of the menu button.
-data SiblingElem = SiblingBefore | SiblingAfter | SiblingMenu (MenuButtonPart Item)
+data SiblingElem = SiblingBefore | SiblingAfter | SiblingMenu
   deriving (Eq, Ord, Show)
 
 -- | What changes the open flag, or logs a keyboard-navigation event, in

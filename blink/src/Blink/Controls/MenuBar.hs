@@ -23,7 +23,6 @@
 -- it landed on a control that takes focus itself.
 module Blink.Controls.MenuBar
   ( MenuBarConfig
-  , MenuBarPart (..)
   , defaultMenuBarConfig
   , menuBar
   , menus
@@ -43,7 +42,7 @@ module Blink.Controls.MenuBar
 import Control.Monad (forM_, void, when)
 
 import Data.List (elemIndex, find)
-import Data.Maybe (isJust, listToMaybe)
+import Data.Maybe (fromMaybe, isJust, listToMaybe)
 import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Button (ButtonConfig (..), ButtonInteraction (..), captionedButton, defaultButtonConfig)
@@ -56,24 +55,26 @@ import Blink.Input (InputState (inputKeyEvents), Key (KeyLeft, KeyRight), KeyEve
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.View
+import Blink.View.Context (UiEffect (..))
 import Blink.Element (Element (..), HasItemAttrs (..), HasLayoutConfig (..), height, runElement, width)
 import Blink.Controls.Style (containerStyle, transparent)
 import Blink.Rendering (TextAlign (..))
 import Blink.Style
 
--- | Identifies one part of a 'menuBar': its own container ('MenuBar'), one
--- top-level menu's own label ('MenuBarLabel'), its item list's own focus
--- scope ('MenuBarList'), one of its items ('MenuBarItem'), or an item's
--- submenu ('MenuBarSubmenu'). Each is tagged by the menu's data and, for an
--- item, the item's data, so reordering keeps per-part state, as with
--- 'Blink.Controls.ToggleGroup.ToggleGroupPart'.
-data MenuBarPart a b
-  = MenuBar
-  | MenuBarLabel a
-  | MenuBarList a
-  | MenuBarItem a b
-  | MenuBarSubmenu a b
-  deriving (Eq, Ord, Show)
+-- | The parts a 'menuBar' is made of, besides itself: each top-level
+-- menu's label and dropdown list, by the menu's position. Items and
+-- submenus are parts of their list (see "Blink.Controls.Menu").
+data MenuBarPart = Label Int | List Int
+  deriving Show
+
+-- | The ids of the label and the dropdown list of @menuKey@, as parts of
+-- the bar @self@.
+labelIdFor, listIdFor :: Eq a => ControlId e -> MenuBarConfig e a b msg -> a -> ControlId e
+labelIdFor self cfg menuKey = partId self (partName (Label (menuIndex cfg menuKey)))
+listIdFor  self cfg menuKey = partId self (partName (List (menuIndex cfg menuKey)))
+
+menuIndex :: Eq a => MenuBarConfig e a b msg -> a -> Int
+menuIndex cfg menuKey = fromMaybe 0 (elemIndex menuKey (mbrMenus cfg))
 
 -- | Every capability 'menuBar' resolves: its own container control, the
 -- top-level menus to build labels from (in order) and how to configure
@@ -160,23 +161,21 @@ onOpenMenuChanged :: (Maybe a -> [Effect e msg]) -> Attribute (MenuBarConfig e a
 onOpenMenuChanged = appendTo mbrOnOpenMenuChanged (\c hs -> c { mbrOnOpenMenuChanged = hs })
 
 -- | A row of labels, one per 'menus', each opening a dropdown list of
--- items (built from 'menuItems') when clicked. @mkId@ builds every part's
--- element id from a 'MenuBarPart': the bar's own container id from
--- 'MenuBar', each label's own id from 'MenuBarLabel', each open dropdown's
--- own focus scope id from 'MenuBarList', each item's id from
--- 'MenuBarItem', and each submenu's own scope id from 'MenuBarSubmenu'.
-menuBar :: (Ord e, Ord a, Ord b) => (MenuBarPart a b -> e) -> [Attribute (MenuBarConfig e a b msg)] -> Element e msg
-menuBar mkId attrs = controlElement (mbrLayout cfg) (rowBox False) ccfg
+-- items (built from 'menuItems') when clicked. The bar is identified by
+-- @bid@; its labels, dropdowns, items and submenus are parts of it (see
+-- 'Blink.Element.part').
+menuBar :: (Ord e, Ord a, Ord b) => e -> [Attribute (MenuBarConfig e a b msg)] -> Element e msg
+menuBar bid attrs = controlElement (mbrLayout cfg) (rowBox False) ccfg
   where
     cfg = resolve defaultMenuBarConfig attrs
     rowBox onBar = hBox [ width fill, height fill, children (map (toLabel onBar) (mbrMenus cfg)) ]
-    toLabel onBar menuKey = captionedButton labelCfg (void (runMenuBarLabel mkId cfg menuKey labelCfg onBar))
+    toLabel onBar menuKey = captionedButton labelCfg (void (runMenuBarLabel bid cfg menuKey labelCfg onBar))
       where labelCfg = labelConfigFor menuKey
     labelConfigFor m = resolve labelDefaults (width fitContent : height fitContent : mbrLabelAttrs cfg m)
     labelDefaults = defaultButtonConfig
       { bcControl = (bcControl defaultButtonConfig) { ccStyleKey = menuBarLabelStyleKey } }
     ccfg = (mbrControl cfg)
-      { ccElementId   = Just (mkId MenuBar)
+      { ccElementId   = Just bid
       , ccFocusPolicy = NotFocusable
       , ccContent     = const (handleMnemonics >> isRegionHit >>= runElement . rowBox)
       }
@@ -184,8 +183,9 @@ menuBar mkId attrs = controlElement (mbrLayout cfg) (rowBox False) ccfg
     -- Unlike a label click, never toggles an already-open menu closed.
     handleMnemonics = do
       scope <- getCurrentScope
+      self  <- controlIdOf bid
       takeMnemonic labelMnemonic (mbrMenus cfg) >>= mapM_ (\menuKey ->
-        when (mbrOpenMenu cfg /= Just menuKey) (openMenuFor mkId cfg scope menuKey))
+        when (mbrOpenMenu cfg /= Just menuKey) (openMenuFor self cfg scope menuKey))
 
     labelMnemonic = lcMnemonic . bcLabelled . labelConfigFor
 
@@ -194,14 +194,16 @@ menuBar mkId attrs = controlElement (mbrLayout cfg) (rowBox False) ccfg
 -- menu bars do. @onBar@ is whether the pointer is on the bar's row.
 runMenuBarLabel
   :: (Ord e, Ord a, Ord b)
-  => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> ButtonConfig e msg -> Bool
+  => e -> MenuBarConfig e a b msg -> a -> ButtonConfig e msg -> Bool
   -> View e msg (ToggleInteraction e msg)
-runMenuBarLabel mkId cfg menuKey labelCfg onBar = do
+runMenuBarLabel bid cfg menuKey labelCfg onBar = do
   enclosingScope <- getCurrentScope
-  let open            = openMenuFor mkId cfg enclosingScope
+  self           <- controlIdOf bid
+  let open            = openMenuFor self cfg enclosingScope
       switchMenu step = forM_ (adjacentMenu (mbrMenus cfg) menuKey step) open
-  r <- menuTrigger (mkId (MenuBarLabel menuKey)) (mkId (MenuBarList menuKey)) toggleCfg
-         (\close -> itemsElement mkId cfg menuKey close onBar switchMenu)
+      listId          = listIdFor self cfg menuKey
+  r <- menuTrigger bid (labelIdFor self cfg menuKey) listId toggleCfg
+         (\close -> itemsElement bid listId cfg menuKey close onBar switchMenu)
   let someOtherOpen = maybe False (/= menuKey) (mbrOpenMenu cfg)
       hoveredIn     = ciMouseEntered (biControl (tgiButton r))
   when (hoveredIn && someOtherOpen) (open menuKey)
@@ -215,10 +217,10 @@ runMenuBarLabel mkId cfg menuKey labelCfg onBar = do
     toOpenMenu opened = if opened then Just menuKey else Nothing
 
 -- | Opens @newKey@'s dropdown and focuses its item list.
-openMenuFor :: Ord e => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> Maybe (ControlId e) -> a -> View e msg ()
-openMenuFor mkId cfg enclosingScope newKey = do
+openMenuFor :: Eq a => ControlId e -> MenuBarConfig e a b msg -> Maybe (ControlId e) -> a -> View e msg ()
+openMenuFor self cfg enclosingScope newKey = do
   runHandlers (mbrOnOpenMenuChanged cfg) (Just newKey)
-  requestFocus enclosingScope (mkId (MenuBarList newKey))
+  emitUi (Focus enclosingScope (listIdFor self cfg newKey))
 
 -- | The menu @step@ places after @menuKey@ (before it, if negative),
 -- wrapping at either end. 'Nothing' if @menuKey@ isn't in @allMenus@.
@@ -233,20 +235,20 @@ adjacentMenu allMenus menuKey step = do
 -- also closing this one as an outside press.
 itemsElement
   :: (Ord e, Ord a, Ord b)
-  => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> a -> View e msg () -> Bool -> (Int -> View e msg ())
+  => e -> ControlId e -> MenuBarConfig e a b msg -> a -> View e msg () -> Bool -> (Int -> View e msg ())
   -> Element e msg
-itemsElement mkId cfg menuKey close onBar switchMenu = base { elRun = handleMenuSwitchKeys >> elRun base }
+itemsElement bid listId cfg menuKey close onBar switchMenu = base { elRun = handleMenuSwitchKeys >> elRun base }
   where
     menu = MenuItems
-      { miListId    = mkId (MenuBarList menuKey)
-      , miItemId    = mkId . MenuBarItem menuKey
+      { miOwner     = bid
+      , miListId    = listId
       , miItems     = mbrMenuItems cfg menuKey
       , miItemAttrs = mbrItemAttrs cfg menuKey
       , miSubmenu   = submenuFor
       }
     submenuFor item = case mbrSubmenuItems cfg menuKey item of
       [] -> Nothing
-      xs -> Just (mkId (MenuBarSubmenu menuKey item), xs)
+      xs -> Just xs
 
     base = menuListWithSubmenus menuBarListStyleKey menu close onBar
 

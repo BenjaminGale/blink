@@ -19,7 +19,6 @@
 -- already have for the selection model.
 module Blink.Controls.Tree
   ( flattenVisible
-  , TreePart (..)
   , TreeItemState (..)
   , TreeDataConfig (..)
   , HasTreeDataConfig (..)
@@ -55,14 +54,14 @@ import Blink.Controls.Control
 import Blink.Controls.List hiding (defaultStyleEntries)
 import Blink.Element
   ( Element (..), HasLayoutConfig (..), HasSelection (..), HasSelectionChanged (..), elementWithLayout, emptyElement
-  , noIntrinsicSize
+  , noIntrinsicSize, part
   )
 import Blink.Geometry (Alignment (TopLeft))
 import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (ImagePath, TextAlign (..))
-import Blink.View (Effect, View, currentStyle)
+import Blink.View (ControlId, Effect, View, controlIdOf, currentStyle)
 import Blink.View.Drawing (drawImage)
 import Blink.Style
 import Blink.Controls.Style (iconStyle, zeroMetrics)
@@ -87,13 +86,9 @@ visibleNodes forest0 expanded0 = go 0 forest0
       | Set.member x expanded0 = (x, depth, not (null kids)) : go (depth + 1) kids
       | otherwise               = [(x, depth, not (null kids))]
 
--- | Identifies one part of a 'tree' for the purpose of building element
--- ids: every part 'listBase' itself already needs (the root, a row, a
--- scrollbar part), plus a node's own expand\/collapse chevron.
-data TreePart a
-  = TreeRow (ListPart a)
-  | TreeChevron a
-  deriving (Eq, Ord, Show)
+-- | The parts a tree adds to its rows: each row's expand\/collapse chevron.
+data TreePart = Chevron
+  deriving Show
 
 -- | What a tree row's own content renderer ('renderNode') receives: the
 -- node's selected\/cursor flags (as 'list' already reports them, via
@@ -205,30 +200,30 @@ chevronExpandedIcon = "assets/icons/expand_more.svg"
 chevronCollapsedIcon :: ImagePath
 chevronCollapsedIcon = "assets/icons/chevron_right.svg"
 
--- | A tree built on 'listBase' (see the module header). @mkId@ builds
--- every part's element id from a 'TreePart', the same relationship
--- 'listBase's own @mkId@ has to 'ListPart'. Left\/Right additionally
+-- | A tree built on 'listBase' (see the module header), identified by
+-- @tid@; its rows and their chevrons are parts of it, as a list's rows
+-- are (see 'list'). Left\/Right additionally
 -- expand\/collapse a node with children, or move the cursor to its
 -- first child\/parent once it's already expanded\/collapsed.
 tree
   :: (Ord e, Ord a, SelectionModel sel, EmptySelection sel, Eq (sel a))
-  => (TreePart a -> e)
+  => e
   -> [Attribute (TreeConfig sel e msg a)]
   -> Element e msg
-tree mkId attrs =
+tree tid attrs =
   chromeElement (lstLayout listCfg) (ccStyleKey (lstControl listCfg)) (listMeasure False listCfg) (void run)
   where
     cfg     = resolve defaultTreeConfig attrs
     td      = tcTreeData cfg
     listCfg = tcList cfg
 
-    run = treeListBase (mkId . TreeRow) TreeListConfig
+    run = treeListBase tid TreeListConfig
       { tlList      = listCfg
       , tlTreeData  = td
       , tlRenderRow = renderRow
       }
 
-    renderRow tis = hBox [children (indentAndChevron (mkId . TreeChevron) td tis ++ [tcRenderNode cfg tis])]
+    renderRow tis = hBox [children (indentAndChevron tid td tis ++ [tcRenderNode cfg tis])]
 
 -- | Every capability 'treeListBase' resolves: the list its rows are shown
 -- in, the forest and expansion state they're flattened from, and how a
@@ -245,12 +240,13 @@ data TreeListConfig sel e msg a = TreeListConfig
 -- child or its parent. Reports the list's own 'ListInteraction'.
 treeListBase
   :: (Ord e, Ord a, SelectionModel sel, Eq (sel a))
-  => (ListPart a -> e)
+  => e
   -> TreeListConfig sel e msg a
   -> View e msg (ListInteraction sel e msg a)
-treeListBase mkRowId cfg = do
-  li <- listBase mkRowId listCfg
-  mapM_ (handleExpansionKey mkRowId listCfg visRows nodeInfo (tdExpanded td) (tdOnExpansionChanged td) (liViewportHeight li))
+treeListBase tid cfg = do
+  li   <- listBase tid listCfg
+  self <- controlIdOf tid
+  mapM_ (handleExpansionKey self listCfg visRows nodeInfo (tdExpanded td) (tdOnExpansionChanged td) (liViewportHeight li))
     (ciKeysPressed (liControl li))
   pure li
   where
@@ -270,19 +266,19 @@ treeListBase mkRowId cfg = do
 -- expansion reactions with the node's membership toggled.
 indentAndChevron
   :: (Ord e, Ord a)
-  => (a -> e) -> TreeDataConfig e msg a -> TreeItemState a -> [Element e msg]
-indentAndChevron mkChevronId td tis =
+  => e -> TreeDataConfig e msg a -> TreeItemState a -> [Element e msg]
+indentAndChevron tid td tis =
   [indentCell, chevronCell]
   where
     indentCell = elementWithLayout (Layout (exactly (fromIntegral depth * treeStepWidth)) fill TopLeft) (pure ())
 
     chevronCell
       | not hasChildren = elementWithLayout (Layout (exactly treeStepWidth) fill TopLeft) (pure ())
-      | otherwise = Element
+      | otherwise = part tid (partName Chevron) Element
           { elLayout  = Layout (exactly treeStepWidth) fill TopLeft
           , elMeasure = noIntrinsicSize
           , elRun     = void $ control defaultControlConfig
-              { ccElementId   = Just (mkChevronId x)
+              { ccElementId   = Just tid
               , ccStyleKey    = treeChevronStyleKey
               , ccFocusPolicy = NotFocusable
               , ccContent     = \ci -> do
@@ -323,7 +319,7 @@ indentAndChevron mkChevronId td tis =
 -- effect, whatever selection model the caller has chosen.
 handleExpansionKey
   :: (Ord e, Ord a, SelectionModel sel, Eq (sel a))
-  => (ListPart a -> e)
+  => ControlId e
   -> ListConfig sel e msg a
   -> [(a, Int, Bool)]
   -> Map.Map a (Int, Bool)
@@ -332,7 +328,7 @@ handleExpansionKey
   -> Double
   -> KeyEvent
   -> View e msg ()
-handleExpansionKey mkRowId listCfg visRows nodeInfo expanded0 onExpansionChanged0 viewportHeight ev =
+handleExpansionKey self listCfg visRows nodeInfo expanded0 onExpansionChanged0 viewportHeight ev =
   case (key ev, cursorItem s0) of
     (KeyRight, Just x) -> case Map.lookup x nodeInfo of
       Just (_, True) | not (Set.member x expanded0) -> setExpanded (Set.insert x expanded0)
@@ -349,7 +345,7 @@ handleExpansionKey mkRowId listCfg visRows nodeInfo expanded0 onExpansionChanged
     moveCursorTo s' = when (s' /= s0) $ do
       runHandlers (lstOnSelectionChanged listCfg) s'
       let rowIndex = cursorItem s' >>= \x -> findIndex (\(y, _, _) -> y == x) visRows
-      mapM_ (scrollRowIntoView mkRowId listCfg (length visRows) viewportHeight) rowIndex
+      mapM_ (scrollRowIntoView self listCfg (length visRows) viewportHeight) rowIndex
     climbToParent n = moveCursorTo (applyN n (moveCursor Prev) s0)
     applyN n f       = (!! n) . iterate f
 

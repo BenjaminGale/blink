@@ -19,27 +19,23 @@ import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.Style (Palette (..), StyleKey (..), Theme (..), emptyTheme)
 import Blink.Update (modify)
-import Blink.View (emit, getFocus, requestFocus)
+import Blink.View (ControlId (..), emit, getFocus, requestFocus)
 
 -- | Every item, top-level and nested alike -- 'Export' is the only one
 -- with a submenu (see 'submenuFor'); 'Csv'\/'Pdf'\/'Json' are its own
 -- items, themselves with no further submenu.
 data Item = Open | Save | Export | Csv | Pdf | Json deriving (Eq, Ord, Show)
 
--- | Every item's own element id ('ItemPart'), plus 'Export's own submenu
--- list\/focus scope id ('ExportSubmenu') and the top-level list's own
--- ('TopList') -- 'itemId' below builds the
--- former for every item regardless of nesting depth, since 'Item' is a
--- single flat type with one constructor per item.
-data Part = ItemPart Item | ExportSubmenu | TopList deriving (Eq, Ord, Show)
+-- | The menu's one id. The list is the whole control; its items and
+-- 'Export's submenu are parts of it.
+data MenuId = TestMenu deriving (Eq, Ord, Show)
 
-testStyleKey :: StyleKey Part
+testStyleKey :: StyleKey MenuId
 testStyleKey = Class "testMenu"
 
--- | 'Export's own submenu -- its focus-scope\/panel id, and its items.
--- Every other item has none.
-submenuFor :: Item -> Maybe (Part, [Item])
-submenuFor Export = Just (ExportSubmenu, [Csv, Pdf, Json])
+-- | 'Export's own submenu items. Every other item has none.
+submenuFor :: Item -> Maybe [Item]
+submenuFor Export = Just [Csv, Pdf, Json]
 submenuFor _       = Nothing
 
 -- | Appends a tagged log entry -- what a test observes, the same
@@ -60,14 +56,14 @@ data Event = Logged Text
 -- it opens -- so this claims it once itself, the one frame nothing is
 -- focused yet, and every frame after simply reaffirms whatever the list's
 -- own navigation has since settled on.
-menuApp :: App Part Event [Text]
+menuApp :: App MenuId Event [Text]
 menuApp = App
   { startUp = pure []
   , theme   = const menuTheme
   , view    = \_ -> elementWithLayout (Layout fill fill TopLeft) $ do
       cur <- getFocus
       case cur of
-        Nothing -> requestFocus Nothing TopList
+        Nothing -> requestFocus Nothing TestMenu
         Just _  -> pure ()
       runElement $
         (menuListWithSubmenus testStyleKey menu (emit (Logged "Closed")) False)
@@ -76,14 +72,14 @@ menuApp = App
   }
   where
     menu = MenuItems
-      { miListId    = TopList
-      , miItemId    = ItemPart
+      { miOwner     = TestMenu
+      , miListId    = Control TestMenu
       , miItems     = [Open, Save, Export]
       , miItemAttrs = itemAttrsFor
       , miSubmenu   = submenuFor
       }
 
-    itemAttrsFor :: Item -> [Attribute (ButtonConfig Part Event)]
+    itemAttrsFor :: Item -> [Attribute (ButtonConfig MenuId Event)]
     itemAttrsFor item =
       [ text (T.pack (show item)), mnemonic (itemMnemonic item), width (exactly 40), height (exactly 20)
       , onFocusGained (post (Logged (T.pack (show item) <> " focused")))
@@ -92,7 +88,7 @@ menuApp = App
 
 -- | The chrome-less test style for everything but the items, which get the
 -- library's real menu item style so its highlight can be observed.
-menuTheme :: Theme Part
+menuTheme :: Theme MenuId
 menuTheme = (emptyTheme (testMetrics, testStyleSet))
   { themeElementStyles = Map.fromList (defaultStyleEntries highlightPalette) }
 

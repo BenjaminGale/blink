@@ -210,7 +210,7 @@ updateApp msg = case msg of
     modify $ \s -> s { backgroundStatus = Fetching }
     cmd fetchDemoFile
   FetchFinished contents -> modify $ \s -> s { backgroundStatus = Fetched contents }
-  JumpToLongListEnd -> scrollViewportTo (LongList ListViewport) 1
+  JumpToLongListEnd -> scrollListTo LongList 1
   SetImageFitWidthEnabled v  -> modify $ \s -> s { imageFitWidthEnabled = v }
   SetImageFitWidth v          -> modify $ \s -> s { imageFitWidth = v }
   SetImageFitHeightEnabled v -> modify $ \s -> s { imageFitHeightEnabled = v }
@@ -318,7 +318,7 @@ radioOptions = ["Small", "Medium", "Large"]
 
 rowRadio :: AppState -> Element ControlId Msg
 rowRadio s =
-  radioButtonGroup RadioOption
+  radioButtonGroup RadioGroup
     ( rowLayout ++
       [ itemSpacing 16
       , items radioOptions
@@ -471,7 +471,7 @@ sidebar s =
   vBox
     [ width (exactly sidebarWidth), height fill, margin 12
     , children
-        [ toggleButtonGroup SidebarPageButton
+        [ toggleButtonGroup SidebarPages
             [ width fill, height fill, orientation Vertical, itemSpacing 4
             , items (map fst pages)
             , itemAttrs (\page -> [text (pageLabel page), width fill, height (exactly 32)])

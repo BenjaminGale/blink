@@ -9,8 +9,7 @@
 -- or focusable row. A draggable handle between each pair of header cells
 -- resizes the two columns it sits between.
 module Blink.Controls.Table
-  ( TablePart (..)
-  , ColumnWidth (..)
+  ( ColumnWidth (..)
   , ColumnConfig (..)
   , defaultColumnConfig
   , column
@@ -50,28 +49,25 @@ import Blink.Controls.Control
 import Blink.Controls.List hiding (defaultStyleEntries)
 import Blink.Element
   ( Element (..), HasLayoutConfig (..), HasSelection (..), HasSelectionChanged (..), elementWithLayout, emptyElement
-  , noIntrinsicSize, runElement
+  , noIntrinsicSize, part, runElement
   )
 import Blink.Geometry (Alignment (TopLeft), Insets (..), Point (pointX), Rectangle (..), insetRect)
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), Length, exactly, fill)
 import Blink.View
-  ( CursorShape (..), Effect, View, getBounds, getExtentState, getMousePos, getStyleSet
+  ( ControlId, CursorShape (..), Effect, View, controlIdOf, getBounds, getMousePos, getStyleSet
   , requestCursor, requestExtentBy, withBounds
   )
+import Blink.View.Context (gets, partId)
+import Blink.View.Extent (contextExtentState)
 import Blink.Style
 import Blink.Controls.Style (plainFillStyle, plainStyle, zeroMetrics)
 
--- | Identifies one part of a 'table' for the purpose of building
--- element ids -- every part 'listBase' itself already needs (the root,
--- a row, a scrollbar part), plus a header cell and, between each pair
--- of header cells, the draggable handle that resizes them (both by
--- column index).
-data TablePart a
-  = TableRow (ListPart a)
-  | TableHeaderCell Int
-  | TableColumnDivider Int
-  deriving (Eq, Ord, Show)
+-- | The parts a column-based list adds to its own: each header cell and,
+-- between each pair of header cells, the handle that resizes them (both
+-- by column index).
+data ColumnPart = HeaderCell Int | ColumnDivider Int
+  deriving Show
 
 -- | A column's own width: a concrete, resizable pixel value, or a share
 -- of whatever space is left (like 'Blink.Layout.Constraints.fill', and
@@ -220,15 +216,15 @@ minColumnWidth = 20
 handleWidth :: Double
 handleWidth = 5
 
--- | A table built on 'listBase' (see the module header). @mkId@ builds
--- every part's element id from a 'TablePart', the same relationship
--- 'listBase's own @mkId@ has to 'ListPart'.
+-- | A table built on 'listBase' (see the module header), identified by
+-- @tid@; its rows, header cells and resize handles are parts of it, as a
+-- list's rows are (see 'list').
 table
   :: (Ord e, Eq a, SelectionModel sel, EmptySelection sel, Eq (sel a))
-  => (TablePart a -> e)
+  => e
   -> [Attribute (TableConfig sel e msg a)]
   -> Element e msg
-table mkId attrs =
+table tid attrs =
   chromeElement (lstLayout (tbList cfg)) (ccStyleKey (lstControl (tbList cfg))) (listMeasure hasColumns (tbList cfg)) (void run)
   where
     cfg        = resolve defaultTableConfig attrs
@@ -236,8 +232,8 @@ table mkId attrs =
     hasColumns = not (null (csColumns cols))
 
     run = do
-      (widths, listCfg) <- withColumns (mkId . TableHeaderCell) (mkId . TableColumnDivider) cols (tbList cfg)
-      listBase (mkId . TableRow) listCfg { lstRenderItem = renderRow widths }
+      (widths, listCfg) <- withColumns tid cols (tbList cfg)
+      listBase tid listCfg { lstRenderItem = renderRow widths }
 
     renderRow widths st = columnRow widths (csColumns cols) (\_ w c -> columnCell w c st)
 
@@ -248,16 +244,16 @@ table mkId attrs =
 -- (see 'columnRow').
 withColumns
   :: Ord e
-  => (Int -> e)                                   -- ^ header cell id, by column index
-  -> (Int -> e)                                   -- ^ resize handle id, by the index of the column before it
+  => e                                            -- ^ the list's own id; header cells and handles are its parts
   -> ColumnsConfig e msg a
   -> ListConfig sel e msg a
   -> View e msg ([Length], ListConfig sel e msg a)
-withColumns mkHeaderId mkDividerId cols listCfg = do
-  widths <- resolveColumnWidths mkDividerId (csColumns cols)
+withColumns lid cols listCfg = do
+  self   <- controlIdOf lid
+  widths <- resolveColumnWidths self (csColumns cols)
   pure (widths, listCfg
     { lstHeader = if null (csColumns cols) then Nothing else
-        Just (columnHeaderRow mkHeaderId mkDividerId
+        Just (columnHeaderRow lid
                 (requestColumnSort (csSort cols) (csOnColumnSortRequested cols)) widths (csColumns cols))
     })
 
@@ -312,8 +308,8 @@ columnSpacer = elementWithLayout (Layout (exactly handleWidth) fill TopLeft) (pu
 -- at the same x under the header as it does in its row.
 columnHeaderRow
   :: Ord e
-  => (Int -> e) -> (Int -> e) -> (Int -> View e msg ()) -> [Length] -> [ColumnConfig e msg a] -> Element e msg
-columnHeaderRow mkHeaderId mkDividerId onSortClick widths cols =
+  => e -> (Int -> View e msg ()) -> [Length] -> [ColumnConfig e msg a] -> Element e msg
+columnHeaderRow lid onSortClick widths cols =
   elementWithLayout (Layout fill fill TopLeft) $ do
     insets <- rowChromeInset
     bounds <- getBounds
@@ -324,16 +320,16 @@ columnHeaderRow mkHeaderId mkDividerId onSortClick widths cols =
     -- hover\/selection highlight.
     let horizontalInsets = insets { topInset = 0, bottomInset = 0 }
     withBounds (insetRect horizontalInsets bounds) $
-      runElement $ hBox [children (weaveColumns (resizeHandle mkDividerId) cells)]
+      runElement $ hBox [children (weaveColumns (resizeHandle lid) cells)]
   where
     cells = [ headerCell idx w c | (idx, w, c) <- zip3 [0 :: Int ..] widths cols ]
 
     -- Its own, unfocusable, hoverable 'control' (see 'tableHeaderStyleKey').
-    headerCell idx w c = Element
+    headerCell idx w c = part lid (partName (HeaderCell idx)) Element
       { elLayout  = Layout w fill TopLeft
       , elMeasure = noIntrinsicSize
       , elRun     = void $ control defaultControlConfig
-          { ccElementId   = Just (mkHeaderId idx)
+          { ccElementId   = Just lid
           , ccStyleKey    = tableHeaderStyleKey
           , ccFocusPolicy = NotFocusable
           , ccContent     = \hci -> do
@@ -360,9 +356,9 @@ rowChromeInset = do
 -- divider (the previous index) does, and never below @minColumnWidth@.
 -- A 'ColumnFill' column is never adjusted directly; it simply absorbs
 -- whatever its neighbours give up.
-resolveColumnWidths :: Ord e => (Int -> e) -> [ColumnConfig e msg a] -> View e msg [Length]
-resolveColumnWidths mkDividerId cols = do
-  extents <- mapM (\i -> getExtentState (mkDividerId i)) [0 .. length cols - 2]
+resolveColumnWidths :: Ord e => ControlId e -> [ColumnConfig e msg a] -> View e msg [Length]
+resolveColumnWidths self cols = do
+  extents <- mapM (\i -> gets (contextExtentState (partId self (partName (ColumnDivider i))))) [0 .. length cols - 2]
   let netDeltas = zipWith (-) (extents ++ [0]) (0 : extents)
   pure (zipWith effectiveLength cols netDeltas)
   where
@@ -380,8 +376,8 @@ resolveColumnWidths mkDividerId cols = do
 -- since (unlike a scrollbar's track) the handle's own position moves as
 -- the drag proceeds, so there's no fixed range to map the pointer onto
 -- absolutely.
-resizeHandle :: Ord e => (Int -> e) -> Int -> Element e msg
-resizeHandle mkDividerId idx = Element
+resizeHandle :: Ord e => e -> Int -> Element e msg
+resizeHandle lid idx = part lid (partName (ColumnDivider idx)) Element
   { elLayout  = Layout (exactly handleWidth) fill TopLeft
   , elMeasure = noIntrinsicSize
   , elRun     = void $ control defaultControlConfig
@@ -393,7 +389,7 @@ resizeHandle mkDividerId idx = Element
       }
   }
   where
-    eid = mkDividerId idx
+    eid = lid
     body ci = do
       let dragging = ciIsCaptured ci
       bounds <- getBounds

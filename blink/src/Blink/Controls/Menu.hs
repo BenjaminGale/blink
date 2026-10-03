@@ -30,7 +30,8 @@ module Blink.Controls.Menu
 
 import Control.Monad (filterM, forM_, when)
 import Data.List (find)
-import Data.Maybe (isJust, listToMaybe)
+import Data.List (elemIndex)
+import Data.Maybe (fromMaybe, isJust, listToMaybe)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 
@@ -47,7 +48,8 @@ import Blink.Layout.Box (children, vBox)
 import Blink.Layout.Constraints (Layout (..), atLeast, fill, fitContent)
 import Blink.Popup (Edge (Start), Side (SideRight), content, placement, popup)
 import Blink.View
-import Blink.View.Context (controlIdIn, gets)
+import Blink.View.Context (UiEffect (..))
+import Blink.View.Focus (withFocusScopeAt)
 import Blink.Element (Element (..), height, width)
 import Blink.Controls.Style (plainStyle)
 import Blink.Style
@@ -59,22 +61,22 @@ import Blink.Style
 -- landed on a control that takes focus itself.
 menuTrigger
   :: Ord e
-  => e -> e -> ToggleConfig e msg -> (View e msg () -> Element e msg)
+  => e -> ControlId e -> ControlId e -> ToggleConfig e msg -> (View e msg () -> Element e msg)
   -> View e msg (ToggleInteraction e msg)
-menuTrigger triggerId listId toggleCfg listFor = do
+menuTrigger owner triggerId listId toggleCfg listFor = do
   enclosingScope <- getCurrentScope
-  r <- toggleBase triggerId toggleCfg { tgcButton = btn { bcControl = ctrl } }
+  r <- withControlId triggerId (toggleBase owner toggleCfg { tgcButton = btn { bcControl = ctrl } })
   let justOpened = tgiSelected r && not wasOpen
       justClosed = wasOpen && not (tgiSelected r)
       refocusTrigger = do
         alreadyClaimed <- hasQueuedFocus enclosingScope
-        when (not alreadyClaimed) $ requestFocus enclosingScope triggerId
+        when (not alreadyClaimed) $ emitUi (Focus enclosingScope triggerId)
       close = do
         runHandlers (tgcOnSelectedChanged toggleCfg) False
         refocusTrigger
-  when justOpened $ requestFocus enclosingScope listId
+  when justOpened $ emitUi (Focus enclosingScope listId)
   when justClosed refocusTrigger
-  when (tgiSelected r) $ popup triggerId [content (listFor close)]
+  when (tgiSelected r) $ withControlId triggerId (popup owner [content (listFor close)])
   pure r
   where
     wasOpen = tgcSelected toggleCfg
@@ -87,18 +89,46 @@ menuTrigger triggerId listId toggleCfg listFor = do
       { ccFocusPolicy = suppressClickToFocus (ccFocusPolicy (bcControl btn))
       }
 
--- | One menu list's ids and items.
+-- | One menu list's ids and items. The list, its items and their
+-- submenus are all parts of @miOwner@: each item is a part of the list
+-- by position, and each submenu a part of its item.
 data MenuItems e b msg = MenuItems
-  { miListId    :: e
-    -- ^ The list's element id and focus scope.
-  , miItemId    :: b -> e
-    -- ^ Each item's id, built from its data so reordering keeps per-item state.
+  { miOwner     :: e
+    -- ^ The id of the control the menu belongs to.
+  , miListId    :: ControlId e
+    -- ^ The list's own id, and its focus scope.
   , miItems     :: [b]
   , miItemAttrs :: b -> [Attribute (ButtonConfig e msg)]
-  , miSubmenu   :: b -> Maybe (e, [b])
-    -- ^ An item's own submenu, if it has one: its list id and its items,
-    -- which may carry further submenus of their own. Ignored by 'menuList'.
+  , miSubmenu   :: b -> Maybe [b]
+    -- ^ An item's own submenu items, if it has any, which may carry
+    -- further submenus of their own. Ignored by 'menuList'.
   }
+
+-- | The parts a menu list is made of: its items, by position, and each
+-- item's submenu.
+data MenuPart = Item Int | Submenu
+  deriving Show
+
+-- | The id of @item@ in @menu@'s list.
+itemIdIn :: Eq b => MenuItems e b msg -> b -> ControlId e
+itemIdIn menu item = partId (miListId menu) (partName (Item (fromMaybe 0 (elemIndex item (miItems menu)))))
+
+-- | @item@'s own submenu, if it has one: the submenu list's id and items.
+submenuOf :: Eq b => MenuItems e b msg -> b -> Maybe (ControlId e, [b])
+submenuOf menu item = (\xs -> (partId (itemIdIn menu item) (partName Submenu), xs)) <$> miSubmenu menu item
+
+-- | Whether the control or part @cid@ of @menu@'s owner holds focus in the
+-- ambient scope.
+focusedAt :: Ord e => MenuItems e b msg -> ControlId e -> View e msg Bool
+focusedAt menu cid = withControlId cid (isFocused (miOwner menu))
+
+-- | Whether the pointer was over @cid@ last frame.
+overAt :: Ord e => MenuItems e b msg -> ControlId e -> View e msg Bool
+overAt menu cid = withControlId cid (wasMouseOverLastFrame (miOwner menu))
+
+-- | Focuses @cid@ within @menu@'s list, from the next frame.
+focusInList :: MenuItems e b msg -> ControlId e -> View e msg ()
+focusInList menu cid = emitUi (Focus (Just (miListId menu)) cid)
 
 -- | A vertical list of buttons, one per item, on a panel styled by
 -- @styleKey@. The list has a minimum width, grows if an item needs more,
@@ -152,9 +182,12 @@ menuListCore
   :: (Ord e, Ord b)
   => StyleKey e -> MenuItems e b msg -> CloseBehaviour e msg -> Bool -> Element e msg
 menuListCore styleKey menu closeBehaviour pressKeepsOpen =
-  controlElement (Layout (atLeast menuMinWidth) fitContent TopLeft) (itemBox (map (toItemElement False) items)) panelCfg
+  asControl listId $
+    controlElement (Layout (atLeast menuMinWidth) fitContent TopLeft) (itemBox (map (toItemElement False) items)) panelCfg
   where
-    MenuItems { miListId = listId, miItemId = itemId, miItems = items, miSubmenu = submenuFor } = menu
+    MenuItems { miOwner = owner, miListId = listId, miItems = items } = menu
+    itemId     = itemIdIn menu
+    submenuFor = submenuOf menu
 
     itemBox kids = vBox [ width fitContent, height fitContent, children kids ]
 
@@ -165,7 +198,7 @@ menuListCore styleKey menu closeBehaviour pressKeepsOpen =
     -- a hit-rect, so a click on the panel background (not an item) would
     -- reach straight through to whatever's behind the popup.
     panelCfg = defaultControlConfig
-      { ccElementId   = Just listId
+      { ccElementId   = Just owner
       , ccStyleKey    = styleKey
       , ccFocusPolicy = NotFocusable
       , ccContent     = const scopedRun
@@ -173,7 +206,7 @@ menuListCore styleKey menu closeBehaviour pressKeepsOpen =
 
     -- While the highlight points at an open submenu, this level's own
     -- handling is skipped; the submenu (its own deferred popup) owns it.
-    scopedRun = withFocusScope listId $ do
+    scopedRun = withFocusScopeAt listId $ do
       openSubmenu <- anySubmenuFocused menu
       onList      <- isRegionHit
       when (not openSubmenu) $ do
@@ -203,17 +236,17 @@ menuListCore styleKey menu closeBehaviour pressKeepsOpen =
       pressed <- isButtonPressed
       when (pressed && not pressKeepsOpen && not onList) (closeAll closeBehaviour)
 
-    toItemElement onList item = captionedButton itemCfg $ do
-      opened <- maybe (pure False) (isFocused . fst) (submenuFor item)
+    toItemElement onList item = captionedButton itemCfg $ withControlId (itemId item) $ do
+      opened <- maybe (pure False) (focusedAt menu . fst) (submenuFor item)
       let states = if opened then Set.singleton menuItemSubmenuOpen else Set.empty
-      r <- buttonBase (itemId item) itemCfg { bcControl = itemCtrl { ccActiveStates = states } }
+      r <- buttonBase owner itemCfg { bcControl = itemCtrl { ccActiveStates = states } }
       case submenuFor item of
         Nothing                -> do
           highlightOnHover item r
           when (biActivated r) (closeAll closeBehaviour)
         Just (subId, subItems) ->
           runSubmenu menu item subId r $
-            popup (itemId item)
+            popup owner
               [ content (submenuElement item subId subItems (onList || pressKeepsOpen))
               , placement SideRight Start
               ]
@@ -224,24 +257,23 @@ menuListCore styleKey menu closeBehaviour pressKeepsOpen =
     -- Keeps a single highlight shared by mouse and keyboard.
     highlightOnHover item r = do
       pointed <- pointerMovedOver menu r
-      when pointed $ requestFocusWithin listId (itemId item)
+      when pointed $ focusInList menu (itemId item)
 
     -- A press on this list keeps the submenu open too, so a click on
     -- another item (to activate it) doesn't close the whole menu first.
     submenuElement item subId subItems pressKeepsSubmenuOpen =
       menuListCore styleKey menu { miListId = subId, miItems = subItems }
-        (Nested (closeAll closeBehaviour) (requestFocusWithin listId (itemId item)))
+        (Nested (closeAll closeBehaviour) (focusInList menu (itemId item)))
         pressKeepsSubmenuOpen
 
-anySubmenuFocused :: Ord e => MenuItems e b msg -> View e msg Bool
+anySubmenuFocused :: (Ord e, Eq b) => MenuItems e b msg -> View e msg Bool
 anySubmenuFocused menu = do
-  cur   <- getFocus
-  toKey <- gets controlIdIn
-  pure $ any (submenuFocused toKey menu cur) (miItems menu)
+  cur <- getFocus
+  pure $ any (submenuFocused menu cur) (miItems menu)
 
 -- | Moves focus by index because Tab traversal doesn't wrap, and menu
 -- items should.
-handleArrowKeys :: Ord e => MenuItems e b msg -> View e msg ()
+handleArrowKeys :: (Ord e, Eq b) => MenuItems e b msg -> View e msg ()
 handleArrowKeys menu = case miItems menu of
   [] -> pure ()
   is -> do
@@ -249,25 +281,24 @@ handleArrowKeys menu = case miItems menu of
     forM_ (find ((`elem` [KeyDown, KeyUp]) . key) evs) $ \e -> do
       consumeKey (key e)
       current <- getFocus
-      toKey   <- gets controlIdIn
       let count        = length is
-          currentIndex = current >>= (`lookup` zip (map (toKey . miItemId menu) is) [0 ..])
+          currentIndex = current >>= (`lookup` zip (map (itemIdIn menu) is) [0 ..])
           nextIndex = case (key e, currentIndex) of
             (KeyDown, Nothing) -> 0
             (KeyDown, Just i)  -> (i + 1) `mod` count
             (_,       Nothing) -> count - 1
             (_,       Just i)  -> (i - 1) `mod` count
-      forM_ (itemAt is nextIndex) $ \item -> requestFocusWithin (miListId menu) (miItemId menu item)
+      forM_ (itemAt is nextIndex) $ \item -> focusInList menu (itemIdIn menu item)
   where
     itemAt xs idx = case drop idx xs of
       (x : _) -> Just x
       []      -> Nothing
 
-handleMnemonics :: Ord e => MenuItems e b msg -> CloseBehaviour e msg -> View e msg ()
+handleMnemonics :: (Ord e, Eq b) => MenuItems e b msg -> CloseBehaviour e msg -> View e msg ()
 handleMnemonics menu closeBehaviour =
   takeMnemonic itemMnemonic (miItems menu) >>= mapM_ (\item ->
-    case miSubmenu menu item of
-      Just (subId, _) -> requestFocusWithin (miListId menu) subId
+    case submenuOf menu item of
+      Just (subId, _) -> focusInList menu subId
       Nothing         -> do
         runHandlers (bcOnActivated (itemConfig menu item)) ()
         closeAll closeBehaviour)
@@ -281,7 +312,7 @@ itemConfig menu item =
 -- | Movement rather than entry, so the pointer takes the highlight back
 -- from the keyboard without first leaving the item. While a sibling's
 -- submenu is open, the delayed switch in 'runSubmenu' moves it instead.
-pointerMovedOver :: Ord e => MenuItems e b msg -> ButtonInteraction e msg -> View e msg Bool
+pointerMovedOver :: (Ord e, Eq b) => MenuItems e b msg -> ButtonInteraction e msg -> View e msg Bool
 pointerMovedOver menu r = do
   moved       <- hasMouseMoved
   siblingOpen <- anySubmenuFocused menu
@@ -292,52 +323,55 @@ pointerMovedOver menu r = do
 -- its submenu straight away; the delayed switch below does, so a
 -- diagonal move towards the open submenu can cross this item safely.
 runSubmenu
-  :: Ord e
-  => MenuItems e b msg -> b -> e -> ButtonInteraction e msg -> View e msg () -> View e msg ()
+  :: (Ord e, Eq b)
+  => MenuItems e b msg -> b -> ControlId e -> ButtonInteraction e msg -> View e msg () -> View e msg ()
 runSubmenu menu item subId r showSubmenu = do
-  opened <- isFocused subId
+  opened <- focusedAt menu subId
   when (not opened) $ do
     pointed      <- pointerMovedOver menu r
-    highlighted  <- isFocused (miItemId menu item)
+    highlighted  <- focusedAt menu (itemIdIn menu item)
     rightPressed <- if highlighted then takeKey KeyRight else pure False
     when (pointed || biActivated r || rightPressed) $
-      requestFocusWithin (miListId menu) subId
+      focusInList menu subId
   leaving <- if opened then leavingSubmenu menu item subId else pure False
-  heldFor <- resolveHeldFor subId leaving
+  heldFor <- withControlId subId (resolveHeldFor (miOwner menu) leaving)
   when (heldFor >= submenuSwitchDelay) $ do
     sibling <- hoveredSibling menu item
-    forM_ sibling $ \it -> requestFocusWithin (miListId menu) (maybe (miItemId menu it) fst (miSubmenu menu it))
+    forM_ sibling $ \it -> focusInList menu (maybe (itemIdIn menu it) fst (submenuOf menu it))
   when opened showSubmenu
 
 -- | Anywhere on this list other than @item@ counts, including the gaps
 -- between items, so sweeping across several items doesn't restart the
 -- delay. Uses last frame's hover because items later in the list
 -- haven't run yet this frame.
-leavingSubmenu :: Ord e => MenuItems e b msg -> b -> e -> View e msg Bool
+leavingSubmenu :: (Ord e, Eq b) => MenuItems e b msg -> b -> ControlId e -> View e msg Bool
 leavingSubmenu menu item subId = do
-  overList    <- wasMouseOverLastFrame (miListId menu)
-  overItem    <- wasMouseOverLastFrame (miItemId menu item)
-  overSubmenu <- wasMouseOverLastFrame subId
+  overList    <- overAt menu (miListId menu)
+  overItem    <- overAt menu (itemIdIn menu item)
+  overSubmenu <- overAt menu subId
   pure (overList && not overItem && not overSubmenu)
 
-hoveredSibling :: Ord e => MenuItems e b msg -> b -> View e msg (Maybe b)
-hoveredSibling menu item = listToMaybe <$> filterM (wasMouseOverLastFrame . miItemId menu) siblings
-  where siblings = filter ((/= miItemId menu item) . miItemId menu) (miItems menu)
+hoveredSibling :: (Ord e, Eq b) => MenuItems e b msg -> b -> View e msg (Maybe b)
+hoveredSibling menu item = listToMaybe <$> filterM (overAt menu . itemIdIn menu) siblings
+  where siblings = filter (/= item) (miItems menu)
 
 -- | 'True' when @listId@'s highlight is on an item with a submenu, or in
 -- that submenu. Left\/Right then belongs to this list rather than to an
 -- enclosing control, such as 'Blink.Controls.MenuBar.menuBar' switching
 -- menus.
 submenuInPlay :: (Ord e, Ord b) => MenuItems e b msg -> View e msg Bool
-submenuInPlay menu = withFocusScope (miListId menu) $ do
-  cur   <- getFocus
-  toKey <- gets controlIdIn
-  let itemFocused it = isJust (miSubmenu menu it) && cur == Just (toKey (miItemId menu it))
-  pure $ any (\it -> itemFocused it || submenuFocused toKey menu cur it) (miItems menu)
+submenuInPlay menu = withFocusScopeAt (miListId menu) $ do
+  cur <- getFocus
+  let itemFocused it = isJust (miSubmenu menu it) && cur == Just (itemIdIn menu it)
+  pure $ any (\it -> itemFocused it || submenuFocused menu cur it) (miItems menu)
 
 -- | Whether @cur@ is @item@'s own submenu.
-submenuFocused :: Ord e => (e -> ControlId e) -> MenuItems e b msg -> Maybe (ControlId e) -> b -> Bool
-submenuFocused toKey menu cur item = maybe False ((== cur) . Just . toKey . fst) (miSubmenu menu item)
+submenuFocused :: (Ord e, Eq b) => MenuItems e b msg -> Maybe (ControlId e) -> b -> Bool
+submenuFocused menu cur item = maybe False ((== cur) . Just . fst) (submenuOf menu item)
+
+-- | @el@ run, and measured, as @cid@ -- see 'withControlId'.
+asControl :: Ord e => ControlId e -> Element e msg -> Element e msg
+asControl cid el = el { elMeasure = withControlId cid . elMeasure el, elRun = withControlId cid (elRun el) }
 
 -- * Style
 
