@@ -13,6 +13,7 @@ module Blink.SDL2.Rendering
 
 import Blink.Backend
 import Blink.Geometry
+import Blink.SDL2.Fonts (FontCache, loadFont)
 import SDL (($=))
 import qualified SDL
 import qualified SDL.Raw as Raw
@@ -89,7 +90,7 @@ evictLRU onEvict m = do
   mapM_ (onEvict . fst . snd) toEvict
   pure (Map.fromList toKeep)
 
-type TextureCache = BoundedCache (Text, SDL.V4 Word8) (SDL.Texture, CInt, CInt)
+type TextureCache = BoundedCache (Font, Text, SDL.V4 Word8) (SDL.Texture, CInt, CInt)
 
 destroyTextureEntry :: (SDL.Texture, CInt, CInt) -> IO ()
 destroyTextureEntry (t, _, _) = SDL.destroyTexture t
@@ -284,11 +285,12 @@ submitMesh renderer color (verts, idxs)
 expandBy :: Double -> Rectangle -> Rectangle
 expandBy o r = Rectangle (rectX r - o) (rectY r - o) (rectWidth r + 2 * o) (rectHeight r + 2 * o)
 
-renderText :: SDL.Renderer -> Font.Font -> TextureCache -> Rectangle -> Text -> Colour -> TextAlign -> IO ()
-renderText renderer font cache r txt color textAlign = do
+renderText :: SDL.Renderer -> FontCache -> TextureCache -> Rectangle -> Text -> Font -> Colour -> TextAlign -> IO ()
+renderText renderer fonts cache r txt font color textAlign = do
   let sdlColor = toSDLColor color
-  (texture, tw, th) <- cacheGetOrCreate cache destroyTextureEntry (txt, sdlColor) $ do
-    surface <- Font.blended font sdlColor txt
+  (texture, tw, th) <- cacheGetOrCreate cache destroyTextureEntry (font, txt, sdlColor) $ do
+    sdlFont <- loadFont fonts font
+    surface <- Font.blended sdlFont sdlColor txt
     tex     <- SDL.createTextureFromSurface renderer surface
     SDL.freeSurface surface
     (SDL.TextureInfo _ _ w h) <- SDL.queryTexture tex
@@ -331,33 +333,34 @@ popClip renderer clipRef = do
     []            -> SDL.rendererClipRect renderer $= Nothing
     (topClip : _) -> SDL.rendererClipRect renderer $= Just topClip
 
-submitDrawCommand :: SDL.Renderer -> Font.Font -> TextureCache -> ImageCache -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
+submitDrawCommand :: SDL.Renderer -> FontCache -> TextureCache -> ImageCache -> IORef [SDL.Rectangle CInt] -> DrawCommand -> IO ()
 submitDrawCommand renderer _ _ _ _          (FillRect r color)            = renderFill   renderer r color
 submitDrawCommand renderer _ _ _ _          (FillRoundedRect r radii color) = renderRoundedFill renderer r radii color
 submitDrawCommand renderer _ _ _ _          (StrokeBorder r border)      = renderBorder renderer r border
-submitDrawCommand _ _ _ _ _                 (DrawText _ txt _ _) | T.null txt = pure ()
-submitDrawCommand renderer font cache _ _   (DrawText r txt color textAlign) = renderText renderer font cache r txt color textAlign
+submitDrawCommand _ _ _ _ _                 (DrawText _ txt _ _ _) | T.null txt = pure ()
+submitDrawCommand renderer fonts cache _ _  (DrawText r txt font color textAlign) = renderText renderer fonts cache r txt font color textAlign
 submitDrawCommand renderer _ _ imgCache _   (DrawImage r path colour)     = renderImage  renderer imgCache r path colour
 submitDrawCommand renderer _ _ _ clipRef    (PushClip r)                  = pushClip     renderer clipRef r
 submitDrawCommand renderer _ _ _ clipRef     PopClip                      = popClip      renderer clipRef
 
-mkTextMeasurer :: Font.Font -> IO TextMeasurer
-mkTextMeasurer font = do
-  offsetCache <- newBoundedCache :: IO (BoundedCache Text [Float])
+mkTextMeasurer :: FontCache -> IO TextMeasurer
+mkTextMeasurer fonts = do
+  offsetCache <- newBoundedCache :: IO (BoundedCache (Font, Text) [Float])
   pure TextMeasurer
-    { tmCharOffset   = \t i -> do
-        offsets <- getOffsets offsetCache font t
+    { tmCharOffset   = \font t i -> do
+        offsets <- getOffsets offsetCache fonts font t
         pure $ indexOr 0 i offsets
 
-    , tmCharAtOffset = \t x -> do
-        offsets <- getOffsets offsetCache font t
+    , tmCharAtOffset = \font t x -> do
+        offsets <- getOffsets offsetCache fonts font t
         pure $ findCharAt offsets x
 
-    , tmTextSize     = \t ->
+    , tmTextSize     = \font t -> do
+        sdlFont <- loadFont fonts font
         if T.null t
-          then do h <- Font.height font
+          then do h <- Font.height sdlFont
                   pure (Size 0 (fromIntegral h))
-          else do (w, h) <- Font.size font t
+          else do (w, h) <- Font.size sdlFont t
                   pure (Size (fromIntegral w) (fromIntegral h))
     }
 
@@ -368,8 +371,10 @@ mkImageMeasurer renderer cache = ImageMeasurer
       pure (Size (fromIntegral w) (fromIntegral h))
   }
 
-getOffsets :: BoundedCache Text [Float] -> Font.Font -> Text -> IO [Float]
-getOffsets cache font t = cacheGetOrCreate cache (const (pure ())) t (buildOffsets font t)
+getOffsets :: BoundedCache (Font, Text) [Float] -> FontCache -> Font -> Text -> IO [Float]
+getOffsets cache fonts font t = cacheGetOrCreate cache (const (pure ())) (font, t) $ do
+  sdlFont <- loadFont fonts font
+  buildOffsets sdlFont t
 
 buildOffsets :: Font.Font -> Text -> IO [Float]
 buildOffsets font t = do

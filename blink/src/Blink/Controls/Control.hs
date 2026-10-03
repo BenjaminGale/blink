@@ -688,7 +688,9 @@ measureChrome :: Ord e => StyleKey e -> Element e msg -> MeasureCtx -> View e ms
 measureChrome k child ctx = do
   (m, styleSet) <- getStyleSet k
   let insets = chromeInsets m (styleBase styleSet)
-  sz <- elMeasure child ctx
+  -- Measured in the control's own base style, so text is sized in the
+  -- control's font rather than whatever its parent was drawing in.
+  sz <- withStyle (styleBase styleSet) $ elMeasure child ctx
     { measureMain  = shrink (axisInset (measureAxis ctx) insets) (measureMain ctx)
     , measureCross = shrink (axisInset (otherAxis (measureAxis ctx)) insets) (measureCross ctx)
     }

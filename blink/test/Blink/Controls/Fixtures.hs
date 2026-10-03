@@ -29,7 +29,7 @@ import Blink.Geometry (Alignment (TopLeft), Insets, Point (..), Rectangle (..), 
 import Blink.Input (InputState (..), emptyInputState)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), TextAlign (..), TextMeasurer (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), noBorder)
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme, defaultStyle, emptyTheme)
 import Blink.View (View, withBounds)
 import Blink.Testing (ViewContext, runView)
 
@@ -40,11 +40,10 @@ testColour = RGBA 0 0 0 1
 -- no border -- the shape nearly every control test starts from before
 -- overriding the one or two fields it actually cares about.
 plainStyle :: Colour -> Style
-plainStyle c = Style
+plainStyle c = defaultStyle
   { styleBackground   = c
   , styleTextColour   = c
   , styleTextAlign    = AlignCenter
-  , styleBorder       = noBorder
   }
 
 plainMetrics :: Insets -> Insets -> Metrics
@@ -67,7 +66,7 @@ plainStyleSet :: Style -> StyleSet
 plainStyleSet s = StyleSet { styleBase = s, styleOverrides = Map.empty }
 
 mkTestTheme :: Metrics -> StyleSet -> Theme e
-mkTestTheme m s = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (m, s) }
+mkTestTheme m s = emptyTheme (m, s)
 
 -- | A cursor position well outside any control under test, so nothing
 -- reads as hovered by default.
@@ -98,9 +97,9 @@ startAt ctx v = snd <$> runView v ctx
 -- | Every character @charWidth@ wide, every line @lineHeight@ high.
 monospaceTextMeasurer :: Double -> Double -> TextMeasurer
 monospaceTextMeasurer charWidth lineHeight = TextMeasurer
-  { tmCharOffset   = \_ n -> pure (fromIntegral n * realToFrac charWidth)
-  , tmCharAtOffset = \_ x -> pure (round (x / realToFrac charWidth))
-  , tmTextSize     = \t -> pure (Size (fromIntegral (T.length t) * charWidth) lineHeight)
+  { tmCharOffset   = \_ _ n -> pure (fromIntegral n * realToFrac charWidth)
+  , tmCharAtOffset = \_ _ x -> pure (round (x / realToFrac charWidth))
+  , tmTextSize     = \_ t -> pure (Size (fromIntegral (T.length t) * charWidth) lineHeight)
   }
 
 -- | A plain control identified by @holder@, placed off-screen. Rendered

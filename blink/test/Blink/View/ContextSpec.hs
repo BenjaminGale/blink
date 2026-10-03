@@ -123,10 +123,8 @@ spec = describe "Blink.View.Context" $ do
               , (CommonDisabled,  \s -> s { styleBackground = RGBA 1 1 1 1 })
               ]
           }
-        styledTheme = Theme
-          { themeElementStyles = Map.singleton (ElementId ()) (emptyMetrics, distinctStyles)
-          , themeDefaultStyle  = (emptyMetrics, emptyStyleSet)
-          }
+        styledTheme = emptyTheme
+          { themeElementStyles = Map.singleton (ElementId ()) (emptyMetrics, distinctStyles) }
         runStyled ui = runView ui (emptyViewContext testBounds noInput styledTheme)
 
     describe "getStyleSet" $ do

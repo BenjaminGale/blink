@@ -39,7 +39,6 @@ import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.View
 import Blink.Element (Element (..), HasLayoutConfig (..), noIntrinsicSize, HasStep (..), HasValue (..))
 import Blink.Style
-import Blink.Rendering (TextAlign (..))
 import Blink.Controls.Style (plainFillStyle, trackMetrics, thumbStyle, zeroMetrics, transparent, valueFillStyle)
 
 -- | The height of the thin filled bar drawn along the middle of the
@@ -223,10 +222,9 @@ sliderThumbStyleKey = Class "sliderThumb"
 -- and draws the focus ring in the accent colour while focused.
 sliderStyle :: Palette -> StyleSet
 sliderStyle p = StyleSet
-  { styleBase = Style
+  { styleBase = defaultStyle
       { styleBackground = transparent
       , styleTextColour = paletteTextPrimary p
-      , styleTextAlign  = AlignLeft
       , styleBorder     = soloBorder transparent 1
       }
   , styleOverrides = Map.singleton FocusFocused

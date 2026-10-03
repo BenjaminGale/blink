@@ -311,10 +311,9 @@ bottomOnly = allEdgesVisible { edgeTopVisible = False, edgeRightVisible = False,
 
 menuBarStyle :: Palette -> StyleSet
 menuBarStyle p = StyleSet
-  { styleBase = Style
+  { styleBase = defaultStyle
       { styleBackground   = paletteSurface p
       , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
       , styleBorder       = map (\l -> l { layerVisible = bottomOnly }) (soloBorder (paletteBorder p) 1)
       }
   , styleOverrides = Map.empty
@@ -322,7 +321,7 @@ menuBarStyle p = StyleSet
 
 menuBarLabelStyle :: Palette -> StyleSet
 menuBarLabelStyle p = StyleSet
-  { styleBase = Style
+  { styleBase = defaultStyle
       { styleBackground   = transparent
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = AlignCenter

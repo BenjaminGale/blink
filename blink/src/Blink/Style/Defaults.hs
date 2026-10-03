@@ -83,7 +83,7 @@ import qualified Blink.Controls.Tree as Tree
 -- boxed-control look. See /Module layout/ above for where each entry
 -- actually comes from.
 defaultTheme :: Ord e => Palette -> Theme e
-defaultTheme p = Theme
+defaultTheme p = (emptyTheme (controlMetrics, buttonStyle AlignCenter p))
   { themeElementStyles = Map.fromList (concat
       [ Button.defaultStyleEntries p
       , ToggleButton.defaultStyleEntries p
@@ -106,5 +106,4 @@ defaultTheme p = Theme
       , MenuBar.defaultStyleEntries p
       , [ (iconStyleKey, (zeroMetrics, iconStyle p)) ]
       ])
-  , themeDefaultStyle = (controlMetrics, buttonStyle AlignCenter p)
   }

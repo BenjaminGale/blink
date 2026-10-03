@@ -13,8 +13,11 @@ module Blink.Rendering
   ( -- * Colour
     Colour (..)
   , isVisible
-    -- * Text alignment
+    -- * Text
   , TextAlign (..)
+  , Font (..)
+  , FontWeight (..)
+  , defaultFont
     -- * Draw commands
   , ImagePath
   , DrawCommand (..)
@@ -34,15 +37,36 @@ module Blink.Rendering
 import Data.Text (Text)
 import Blink.Geometry (Rectangle, Size (..), Colour (..), isVisible, Border, CornerRadii)
 
+-- | How heavy a font's strokes are.
+data FontWeight = Regular | Bold
+  deriving (Eq, Ord, Show)
+
+-- | The font a piece of text is drawn and measured in.
+data Font = Font
+  { fontFamily :: Maybe Text
+    -- ^ The family name, as the backend knows it. 'Nothing' means the
+    -- backend's default family.
+  , fontSize   :: Double
+    -- ^ The size in points.
+  , fontWeight :: FontWeight
+  } deriving (Eq, Ord, Show)
+
+-- | The backend's default family at 14 points, regular weight -- the font
+-- every built-in control uses unless a theme says otherwise.
+defaultFont :: Font
+defaultFont = Font { fontFamily = Nothing, fontSize = 14, fontWeight = Regular }
+
 -- | Text measurement operations provided to the View for cursor positioning.
 -- Construct one from your platform's font API and pass it to
 -- 'Blink.App.configureContinuous' or 'Blink.App.configureEventDriven'.
+-- Every operation measures in the given 'Font', which must match how the
+-- backend draws 'DrawText' in that font.
 data TextMeasurer = TextMeasurer
-  { tmCharOffset   :: Text -> Int -> IO Float
+  { tmCharOffset   :: Font -> Text -> Int -> IO Float
     -- ^ X offset (pixels) of character index @n@ from the start of the string.
-  , tmCharAtOffset :: Text -> Float -> IO Int
+  , tmCharAtOffset :: Font -> Text -> Float -> IO Int
     -- ^ Character index closest to the given x offset.
-  , tmTextSize     :: Text -> IO Size
+  , tmTextSize     :: Font -> Text -> IO Size
     -- ^ Pixel dimensions of the rendered string.
   }
 
@@ -50,9 +74,9 @@ data TextMeasurer = TextMeasurer
 -- when no font backend is available.
 noOpTextMeasurer :: TextMeasurer
 noOpTextMeasurer = TextMeasurer
-  { tmCharOffset   = \_ _ -> pure 0
-  , tmCharAtOffset = \_ _ -> pure 0
-  , tmTextSize     = \_ -> pure (Size 0 0)
+  { tmCharOffset   = \_ _ _ -> pure 0
+  , tmCharAtOffset = \_ _ _ -> pure 0
+  , tmTextSize     = \_ _ -> pure (Size 0 0)
   }
 
 -- | Horizontal alignment of text within its bounding rectangle.
@@ -115,8 +139,9 @@ data DrawCommand
   | StrokeBorder Rectangle Border
     -- ^ Stroke the rectangle's border with the given stack of layers,
     -- drawn back-to-front.
-  | DrawText Rectangle Text Colour TextAlign
-    -- ^ Render text within the rectangle using the given colour and alignment.
+  | DrawText Rectangle Text Font Colour TextAlign
+    -- ^ Render text within the rectangle in the given font, colour and
+    -- alignment.
   | DrawImage Rectangle ImagePath Colour
     -- ^ Render the image at the given path, stretched to fill the
     -- rectangle, tinted by the given colour -- a fully-opaque white

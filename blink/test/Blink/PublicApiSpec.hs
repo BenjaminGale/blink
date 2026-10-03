@@ -60,7 +60,7 @@ todoTheme = (emptyTheme (plainMetrics, plainStyleSet))
   { themeElementStyles = Map.fromList [(Class "accent", (plainMetrics, plainStyleSet { styleBase = plainStyle { styleBackground = accent } }))] }
   where
     plainMetrics  = Metrics { metricsMargin = uniform 0, metricsPadding = uniform 0 }
-    plainStyle    = Style { styleBackground = RGBA 0 0 0 1, styleTextColour = RGBA 0 0 0 1, styleTextAlign = AlignLeft, styleBorder = noBorder }
+    plainStyle    = defaultStyle { styleBackground = RGBA 0 0 0 1 }
     plainStyleSet = StyleSet { styleBase = plainStyle, styleOverrides = mempty }
 
 todoApp :: Todos -> App ControlId Msg Todos

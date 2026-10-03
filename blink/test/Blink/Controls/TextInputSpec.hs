@@ -11,7 +11,7 @@ import Blink.Controls.Fixtures (contentRectFor, fullSizeAt, hitRectFor, mkTestTh
 import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Input (Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
+import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), defaultFont)
 import Blink.Style (Style (..), Theme)
 import Blink.Controls.TextInput
   (TextInputConfig, displayFilter, inputFilter, onInput, onSubmit, placeholder, value, textInput)
@@ -79,27 +79,27 @@ spec = describe "Blink.Controls.TextInput" $ do
   describe "rendering" $ do
     it "displays the value without a cursor when unfocused" $ do
       result <- runInteractions testBounds seedCtx (unfocused [value "hello"]) [] []
-      resultDraws result `shouldContain` [DrawText contentRect "hello" testColour AlignLeft]
+      resultDraws result `shouldContain` [DrawText contentRect "hello" defaultFont testColour AlignLeft]
       resultDraws result `shouldNotContain` [cursorRectAt 15]
 
     it "displays the value with a cursor when focused" $ do
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field [value "hello"]) [] [ClickAt focusPt]
-      resultDraws result `shouldContain` [DrawText contentRect "hello" testColour AlignLeft]
+      resultDraws result `shouldContain` [DrawText contentRect "hello" defaultFont testColour AlignLeft]
       resultDraws result `shouldContain` [cursorRectAt 15]
 
   describe "placeholder" $ do
     it "shows the placeholder, muted toward the background, when the value is empty" $ do
       result <- runInteractions testBounds seedCtx (unfocused [placeholder "hint"]) [] []
-      resultDraws result `shouldContain` [DrawText contentRect "hint" (RGBA 0.6 0.6 0.6 1) AlignLeft]
+      resultDraws result `shouldContain` [DrawText contentRect "hint" defaultFont (RGBA 0.6 0.6 0.6 1) AlignLeft]
 
     it "shows the value instead of the placeholder once there is input" $ do
       result <- runInteractions testBounds seedCtx (unfocused [value "hello", placeholder "hint"]) [] []
-      resultDraws result `shouldContain` [DrawText contentRect "hello" testColour AlignLeft]
-      resultDraws result `shouldNotContain` [DrawText contentRect "hint" (RGBA 0.6 0.6 0.6 1) AlignLeft]
+      resultDraws result `shouldContain` [DrawText contentRect "hello" defaultFont testColour AlignLeft]
+      resultDraws result `shouldNotContain` [DrawText contentRect "hint" defaultFont (RGBA 0.6 0.6 0.6 1) AlignLeft]
 
     it "still draws the cursor over the placeholder when focused" $ do
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field [placeholder "hint"]) [] [ClickAt focusPt]
-      resultDraws result `shouldContain` [DrawText contentRect "hint" (RGBA 0.6 0.6 0.6 1) AlignLeft]
+      resultDraws result `shouldContain` [DrawText contentRect "hint" defaultFont (RGBA 0.6 0.6 0.6 1) AlignLeft]
       resultDraws result `shouldContain` [cursorRectAt 15]
 
   describe "text editing" $ do
@@ -316,8 +316,8 @@ spec = describe "Blink.Controls.TextInput" $ do
     it "displays a filtered value instead of the real one" $ do
       let attrs = [value "hunter2", displayFilter (T.map (const '*'))]
       result <- runInteractions testBounds seedCtx (fullSizeTextInput Field attrs) [] [ClickAt focusPt]
-      resultDraws result `shouldContain` [DrawText contentRect "*******" testColour AlignLeft]
-      resultDraws result `shouldNotContain` [DrawText contentRect "hunter2" testColour AlignLeft]
+      resultDraws result `shouldContain` [DrawText contentRect "*******" defaultFont testColour AlignLeft]
+      resultDraws result `shouldNotContain` [DrawText contentRect "hunter2" defaultFont testColour AlignLeft]
 
     it "still edits and reports the real (unfiltered) value" $ do
       let attrs = [value "hunter2", displayFilter (T.map (const '*')), onInput (postWith (\t -> (T.unpack t)))]

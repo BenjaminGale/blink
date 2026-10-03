@@ -78,6 +78,7 @@ module Blink.View.Context
   , currentStyle
   , withStyle
   , currentMetrics
+  , currentFont
   , withMetrics
     -- * Text measurement
   , charOffset
@@ -142,6 +143,7 @@ module Blink.View.Context
 import Control.Monad (forM_, unless)
 import Data.Char (toUpper)
 import Data.List (find, foldl')
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -151,7 +153,7 @@ import Blink.Input
   ( Key (..), KeyEvent (..), Modifier (..), InputState (..)
   , Mouse (..), emptyMouse, advanceButton, advanceHover, mnemonicActivated
   )
-import Blink.Style (Style, StyleSet, Metrics, StyleKey (..), Theme (..), resolveStyle)
+import Blink.Style (Font, Style (styleFont), StyleSet, Metrics, StyleKey (..), Theme (..), resolveStyle)
 
 --------------------------------------------------------------------------------
 -- Focus (pure)
@@ -1268,24 +1270,33 @@ setFocusChange scopeId newFocus ctx = ctx { ctxFocus = updateScope (ctxFocus ctx
       , focusLost  = LostThisFrame (currentFocus (focusClaim fs))
       }
 
+-- | The font text is drawn and measured in right now: the current
+-- style's own font, or the theme's when the style doesn't choose one.
+currentFont :: View e msg Font
+currentFont = gets contextFont
+
+contextFont :: ViewContext e msg -> Font
+contextFont ctx = fromMaybe (themeFont (ctxTheme ctx)) (styleFont (ctxStyle ctx))
+
 -- | Returns the x offset (pixels) of character index @n@ from the start of
--- @text@, using the backend's text measurer.
+-- @text@ in the current style's font, using the backend's text measurer.
 charOffset :: Text -> Int -> View e msg Float
 charOffset text n = View $ \ctx -> do
-  v <- tmCharOffset (msrText (ctxMeasurers ctx)) text n
+  v <- tmCharOffset (msrText (ctxMeasurers ctx)) (contextFont ctx) text n
   pure (v, ctx)
 
--- | Returns the character index closest to x offset @x@ in @text@, using the
--- backend's text measurer.
+-- | Returns the character index closest to x offset @x@ in @text@, in the
+-- current style's font, using the backend's text measurer.
 charAtOffset :: Text -> Float -> View e msg Int
 charAtOffset text x = View $ \ctx -> do
-  v <- tmCharAtOffset (msrText (ctxMeasurers ctx)) text x
+  v <- tmCharAtOffset (msrText (ctxMeasurers ctx)) (contextFont ctx) text x
   pure (v, ctx)
 
--- | Returns the pixel dimensions of @text@ as rendered by the current font.
+-- | Returns the pixel dimensions of @text@ as rendered in the current
+-- style's font.
 measureText :: Text -> View e msg Size
 measureText text = View $ \ctx -> do
-  v <- tmTextSize (msrText (ctxMeasurers ctx)) text
+  v <- tmTextSize (msrText (ctxMeasurers ctx)) (contextFont ctx) text
   pure (v, ctx)
 
 -- | Returns the natural pixel dimensions of the image at @path@, using the

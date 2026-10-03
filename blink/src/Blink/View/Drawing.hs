@@ -21,7 +21,7 @@ module Blink.View.Drawing
 import Control.Monad (when)
 import Data.Text (Text)
 import Blink.Geometry (Rectangle, Border, BorderLayer (..), CornerRadii, intersectRect, uniformRadii)
-import Blink.View (View, draw, getBounds, getInteractionClip, withInteractionClip)
+import Blink.View (View, currentFont, draw, getBounds, getInteractionClip, withInteractionClip)
 import Blink.Rendering (Colour, TextAlign, ImagePath, DrawCommand (..), isVisible)
 
 -- | Builds a 'DrawCommand' from the current bounds and queues it.
@@ -48,9 +48,13 @@ fillRoundedRect radii colour
 strokeRect :: Border -> View e msg ()
 strokeRect border = drawAt (\r -> StrokeBorder r border)
 
--- | Renders text within the current bounds using the given colour and alignment.
+-- | Renders text within the current bounds using the given colour and
+-- alignment, in 'Blink.View.currentFont' -- the same font
+-- 'Blink.View.measureText' measures in.
 drawText :: Colour -> TextAlign -> Text -> View e msg ()
-drawText colour align text = drawAt (\r -> DrawText r text colour align)
+drawText colour align text = do
+  font <- currentFont
+  drawAt (\r -> DrawText r text font colour align)
 
 -- | Renders the image at @path@ stretched to fill the current bounds,
 -- tinted by @colour@ -- see 'DrawImage' for what tinting does and does

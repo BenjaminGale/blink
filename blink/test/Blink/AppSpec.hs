@@ -363,7 +363,7 @@ focusApp = App
 -- test can observe how many times a frame's view actually ran.
 countingMeasurer :: IORef Int -> TextMeasurer
 countingMeasurer ref = noOpTextMeasurer
-  { tmTextSize = \_ -> modifyIORef' ref (+1) >> pure (Size 0 0) }
+  { tmTextSize = \_ _ -> modifyIORef' ref (+1) >> pure (Size 0 0) }
 
 -- Measures text every render (making render count observable via
 -- 'countingMeasurer') and emits a message only when @emits@ is True.

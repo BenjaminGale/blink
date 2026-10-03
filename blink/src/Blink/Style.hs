@@ -53,11 +53,10 @@ palette = Palette
   }
 
 baseStyle :: Style
-baseStyle = Style
+baseStyle = defaultStyle
   { styleBackground   = paletteSurface palette
   , styleTextColour   = paletteTextPrimary palette
   , styleTextAlign    = AlignCenter
-  , styleBorder       = noBorder
   }
 
 baseMetrics :: Metrics
@@ -108,6 +107,10 @@ module Blink.Style
   , groupOf
     -- * Style
   , Style (..)
+  , defaultStyle
+  , Font (..)
+  , FontWeight (..)
+  , defaultFont
   , StyleSet (..)
   , resolveStyle
     -- * Theme
@@ -141,7 +144,7 @@ import Blink.Geometry
   , CornerRadii (..), EdgeVisibility (..), BorderLayer (..), Border
   , noBorder, uniformRadii, allEdgesVisible
   )
-import Blink.Rendering (Colour (..), TextAlign (..))
+import Blink.Rendering (Colour (..), Font (..), FontWeight (..), TextAlign (..), defaultFont)
 
 -- * Palette
 
@@ -227,8 +230,25 @@ data Style = Style
   { styleBackground :: Colour   -- ^ Fill colour for the background rectangle (inside the margin).
   , styleTextColour :: Colour   -- ^ Colour used for text and simple fill drawing.
   , styleTextAlign :: TextAlign -- ^ Horizontal text alignment within the content rectangle.
+  , styleFont :: Maybe Font     -- ^ The font text is drawn and measured in; 'Nothing' uses the theme's 'themeFont'.
   , styleBorder :: Border       -- ^ The border's layer stack, drawn back-to-front; 'noBorder' draws nothing.
   } deriving (Eq, Show)
+
+-- | A transparent background, black left-aligned text in the theme's
+-- font, and no border. Build other styles from it by record update, so a
+-- field a style doesn't set keeps this value:
+--
+-- @
+-- warning = defaultStyle { styleBackground = RGBA 1 0.8 0 1, styleTextAlign = AlignCenter }
+-- @
+defaultStyle :: Style
+defaultStyle = Style
+  { styleBackground = RGBA 0 0 0 0
+  , styleTextColour = RGBA 0 0 0 1
+  , styleTextAlign  = AlignLeft
+  , styleFont       = Nothing
+  , styleBorder     = noBorder
+  }
 
 -- | The colour of the outermost (first) layer in a 'Style' record's
 -- border, if it has one -- for code that only draws a single flat
@@ -320,9 +340,12 @@ data Theme e = Theme
     -- ^ Per-element or per-class overrides, keyed by 'StyleKey'.
   , themeDefaultStyle :: (Metrics, StyleSet)
     -- ^ Fallback used when a 'StyleKey' has no entry in 'themeElementStyles'.
+  , themeFont :: Font
+    -- ^ The font for every style whose 'styleFont' is 'Nothing'. Change
+    -- this to change the font of every control that doesn't choose its own.
   }
 
 -- | Creates a 'Theme' with no per-element overrides; every element
--- resolves to @def@.
+-- resolves to @def@, in 'defaultFont'.
 emptyTheme :: (Metrics, StyleSet) -> Theme e
-emptyTheme def = Theme { themeElementStyles = Map.empty, themeDefaultStyle = def }
+emptyTheme def = Theme { themeElementStyles = Map.empty, themeDefaultStyle = def, themeFont = defaultFont }

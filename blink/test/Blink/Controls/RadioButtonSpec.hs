@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Controls.Control (Attribute)
-import Blink.Controls.Fixtures (fullSizeAt, hitRectFor, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
+import Blink.Controls.Fixtures (fullSizeAt, hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
 import Blink.Controls.Label (text)
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.Style (iconStyleKey)
@@ -13,7 +13,7 @@ import Blink.Controls.ToggleButton (ToggleConfig, isSelected)
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
+import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), defaultFont)
 import Blink.Style (StyleSet (..), Theme (..), VisualState (CommonMouseOver), styleTextColour)
 import Blink.View
 import Blink.Testing
@@ -40,10 +40,8 @@ iconStyleSet = StyleSet
   }
 
 testTheme :: Theme TestElement
-testTheme = Theme
-  { themeElementStyles = Map.singleton iconStyleKey (standardMetrics, iconStyleSet)
-  , themeDefaultStyle  = (standardMetrics, testStyleSet)
-  }
+testTheme = (mkTestTheme standardMetrics testStyleSet)
+  { themeElementStyles = Map.singleton iconStyleKey (standardMetrics, iconStyleSet) }
 
 -- | Covers both the radio button's glyph (x: 15-35) and caption
 -- (x: 41-85), so random points from within it exercise both halves.
@@ -72,7 +70,7 @@ spec = describe "Blink.Controls.RadioButton" $ do
     ctx <- start [text "Option A"]
     getDrawCommands ctx `shouldContain`
       [ DrawImage (Rectangle 15 40 20 20) "assets/icons/radio_button_unchecked.svg" testColour
-      , DrawText (Rectangle 41 15 44 70) "Option A" testColour AlignCenter
+      , DrawText (Rectangle 41 15 44 70) "Option A" defaultFont testColour AlignCenter
       ]
 
   it "draws the selected-bullet icon while selected" $ do

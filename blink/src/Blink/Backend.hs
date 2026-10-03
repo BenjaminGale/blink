@@ -24,6 +24,9 @@ module Blink.Backend
   , DrawCommand (..)
   , ImagePath
   , TextAlign (..)
+  , Font (..)
+  , FontWeight (..)
+  , defaultFont
   , CursorShape (..)
     -- * Measurement
   , Measurers (..)
@@ -51,6 +54,6 @@ import Blink.Geometry
   ( Border, BorderLayer (..), Colour (..), CornerRadii (..), EdgeVisibility (..), Point (..), Rectangle (..), Size (..) )
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..))
 import Blink.Rendering
-  ( CursorShape (..), DrawCommand (..), ImageMeasurer (..), ImagePath, Measurers (..), TextAlign (..), TextMeasurer (..)
-  , noOpImageMeasurer, noOpMeasurers, noOpTextMeasurer
+  ( CursorShape (..), DrawCommand (..), Font (..), FontWeight (..), ImageMeasurer (..), ImagePath, Measurers (..), TextAlign (..)
+  , TextMeasurer (..), defaultFont, noOpImageMeasurer, noOpMeasurers, noOpTextMeasurer
   )

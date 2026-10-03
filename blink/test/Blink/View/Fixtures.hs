@@ -28,7 +28,8 @@ import qualified Data.Map.Strict as Map
 import Blink.Geometry (Point (..), Rectangle (..), uniform)
 import Blink.Input (InputState (..), emptyInputState)
 import Blink.Rendering (Colour (..), TextAlign (..))
-import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), noBorder)
+import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme, defaultStyle)
+import qualified Blink.Style as Style
 import Blink.View
 import Blink.Testing
 
@@ -38,7 +39,7 @@ data TwoElems = ElemA | ElemB deriving (Eq, Ord, Show)
 -- type per caller) everywhere a test just needs *a* theme, not a specific
 -- one.
 mkTheme :: Theme e
-mkTheme = Theme { themeElementStyles = Map.empty, themeDefaultStyle = (emptyMetrics, emptyStyleSet) }
+mkTheme = Style.emptyTheme (emptyMetrics, emptyStyleSet)
 
 twoElemTheme :: Theme TwoElems
 twoElemTheme = mkTheme
@@ -56,11 +57,10 @@ mouseOnCenterDown :: InputState
 mouseOnCenterDown = noInput { inputMousePosition = Point 50 50, inputLeftButtonDown = True }
 
 emptyStyle :: Style
-emptyStyle = Style
+emptyStyle = defaultStyle
   { styleBackground = RGBA 0 0 0 1
   , styleTextColour = RGBA 0 0 0 1
   , styleTextAlign = AlignCenter
-  , styleBorder = noBorder
   }
 
 emptyMetrics :: Metrics

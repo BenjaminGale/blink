@@ -1047,7 +1047,7 @@ mainList s =
     [ content $ vBox
         [ spacing 8, margin 12
         , children
-            [ caption "Blink controls demo" [width fill, height (exactly 24), align TopLeft]
+            [ caption "Blink controls demo" [style (Class "heading"), width fill, height (exactly 32), align TopLeft]
             , rowDarkMode s
             , rowEditing s
             , rowDivider

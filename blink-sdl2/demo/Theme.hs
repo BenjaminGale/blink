@@ -4,9 +4,9 @@
 -- Both 'lightTheme' and 'darkTheme' are built from the library's
 -- 'Blink.Style.Defaults.defaultTheme', each fed a 'Palette' sampled from a
 -- reference screenshot ('lightPalette'\/'darkPalette') -- see
--- 'withStatusBar' for the one entry added on top of what 'defaultTheme'
--- registers ('StatusBar' is an app-specific 'ElementId', not a built-in
--- control class, so 'defaultTheme' can't register it itself).
+-- 'withStatusBar', 'withHeading' and 'withBorderShowcase' for the entries
+-- added on top of what 'defaultTheme' registers (each styles something
+-- app-specific, so 'defaultTheme' can't register it itself).
 module Theme
   ( ControlId (..)
   , Page (..)
@@ -135,11 +135,10 @@ swatchMetrics = Metrics { metricsMargin = uniform 0, metricsPadding = uniform 0 
 -- read as an outline sitting on the page, not a filled tile.
 swatchBase :: Palette -> StyleSet
 swatchBase p = StyleSet
-  { styleBase = Style
+  { styleBase = defaultStyle
       { styleBackground = transparent
       , styleTextColour = paletteTextPrimary p
       , styleTextAlign  = AlignCenter
-      , styleBorder     = noBorder
       }
   , styleOverrides = Map.empty
   }
@@ -189,7 +188,7 @@ recolourLayer i c = zipWith (\j l -> if j == i then l { layerColour = c } else l
 -- button\/description this style backs calls out.
 buttonShowcaseStyle :: Palette -> StyleSet
 buttonShowcaseStyle p = StyleSet
-  { styleBase = Style
+  { styleBase = defaultStyle
       { styleBackground = paletteSurface p
       , styleTextColour = paletteTextPrimary p
       , styleTextAlign  = AlignCenter
@@ -230,8 +229,17 @@ withBorderShowcase p thm = thm
     rounded = [ BorderLayer (paletteBorder p) 3 0 (uniformRadii 24) allEdgesVisible ]
     tab     = [ BorderLayer (paletteBorder p) 2 0 (topRounded 16) (allEdgesVisible { edgeBottomVisible = False }) ]
 
+-- | The built-in label look in a larger, bold font, registered as its own
+-- class so a caption opts in with @style (Class "heading")@.
+withHeading :: Theme ControlId -> Theme ControlId
+withHeading thm = thm
+  { themeElementStyles = Map.insert (Class "heading") (labelMetrics, headingStyles) (themeElementStyles thm) }
+  where
+    (labelMetrics, labelStyles) = Map.findWithDefault (themeDefaultStyle thm) (Class "label") (themeElementStyles thm)
+    headingStyles = labelStyles { styleBase = (styleBase labelStyles) { styleFont = Just defaultFont { fontSize = 20, fontWeight = Bold } } }
+
 lightTheme :: Theme ControlId
-lightTheme = withBorderShowcase lightPalette (withStatusBar lightPalette (defaultTheme lightPalette))
+lightTheme = withBorderShowcase lightPalette (withHeading (withStatusBar lightPalette (defaultTheme lightPalette)))
 
 darkTheme :: Theme ControlId
-darkTheme = withBorderShowcase darkPalette (withStatusBar darkPalette (defaultTheme darkPalette))
+darkTheme = withBorderShowcase darkPalette (withHeading (withStatusBar darkPalette (defaultTheme darkPalette)))

@@ -7,8 +7,8 @@ Runs a Blink application in an SDL2 window:
 main :: IO ()
 main = runApp Config
   { windowTitle = \"My app\"
-  , fontPath    = \"assets\/fonts\/Inter-Regular.ttf\"
-  , fontSize    = 14
+  , fontFiles   = FontFile \"Inter\" Regular \"assets\/fonts\/Inter-Regular.ttf\"
+               :| [FontFile \"Inter\" Bold \"assets\/fonts\/Inter-Bold.ttf\"]
   } myApp
 @
 
@@ -21,11 +21,13 @@ the threads running background commands and the animation ticker.
 -}
 module Blink.SDL2
   ( Config (..)
+  , FontFile (..)
   , runApp
   ) where
 
 import Blink.Backend
 import Blink.SDL2.Input (sdlPoint, toKeyEvents, toModifiers, toTypedText, toWheelDelta, updateButton)
+import Blink.SDL2.Fonts (FontFile (..), freeFontCache, newFontCache)
 import Blink.SDL2.Rendering
 import SDL (($=))
 import qualified SDL
@@ -34,6 +36,7 @@ import qualified SDL.Raw
 import Control.Concurrent.STM (atomically, flushTBQueue, newTBQueueIO, writeTBQueue)
 import Control.Monad (foldM, unless, void)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import Foreign.C.Types (CInt)
@@ -43,10 +46,12 @@ import Foreign.Ptr (nullPtr)
 data Config = Config
   { windowTitle :: Text
     -- ^ Shown in the window's title bar.
-  , fontPath    :: FilePath
-    -- ^ A TrueType font file used for all text.
-  , fontSize    :: Int
-    -- ^ The font's point size.
+  , fontFiles   :: NonEmpty FontFile
+    -- ^ The TrueType files to draw text with, one per family and weight.
+    -- The first file's family is used for any 'Font' whose family is
+    -- 'Nothing' or names a family with no file. A weight with no file of
+    -- its own is drawn from another file of the same family, made bold by
+    -- SDL_ttf when bold was asked for.
   }
 
 -- | Opens a window, runs @app@ until the window is closed, then releases
@@ -66,7 +71,7 @@ runApp config app = do
   -- anti-aliased fringe pixels to actually blend instead of being drawn
   -- solid.
   SDL.rendererDrawBlendMode renderer $= SDL.BlendAlphaBlend
-  font     <- Font.load (fontPath config) (fontSize config)
+  fonts    <- newFontCache (fontFiles config)
   SDL.Raw.startTextInput
 
   texCache  <- newTextureCache
@@ -81,7 +86,7 @@ runApp config app = do
       checkAnimTick = case mAnimEvent of
                        Nothing -> \_ -> pure False
                        Just et -> \evs -> or <$> mapM (fmap isJust . SDL.getRegisteredEvent et) evs
-  measurer <- mkTextMeasurer font
+  measurer <- mkTextMeasurer fonts
   let imageMeasurer = mkImageMeasurer renderer imgCache
   msgQueue <- newBoundedMsgQueue 256
 
@@ -89,7 +94,7 @@ runApp config app = do
         SDL.rendererDrawColor renderer $= SDL.V4 229 229 234 255
         SDL.clear renderer
         clipRef <- newIORef ([] :: [SDL.Rectangle CInt])
-        mapM_ (submitDrawCommand renderer font texCache imgCache clipRef) calls
+        mapM_ (submitDrawCommand renderer fonts texCache imgCache clipRef) calls
         SDL.present renderer
 
   handle <- configureEventDriven app msgQueue notify
@@ -106,7 +111,7 @@ runApp config app = do
   SDL.freeCursor resizeCursor
   freeTextureCache texCache
   freeImageCache imgCache
-  Font.free font
+  freeFontCache fonts
   SDL.destroyRenderer renderer
   SDL.destroyWindow window
   Font.quit

@@ -27,6 +27,7 @@ library
     exposed-modules:
         Blink.SDL2
     other-modules:
+        Blink.SDL2.Fonts
         Blink.SDL2.Input
         Blink.SDL2.Rendering
     build-depends:

@@ -1,12 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Blink.SDL2 (Config (..), runApp)
+import Blink (FontWeight (..))
+import Blink.SDL2 (Config (..), FontFile (..), runApp)
+import Data.List.NonEmpty (NonEmpty (..))
 import UI (demoApp)
 
 main :: IO ()
 main = runApp Config
   { windowTitle = "blink"
-  , fontPath    = "assets/fonts/Inter-Regular.ttf"
-  , fontSize    = 14
+  , fontFiles   = FontFile "Inter" Regular "assets/fonts/Inter-Regular.ttf" :| []
   } demoApp

@@ -6,7 +6,7 @@ import Test.Hspec
 
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Control (Attribute)
-import Blink.Controls.Fixtures (fullSizeAt, hitRectFor, monospaceTextMeasurer, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
+import Blink.Controls.Fixtures (fullSizeAt, hitRectFor, mkTestTheme, monospaceTextMeasurer, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
 import Blink.Controls.Label (text)
 import Blink.Controls.Style (iconStyleKey)
 import Blink.Controls.ToggleButton (ToggleConfig, isSelected)
@@ -14,7 +14,7 @@ import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 import Blink.Element (measureElement)
 import Blink.Geometry (Point (..), Rectangle (..), Size (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
+import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), defaultFont)
 import Blink.Style (StyleSet (..), Theme (..), VisualState (CommonMouseOver), styleTextColour)
 import Blink.View
 import Blink.Testing
@@ -41,10 +41,8 @@ iconStyleSet = StyleSet
   }
 
 testTheme :: Theme TestElement
-testTheme = Theme
-  { themeElementStyles = Map.singleton iconStyleKey (standardMetrics, iconStyleSet)
-  , themeDefaultStyle  = (standardMetrics, testStyleSet)
-  }
+testTheme = (mkTestTheme standardMetrics testStyleSet)
+  { themeElementStyles = Map.singleton iconStyleKey (standardMetrics, iconStyleSet) }
 
 -- | Covers both the checkbox's glyph (x: 15-43) and caption (x: 49-85),
 -- so random points from within it exercise both halves.
@@ -76,7 +74,7 @@ spec = describe "Blink.Controls.Checkbox" $ do
     let cmds = getDrawCommands ctx
     cmds `shouldContain`
       [ DrawImage (Rectangle 16 37 26 26) "assets/icons/check_box_outline_blank.svg" testColour
-      , DrawText (Rectangle 49 15 36 70) "Remember me" testColour AlignCenter
+      , DrawText (Rectangle 49 15 36 70) "Remember me" defaultFont testColour AlignCenter
       ]
     cmds `shouldNotContain` [DrawImage (Rectangle 16 37 26 26) "assets/icons/check_box.svg" testColour]
 

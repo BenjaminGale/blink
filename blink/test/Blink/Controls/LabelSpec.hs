@@ -11,7 +11,7 @@ import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Input (InputState (..), Modifier (Alt))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.Label (LabelConfig, label, mnemonic, target, text)
-import Blink.Rendering (DrawCommand (..), TextAlign (..))
+import Blink.Rendering (DrawCommand (..), TextAlign (..), defaultFont)
 import Blink.Style (Theme)
 import Blink.View
 import Blink.Testing
@@ -102,7 +102,7 @@ spec = describe "Blink.Controls.Label" $ do
 
   it "draws its text in the resolved style" $ do
     ctx <- start [text "Hello"]
-    getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "Hello" testColour AlignCenter]
+    getDrawCommands ctx `shouldContain` [DrawText (Rectangle 15 15 70 70) "Hello" defaultFont testColour AlignCenter]
 
   describe "mnemonic" $ do
     it "draws no underline when no mnemonic is set, even with Alt held" $ do

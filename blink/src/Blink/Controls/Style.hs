@@ -97,7 +97,7 @@ zeroMetrics = Metrics
 -- button adds on top while selected.
 buttonStyle :: TextAlign -> Palette -> StyleSet
 buttonStyle align p = StyleSet
-  { styleBase = Style
+  { styleBase = defaultStyle
       { styleBackground   = paletteSurface p
       , styleTextColour   = paletteTextPrimary p
       , styleTextAlign    = align
@@ -119,10 +119,9 @@ buttonStyle align p = StyleSet
 -- the hover/press tint above whenever a row is selected.
 flatRowStyle :: Palette -> StyleSet
 flatRowStyle p = StyleSet
-  { styleBase = Style
+  { styleBase = defaultStyle
       { styleBackground   = transparent
       , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
       , styleBorder       = soloBorder transparent 1
       }
   , styleOverrides = Map.fromList
@@ -139,11 +138,9 @@ flatRowStyle p = StyleSet
 -- styled separately, an image), and the base other styles adjust.
 plainStyle :: Palette -> StyleSet
 plainStyle p = StyleSet
-  { styleBase = Style
+  { styleBase = defaultStyle
       { styleBackground   = transparent
       , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleBorder       = noBorder
       }
   , styleOverrides = Map.empty
   }
@@ -160,10 +157,9 @@ plainStyle p = StyleSet
 -- something to draw into) rather than 'zeroMetrics'.
 containerStyle :: Palette -> StyleSet
 containerStyle p = StyleSet
-  { styleBase = Style
+  { styleBase = defaultStyle
       { styleBackground   = paletteSurface p
       , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
       , styleBorder       = soloBorder (paletteBorder p) 1
       }
   , styleOverrides = Map.fromList
@@ -190,11 +186,9 @@ iconStyleKey = Class "icon"
 -- plain icon uses them.
 iconStyle :: Palette -> StyleSet
 iconStyle p = StyleSet
-  { styleBase = Style
+  { styleBase = defaultStyle
       { styleBackground   = transparent
       , styleTextColour   = paletteIcon p
-      , styleTextAlign    = AlignLeft
-      , styleBorder       = noBorder
       }
   , styleOverrides = Map.fromList
       [ (CommonMouseOver, \s -> s { styleTextColour = paletteIconHover p })
@@ -212,11 +206,9 @@ shade factor (RGBA r g b a) = RGBA (r * factor) (g * factor) (b * factor) a
 -- solid region (a groove, a divider's line). No state changes its look.
 plainFillStyle :: Palette -> Colour -> StyleSet
 plainFillStyle p colour = StyleSet
-  { styleBase = Style
+  { styleBase = defaultStyle
       { styleBackground = colour
       , styleTextColour = paletteTextPrimary p
-      , styleTextAlign  = AlignLeft
-      , styleBorder     = noBorder
       }
   , styleOverrides = Map.empty
   }

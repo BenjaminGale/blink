@@ -59,7 +59,6 @@ import Blink.View
   ( CursorShape (..), Effect, View, getBounds, getExtentState, getMousePos, getStyleSet
   , requestCursor, requestExtentBy, withBounds
   )
-import Blink.Rendering (TextAlign (..))
 import Blink.Style
 import Blink.Controls.Style (plainFillStyle, plainStyle, zeroMetrics)
 
@@ -428,11 +427,9 @@ tableColumnDividerStyleKey = Class "tableColumnDivider"
 -- 'Blink.Controls.Table.table') separates them instead of a border.
 tableHeaderStyle :: Palette -> StyleSet
 tableHeaderStyle p = StyleSet
-  { styleBase = Style
+  { styleBase = defaultStyle
       { styleBackground   = paletteSurface p
       , styleTextColour   = paletteTextPrimary p
-      , styleTextAlign    = AlignLeft
-      , styleBorder       = noBorder
       }
   , styleOverrides = Map.singleton CommonMouseOver (\s -> s { styleBackground = paletteSurfaceHover p })
   }

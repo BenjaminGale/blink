@@ -3,12 +3,12 @@ module Blink.Controls.ButtonSpec (spec) where
 
 import Test.Hspec
 
-import Blink.Controls.Button (ButtonActivation (..), ButtonConfig, activation, button, onActivated)
+import Blink.Controls.Button (ButtonActivation (..), ButtonConfig, activation, button, buttonStyleKey, onActivated)
 import Blink.Controls.ButtonBehaviour (buttonBehaviourSpec, defaultButtonBehaviourConfig)
 import Blink.Controls.Control (Attribute, post)
 import Blink.Controls.Fixtures
   ( contentRectFor, fullSizeAt, hitRectFor, mkTestTheme, monospaceTextMeasurer, noInput, plainStyle, plainStyleSet, standardMetrics
-  , startAt, testColour
+  , startAt, testColour, zeroMetrics
   )
 import Blink.Controls.Label (text)
 import qualified Data.Text as T
@@ -16,11 +16,12 @@ import qualified Data.Text as T
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
-import Blink.Rendering (DrawCommand (..), TextAlign (..))
-import Blink.Style (Theme)
+import Blink.Rendering (DrawCommand (..), Font (..), TextAlign (..), defaultFont)
+import Blink.Style (Style (..), Theme (..))
+import qualified Data.Map.Strict as Map
 import Blink.View
 import Blink.Testing
-import Blink.Element (elLayout, runElement)
+import Blink.Element (elLayout, height, measureElement, runElement, width)
 
 data TestElement = Ok | FocusHolder deriving (Eq, Ord, Show)
 
@@ -53,7 +54,30 @@ spec = describe "Blink.Controls.Button" $ do
 
   it "draws its text in the resolved style" $ do
     ctx <- start [text "OK"]
-    getDrawCommands ctx `shouldContain` [DrawText contentRect "OK" testColour AlignCenter]
+    getDrawCommands ctx `shouldContain` [DrawText contentRect "OK" defaultFont testColour AlignCenter]
+
+  it "measures its caption in its own style's font, not its parent's" $ do
+    let small    = defaultFont { fontSize = 10 }
+        large    = defaultFont { fontSize = 20 }
+        styled f = plainStyleSet (plainStyle testColour) { styleFont = Just f }
+        theme    = (mkTestTheme zeroMetrics (styled small))
+          { themeElementStyles = Map.fromList [(buttonStyleKey, (zeroMetrics, styled large))] }
+        sizedByFont = noOpTextMeasurer
+          { tmTextSize = \f t -> pure (Size (fromIntegral (T.length t) * fontSize f) (fontSize f)) }
+        ctx = withMeasurers noOpMeasurers { msrText = sizedByFont } (emptyViewContext testBounds noInput theme)
+        el  = button Ok [text "OK", width fitContent, height fitContent]
+    (sz, _) <- runView (measureElement (Rectangle 0 0 1000 1000) el) ctx
+    sz `shouldBe` Size 40 20
+
+  it "uses the theme's font when its style doesn't choose one" $ do
+    let large    = defaultFont { fontSize = 20 }
+        theme    = (mkTestTheme zeroMetrics (plainStyleSet (plainStyle testColour))) { themeFont = large }
+        sizedByFont = noOpTextMeasurer
+          { tmTextSize = \f t -> pure (Size (fromIntegral (T.length t) * fontSize f) (fontSize f)) }
+        ctx = withMeasurers noOpMeasurers { msrText = sizedByFont } (emptyViewContext testBounds noInput theme)
+        el  = button Ok [text "OK", width fitContent, height fitContent]
+    (sz, _) <- runView (measureElement (Rectangle 0 0 1000 1000) el) ctx
+    sz `shouldBe` Size 40 20
 
   it "defaults to filling the given width and fitting its own content height" $ do
     -- Every other test in this file overrides 'elLayout' ('fullSize' to

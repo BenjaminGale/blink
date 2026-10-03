@@ -20,8 +20,8 @@ import Data.Text (Text)
 
 import Blink.App (App, BlinkHandle, FrameResult (..), MsgQueue (..), configureEventDriven)
 import Blink.Geometry (uniform)
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), noOpMeasurers)
-import Blink.Style (Metrics (..), Palette (..), Style (..), StyleSet (..), noBorder)
+import Blink.Rendering (Colour (..), DrawCommand (..), noOpMeasurers)
+import Blink.Style (Metrics (..), Palette (..), Style (..), StyleSet (..), defaultStyle)
 
 -- | A 'MsgQueue' that holds nothing -- fine for any test app that never
 -- requests a 'Cmd' via 'cmd'.
@@ -42,7 +42,7 @@ resultDraws (Continue ds _ _) = ds
 resultDraws (Quit ds _ _)     = ds
 
 drawnTexts :: FrameResult s -> [Text]
-drawnTexts r = [t | DrawText _ t _ _ <- resultDraws r]
+drawnTexts r = [t | DrawText _ t _ _ _ <- resultDraws r]
 
 -- | The log of an app whose state pairs some value with an append-only log.
 resultLog :: FrameResult (a, [Text]) -> [Text]
@@ -56,11 +56,9 @@ logAddedBetween earlier later = drop (length (resultLog earlier)) (resultLog lat
 -- 'App'-driven test theme here starts from, via
 -- @emptyTheme (testMetrics, testStyleSet)@.
 testStyle :: Style
-testStyle = Style
+testStyle = defaultStyle
   { styleBackground   = RGBA 0 0 0 1
   , styleTextColour   = RGBA 0 0 0 1
-  , styleTextAlign    = AlignLeft
-  , styleBorder       = noBorder
   }
 
 testMetrics :: Metrics

@@ -5,8 +5,8 @@ import Test.Hspec
 
 import Blink.Geometry (Point (..), Rectangle (..), Size (..), uniformRadii)
 import Blink.Input (InputState (..))
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
-import Blink.Style (soloBorder)
+import Blink.Rendering (Colour (..), DrawCommand (..), Font (..), FontWeight (..), TextAlign (..), defaultFont)
+import Blink.Style (Style (..), soloBorder)
 import Blink.View
 import Blink.Testing
 import Blink.View.Drawing (drawImage, drawText, fillRect, strokeRect, withBackground, withBorder, withClip)
@@ -64,7 +64,13 @@ spec = describe "Blink.View.Drawing" $ do
     it "drawText emits a DrawText command for the current bounds" $ do
       let colour = RGBA 0 0 1 1
       (_, ctx) <- run0 (drawText colour AlignCenter "hello")
-      getDrawCommands ctx `shouldBe` [DrawText testBounds "hello" colour AlignCenter]
+      getDrawCommands ctx `shouldBe` [DrawText testBounds "hello" defaultFont colour AlignCenter]
+
+    it "drawText draws in the current style's font" $ do
+      let colour  = RGBA 0 0 1 1
+          heading = Font { fontFamily = Just "Serif", fontSize = 24, fontWeight = Bold }
+      (_, ctx) <- run0 (withStyle emptyStyle { styleFont = Just heading } (drawText colour AlignCenter "hello"))
+      getDrawCommands ctx `shouldBe` [DrawText testBounds "hello" heading colour AlignCenter]
 
     it "drawImage emits a DrawImage command for the current bounds" $ do
       let colour = RGBA 1 0 0 1

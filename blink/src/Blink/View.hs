@@ -333,6 +333,7 @@ module Blink.View
   , currentStyle
   , withStyle
   , currentMetrics
+  , currentFont
   , withMetrics
     -- * Text measurement
   , charOffset

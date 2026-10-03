@@ -13,7 +13,7 @@ import Blink.Controls.ToggleButton (ToggleConfig, isSelected, toggleButton, togg
 import Blink.Controls.ToggleBehaviour (toggleBehaviourSpec)
 
 import Blink.Geometry (Point (..), Rectangle (..))
-import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
+import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..), defaultFont)
 import Blink.Style (StyleSet (..), Theme, styleTextColour)
 import Blink.View
 import Blink.Testing
@@ -55,8 +55,8 @@ spec = describe "Blink.Controls.ToggleButton" $ do
 
     it "draws in its normal style while not selected" $ do
       ctx <- start []
-      getDrawCommands ctx `shouldContain` [DrawText contentRect "" testColour AlignCenter]
+      getDrawCommands ctx `shouldContain` [DrawText contentRect "" defaultFont testColour AlignCenter]
 
     it "draws in its pressed style while selected, even without being physically pressed" $ do
       ctx <- start [isSelected True]
-      getDrawCommands ctx `shouldContain` [DrawText contentRect "" pressedColour AlignCenter]
+      getDrawCommands ctx `shouldContain` [DrawText contentRect "" defaultFont pressedColour AlignCenter]
