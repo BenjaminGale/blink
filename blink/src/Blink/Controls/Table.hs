@@ -225,7 +225,7 @@ table
   -> [Attribute (TableConfig sel e msg a)]
   -> Element e msg
 table tid attrs =
-  chromeElement (lstLayout (tbList cfg)) (ccStyleKey (lstControl (tbList cfg))) (listMeasure hasColumns (tbList cfg)) (void run)
+  chromeElement (lstLayout (tbList cfg)) (lstControl (tbList cfg)) (listMeasure hasColumns (tbList cfg)) (void run)
   where
     cfg        = resolve defaultTableConfig attrs
     cols       = tbColumns cfg

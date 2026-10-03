@@ -212,7 +212,7 @@ tree
   -> [Attribute (TreeConfig sel e msg a)]
   -> Element e msg
 tree tid attrs =
-  chromeElement (lstLayout listCfg) (ccStyleKey (lstControl listCfg)) (listMeasure False listCfg) (void run)
+  chromeElement (lstLayout listCfg) (lstControl listCfg) (listMeasure False listCfg) (void run)
   where
     cfg     = resolve defaultTreeConfig attrs
     td      = tcTreeData cfg

@@ -87,7 +87,8 @@ import Blink.Geometry
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..))
 import Blink.Layout
 import Blink.Rendering (TextAlign (..))
-import Blink.Style
+import Blink.Style hiding (VisualState (..))
+import Blink.Style (VisualState (CommonNormal, CommonMouseOver, CommonPressed, CommonDisabled, FocusFocused, FocusUnfocused))
 import Blink.Style.Defaults (defaultTheme)
 import Blink.Update (Update, cmd, get, gets, modify, put, runUpdate)
 import Blink.View (Selection (..), requestClearFocus, requestFocus, requestScrollBy, requestScrollTo, requestSelectionAt)

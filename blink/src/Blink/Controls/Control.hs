@@ -87,6 +87,7 @@ module Blink.Controls.Control
     -- * Measurement
   , chromeInsets
   , measureChrome
+  , controlStyleSet
 
     -- * Elements
   , chromeElement
@@ -100,6 +101,8 @@ module Blink.Controls.Control
 
 import Control.Monad (forM_, void, when)
 import Data.List (find)
+import qualified Data.Map.Strict as Map
+import Data.Maybe (mapMaybe)
 import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -111,9 +114,9 @@ import Blink.Geometry
   )
 import Blink.Input (ButtonState (..), InputState (..), Key, KeyEvent (..), Modifier, Mouse (..), captureOf)
 import Blink.Layout.Constraints (Layout, MeasureCtx (..), shrink)
-import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), VisualState (..), resolveStyle)
+import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), Theme (..), VisualState (..), resolveStyle)
 import Blink.View
-import Blink.View.Context (Effect (..), UiEffect (..), gets)
+import Blink.View.Context (Effect (..), UiEffect (..), contextTheme, gets)
 import Blink.View.Mouse (contextCaptured, isOccludedByPopupFor)
 import Blink.View.Drawing (withClip, withBackground, withBorder)
 import Blink.Element (Attribute (..), Element (..), appendTo, nested, resolve)
@@ -437,6 +440,9 @@ data ControlConfig e msg = ControlConfig
   , ccMouseActivation :: MouseActivation
   , ccIsEnabled       :: Bool
   , ccStyleKey        :: StyleKey e
+    -- ^ The control's own class.
+  , ccStyleClass      :: Maybe (StyleKey e)
+    -- ^ The class chosen with 'style', tried before 'ccStyleKey'.
   , ccActiveStates    :: Set VisualState
     -- ^ Extra 'VisualState's contributed by a wrapping layer (e.g.
     -- 'Blink.Controls.ToggleButton.toggleBase' setting a checked\/unchecked
@@ -471,6 +477,7 @@ defaultControlConfig = ControlConfig
   , ccMouseActivation = ClickActivated
   , ccIsEnabled       = True
   , ccStyleKey        = Class ""
+  , ccStyleClass      = Nothing
   , ccActiveStates    = Set.empty
   , ccContent         = const (pure ())
   , ccFocusPolicy     = Focusable defaultFocusOptions
@@ -558,11 +565,27 @@ instance HasEventHandlers (ControlConfig e msg)
 isEnabled :: HasControlConfig e msg cfg => Bool -> Attribute cfg
 isEnabled b = overControl (Attribute (\cc -> cc { ccIsEnabled = b }))
 
--- | Which 'StyleKey' this control resolves its style from. Defaults to a
--- 'Class' named after the control; pass 'ElementId' to theme this one
--- instance differently, or a different 'Class' to group it with others.
+-- | Draws this control with the theme's entry for @k@, usually a 'Class'
+-- shared by several controls. When the theme has no entry for @k@, the
+-- control uses its own class's style. A theme entry for the control's id
+-- still comes first -- see "Blink.Style".
 style :: HasControlConfig e msg cfg => StyleKey e -> Attribute cfg
-style k = overControl (Attribute (\cc -> cc { ccStyleKey = k }))
+style k = overControl (Attribute (\cc -> cc { ccStyleClass = Just k }))
+
+-- | The @('Metrics', 'StyleSet')@ pair @cc@ draws with: the theme's entry
+-- for its id, then for its 'style' class, then for its own class, falling
+-- back to the theme's default.
+controlStyleSet :: Ord e => ControlConfig e msg -> View e msg (Metrics, StyleSet)
+controlStyleSet cc = do
+  idKeys <- case ccElementId cc of
+    -- Inside a part, the id names the owner, whose entry isn't meant for this part.
+    Just eid -> (\cid -> [ElementId eid | cid == Control eid]) <$> controlIdOf eid
+    Nothing  -> pure []
+  thm <- gets contextTheme
+  let keys = idKeys ++ maybe [] pure (ccStyleClass cc) ++ [ccStyleKey cc]
+  pure $ case mapMaybe (`Map.lookup` themeElementStyles thm) keys of
+    found : _ -> found
+    []        -> themeDefaultStyle thm
 
 -- | Whether, and how, this control's own identity participates in
 -- keyboard focus -- see 'FocusPolicy'. Defaults to
@@ -681,9 +704,9 @@ chromeInsets m s = metricsMargin m <> borderContribution s <> metricsPadding m
 -- state, and resolving the active variant would make a control's size
 -- depend on hover\/press\/focus (a button that grows when the pointer
 -- touches it, or reflows its row when clicked).
-measureChrome :: Ord e => StyleKey e -> Element e msg -> MeasureCtx -> View e msg Size
-measureChrome k child ctx = do
-  (m, styleSet) <- getStyleSet k
+measureChrome :: Ord e => ControlConfig e msg -> Element e msg -> MeasureCtx -> View e msg Size
+measureChrome cc child ctx = do
+  (m, styleSet) <- controlStyleSet cc
   let insets = chromeInsets m (styleBase styleSet)
   -- Measured in the control's own base style, so text is sized in the
   -- control's font rather than whatever its parent was drawing in.
@@ -791,10 +814,8 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
     Nothing  -> renderInert
     Just eid -> renderTracked eid
   where
-    styleKey = ccStyleKey cc
-
     renderInert = do
-      (m, styles) <- getStyleSet styleKey
+      (m, styles) <- controlStyleSet cc
       disabled    <- isDisabled
       let active = intrinsicStates disabled (noInteraction (styleBase styles)) `Set.union` ccActiveStates cc
           s      = resolveStyle styles active
@@ -816,7 +837,7 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       when (ccFocusPolicy cc /= NotFocusable) (applyNavigationKeys wasFocused)
       nowFocused <- isFocused eid
       fireFocusChangeDirect cc (focusTransition wasFocused nowFocused)
-      (m, styles) <- getStyleSet styleKey
+      (m, styles) <- controlStyleSet cc
       hitBounds   <- marginInsetBounds m
       raw         <- withBounds hitBounds (watchInteraction eid disabled (styleBase styles))
       when (ciMouseDown raw && isClickToFocus (ccFocusPolicy cc) && not nowFocused) (requestFocus currentScope eid)
@@ -911,18 +932,17 @@ focusTargetOnClick :: Ord e => Maybe (ControlId e) -> e -> ControlInteraction e 
 focusTargetOnClick scope target ci = when (ciClicked ci) (requestFocus scope target)
 
 -- | An element laid out by @layout@ that measures as @content@ wrapped in
--- the chrome @styleKey@ resolves to, and runs @run@.
-chromeElement :: Ord e => Layout -> StyleKey e -> Element e msg -> View e msg () -> Element e msg
-chromeElement layout styleKey content run = Element
+-- the chrome @cc@'s style gives it (see 'controlStyleSet'), and runs @run@.
+chromeElement :: Ord e => Layout -> ControlConfig e msg -> Element e msg -> View e msg () -> Element e msg
+chromeElement layout cc content run = Element
   { elLayout  = layout
-  , elMeasure = measureChrome styleKey content
+  , elMeasure = measureChrome cc content
   , elRun     = run
   }
 
--- | 'chromeElement' for a widget whose run is @ctrl@ alone, measuring its
--- chrome from the same style key @ctrl@ draws with.
+-- | 'chromeElement' for a widget whose run is @ctrl@ alone.
 controlElement :: Ord e => Layout -> Element e msg -> ControlConfig e msg -> Element e msg
-controlElement layout content ctrl = chromeElement layout (ccStyleKey ctrl) content (void (control ctrl))
+controlElement layout content ctrl = chromeElement layout ctrl content (void (control ctrl))
 
 -- | The style a part of a control draws with: @partKey@'s style resolved for
 -- @states@. A part is a region a control draws inside itself (a slider's

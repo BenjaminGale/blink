@@ -7,7 +7,7 @@ import Blink.Input (InputState (..))
 import Blink.View hiding (ControlId (..))
 import Blink.View.Drawing (drawText, fillRect)
 import ColourPicker (colourPicker)
-import Theme (ControlId (..), Page (..), lightTheme, darkTheme)
+import Theme (ControlId (..), Page (..), lightTheme, darkTheme, heading)
 import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import GHC.Clock (getMonotonicTimeNSec)
@@ -972,7 +972,7 @@ bordersPage _ =
             ]
         , caption buttonDescription [width fill, height (exactly 56), align TopLeft]
         , button SaveChangesButton
-            [ text "Save changes", style (ElementId SaveChangesButton)
+            [ text "Save changes"
             , width (exactly 160), height (exactly 48)
             ]
         ]
@@ -1061,7 +1061,7 @@ mainList s =
     [ content $ vBox
         [ spacing 8, margin 12
         , children
-            [ caption "Blink controls demo" [style (Class "heading"), width fill, height (exactly 32), align TopLeft]
+            [ caption "Blink controls demo" [style heading, width fill, height (exactly 32), align TopLeft]
             , rowDarkMode s
             , rowEditing s
             , rowDivider

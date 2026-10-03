@@ -195,7 +195,7 @@ target t = Attribute (\c -> c { lblTarget = Just t })
 -- of that target, which is all it needs to notice a click; one without is
 -- plain, non-interactive content.
 label :: Ord e => [Attribute (LabelConfig e msg)] -> Element e msg
-label attrs = chromeElement (lblLayout cfg) (ccStyleKey ctrl) (captionElement (lcText (lblLabelled cfg))) $
+label attrs = chromeElement (lblLayout cfg) ctrl (captionElement (lcText (lblLabelled cfg))) $
   case lblTarget cfg of
     Nothing -> () <$ control ctrl
     Just t  -> do

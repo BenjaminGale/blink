@@ -238,7 +238,7 @@ arrowLayoutAttrs Vertical   = [width fill, height (exactly scrollBarThickness)]
 -- resolved style's text colour) instead of a caption.
 arrowButton :: Ord e => e -> ImagePath -> [Attribute (RepeatButtonConfig e msg)] -> Element e msg
 arrowButton eid path attrs =
-  chromeElement (bcLayout btn) (ccStyleKey (bcControl btn)) (elementWithLayout (bcLayout btn) (pure ()))
+  chromeElement (bcLayout btn) (bcControl btn) (elementWithLayout (bcLayout btn) (pure ()))
     (void (repeatButtonBase eid cfg { rbButton = btn { bcControl = ctrl } }))
   where
     cfg  = resolve defaultRepeatButtonConfig attrs
@@ -278,7 +278,7 @@ scrollBar eid attrs = controlElement (scrollBarLayout cfg) (box (Control eid)) c
 
     decrementBtn barId = part eid (partName Decrement) $ arrowButton eid
       (if o == Horizontal then "assets/icons/arrow_left.svg" else "assets/icons/arrow_drop_up.svg")
-      ( [ style scrollBarButtonStyleKey
+      ( [ overControl (Attribute (\cc -> cc { ccStyleKey = scrollBarButtonStyleKey }))
         , overControl (focusPolicy NotFocusable)
         , scrollOnActivated barId (negate (sbStep cfg))
         ] ++ arrowLayoutAttrs o
@@ -286,7 +286,7 @@ scrollBar eid attrs = controlElement (scrollBarLayout cfg) (box (Control eid)) c
 
     incrementBtn barId = part eid (partName Increment) $ arrowButton eid
       (if o == Horizontal then "assets/icons/arrow_right.svg" else "assets/icons/arrow_drop_down.svg")
-      ( [ style scrollBarButtonStyleKey
+      ( [ overControl (Attribute (\cc -> cc { ccStyleKey = scrollBarButtonStyleKey }))
         , overControl (focusPolicy NotFocusable)
         , scrollOnActivated barId (sbStep cfg)
         ] ++ arrowLayoutAttrs o

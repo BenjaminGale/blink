@@ -160,7 +160,7 @@ import Blink.Input
   ( Key (..), KeyEvent (..), Modifier (..), InputState (..)
   , Mouse (..), emptyMouse, advanceButton, advanceHover, mnemonicActivated
   )
-import Blink.Style (Font, Style (styleFont), StyleSet, Metrics, StyleKey (..), Theme (..), resolveStyle)
+import Blink.Style (Font, Style (styleFont), StyleSet, Metrics, StyleKey (..), Theme (..), lookupStyle, resolveStyle)
 
 --------------------------------------------------------------------------------
 -- Focus (pure)
@@ -1038,9 +1038,7 @@ withTheme thm ctx = ctx { ctxTheme = thm }
 -- 'StyleKey'. Falls back to the theme's default when nothing is
 -- registered for it.
 getStyleSet :: Ord e => StyleKey e -> View e msg (Metrics, StyleSet)
-getStyleSet styleKey = do
-  t <- getTheme
-  return $ Map.findWithDefault (themeDefaultStyle t) styleKey (themeElementStyles t)
+getStyleSet styleKey = lookupStyle styleKey <$> getTheme
 
 -- | Just the 'Metrics' half of 'getStyleSet' -- used where a size is
 -- needed independently of interaction state (e.g. hit-testing before the

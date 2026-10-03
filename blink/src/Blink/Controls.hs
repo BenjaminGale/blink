@@ -13,6 +13,9 @@
 -- Each widget's config type is exported without its constructor, so it
 -- can appear in type signatures (e.g. a helper returning
 -- @['Blink.Element.Attribute' ('ButtonConfig' e msg)]@).
+--
+-- The style classes and visual states at the end are the keys a theme
+-- uses for each widget and its parts (see "Blink.Style").
 module Blink.Controls
   ( -- * Attributes every widget accepts
     isEnabled
@@ -177,15 +180,60 @@ module Blink.Controls
   , submenuItems
   , openMenu
   , onOpenMenuChanged
+    -- * Style classes
+  , buttonStyleKey
+  , checkboxStyleKey
+  , radioButtonStyleKey
+  , toggleButtonStyleKey
+  , toggleButtonGroupStyleKey
+  , radioButtonGroupStyleKey
+  , labelStyleKey
+  , iconStyleKey
+  , imageStyleKey
+  , dividerStyleKey
+  , dividerLineStyleKey
+  , listStyleKey
+  , listItemStyleKey
+  , treeChevronStyleKey
+  , tableHeaderStyleKey
+  , tableColumnDividerStyleKey
+  , tableColumnDividerLineStyleKey
+  , progressBarStyleKey
+  , progressBarTrackStyleKey
+  , progressBarFillStyleKey
+  , sliderStyleKey
+  , sliderTrackStyleKey
+  , sliderFillStyleKey
+  , sliderThumbStyleKey
+  , textInputStyleKey
+  , textInputSelectionStyleKey
+  , scrollBarStyleKey
+  , scrollBarButtonStyleKey
+  , scrollBarTrackStyleKey
+  , scrollBarThumbStyleKey
+  , scrollPanelStyleKey
+  , menuItemStyleKey
+  , menuButtonListStyleKey
+  , menuBarStyleKey
+  , menuBarLabelStyleKey
+  , menuBarListStyleKey
+    -- * Control-specific visual states
+  , toggleChecked
+  , toggleUnchecked
+  , listSelected
+  , listUnselected
+  , listCursor
+  , listNoCursor
+  , menuItemSubmenuOpen
   ) where
 
 import Blink.Element (content, itemAttrs, items, onSelectionChanged, orientation, selection, step, value)
 import Blink.Controls.Control (isEnabled, style)
-import Blink.Controls.Button (ButtonActivation (..), ButtonConfig, activation, button, onActivated)
-import Blink.Controls.Checkbox (checkbox)
-import Blink.Controls.Divider (DividerConfig, divider, thickness)
-import Blink.Controls.Image (ImageConfig, image, source, fitWidth, fitHeight, preserveRatio)
-import Blink.Controls.Label (LabelConfig, label, mnemonic, target, text)
+import Blink.Controls.Button (ButtonActivation (..), ButtonConfig, activation, button, onActivated, buttonStyleKey)
+import Blink.Controls.Checkbox (checkbox, checkboxStyleKey)
+import Blink.Controls.Divider (DividerConfig, divider, thickness, dividerStyleKey, dividerLineStyleKey)
+import Blink.Controls.Image (ImageConfig, image, source, fitWidth, fitHeight, preserveRatio, imageStyleKey)
+import Blink.Controls.Label (LabelConfig, label, mnemonic, target, text, labelStyleKey)
 import Blink.Controls.List
   ( Direction (..), EmptySelection (..), End (..), ItemState (..), ListConfig, MultiSelection
   , RangeSelection, RequiredSelection, SelectionModel (..), SingleSelection
@@ -193,21 +241,25 @@ import Blink.Controls.List
   , rangeAt, rangeAtPositions, rangeEnd, rangeFrom, rangeItems, renderItem, requireAt, requireFirst, requireItem
   , requiredItems, requiredList, rowHeight, scrollListTo, selectAt, selectFirst, selectItem, selectedItems, singleItems
   , singleSelection, unselected
+  , listStyleKey, listItemStyleKey, listSelected, listUnselected, listCursor, listNoCursor
   )
-import Blink.Controls.MenuBar (MenuBarConfig, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu, submenuItems)
-import Blink.Controls.MenuButton (MenuButtonConfig, isOpen, menuButton, onOpenChanged)
-import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, bandWidth, progress, progressBar)
-import Blink.Controls.RadioButton (radioButton)
+import Blink.Controls.MenuBar (MenuBarConfig, labelAttrs, menuBar, menuItems, menus, onOpenMenuChanged, openMenu, submenuItems, menuBarStyleKey, menuBarLabelStyleKey, menuBarListStyleKey)
+import Blink.Controls.MenuButton (MenuButtonConfig, isOpen, menuButton, onOpenChanged, menuButtonListStyleKey)
+import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, bandWidth, progress, progressBar, progressBarStyleKey, progressBarTrackStyleKey, progressBarFillStyleKey)
+import Blink.Controls.RadioButton (radioButton, radioButtonStyleKey)
 import Blink.Controls.RepeatButton (RepeatButtonConfig, initialDelay, repeatButton, repeatInterval)
-import Blink.Controls.ScrollBar (ScrollBarConfig, scrollBar, scrollViewportTo, visibleFraction)
-import Blink.Controls.ScrollPanel (ScrollPanelConfig, scrollPanel, scrollPanelTo)
-import Blink.Controls.Slider (SliderConfig, onValueChanged, slider)
-import Blink.Controls.TextInput (TextInputConfig, displayFilter, inputFilter, onInput, onSubmit, placeholder, textInput)
-import Blink.Controls.ToggleButton (ToggleConfig, isSelected, onSelectedChanged, toggleButton)
-import Blink.Controls.ToggleGroup (ToggleGroupConfig, allowDeselect, itemSpacing, radioButtonGroup, toggleButtonGroup)
+import Blink.Controls.ScrollBar (ScrollBarConfig, scrollBar, scrollViewportTo, visibleFraction, scrollBarStyleKey, scrollBarButtonStyleKey, scrollBarTrackStyleKey, scrollBarThumbStyleKey)
+import Blink.Controls.ScrollPanel (ScrollPanelConfig, scrollPanel, scrollPanelTo, scrollPanelStyleKey)
+import Blink.Controls.Slider (SliderConfig, onValueChanged, slider, sliderStyleKey, sliderTrackStyleKey, sliderFillStyleKey, sliderThumbStyleKey)
+import Blink.Controls.TextInput (TextInputConfig, displayFilter, inputFilter, onInput, onSubmit, placeholder, textInput, textInputStyleKey, textInputSelectionStyleKey)
+import Blink.Controls.ToggleButton (ToggleConfig, isSelected, onSelectedChanged, toggleButton, toggleButtonStyleKey, toggleChecked, toggleUnchecked)
+import Blink.Controls.ToggleGroup (ToggleGroupConfig, allowDeselect, itemSpacing, radioButtonGroup, toggleButtonGroup, toggleButtonGroupStyleKey, radioButtonGroupStyleKey)
 import Blink.Controls.Table
   ( ColumnConfig, ColumnWidth (..), SortDirection (..), TableConfig
   , cell, cellWidth, column, columns, header, onColumnSortRequested, sortable, sortedBy, table
+  , tableHeaderStyleKey, tableColumnDividerStyleKey, tableColumnDividerLineStyleKey
   )
-import Blink.Controls.Tree (TreeConfig, TreeItemState (..), expanded, flattenVisible, forest, onExpansionChanged, renderNode, tree)
+import Blink.Controls.Tree (TreeConfig, TreeItemState (..), expanded, flattenVisible, forest, onExpansionChanged, renderNode, tree, treeChevronStyleKey)
 import Blink.Controls.TreeTable (TreeTableConfig, treeTable)
+import Blink.Controls.Style (iconStyleKey)
+import Blink.Controls.Menu (menuItemStyleKey, menuItemSubmenuOpen)

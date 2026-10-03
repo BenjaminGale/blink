@@ -307,7 +307,7 @@ handleMnemonics menu closeBehaviour =
 
 itemConfig :: MenuItems e b msg -> b -> ButtonConfig e msg
 itemConfig menu item =
-  resolve defaultButtonConfig (style menuItemStyleKey : width fitContent : height fitContent : miItemAttrs menu item)
+  resolve defaultButtonConfig (overControl (Attribute (\cc -> cc { ccStyleKey = menuItemStyleKey })) : width fitContent : height fitContent : miItemAttrs menu item)
 
 -- | Movement rather than entry, so the pointer takes the highlight back
 -- from the keyboard without first leaving the item. While a sibling's

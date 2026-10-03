@@ -21,13 +21,20 @@ them:
     default. Derived from application state each frame and passed into
     the view via the 'Blink.App.App' record.
 
-When the view resolves the active look for a control, it looks up its
-'StyleKey' in the 'Theme' (falling back to 'themeDefaultStyle' if none is
-registered) to get a @('Metrics', 'StyleSet')@ pair, then calls
-'resolveStyle' with the control's current set of active 'VisualState's.
-Construct a theme with 'emptyTheme'. A ready-made control defaults its
-own key to a 'Class' named after itself (e.g. @Class \"button\"@),
-overridable per-instance via its @style@ attr.
+When the view resolves the active look for a control, it uses the first
+of these the 'Theme' has an entry for:
+
+  1. @'ElementId' eid@, for a control with the id @eid@.
+  2. The class chosen with the control's @style@ attribute, if any.
+  3. The control's own class, a 'Class' named after it (e.g.
+     @Class \"button\"@).
+  4. 'themeDefaultStyle'.
+
+That gives a @('Metrics', 'StyleSet')@ pair, and 'resolveStyle' then
+applies the control's current set of active 'VisualState's. Construct a
+theme with 'emptyTheme'. To give some controls a variation of another
+style, take that style with 'lookupStyle', change it, and add it under a
+new 'Class'.
 
 = Building a theme
 
@@ -117,6 +124,7 @@ module Blink.Style
   , StyleKey (..)
   , Theme (..)
   , emptyTheme
+  , lookupStyle
     -- * Re-exports
   , CornerRadii (..)
   , EdgeVisibility (..)
@@ -319,14 +327,10 @@ resolveStyle ss active = foldl' applyState (styleBase ss) orderedStates
 
 -- * Theme
 
--- | Which entry in a 'Theme' a control resolves its @('Metrics',
--- 'StyleSet')@ from -- either that specific element's own id, or a named
--- class shared by every control that resolves to it. A ready-made
--- control (button, checkbox, ...) defaults to a 'Class' named after
--- itself, so a theme can style every instance of that kind of control at
--- once without registering each element id individually; passing
--- 'ElementId', or a different 'Class', to a control's @style@ attr
--- overrides that default.
+-- | A key for an entry in a 'Theme': one control's own id, or a named
+-- class shared by every control that uses it. Each ready-made control
+-- (button, checkbox, ...) has a 'Class' named after itself. See the module
+-- header for the order a control tries its keys in.
 data StyleKey e
   = ElementId e
   | Class Text
@@ -344,6 +348,11 @@ data Theme e = Theme
     -- ^ The font for every style whose 'styleFont' is 'Nothing'. Change
     -- this to change the font of every control that doesn't choose its own.
   }
+
+-- | The @('Metrics', 'StyleSet')@ pair @thm@ has for @key@, or
+-- 'themeDefaultStyle' when it has none.
+lookupStyle :: Ord e => StyleKey e -> Theme e -> (Metrics, StyleSet)
+lookupStyle key thm = Map.findWithDefault (themeDefaultStyle thm) key (themeElementStyles thm)
 
 -- | Creates a 'Theme' with no per-element overrides; every element
 -- resolves to @def@, in 'defaultFont'.

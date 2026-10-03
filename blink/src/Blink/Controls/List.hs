@@ -145,7 +145,7 @@ import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..), insetRect
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Shift))
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
-import Blink.View (View, getBounds, getCursorIndex, getStyleSet, setCursorIndex)
+import Blink.View (View, getBounds, getCursorIndex, setCursorIndex)
 import Blink.Style
 import Blink.Controls.Style (containerStyle, controlMetrics, flatRowMetrics, flatRowStyle)
 
@@ -719,7 +719,7 @@ listBase
 listBase lid cfg = do
   self          <- controlIdOf lid
   r             <- control (ccfg self)
-  (m, styleSet) <- getStyleSet (ccStyleKey (lstControl cfg))
+  (m, styleSet) <- controlStyleSet (lstControl cfg)
   outer         <- getBounds
   let (finalModel, activated) = keyboardResult (ciKeysPressed r)
       viewportHeight           = rectHeight (insetRect (chromeInsets m (styleBase styleSet)) outer) - headerHeight
@@ -917,7 +917,7 @@ listFrom
   -> ListConfig sel e msg a
   -> Element e msg
 listFrom lid cfg =
-  chromeElement (lstLayout cfg) (ccStyleKey (lstControl cfg)) (listMeasure (isJust (lstHeader cfg)) cfg) (void (listBase lid cfg))
+  chromeElement (lstLayout cfg) (lstControl cfg) (listMeasure (isJust (lstHeader cfg)) cfg) (void (listBase lid cfg))
 
 -- | Scrolls the list (or tree, table or tree-table) @lid@ to @position@,
 -- from @0@ (top) to @1@ (bottom), from the next frame onward. Callable

@@ -188,7 +188,7 @@ data IconToggleConfig e msg = IconToggleConfig
 -- radio button share.
 iconToggle :: Ord e => e -> IconToggleConfig e msg -> Element e msg
 iconToggle eid iconCfg =
-  chromeElement (bcLayout btn) (ccStyleKey (bcControl btn)) content (void (toggleBase eid cfg { tgcButton = btn { bcControl = ctrl } }))
+  chromeElement (bcLayout btn) (bcControl btn) content (void (toggleBase eid cfg { tgcButton = btn { bcControl = ctrl } }))
   where
     cfg     = itToggle iconCfg
     btn     = tgcButton cfg

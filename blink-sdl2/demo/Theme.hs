@@ -12,6 +12,7 @@ module Theme
   , Page (..)
   , lightTheme
   , darkTheme
+  , heading
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -227,13 +228,17 @@ withBorderShowcase p thm = thm
     rounded = [ BorderLayer (paletteBorder p) 3 0 (uniformRadii 24) allEdgesVisible ]
     tab     = [ BorderLayer (paletteBorder p) 2 0 (topRounded 16) (allEdgesVisible { edgeBottomVisible = False }) ]
 
--- | The built-in label look in a larger, bold font, registered as its own
--- class so a caption opts in with @style (Class "heading")@.
+-- | A class for captions drawn as headings, applied with @style heading@.
+heading :: StyleKey e
+heading = Class "heading"
+
+-- | The built-in label look in a larger, bold font, registered as
+-- 'heading'.
 withHeading :: Theme ControlId -> Theme ControlId
 withHeading thm = thm
-  { themeElementStyles = Map.insert (Class "heading") (labelMetrics, headingStyles) (themeElementStyles thm) }
+  { themeElementStyles = Map.insert heading (labelMetrics, headingStyles) (themeElementStyles thm) }
   where
-    (labelMetrics, labelStyles) = Map.findWithDefault (themeDefaultStyle thm) (Class "label") (themeElementStyles thm)
+    (labelMetrics, labelStyles) = lookupStyle labelStyleKey thm
     headingStyles = labelStyles { styleBase = (styleBase labelStyles) { styleFont = Just defaultFont { fontSize = 20, fontWeight = Bold } } }
 
 lightTheme :: Theme ControlId

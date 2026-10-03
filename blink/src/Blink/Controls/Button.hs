@@ -171,7 +171,7 @@ button eid attrs = captionedButton cfg (void (buttonBase eid (withCaptionContent
 -- inside its chrome, and runs @run@. The shape every captioned
 -- button-like widget shares.
 captionedButton :: Ord e => ButtonConfig e msg -> View e msg () -> Element e msg
-captionedButton cfg = chromeElement (bcLayout cfg) (ccStyleKey (bcControl cfg)) (captionElement (lcText (bcLabelled cfg)))
+captionedButton cfg = chromeElement (bcLayout cfg) (bcControl cfg) (captionElement (lcText (bcLabelled cfg)))
 
 -- | @cfg@ with its content set to draw its own caption.
 withCaptionContent :: ButtonConfig e msg -> ButtonConfig e msg

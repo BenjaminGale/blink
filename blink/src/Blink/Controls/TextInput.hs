@@ -333,7 +333,7 @@ drawTextInputContent s bounds displayValue placeholderText canEdit ox sel@(Selec
 -- into. Override with 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
 textInput :: Ord e => e -> [Attribute (TextInputConfig e msg)] -> Element e msg
 textInput eid attrs =
-  chromeElement (ticLayout cfg) (ccStyleKey (ticControl cfg)) (lineHeightElement (ticValue cfg)) (void (control ctrl))
+  chromeElement (ticLayout cfg) ctrl (lineHeightElement (ticValue cfg)) (void (control ctrl))
   where
     cfg  = resolve defaultTextInputConfig attrs
     ctrl = (ticControl cfg)

@@ -9,7 +9,7 @@ import Blink.Controls.Control
   ( Attribute, ControlConfig (..), FocusOptions (..), FocusPolicy (..)
   , chromeInsets, control, defaultControlConfig, defaultFocusOptions, elementId, focusTargetOnClick, isEnabled, focusPolicy
   , onClicked, onFocusGained, onFocusLost, onKeyPressed
-  , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, resolve
+  , onMouseDown, onMouseEntered, onMouseExited, onMouseUp, resolve, style
   )
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig, focusPolicyAttributeSpec)
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour)
@@ -18,7 +18,7 @@ import Blink.Input (Key (..), KeyEvent (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.Style
-  ( StyleSet (..), Theme (..), VisualState (CommonPressed)
+  ( StyleKey (..), StyleSet (..), Theme (..), VisualState (CommonPressed)
   , BorderLayer (..), EdgeVisibility (..), allEdgesVisible, styleBackground, styleBorder, uniformRadii
   )
 import Blink.View
@@ -240,6 +240,42 @@ spec = describe "Blink.Controls.Control.control" $ do
       it "does not draw the earlier (bottommost) sibling in its pressed style" $ do
         result <- runInteractions testBounds pressedSeedCtx overlapping [MoveTo clickPoint] [MouseDown clickPoint]
         getDrawCommands (resultContext result) `shouldNotContain` [chromeFill pressedColour rectBack]
+
+  describe "style lookup" $ do
+    let idColour      = RGBA 1 0 0 1
+        variantColour = RGBA 0 1 0 1
+        ownColour     = RGBA 0 0 1 1
+        own           = Class "own"
+        variant       = Class "variant"
+        entry c       = (standardMetrics, plainStyleSet (plainStyle c))
+        drawsWith entries view =
+          getDrawCommands . snd <$> runView view
+            (emptyViewContext testBounds noInput testTheme { themeElementStyles = Map.fromList entries })
+        styled attrs = () <$ control (resolve defaultControlConfig { ccStyleKey = own } (elementId ElemA : attrs))
+
+    it "uses the theme's entry for the control's id without a style attribute" $ do
+      cmds <- drawsWith [(ElementId ElemA, entry idColour), (own, entry ownColour)] (styled [])
+      cmds `shouldContain` [chromeFill idColour testBounds]
+
+    it "prefers the entry for the control's id over its style class" $ do
+      cmds <- drawsWith [(ElementId ElemA, entry idColour), (variant, entry variantColour)] (styled [style variant])
+      cmds `shouldContain` [chromeFill idColour testBounds]
+
+    it "prefers its style class over its own class" $ do
+      cmds <- drawsWith [(variant, entry variantColour), (own, entry ownColour)] (styled [style variant])
+      cmds `shouldContain` [chromeFill variantColour testBounds]
+
+    it "falls back to its own class when the theme has no entry for its style class" $ do
+      cmds <- drawsWith [(own, entry ownColour)] (styled [style variant])
+      cmds `shouldContain` [chromeFill ownColour testBounds]
+
+    it "falls back to the theme's default when no key has an entry" $ do
+      cmds <- drawsWith [] (styled [style variant])
+      cmds `shouldContain` [chromeFill testColour testBounds]
+
+    it "ignores the entry for its id when it is a part of that id" $ do
+      cmds <- drawsWith [(ElementId ElemA, entry idColour), (own, entry ownColour)] (withPart ElemA "inner" (styled []))
+      cmds `shouldContain` [chromeFill ownColour testBounds]
 
   describe "no id" $ do
     -- No 'elementId' at all, unlike 'renderAt'/'renderControl'.
