@@ -8,7 +8,7 @@ import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBeha
 import Blink.Controls.Fixtures
   (fullSizeAt, hitRectFor, mkTestTheme, monospaceTextMeasurer, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
 import Blink.Geometry (Point (..), Rectangle (..))
-import Blink.Input (InputState (..))
+import Blink.Input (InputState (..), Modifier (Alt))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Controls.Label (LabelConfig, label, mnemonic, target, text)
 import Blink.Rendering (DrawCommand (..), TextAlign (..))
@@ -43,7 +43,7 @@ start attrs = startAt seedCtx (fullSize attrs)
 
 -- | Same as 'seedCtx', but with Alt reported held this frame.
 altHeldCtx :: ViewContext TestElement String
-altHeldCtx = emptyViewContext testBounds (noInput { inputAltHeld = True }) testTheme
+altHeldCtx = emptyViewContext testBounds (noInput { inputHeldModifiers = [Alt] }) testTheme
 
 startWithAltHeld :: [Attribute'] -> IO (ViewContext TestElement String)
 startWithAltHeld attrs = startAt altHeldCtx (fullSize attrs)
@@ -70,7 +70,7 @@ tallBounds = Rectangle 0 0 200 200
 tallAltHeldCtx :: ViewContext TestElement String
 tallAltHeldCtx =
   withMeasurers (noOpMeasurers { msrText = fakeTextMeasurer })
-    (emptyViewContext tallBounds (noInput { inputAltHeld = True }) testTheme)
+    (emptyViewContext tallBounds (noInput { inputHeldModifiers = [Alt] }) testTheme)
 
 startTall :: [Attribute'] -> IO (ViewContext TestElement String)
 startTall attrs = startAt tallAltHeldCtx (fullSize attrs)
@@ -91,7 +91,7 @@ startShortOverflowing :: [Attribute'] -> IO (ViewContext TestElement String)
 startShortOverflowing attrs =
   startAt
     (withMeasurers (noOpMeasurers { msrText = fakeOverflowingTextMeasurer })
-      (emptyViewContext shortBounds (noInput { inputAltHeld = True }) testTheme))
+      (emptyViewContext shortBounds (noInput { inputHeldModifiers = [Alt] }) testTheme))
     (fullSize attrs)
 
 spec :: Spec

@@ -2,12 +2,14 @@
 module Blink.SDL2.Input
   ( updateButton
   , toKeyEvents
+  , toModifiers
   , toTypedText
   , toWheelDelta
   , sdlPoint
   ) where
 
 import Blink.Backend
+import Control.Applicative ((<|>))
 import qualified SDL
 import Data.Char (chr, toUpper)
 import Data.Text (Text)
@@ -22,54 +24,63 @@ updateButton current e = case SDL.eventPayload e of
           SDL.Pressed  -> True
   _ -> current
 
--- | The uppercase letter a letter keycode ('SDL.KeycodeA' through
--- 'SDL.KeycodeZ', whose underlying codes are the ASCII lowercase range)
--- represents, or 'Nothing' for any other keycode.
-letterKeycode :: SDL.Keycode -> Maybe Char
-letterKeycode kc
-  | code >= SDL.unwrapKeycode SDL.KeycodeA && code <= SDL.unwrapKeycode SDL.KeycodeZ
-  = Just (toUpper (chr (fromIntegral code)))
-  | otherwise = Nothing
-  where code = SDL.unwrapKeycode kc
+-- | The 'Key' for each SDL keycode Blink reports, or 'Nothing' for any
+-- other keycode.
+toKey :: SDL.Keycode -> Maybe Key
+toKey kc = case kc of
+  SDL.KeycodeTab       -> Just KeyTab
+  SDL.KeycodeReturn    -> Just KeyReturn
+  SDL.KeycodeKPEnter   -> Just KeyReturn
+  SDL.KeycodeBackspace -> Just KeyBackspace
+  SDL.KeycodeDelete    -> Just KeyDelete
+  SDL.KeycodeInsert    -> Just KeyInsert
+  SDL.KeycodeSpace     -> Just KeySpace
+  SDL.KeycodeEscape    -> Just KeyEscape
+  SDL.KeycodeLeft      -> Just KeyLeft
+  SDL.KeycodeRight     -> Just KeyRight
+  SDL.KeycodeUp        -> Just KeyUp
+  SDL.KeycodeDown      -> Just KeyDown
+  SDL.KeycodeHome      -> Just KeyHome
+  SDL.KeycodeEnd       -> Just KeyEnd
+  SDL.KeycodePageUp    -> Just KeyPageUp
+  SDL.KeycodePageDown  -> Just KeyPageDown
+  _ -> lookup kc functionKeys <|> charKey kc
+
+functionKeys :: [(SDL.Keycode, Key)]
+functionKeys = zip
+  [ SDL.KeycodeF1, SDL.KeycodeF2, SDL.KeycodeF3, SDL.KeycodeF4, SDL.KeycodeF5, SDL.KeycodeF6
+  , SDL.KeycodeF7, SDL.KeycodeF8, SDL.KeycodeF9, SDL.KeycodeF10, SDL.KeycodeF11, SDL.KeycodeF12
+  ]
+  (map KeyFunction [1 ..])
+
+-- | A letter or digit keycode as 'KeyChar', with letters in upper case.
+-- SDL's letter keycodes are the ASCII lowercase range and its digit
+-- keycodes the ASCII digit range.
+charKey :: SDL.Keycode -> Maybe Key
+charKey kc
+  | inRange SDL.KeycodeA SDL.KeycodeZ = Just (KeyChar (toUpper (chr (fromIntegral code))))
+  | inRange SDL.Keycode0 SDL.Keycode9 = Just (KeyChar (chr (fromIntegral code)))
+  | otherwise                         = Nothing
+  where
+    code = SDL.unwrapKeycode kc
+    inRange lo hi = code >= SDL.unwrapKeycode lo && code <= SDL.unwrapKeycode hi
+
+-- | The modifier keys held, in a fixed order, so the same combination
+-- always produces the same list.
+toModifiers :: SDL.KeyModifier -> [Modifier]
+toModifiers mods =
+  [ Shift | SDL.keyModifierLeftShift mods || SDL.keyModifierRightShift mods ]
+  ++ [ Ctrl  | SDL.keyModifierLeftCtrl mods  || SDL.keyModifierRightCtrl mods ]
+  ++ [ Alt   | SDL.keyModifierLeftAlt mods   || SDL.keyModifierRightAlt mods ]
+  ++ [ Super | SDL.keyModifierLeftGUI mods   || SDL.keyModifierRightGUI mods ]
 
 toKeyEvents :: SDL.Event -> [KeyEvent]
 toKeyEvents e = case SDL.eventPayload e of
   SDL.KeyboardEvent d
     | SDL.keyboardEventKeyMotion d == SDL.Pressed
     , let keysym = SDL.keyboardEventKeysym d
-    , let mods   = SDL.keysymModifier keysym
-    , let alt    = SDL.keyModifierLeftAlt mods || SDL.keyModifierRightAlt mods
-    , Just c <- letterKeycode (SDL.keysymKeycode keysym)
-    , alt
-    -> [KeyEvent { key = KeyChar c, modifiers = [Alt], keyRepeat = SDL.keyboardEventRepeat d }]
-  SDL.KeyboardEvent d
-    | SDL.keyboardEventKeyMotion d == SDL.Pressed
-    -> let rep = SDL.keyboardEventRepeat d
-       in case SDL.keysymKeycode (SDL.keyboardEventKeysym d) of
-         SDL.KeycodeTab ->
-           let mods    = SDL.keysymModifier (SDL.keyboardEventKeysym d)
-               shifted = SDL.keyModifierLeftShift mods || SDL.keyModifierRightShift mods
-           in [KeyEvent { key = KeyTab, modifiers = [Shift | shifted], keyRepeat = rep }]
-         SDL.KeycodeReturn    -> [KeyEvent { key = KeyReturn,    modifiers = [], keyRepeat = rep }]
-         SDL.KeycodeBackspace -> [KeyEvent { key = KeyBackspace, modifiers = [], keyRepeat = rep }]
-         SDL.KeycodeDelete    -> [KeyEvent { key = KeyDelete,    modifiers = [], keyRepeat = rep }]
-         SDL.KeycodeSpace     -> [KeyEvent { key = KeySpace,     modifiers = [], keyRepeat = rep }]
-         SDL.KeycodeA         ->
-           let mods  = SDL.keysymModifier (SDL.keyboardEventKeysym d)
-               ctrld = SDL.keyModifierLeftCtrl mods || SDL.keyModifierRightCtrl mods
-           in [KeyEvent { key = KeyA, modifiers = [Ctrl | ctrld], keyRepeat = rep }]
-         SDL.KeycodeLeft      ->
-           let mods    = SDL.keysymModifier (SDL.keyboardEventKeysym d)
-               shifted = SDL.keyModifierLeftShift mods || SDL.keyModifierRightShift mods
-           in [KeyEvent { key = KeyLeft,  modifiers = [Shift | shifted], keyRepeat = rep }]
-         SDL.KeycodeRight     ->
-           let mods    = SDL.keysymModifier (SDL.keyboardEventKeysym d)
-               shifted = SDL.keyModifierLeftShift mods || SDL.keyModifierRightShift mods
-           in [KeyEvent { key = KeyRight, modifiers = [Shift | shifted], keyRepeat = rep }]
-         SDL.KeycodeUp        -> [KeyEvent { key = KeyUp,        modifiers = [], keyRepeat = rep }]
-         SDL.KeycodeDown      -> [KeyEvent { key = KeyDown,      modifiers = [], keyRepeat = rep }]
-         SDL.KeycodeEscape    -> [KeyEvent { key = KeyEscape,    modifiers = [], keyRepeat = rep }]
-         _ -> []
+    , Just k <- toKey (SDL.keysymKeycode keysym)
+    -> [KeyEvent { key = k, modifiers = toModifiers (SDL.keysymModifier keysym), keyRepeat = SDL.keyboardEventRepeat d }]
   _ -> []
 
 toTypedText :: SDL.Event -> [Text]

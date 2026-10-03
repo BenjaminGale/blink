@@ -130,7 +130,7 @@ import GHC.Clock (getMonotonicTimeNSec)
 
 import Blink.Cmd (Cmd, runCmd)
 import Blink.Geometry (Point (..), Rectangle, Size (..), placePopup, rectFromSize)
-import Blink.Input (KeyEvent, InputState (..), Mouse (..), advanceButton, emptyInputState)
+import Blink.Input (KeyEvent, Modifier, InputState (..), Mouse (..), advanceButton, emptyInputState)
 import Blink.Rendering (DrawCommand, CursorShape, TextMeasurer (..), ImageMeasurer (..), Measurers (..))
 import Blink.Style (Theme)
 import Blink.View.Animation (AnimationState (animElapsed), contextAnimation, mkAnimationState)
@@ -234,9 +234,9 @@ data FrameInput = FrameInput
   , wheelDelta    :: Double
     -- ^ Vertical mouse wheel movement for this frame -- see
     -- 'Blink.Input.inputWheelDelta'.
-  , altHeld       :: Bool
-    -- ^ Whether Alt is physically held this frame -- see
-    -- 'Blink.Input.inputAltHeld'.
+  , heldModifiers :: [Modifier]
+    -- ^ The modifier keys physically held this frame -- see
+    -- 'Blink.Input.inputHeldModifiers'.
   , windowSize    :: Size
     -- ^ Current dimensions of the window's drawing area.
   , quitRequested   :: Bool
@@ -264,7 +264,7 @@ emptyFrameInput = FrameInput
   , keyEvents       = []
   , typedText       = []
   , wheelDelta      = 0
-  , altHeld         = False
+  , heldModifiers   = []
   , windowSize      = Size 0 0
   , quitRequested   = False
   , isAnimationTick = False
@@ -487,7 +487,7 @@ toInputState fi = InputState
   , inputKeyEvents      = keyEvents fi
   , inputTypedText      = typedText fi
   , inputWheelDelta     = wheelDelta fi
-  , inputAltHeld        = altHeld fi
+  , inputHeldModifiers  = heldModifiers fi
   }
 
 -- Clears keyboard, text, and wheel events for the second render pass in

@@ -43,9 +43,9 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Blink.Geometry (Point (..), Rectangle)
 
--- | The subset of keys that Blink's controls respond to. Text entry is
--- handled via 'inputTypedText' in 'InputState'; 'Key' covers only
--- navigation and editing keys.
+-- | The keys a backend reports. Text entry is handled via
+-- 'inputTypedText' in 'InputState'; 'Key' covers the keys controls react
+-- to directly: navigation, editing, shortcuts and mnemonics.
 data Key
   = KeyTab
     -- ^ Tab key (focus forward).
@@ -55,11 +55,12 @@ data Key
     -- ^ Backspace key.
   | KeyDelete
     -- ^ Forward Delete key.
+  | KeyInsert
+    -- ^ Insert key.
   | KeySpace
     -- ^ Space bar.
-  | KeyA
-    -- ^ The @A@ key. With 'Ctrl' held, selects all in
-    -- "Blink.Controls.TextInput".
+  | KeyEscape
+    -- ^ Escape key.
   | KeyLeft
     -- ^ Left arrow.
   | KeyRight
@@ -68,19 +69,30 @@ data Key
     -- ^ Up arrow.
   | KeyDown
     -- ^ Down arrow.
-  | KeyEscape
-    -- ^ Escape key.
+  | KeyHome
+    -- ^ Home key.
+  | KeyEnd
+    -- ^ End key.
+  | KeyPageUp
+    -- ^ Page Up key.
+  | KeyPageDown
+    -- ^ Page Down key.
+  | KeyFunction Int
+    -- ^ A function key, numbered from 1 (F1) to 12 (F12).
   | KeyChar Char
-    -- ^ A letter key, reported as its uppercase form regardless of Shift.
-    -- Covers mnemonic letters (see 'mnemonicActivated') that aren't
-    -- otherwise enumerated above.
+    -- ^ A letter or digit key, with letters reported in upper case
+    -- regardless of Shift. Used for shortcuts such as Ctrl+A and for
+    -- mnemonics (see 'mnemonicActivated'); the characters a key types
+    -- arrive separately, in 'inputTypedText'.
   deriving (Eq, Show)
 
--- | Keyboard modifier keys. Carried alongside a 'Key' in 'KeyEvent'.
+-- | Keyboard modifier keys. Carried alongside a 'Key' in 'KeyEvent', and
+-- reported every frame in 'inputHeldModifiers'.
 data Modifier
-  = Shift -- ^ Shift key held during the key press.
-  | Ctrl  -- ^ Ctrl key held during the key press.
-  | Alt   -- ^ Alt \/ Option key held during the key press.
+  = Shift -- ^ Shift key.
+  | Ctrl  -- ^ Ctrl key.
+  | Alt   -- ^ Alt \/ Option key.
+  | Super -- ^ The Command key on macOS, the Windows key on Windows.
   deriving (Eq, Show)
 
 -- | A single keyboard event from the platform: a key press together with
@@ -132,13 +144,13 @@ data InputState = InputState
     -- revealing what's below); negative scrolls up/back. Zero when the
     -- wheel didn't move this frame. Already corrects for the platform's
     -- "natural"/flipped scrolling setting, so a consumer never has to.
-  , inputAltHeld       :: Bool
-    -- ^ 'True' while Alt is physically held, sampled fresh every frame --
+  , inputHeldModifiers :: [Modifier]
+    -- ^ The modifier keys physically held, sampled fresh every frame --
     -- unlike 'inputKeyEvents', which only reports the frame a key is
     -- pressed, this reflects the held-down /level/, the same continuous
-    -- style as 'inputLeftButtonDown'. Used to show a mnemonic's underline
-    -- (see 'Blink.Controls.Label.mnemonic') only while Alt is actually
-    -- held, rather than permanently.
+    -- style as 'inputLeftButtonDown'. Used, for example, to show a
+    -- mnemonic's underline (see 'Blink.Controls.Label.mnemonic') only
+    -- while Alt is held.
   } deriving (Eq, Show)
 
 -- | Nothing held or pressed. Build a specific frame's state by record
@@ -150,7 +162,7 @@ emptyInputState = InputState
   , inputKeyEvents      = []
   , inputTypedText      = []
   , inputWheelDelta     = 0
-  , inputAltHeld        = False
+  , inputHeldModifiers  = []
   }
 
 -- | Which element, if any, holds mouse capture during a drag. A control

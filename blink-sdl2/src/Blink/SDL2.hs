@@ -25,7 +25,7 @@ module Blink.SDL2
   ) where
 
 import Blink.Backend
-import Blink.SDL2.Input (sdlPoint, toKeyEvents, toTypedText, toWheelDelta, updateButton)
+import Blink.SDL2.Input (sdlPoint, toKeyEvents, toModifiers, toTypedText, toWheelDelta, updateButton)
 import Blink.SDL2.Rendering
 import SDL (($=))
 import qualified SDL
@@ -173,7 +173,7 @@ loop handle btnDown applyCursor renderFrame window checkAnimTick = do
                    , keyEvents       = toKeyEvents event
                    , typedText       = toTypedText event
                    , wheelDelta      = toWheelDelta event
-                   , altHeld         = SDL.keyModifierLeftAlt mods || SDL.keyModifierRightAlt mods
+                   , heldModifiers   = toModifiers mods
                    , windowSize      = winSize
                    , quitRequested   = SDL.eventPayload event == SDL.QuitEvent
                    , isAnimationTick = isAnimTick

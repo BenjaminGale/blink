@@ -144,14 +144,19 @@ resolveMouseSelection ci bounds displayValue scrollX sel
 
 -- | Ctrl+A selects the entire value; Shift+Left\/Right extend the
 -- selection; plain Left\/Right collapse an existing selection to its near
--- end, or step by one otherwise.
+-- end, or step by one otherwise. Home\/End move the cursor to the start or
+-- end of the value, extending the selection when Shift is held.
 resolveKeyboardSelection :: Bool -> [KeyEvent] -> Int -> Selection -> Selection
 resolveKeyboardSelection canEdit keyEvts len sel@(Selection _ active)
   | selectAll  = Selection 0 len
   | shiftLeft  = extendActive (\a -> max 0   (a - 1)) sel
   | shiftRight = extendActive (\a -> min len (a + 1)) sel
+  | shiftHome  = extendActive (const 0) sel
+  | shiftEnd   = extendActive (const len) sel
   | plainLeft  = cursor (if hasSel then selLo else max 0   (active - 1))
   | plainRight = cursor (if hasSel then selHi else min len (active + 1))
+  | plainHome  = cursor 0
+  | plainEnd   = cursor len
   | otherwise  = sel
   where
     hasSel     = selectionHasExtent sel
@@ -162,7 +167,11 @@ resolveKeyboardSelection canEdit keyEvts len sel@(Selection _ active)
     shiftRight = pressed KeyRight True
     plainLeft  = pressed KeyLeft  False
     plainRight = pressed KeyRight False
-    selectAll  = canEdit && any (\e -> key e == KeyA && Ctrl `elem` modifiers e) keyEvts
+    shiftHome  = pressed KeyHome  True
+    shiftEnd   = pressed KeyEnd   True
+    plainHome  = pressed KeyHome  False
+    plainEnd   = pressed KeyEnd   False
+    selectAll  = canEdit && any (\e -> key e == KeyChar 'A' && Ctrl `elem` modifiers e) keyEvts
 
 -- | Backspace, Delete, and typed text edit the value, selection-aware;
 -- returns the new selection alongside the new value when it actually

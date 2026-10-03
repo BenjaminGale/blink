@@ -240,8 +240,28 @@ spec = describe "Blink.Controls.TextInput" $ do
 
     it "selects the entire value on Ctrl+A" $ do
       base   <- seeded 2 2
-      result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyA [Ctrl]]
+      result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey (KeyChar 'A') [Ctrl]]
       contextSelection Field (resultContext result) `shouldBe` Just (Selection 0 5)
+
+    it "moves the cursor to the start on Home, dropping any selection" $ do
+      base   <- seeded 1 3
+      result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyHome []]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 0 0)
+
+    it "moves the cursor to the end on End" $ do
+      base   <- seeded 2 2
+      result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyEnd []]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 5 5)
+
+    it "extends the selection to the start with Shift+Home" $ do
+      base   <- seeded 3 3
+      result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyHome [Shift]]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 3 0)
+
+    it "extends the selection to the end with Shift+End" $ do
+      base   <- seeded 1 3
+      result <- runInteractions testBounds base (fullSizeTextInput Field [value "hello"]) [] [PressKey KeyEnd [Shift]]
+      contextSelection Field (resultContext result) `shouldBe` Just (Selection 1 5)
 
   describe "selection editing" $ do
     -- See the "arrow navigation" 'seeded' above for why the field itself is

@@ -43,7 +43,7 @@ import qualified Data.Map.Strict as Map
 
 import Blink.Controls.Control
 import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..), uniform)
-import Blink.Input (InputState (inputAltHeld))
+import Blink.Input (InputState (inputHeldModifiers), Modifier (Alt))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Rendering (TextAlign (..))
 import Blink.View (View, charOffset, currentStyle, getBounds, getCurrentScope, getInput, measureText, withBounds)
@@ -93,7 +93,7 @@ mnemonic c = overLabelled (Attribute (\lc -> lc { lcMnemonic = Just c }))
 renderLabelledContent :: LabelledConfig e msg -> View e msg ()
 renderLabelledContent cfg = do
   s       <- currentStyle
-  altHeld <- inputAltHeld <$> getInput
+  altHeld <- elem Alt . inputHeldModifiers <$> getInput
   drawText (styleTextColour s) (styleTextAlign s) (lcText cfg)
   when altHeld $ forM_ (lcMnemonic cfg) (drawMnemonicUnderline s (lcText cfg))
 
