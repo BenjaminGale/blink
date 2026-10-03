@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Rendering
+module Blink.SDL2.Rendering
   ( TextureCache
   , newTextureCache
   , freeTextureCache
@@ -134,7 +134,7 @@ loadImageTexture renderer cache path =
 isSvgPath :: ImagePath -> Bool
 isSvgPath path = T.toLower (T.takeWhileEnd (/= '.') path) == "svg"
 
--- | Removes any existing @attr="..."@ (or @attr='...'@) occurrence, so a
+-- | Removes any existing @attr="..."@ (or @attr=\'...\'@) occurrence, so a
 -- fresh value can be inserted without leaving a stale duplicate attribute
 -- behind. Leaves @t@ unchanged if @attr=@ isn't followed by a quoted
 -- value at all (a malformed document isn't this function's problem to
@@ -675,7 +675,7 @@ edgeOuterFeather edge = bandMesh a b
 
 -- | The flat, fully-covered interior of a fill: the rectangle minus its
 -- four corner boxes (each corner's own radius-by-radius square, whose
--- rounding is instead handled by 'cornerMeshes' above), decomposed into
+-- rounding is instead handled by @cornerMeshes@ above), decomposed into
 -- plain rectangles that need no feathering of their own since every
 -- point in them sits outside every corner's box.
 --
@@ -684,13 +684,13 @@ edgeOuterFeather edge = bandMesh a b
 -- @maxLeft@\/@maxRight@\/@maxTop@\/@maxBottom@ -- the /larger/ of each
 -- side's two corner radii) covers everything except the four small
 -- corners of that cross, where the smaller of a side's two radii would
--- otherwise leave a sliver unfilled (e.g. a point just past 'tl' but
+-- otherwise leave a sliver unfilled (e.g. a point just past @tl@ but
 -- still short of @max tl bl@, with @bl > tl@) -- those are filled by up
 -- to two more rectangles per corner, splitting that corner's own
 -- (up to @maxLeft@-by-@maxTop@) box around the part its own radius
 -- actually excludes. In the uniform-radius and top-only-rounded cases
 -- this library actually constructs, every one of those extra pieces
--- collapses to zero width or height and 'solidRect' drops it, leaving
+-- collapses to zero width or height and @solidRect@ drops it, leaving
 -- exactly the plain cross either way would produce; the extra pieces
 -- only matter for four genuinely different corner radii at once.
 interiorRects :: Rectangle -> CornerRadii -> [([MeshVertex], [Int])]

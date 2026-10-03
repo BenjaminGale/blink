@@ -101,7 +101,7 @@ renderLabelledContent cfg = do
 -- with a thin rule just under the text, positioned by 'charOffset' and
 -- shifted to match how the backend itself places @t@ under @styleTextAlign@
 -- horizontally and centres it vertically within the current bounds -- see
--- @alignedTextRect@ in @app/Rendering.hs@, whose formula this mirrors on
+-- @alignedTextRect@ in @blink-sdl2@'s @Blink.SDL2.Rendering@, whose formula this mirrors on
 -- both axes so the rule lands under the drawn glyph itself rather than the
 -- bottom of @bounds@, which is usually taller than the glyph (e.g. a
 -- 'Blink.Controls.MenuBar.menuBar' label filling the whole bar's height).
