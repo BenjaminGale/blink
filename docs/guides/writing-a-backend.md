@@ -3,7 +3,7 @@
 Blink doesn't own a main loop, a window, or a renderer — a backend
 supplies all three and calls into Blink once per frame. This guide walks
 through what a backend actually has to do, using the included SDL2 backend
-(`app/Main.hs`, `app/Rendering.hs`) as the worked example. Read
+(the `blink-sdl2` package, under `blink-sdl2/src/`) as the worked example. Read
 [the application-and-backend concept](../concepts/04-runtime/03-application-and-backend.md)
 first if you haven't already — this guide assumes you know what `App`,
 `BlinkHandle`, and `stepFrame` are for.
@@ -27,7 +27,7 @@ data TextMeasurer = TextMeasurer
 ```
 
 The SDL2 backend builds this from `SDL.Font` glyph metrics in
-`app/Rendering.hs`'s `mkTextMeasurer`. If you're prototyping without a real
+`blink-sdl2/src/Blink/SDL2/Rendering.hs`'s `mkTextMeasurer`. If you're prototyping without a real
 font library yet, `noOpTextMeasurer` (all zeros) is enough to get a
 backend running before text layout needs to be pixel-accurate.
 
@@ -75,7 +75,7 @@ signalled a close request. Two fields need more care:
 
 * **`keyEvents`** only needs the keys Blink's controls act on (see `Key` in
   `Blink.Input`) — Tab, Return, Backspace, Space, and the arrow keys.
-  Everything else can be dropped. `app/Main.hs`'s `toKeyEvents` shows the
+  Everything else can be dropped. `blink-sdl2/src/Blink/SDL2/Input.hs`'s `toKeyEvents` shows the
   full translation from SDL keysyms, including reading `keyRepeat` off the
   platform's own auto-repeat flag and carrying Shift as a `Modifier` for
   Shift+Tab and Shift+arrow.
@@ -84,7 +84,7 @@ signalled a close request. Two fields need more care:
   how the frame loop knows to advance animation state rather than treat
   this as an ordinary input frame. The SDL2 backend does this by
   registering a distinct SDL event type for `notify` and checking each
-  polled event against it (`checkAnimTick` in `app/Main.hs`).
+  polled event against it (`checkAnimTick` in `blink-sdl2/src/Blink/SDL2.hs`).
 * **`frameTime`** is the frame's time in nanoseconds on a monotonic clock.
   Leave it `Nothing` and `stepFrame` reads the system clock itself; set it
   when your platform timestamps its events, or in tests that need to
@@ -114,14 +114,14 @@ Walk the list in order, issuing the equivalent draw call in your
 rendering API for each, and treat `PushClip`/`PopClip` as a stack —
 everything drawn between a push and its matching pop should be clipped to
 the intersection of that rectangle with whatever was already on the
-clip stack. `app/Rendering.hs`'s `submitDrawCommand` does this against
+clip stack. `blink-sdl2/src/Blink/SDL2/Rendering.hs`'s `submitDrawCommand` does this against
 SDL2's renderer, including a simple glyph texture cache for `DrawText` so
 each string isn't re-rendered to a texture every frame.
 
 ## Putting it together
 
 The actual loop is small once the above four pieces exist — this is
-`app/Main.hs`'s `loop`, trimmed to the shape:
+`blink-sdl2/src/Blink/SDL2.hs`'s `loop`, trimmed to the shape:
 
 ```haskell
 loop handle = do

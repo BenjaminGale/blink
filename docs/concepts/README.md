@@ -5,7 +5,7 @@ start to finish by someone who has never seen the library, without needing
 to read the source first.
 
 For precise, per-function reference documentation, use the Haddocks
-(`cabal haddock`), starting from the `Blink` module. This guide exists
+(`cabal haddock all`), starting from the `Blink` module. This guide exists
 because some of that reference material — correctly, for reference material
 — assumes you already have the mental model. This is where you get it.
 

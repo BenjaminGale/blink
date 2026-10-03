@@ -68,4 +68,4 @@ See [frame management](02-frame-management.md) for that distinction.
 Everything above is what a backend author needs to drive Blink; writing
 one is a task, not a concept, so it isn't covered further here. See
 [the backend guide](../../guides/writing-a-backend.md) for that, and the
-included SDL2 backend (`app/`) as a working example.
+included SDL2 backend (`blink-sdl2/`) as a working example.

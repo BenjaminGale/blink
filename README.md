@@ -178,13 +178,13 @@ cabal run demo
 ### Running the tests
 
 ```
-cabal test
+cabal test all
 ```
 
 ### Building the documentation
 
 ```
-cabal haddock
+cabal haddock all
 ```
 
 ## License

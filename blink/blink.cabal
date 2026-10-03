@@ -16,8 +16,8 @@ description:
     if you need to hand-write a custom control. The whole view tree is
     rebuilt from application state each frame, rather than retained and
     mutated incrementally. Blink does not own the main loop -- a backend
-    (SDL2, in the included demo) drives the loop and calls into Blink once
-    per frame.
+    (such as the separate blink-sdl2 package) drives the loop and calls
+    into Blink once per frame.
 
     Start with "Blink" for the module guide, "Blink.App" for how to define
     an application and wire it up to a backend, and "Blink.View" for the
