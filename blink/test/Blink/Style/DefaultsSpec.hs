@@ -30,7 +30,8 @@ import Blink.Geometry (Rectangle (..))
 import Blink.Rendering (Colour (..))
 import Blink.Style
 import Blink.Style.Defaults (defaultTheme)
-import Blink.View (emptyViewContext, getStyleSet, runView)
+import Blink.View (getStyleSet)
+import Blink.Testing (emptyViewContext, runView)
 
 testPalette :: Palette
 testPalette = Palette

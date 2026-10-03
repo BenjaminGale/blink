@@ -16,6 +16,7 @@ import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (DrawCommand (..))
 import Blink.Style (Theme)
 import Blink.View
+import Blink.Testing
 import Blink.View.Drawing (fillRect)
 
 data TestElem = Part ScrollPanelPart | FocusHolder deriving (Eq, Ord, Show)

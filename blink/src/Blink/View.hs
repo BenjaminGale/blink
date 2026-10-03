@@ -10,12 +10,12 @@ parameterised over an /element type/ @e@ and a /message type/ @msg@.
 newtype View e msg a = View { runView :: ViewContext e msg -> IO (a, ViewContext e msg) }
 @
 
-The computation runs in 'IO' only because 'TextMeasurer' (see /Text
+The computation runs in 'IO' only because 'Blink.Testing.TextMeasurer' (see /Text
 measurement/ below) queries the backend's real font metrics; nothing else in
 the view tree touches 'IO'.
 
 Composing 'View' actions with '>>=', '>>' and 'mapM_' builds a view tree. Each
-node in the tree reads from the shared 'ViewContext' (bounds, input, theme, focus
+node in the tree reads from the shared 'Blink.Testing.ViewContext' (bounds, input, theme, focus
 state) and may append draw commands to it or queue application state changes.
 
 = Element identity
@@ -37,7 +37,7 @@ control.
 Application state is not part of the context at all: views are pure
 functions of a model value supplied by the host, and controls report changes
 by queuing a @msg@ value with 'emit' rather than mutating anything. The host
-reads the queued messages back with 'getMessages' once the frame completes
+reads the queued messages back with 'Blink.Testing.getMessages' once the frame completes
 and folds them into its own state via "Blink.Update".
 
 = Effects and settling
@@ -45,7 +45,7 @@ and folds them into its own state via "Blink.Update".
 A control queues two kinds of thing during a frame, both riding in the
 same 'Effect' queue: a @msg@ via 'emit', for the application, and a
 'UiEffect' via 'emitUi', for Blink's own presentation state, never seen by
-the application. 'Effect' is opaque outside "Blink.View.Context" — a
+the application. 'Effect' is opaque — a
 handler builds its @['Effect' e msg]@ result with
 'Blink.Controls.Control.post' or 'Blink.Controls.Control.postWith' (see
 'Blink.Controls.Table.onColumnSortRequested' for an example), and can
@@ -54,12 +54,12 @@ application what happened, and an effect reacting to it on the
 presentation side.
 
 'emitUi' only appends a 'UiEffect' to the queue; it does not change the
-running 'ViewContext'. 'nextFrameContext' (or, mid-frame,
-'rerenderContext') applies every queued effect via @applyUiEffects@ before
+running 'Blink.Testing.ViewContext'. 'Blink.Testing.nextFrameContext' (or, mid-frame,
+'Blink.Testing.rerenderContext') applies every queued effect via @applyUiEffects@ before
 the next render starts — this is "settling". A control reading its own
 state back ('getScrollState', 'getFocus', 'getSelection') always sees the last settled value,
 never a write some other control queued moments earlier in the same
-frame. 'settleEffects' and 'settleAndClearEffects' expose the same
+frame. 'Blink.Testing.settleEffects' and 'Blink.Testing.settleAndClearEffects' expose the same
 operation directly, for a caller that needs a queued effect applied
 without advancing every other part of the frame the way a real render
 does.
@@ -85,10 +85,10 @@ current frame, not a decision anything else needs to read back.
 Some controls carry presentation state that is no business of the
 application — which element holds keyboard focus, a scrollbar's position,
 whether a repeat button is still being held down, a text input's cursor.
-This state is baked directly into the 'ViewContext': focus lives in the
+This state is baked directly into the 'Blink.Testing.ViewContext': focus lives in the
 interaction state, and scroll positions (@elmScrollStates@, a @Map e
 'ScrollState'@) and repeat-press state (@elmHoldStates@, a @Map e
-'Blink.View.Hold.HoldState'@) live in the element state, both keyed by element ID,
+HoldState@) live in the element state, both keyed by element ID,
 populating lazily on first write and persisting across frames. Selection
 (@elmSelection@, a @SelectionSlot@) holds just one 'Selection' at a time,
 tagged with the element it belongs to, since only the focused control ever
@@ -102,33 +102,21 @@ single tree walk depends on it (see the
 for why). Scroll, hold, and selection have no such sibling-arbitration
 requirement, so they queue a 'UiEffect' with 'emitUi' instead of mutating
 immediately; a write made partway through a frame is not visible to a read
-later in that same frame. 'nextFrameContext' applies the queued effects via
+later in that same frame. 'Blink.Testing.nextFrameContext' applies the queued effects via
 @applyUiEffects@ when building the next frame's context, so the change
 takes effect starting then.
 
-= The render loop
+= Running a view
 
-Each frame follows the same three steps:
-
->  1. buildCtx  ---->  2. runView  ---->  3. extract
->  (emptyViewContext /       (walk the           (getDrawCommands,
->   nextFrameContext)       view tree)            getMessages)
-
-  1. Build a fresh 'ViewContext' with 'emptyViewContext' (first frame) or advance an
-     existing one with 'nextFrameContext'.
-  2. Run the view tree via 'runView'.
-  3. Pass the resulting context to 'getDrawCommands' to obtain the renderer
-     input, and to 'getMessages' to advance the application state.
-
-The 'TextMeasurer' re-exported from "Blink.Rendering" is threaded through
-'emptyViewContext' at step 1; see /Text measurement/ below for how controls use
-it during step 2.
+An application never runs a view itself: "Blink.App" does that each
+frame. To run a view or custom control on its own, for example in a test,
+use "Blink.Testing".
 
 = Animation
 
 Two frame kinds drive the loop: those triggered by a platform input event
 (mouse, keyboard) and those triggered by an animation ticker running on a
-fixed interval. 'AnimationState' — set by the backend, not application code —
+fixed interval. 'Blink.Testing.AnimationState' — set by the backend, not application code —
 records which kind the current frame is and how much wall-clock time has
 passed.
 
@@ -166,9 +154,9 @@ the mouse is within the /current bounds/, without reference to any element ID.
 = Focus and keyboard navigation
 
 Focus is tracked per scope, not as a single flat element: root owns one
-'FocusState', and every composite (a list, a tree — anything with
+@FocusState@, and every composite (a list, a tree — anything with
 sub-items) owns its own, persisted in @ftScopes@ — a @Map e
-'FocusState'@, keyed by scope id the same way @elmScrollStates@ is keyed by
+@FocusState@@, keyed by scope id the same way @elmScrollStates@ is keyed by
 element id. 'withFocusScope' is where a composite swaps the ambient scope
 for its own while its children render, and folds the result back.
 
@@ -197,10 +185,10 @@ its own content via 'currentStyle'.
 'Blink.View.Drawing.drawText' renders whatever text it is given without needing to know its
 pixel size. Controls that must — placing a cursor, computing where a click
 landed, sizing a box to fit its label — go through the backend's
-'TextMeasurer' instead, via 'charOffset', 'charAtOffset', and 'measureText'.
-These wrap the raw 'TextMeasurer' functions so callers never touch
+'Blink.Testing.TextMeasurer' instead, via 'charOffset', 'charAtOffset', and 'measureText'.
+These wrap the raw 'Blink.Testing.TextMeasurer' functions so callers never touch
 @ctxMeasurers@ directly. 'Blink.View.Drawing.drawImage' has the same
-relationship to 'ImageMeasurer' and 'measureImage', for controls that must
+relationship to 'Blink.Testing.ImageMeasurer' and 'measureImage', for controls that must
 know an image's natural pixel size before drawing it.
 
 = Disabled state
@@ -234,102 +222,52 @@ navigation, and style-driven chrome on top of exactly this shape.
 
 = Module organisation
 
-This module is a thin re-exporting shell over "Blink.View.Context" (the
-monad, the render loop, and the state types 'ViewContext' embeds — focus,
-scroll, selection, hold, animation, navigation) and the feature modules
-built on it: "Blink.View.Mouse" (position, buttons, capture, hover,
-occlusion), "Blink.View.Focus" (focus queries, claim\/clear, nested
-scopes), "Blink.View.Scroll", "Blink.View.Extent", "Blink.View.Cursor",
-"Blink.View.Selection", "Blink.View.Hold", "Blink.View.Animation", and
-"Blink.View.Navigation" (each pairing its pure type with the monadic
-accessors built on top of it). Import this module rather than any of
-those directly.
+This module collects everything needed to write a custom control. Its
+pieces live in private modules of their own (mouse, focus, scroll,
+selection, hold, animation, navigation); import this module to use them.
 -}
 module Blink.View
   ( -- * The View monad
     View
-  , runView
-  , ViewContext
-    -- * Re-export for convenience
-    -- | From "Blink.Rendering"; re-exported since 'emptyViewContext'
-    -- defaults to 'noOpMeasurers', and 'withMeasurers' overrides it with a
-    -- real backend's own 'Measurers'.
-  , TextMeasurer (..)
-  , noOpTextMeasurer
-  , ImageMeasurer (..)
-  , noOpImageMeasurer
-  , Measurers (..)
-  , noOpMeasurers
-    -- * The render loop
-  , emptyViewContext
-  , nextFrameContext
-  , rerenderContext
-  , getDrawCommands
-  , getMessages
-  , hasPendingUiEffects
-    -- * Popups
-    -- | The deferred-overlay bookkeeping "Blink.Popup" and "Blink.App"
-    -- build on; import "Blink.Popup" for the public 'Blink.Popup.popup' API.
-  , PendingPopup (..)
-  , queuePopup
-  , getPendingPopups
-  , clearPendingPopups
-  , settleEffects
-  , settleAndClearEffects
-  , contextRequiresAnimation
-    -- * Cursor shape
-    -- | 'CursorShape' lives in "Blink.Rendering"; re-exported here since
-    -- it's threaded through 'ViewContext' the same way a draw command is.
-    -- 'requestCursor' lives in "Blink.View.CursorShape".
-  , CursorShape (..)
-  , getCursorShape
-  , requestCursor
-    -- * Messages
+    -- * Messages and effects
   , Effect
   , UiEffect
   , HasUiEffect (..)
   , emit
   , emitUi
-  , queueUiEffects
+    -- * Cursor shape
+  , CursorShape (..)
+  , requestCursor
     -- * Scroll state
-    -- | 'ScrollState' and 'clampScrollPos' live in "Blink.View.Scroll";
-    -- re-exported here since a 'ScrollState' is threaded through
-    -- 'ViewContext'.
   , ScrollState
   , getScrollState
   , clampScrollPos
-  , contextScrollState
   , requestScrollTo
   , requestScrollBy
   , postScrollBy
   , setScrollStateNow
     -- * Extent state
-    -- | 'ExtentState' lives in "Blink.View.Extent"; re-exported here
-    -- since it's threaded through 'ViewContext' the same way
-    -- 'ScrollState' is.
   , ExtentState
   , getExtentState
-  , contextExtentState
   , requestExtentBy
     -- * Cursor index state
-    -- | 'CursorIndexState' lives in "Blink.View.Context"; internal to
-    -- 'Blink.Controls.List.listBase', re-exported here the same way
-    -- 'ExtentState' is.
   , CursorIndexState
   , getCursorIndex
-  , contextCursorIndex
   , setCursorIndex
     -- * Repeat-press ("hold") state
   , resolveHoldRepeats
   , resolveHeldFor
     -- * Selection
-    -- | 'Selection' itself, and the pure helpers built on it
-    -- ('Blink.View.Selection.selectionLow', 'Blink.View.Selection.cursor',
-    -- etc.), live in "Blink.View.Selection"; re-exported here since a
-    -- 'Selection' is threaded through 'ViewContext'.
   , Selection (..)
+  , selectionLow
+  , selectionHigh
+  , selectionHasExtent
+  , cursor
+  , collapseToLow
+  , collapseToHigh
+  , collapseToActive
+  , extendActive
   , getSelection
-  , contextSelection
   , requestSelectionAt
     -- * Bounds
   , getBounds
@@ -346,7 +284,6 @@ module Blink.View
   , withInteractionClip
     -- * Interaction
   , getInput
-  , contextInput
   , getMousePos
   , getWheelDelta
   , isRegionHit
@@ -356,8 +293,6 @@ module Blink.View
   , isAnyMouseOver
   , registerHitRect
   , isOccludedFor
-  , markPopupFloor
-  , isOccludedByPopupFor
   , hasMouseMoved
   , isButtonDown
   , isButtonPressed
@@ -366,15 +301,8 @@ module Blink.View
   , isMouseFree
   , MouseCapture (..)
   , getCaptured
-  , contextCaptured
-  , contextButtonDown
-  , contextButtonReleased
   , getMouse
-  , contextMouse
     -- * Focus and keyboard navigation
-  , FocusState (previousTabStop)
-  , FocusClaim (..)
-  , currentFocus
   , isNothingFocused
   , getFocus
   , isFocused
@@ -394,24 +322,14 @@ module Blink.View
   , withoutKeyEvents
   , getPreviousTabStop
   , setPreviousTabStop
-  , contextFocus
-  , contextFocusChain
-  , contextPreviousTabStop
-    -- | 'NavigationKeys' and 'defaultNavigationKeys' live in
-    -- "Blink.View.Navigation"; re-exported here since a 'NavigationKeys'
-    -- is threaded through 'ViewContext'.
   , NavigationKeys (..)
   , defaultNavigationKeys
   , getNavigationKeys
   , withNavigationKeys
   , getCurrentScope
-  , getCurrentPopupId
-  , withCurrentPopup
     -- * Styles
   , getStyleSet
   , getMetrics
-  , contextTheme
-  , withTheme
   , currentStyle
   , withStyle
   , currentMetrics
@@ -422,28 +340,18 @@ module Blink.View
   , measureText
     -- * Image measurement
   , measureImage
-  , withMeasurers
     -- * Disabled state
   , isDisabled
   , disableWhen
   , whenEnabled
     -- * Animation
-    -- | 'AnimationState' and 'mkAnimationState' live in
-    -- "Blink.View.Animation"; re-exported here since an 'AnimationState'
-    -- is threaded through 'ViewContext'.
-  , AnimationState (animDelta, animElapsed, animIsTick)
-  , mkAnimationState
   , requiresAnimation
   , withAnimationFrame
   , getAnimDelta
   , getAnimElapsed
-  , contextAnimation
   ) where
 
-import Blink.Rendering
-  ( TextMeasurer (..), noOpTextMeasurer, ImageMeasurer (..), noOpImageMeasurer, Measurers (..), noOpMeasurers
-  , CursorShape (..)
-  )
+import Blink.Rendering (CursorShape (..))
 import Blink.Input (MouseCapture (..))
 import Blink.View.Context
 import Blink.View.Mouse

@@ -26,6 +26,7 @@ import Blink.Geometry (Point, Rectangle)
 import Blink.Input (Key (KeySpace))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.View
+import Blink.Testing
 
 -- | Tags every raw event a reaction built on 'Blink.Controls.Control.control'
 -- can raise with a plain label naming it, discarding any payload -- enough

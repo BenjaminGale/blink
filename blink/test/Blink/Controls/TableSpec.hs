@@ -20,6 +20,7 @@ import Blink.AppFixtures (solidPalette)
 import Blink.Style (Palette, Theme)
 import Blink.Style.Defaults (defaultTheme)
 import Blink.View
+import Blink.Testing
 
 data TestElem = Part (TablePart Int) | FocusHolder deriving (Eq, Ord, Show)
 

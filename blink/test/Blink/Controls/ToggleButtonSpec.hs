@@ -16,6 +16,7 @@ import Blink.Geometry (Point (..), Rectangle (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (StyleSet (..), Theme, styleTextColour)
 import Blink.View
+import Blink.Testing
 
 data TestElement = Ok | FocusHolder deriving (Eq, Ord, Show)
 

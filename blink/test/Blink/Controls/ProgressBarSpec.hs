@@ -10,7 +10,7 @@ import Blink.Geometry (Rectangle (..))
 import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, bandWidth, progress, progressBar)
 import Blink.Rendering (DrawCommand (..))
 import Blink.Style (Theme)
-import Blink.View
+import Blink.Testing
 import Blink.Element (runElement)
 
 data TestElement = Bar deriving (Eq, Ord, Show)

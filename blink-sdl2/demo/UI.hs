@@ -1,31 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 module UI (ControlId, AppState (..), demoApp) where
 
-import Blink.App hiding (Continue)
-import Blink.Controls hiding (rowHeight)
-import Blink.Controls.Label (LabelConfig)
-import Blink.Controls.List
-  (ListPart (..), MultiSelection, SingleSelection, multiSelection, selectFirst, selectedItems, singleSelection)
-import qualified Blink.Controls.List as List (itemValue, onSelectionChanged)
-import qualified Blink.Controls.MenuBar as MenuBar (itemAttrs, submenuItems)
-import qualified Blink.Controls.MenuButton as MenuButton (items)
-import Blink.Controls.ProgressBar (ProgressValue (..))
-import Blink.Controls.ScrollBar (ScrollBarPart (..), ScrollViewportPart (..))
-import qualified Blink.Controls.ScrollPanel as ScrollPanel (content)
-import qualified Blink.Controls.Slider as Slider (value)
-import Blink.Controls.Table
-  (ColumnConfig (..), ColumnWidth (..), SortDirection (..), cell, cellWidth, column, header, onColumnSortRequested, sortable, sortedBy)
-import Blink.Controls.Tree (TreeItemState (..), flattenVisible)
-import Blink.Controls.TreeTable (treeTable)
-import qualified Blink.Controls.TreeTable as TreeTable
-import Blink.Style (Style (..), StyleKey (..))
-import Blink.Geometry
-import Blink.Input
-import Blink.Layout
+import Blink
+import Blink.Element (Element (..), elementWithLayout, runElement)
+import Blink.Input (InputState (..))
 import Blink.View
 import Blink.View.Drawing (drawText, fillRect)
-import Blink.Element (Attribute, Element (..), elementWithLayout, runElement)
-import Blink.Update
 import Theme (ControlId (..), Page (..), lightTheme, darkTheme)
 import Control.Concurrent (threadDelay)
 import Control.Monad (when)
@@ -272,24 +252,24 @@ field layoutAttrs enabled targetId labelText fieldControl =
       ]
     )
 
-rowHeight :: Length
-rowHeight = exactly 40
+pageRowHeight :: Length
+pageRowHeight = exactly 40
 
 -- | Layout attributes shared by every direct child of 'mainList': the full
 -- row width, the shared row height, top-left within that slot.
 rowLayout :: HasLayoutConfig cfg => [Attribute cfg]
-rowLayout = [width fill, height rowHeight, align TopLeft]
+rowLayout = [width fill, height pageRowHeight, align TopLeft]
 
 -- Control rows, top to bottom
 
 rowDarkMode :: AppState -> Element ControlId Msg
 rowDarkMode s =
-  checkbox DarkModeCheckbox [height rowHeight, text "Dark mode", isSelected (darkMode s), onSelectedChanged (postWith SetDarkMode)]
+  checkbox DarkModeCheckbox [height pageRowHeight, text "Dark mode", isSelected (darkMode s), onSelectedChanged (postWith SetDarkMode)]
 
 rowEditing :: AppState -> Element ControlId Msg
 rowEditing s =
   checkbox EditingCheckbox
-    [height rowHeight, text "Enable editing", isSelected (editingEnabled s), onSelectedChanged (postWith SetEditingEnabled)]
+    [height pageRowHeight, text "Enable editing", isSelected (editingEnabled s), onSelectedChanged (postWith SetEditingEnabled)]
 
 -- | A plain full-width separator between the settings checkboxes above and
 -- the interactive controls below -- 'divider's own default orientation and
@@ -358,7 +338,7 @@ rowMenuButton s =
       , children
           [ menuButton FileMenuButton
               [ text "File", isOpen (fileMenuOpen s), onOpenChanged (postWith SetFileMenuOpen)
-              , MenuButton.items fileMenuActions
+              , items fileMenuActions
               , itemAttrs (\a -> [text a, onActivated (post (FileMenuItemActivated a))])
               , isEnabled (editingEnabled s), width (exactly 120), height fill
               ]
@@ -388,7 +368,7 @@ rowPasswordInput s =
 rowAnimate :: AppState -> Element ControlId Msg
 rowAnimate s =
   checkbox AnimateCheckbox
-    [height rowHeight, text "Animate progress bar", isSelected (animating s), onSelectedChanged (postWith SetAnimating), isEnabled (editingEnabled s)]
+    [height pageRowHeight, text "Animate progress bar", isSelected (animating s), onSelectedChanged (postWith SetAnimating), isEnabled (editingEnabled s)]
 
 rowProgress :: AppState -> Element ControlId Msg
 rowProgress s =
@@ -404,7 +384,7 @@ rowSlider s =
     ( hBox
         [ spacing 8, alignment Center
         , children
-            [ slider SliderCtl [Slider.value (sliderValue s), onValueChanged (postWith SetSlider), isEnabled (editingEnabled s), height fill]
+            [ slider SliderCtl [value (sliderValue s), onValueChanged (postWith SetSlider), isEnabled (editingEnabled s), height fill]
             , caption (T.pack (show (round (sliderValue s * 100) :: Int)) <> "%") [width (exactly 60), height fill, align MiddleLeft]
             ]
         ]
@@ -533,8 +513,8 @@ fruitListElem :: AppState -> Element ControlId Msg
 fruitListElem s =
   list FruitList
     [ selection (fruitSelection s)
-    , renderItem (listCaption . List.itemValue)
-    , List.onSelectionChanged (postWith FruitSelectionChanged)
+    , renderItem (listCaption . itemValue)
+    , onSelectionChanged (postWith FruitSelectionChanged)
     , onItemActivated (postWith FruitActivated)
     , height fill
     ]
@@ -558,8 +538,8 @@ groceryListElem :: AppState -> Element ControlId Msg
 groceryListElem s =
   list GroceryList
     [ selection (groceryList s)
-    , renderItem (listCaption . List.itemValue)
-    , List.onSelectionChanged (postWith GroceryListChanged)
+    , renderItem (listCaption . itemValue)
+    , onSelectionChanged (postWith GroceryListChanged)
     , height fill
     ]
 
@@ -589,8 +569,8 @@ longListElem :: AppState -> Element ControlId Msg
 longListElem s =
   list LongList
     [ selection (longListSelection s)
-    , renderItem (listCaption . (\n -> "Item " <> T.pack (show n)) . List.itemValue)
-    , List.onSelectionChanged (postWith LongListChanged)
+    , renderItem (listCaption . (\n -> "Item " <> T.pack (show n)) . itemValue)
+    , onSelectionChanged (postWith LongListChanged)
     , width fill, height (exactly 200)
     ]
 
@@ -671,8 +651,8 @@ fileTreeElem s =
     [ forest fileForest
     , expanded (fileTreeExpanded s)
     , selection (fileTreeSelection s)
-    , renderNode (listCaption . List.itemValue . tisState)
-    , List.onSelectionChanged (postWith FileTreeSelectionChanged)
+    , renderNode (listCaption . itemValue . tisState)
+    , onSelectionChanged (postWith FileTreeSelectionChanged)
     , onExpansionChanged (postWith FileTreeExpansionChanged)
     , width fill, height (exactly 200)
     ]
@@ -719,11 +699,11 @@ sortedGroceryItems (Just (_, Descending)) = sortOn (Down . snd) groceryTableItem
 
 groceryTableColumns :: [ColumnConfig ControlId Msg Text]
 groceryTableColumns =
-  [ column [header (listCaption "Item"), cellWidth ColumnFill, cell (listCaption . List.itemValue), sortable True]
+  [ column [header (listCaption "Item"), cellWidth ColumnFill, cell (listCaption . itemValue), sortable True]
   , column
       [ header (listCaption "Qty")
       , cellWidth (ColumnFixed 60)
-      , cell (\st -> listCaption (maybe "" (T.pack . show) (lookup (List.itemValue st) groceryTableItems)))
+      , cell (\st -> listCaption (maybe "" (T.pack . show) (lookup (itemValue st) groceryTableItems)))
       , sortable True
       ]
   ]
@@ -733,7 +713,7 @@ groceryTableElem s =
   table GroceryTable
     [ columns groceryTableColumns
     , selection (groceryTableSelection s)
-    , List.onSelectionChanged (postWith GroceryTableSelectionChanged)
+    , onSelectionChanged (postWith GroceryTableSelectionChanged)
     , sortedBy (groceryTableSort s)
     , onColumnSortRequested (postWith GroceryTableSortRequested)
     , width fill, height (exactly 200)
@@ -799,11 +779,11 @@ visibleFileSizeTreeItems sortReq e = map fst (flattenVisible (sortedFileForest s
 
 fileSizeTreeColumns :: [ColumnConfig ControlId Msg Text]
 fileSizeTreeColumns =
-  [ column [header (listCaption "Name"), cellWidth ColumnFill, cell (listCaption . List.itemValue), sortable True]
+  [ column [header (listCaption "Name"), cellWidth ColumnFill, cell (listCaption . itemValue), sortable True]
   , column
       [ header (listCaption "Size (KB)")
       , cellWidth (ColumnFixed 80)
-      , cell (listCaption . fileSizeLabel . List.itemValue)
+      , cell (listCaption . fileSizeLabel . itemValue)
       , sortable True
       ]
   ]
@@ -811,14 +791,14 @@ fileSizeTreeColumns =
 fileSizeTreeTableElem :: AppState -> Element ControlId Msg
 fileSizeTreeTableElem s =
   treeTable FileSizeTreeTable
-    [ TreeTable.columns fileSizeTreeColumns
-    , TreeTable.forest (sortedFileForest (fileSizeTreeSort s))
-    , TreeTable.expanded (fileSizeTreeExpanded s)
+    [ columns fileSizeTreeColumns
+    , forest (sortedFileForest (fileSizeTreeSort s))
+    , expanded (fileSizeTreeExpanded s)
     , selection (fileSizeTreeSelection s)
-    , List.onSelectionChanged (postWith FileSizeTreeSelectionChanged)
-    , TreeTable.onExpansionChanged (postWith FileSizeTreeExpansionChanged)
-    , TreeTable.sortedBy (fileSizeTreeSort s)
-    , TreeTable.onColumnSortRequested (postWith FileSizeTreeSortRequested)
+    , onSelectionChanged (postWith FileSizeTreeSelectionChanged)
+    , onExpansionChanged (postWith FileSizeTreeExpansionChanged)
+    , sortedBy (fileSizeTreeSort s)
+    , onColumnSortRequested (postWith FileSizeTreeSortRequested)
     , width fill, height (exactly 200)
     ]
 
@@ -890,7 +870,7 @@ backgroundPage s =
 demoImagePath :: Text
 demoImagePath = "assets/images/haskell-logo.svg"
 
--- | Maps a 'Slider.value' fraction (@[0, 1]@) to a fit dimension in
+-- | Maps a 'value' fraction (@[0, 1]@) to a fit dimension in
 -- pixels, over a range wide enough to visibly grow the image from its
 -- barely-there natural size.
 fitSliderPixels :: Double -> Double
@@ -912,7 +892,7 @@ imagePage s =
         , fitRow ImageFitHeightCheckbox "Fit height" (imageFitHeightEnabled s) SetImageFitHeightEnabled
             ImageFitHeightSlider (imageFitHeight s) SetImageFitHeight
         , checkbox ImagePreserveRatioCheckbox
-            [ height rowHeight, text "Preserve ratio", isSelected (imagePreserveRatio s)
+            [ height pageRowHeight, text "Preserve ratio", isSelected (imagePreserveRatio s)
             , onSelectedChanged (postWith SetImagePreserveRatio)
             ]
         , image (imageAttrs ++ [align TopLeft])
@@ -946,7 +926,7 @@ imagePage s =
                       ]
                   ]
               , slider sliderId
-                  [ Slider.value frac, onValueChanged (postWith onFrac)
+                  [ value frac, onValueChanged (postWith onFrac)
                   , isEnabled enabled, width fill, height fill
                   ]
               , caption (T.pack (show (round (fitSliderPixels frac) :: Int)) <> "px")
@@ -1037,8 +1017,8 @@ topMenuBar s =
     [ menus menuBarMenus
     , labelAttrs (\m -> [text m, mnemonic (menuBarLabelMnemonic m)])
     , menuItems menuBarItemsFor
-    , MenuBar.itemAttrs (\_ i -> [text i, onActivated (post (MenuBarItemActivated i))])
-    , MenuBar.submenuItems menuBarSubmenuItemsFor
+    , itemAttrs (\_ i -> [text i, onActivated (post (MenuBarItemActivated i))])
+    , submenuItems menuBarSubmenuItemsFor
     , openMenu (menuBarOpenMenu s)
     , onOpenMenuChanged (postWith SetMenuBarOpenMenu)
     ]
@@ -1064,7 +1044,7 @@ demoView s = elementWithLayout (Layout fill fill TopLeft) $ do
 mainList :: AppState -> Element ControlId Msg
 mainList s =
   scrollPanel MainListScroll
-    [ ScrollPanel.content $ vBox
+    [ content $ vBox
         [ spacing 8, margin 12
         , children
             [ caption "Blink controls demo" [width fill, height (exactly 24), align TopLeft]

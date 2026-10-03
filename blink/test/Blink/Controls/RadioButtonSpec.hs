@@ -16,6 +16,7 @@ import Blink.Interaction (Interaction (..), InteractionResult (..), runInteracti
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (StyleSet (..), Theme (..), VisualState (CommonMouseOver), styleTextColour)
 import Blink.View
+import Blink.Testing
 
 data TestElement = OptionA | FocusHolder deriving (Eq, Ord, Show)
 

@@ -5,6 +5,7 @@ import Test.Hspec
 import Blink.Geometry (Point (..))
 import Blink.Input (InputState (..))
 import Blink.View
+import Blink.Testing
 import Blink.View.Fixtures
 
 -- | A context in which @()@ has just acquired real mouse capture at the

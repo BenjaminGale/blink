@@ -7,6 +7,7 @@ import Blink.Geometry (Point (..))
 import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..), emptyInputState)
 import Blink.Interaction
 import Blink.View
+import Blink.Testing
 import Blink.View.Fixtures (emptyTheme, testBounds)
 
 seedAt :: Point -> ViewContext () msg

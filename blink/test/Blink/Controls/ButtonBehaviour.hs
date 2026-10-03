@@ -28,6 +28,7 @@ import Blink.Geometry (Point, Rectangle)
 import Blink.Input (InputState (..), Key (KeyReturn), KeyEvent (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.View
+import Blink.Testing
 
 -- | Every raw\/focus reaction (including 'Blink.Controls.Control.onClicked',
 -- via 'tagged'), plus a tagged reaction to 'onActivated'.

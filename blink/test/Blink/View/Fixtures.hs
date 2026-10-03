@@ -30,6 +30,7 @@ import Blink.Input (InputState (..), emptyInputState)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), noBorder)
 import Blink.View
+import Blink.Testing
 
 data TwoElems = ElemA | ElemB deriving (Eq, Ord, Show)
 

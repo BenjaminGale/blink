@@ -15,6 +15,7 @@ import Blink.Controls.Slider
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.Style (Style (..), StyleSet (..), Theme (..), VisualState (..), soloBorder)
 import Blink.View
+import Blink.Testing
 import Blink.Element (runElement)
 
 data TestElement = Handle | Other | FocusHolder deriving (Eq, Ord, Show)

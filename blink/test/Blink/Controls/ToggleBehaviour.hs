@@ -25,6 +25,7 @@ import Blink.Geometry (Point, Rectangle)
 import Blink.Input (Key (KeyReturn))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.View
+import Blink.Testing
 
 -- | Every raw\/activation reaction, plus a tagged reaction to
 -- 'onSelectedChanged' naming the value it changed to.

@@ -7,7 +7,7 @@ module Blink.SDL2.Input
   , sdlPoint
   ) where
 
-import Blink
+import Blink.Backend
 import qualified SDL
 import Data.Char (chr, toUpper)
 import Data.Text (Text)

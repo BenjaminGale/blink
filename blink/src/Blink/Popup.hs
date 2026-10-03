@@ -20,7 +20,7 @@ module Blink.Popup
 
 import Blink.Element (Attribute (..), Element (..), emptyElement, measureElement, resolve, HasContent (..))
 import Blink.Geometry (Edge (..), Point (..), Rectangle (..), Side (..))
-import Blink.View (PendingPopup (..), View, getBounds, getCurrentScope, getWindowSize, queuePopup)
+import Blink.View.Context (PendingPopup (..), View, getBounds, getCurrentScope, getWindowSize, queuePopup)
 
 -- | Every capability 'popup' resolves: the content to show, where to anchor
 -- it, and where it sits relative to that anchor. Defaults to 'emptyElement',

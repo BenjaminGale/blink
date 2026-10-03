@@ -12,7 +12,7 @@ import Blink.Geometry (Alignment (Center), Orientation (..), Rectangle (..), Siz
 import Blink.Layout.Constraints (exactly)
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.Style (StyleSet (..), Theme (..))
-import Blink.View
+import Blink.Testing
 import Blink.Element (align, height, measureElement, runElement, width)
 
 data TestElement = Bar deriving (Eq, Ord, Show)

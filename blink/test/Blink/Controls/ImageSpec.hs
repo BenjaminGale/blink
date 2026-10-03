@@ -10,6 +10,7 @@ import Blink.Geometry (Rectangle (..), Size (..), uniform)
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (Theme, styleTextAlign)
 import Blink.View
+import Blink.Testing
 import Blink.Element (Attribute, runElement)
 
 data TestElement = Pic deriving (Eq, Ord, Show)

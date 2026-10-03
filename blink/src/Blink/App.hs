@@ -131,24 +131,22 @@ import GHC.Clock (getMonotonicTimeNSec)
 import Blink.Cmd (Cmd, runCmd)
 import Blink.Geometry (Point (..), Rectangle, Size (..), placePopup, rectFromSize)
 import Blink.Input (KeyEvent, InputState (..), Mouse (..), advanceButton, emptyInputState)
-import Blink.View.Context (ctxMouse)
 import Blink.Rendering (DrawCommand, CursorShape, TextMeasurer (..), ImageMeasurer (..), Measurers (..))
 import Blink.Style (Theme)
-import Blink.View
-  ( ViewContext
-  , AnimationState (animElapsed)
-  , mkAnimationState
+import Blink.View.Animation (AnimationState (animElapsed), contextAnimation, mkAnimationState)
+import Blink.View.Context
+  ( View (..), ViewContext, ctxMouse
   , emptyViewContext, withMeasurers, nextFrameContext, rerenderContext
-  , runView, getDrawCommands, getCursorShape, getMessages, hasPendingUiEffects
+  , getDrawCommands, getCursorShape, getMessages, hasPendingUiEffects
   , UiEffect, queueUiEffects
-  , contextAnimation, contextRequiresAnimation
+  , contextRequiresAnimation
   , PendingPopup (popupId, popupAnchor, popupSize, popupPlacement, popupOffset, popupRun, popupOriginScope)
   , getPendingPopups, clearPendingPopups
   , getWindowSize, withBounds
-  , markPopupFloor
-  , withFocusScope
   , withCurrentPopup
   )
+import Blink.View.Focus (withFocusScope)
+import Blink.View.Mouse (markPopupFloor)
 import Blink.Element (Element, runElement)
 import Blink.Update (Update, runUpdateEffects)
 

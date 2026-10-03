@@ -11,7 +11,8 @@ module Blink.SDL2.Rendering
   , mkImageMeasurer
   ) where
 
-import Blink
+import Blink.Backend
+import Blink.Geometry
 import SDL (($=))
 import qualified SDL
 import qualified SDL.Raw as Raw

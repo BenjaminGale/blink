@@ -20,7 +20,8 @@ import Blink.Input (Key (KeyChar, KeyLeft, KeyRight), KeyEvent (..), Modifier (A
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Style (Theme, emptyTheme)
 import Blink.Update (modify, put)
-import Blink.View (View, ViewContext, emptyViewContext, withBounds)
+import Blink.View (View, withBounds)
+import Blink.Testing (ViewContext, emptyViewContext)
 
 data TopMenu = FileMenu | EditMenu deriving (Eq, Ord, Show)
 

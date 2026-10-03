@@ -30,7 +30,8 @@ import Blink.Input (InputState (..), emptyInputState)
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (Colour (..), TextAlign (..), TextMeasurer (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), noBorder)
-import Blink.View (View, ViewContext, runView, withBounds)
+import Blink.View (View, withBounds)
+import Blink.Testing (ViewContext, runView)
 
 testColour :: Colour
 testColour = RGBA 0 0 0 1

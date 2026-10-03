@@ -3,6 +3,7 @@ module Blink.View.ExtentSpec (spec) where
 import Test.Hspec
 
 import Blink.View
+import Blink.Testing
 import Blink.View.Fixtures
 
 spec :: Spec

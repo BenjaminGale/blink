@@ -19,6 +19,7 @@ import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Rendering (DrawCommand (..), TextAlign (..))
 import Blink.Style (Theme)
 import Blink.View
+import Blink.Testing
 import Blink.Element (elLayout, runElement)
 
 data TestElement = Ok | FocusHolder deriving (Eq, Ord, Show)

@@ -20,6 +20,7 @@ import Blink.Layout.Constraints (exactly, fill)
 import Blink.Style (Theme)
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.View
+import Blink.Testing
 import Blink.Element (height, runElement, width)
 
 -- | The data a group under test picks from -- deliberately not an id type,

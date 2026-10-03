@@ -8,6 +8,7 @@ import Blink.Input (InputState (..))
 import Blink.Rendering (Colour (..), DrawCommand (..), TextAlign (..))
 import Blink.Style (soloBorder)
 import Blink.View
+import Blink.Testing
 import Blink.View.Drawing (drawImage, drawText, fillRect, strokeRect, withBackground, withBorder, withClip)
 import Blink.View.Fixtures
 

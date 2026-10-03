@@ -38,6 +38,7 @@ import Blink.Geometry (Point, Rectangle)
 import Blink.Input (Key (..), Modifier (..), InputState (..), KeyEvent (..))
 import Blink.Rendering (DrawCommand)
 import Blink.View
+import Blink.Testing
 
 -- | One simulated real-input step. A list of these is expanded into one or
 -- more raw 'InputState' frames, each driven through 'nextFrameContext' \/

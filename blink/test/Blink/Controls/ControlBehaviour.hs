@@ -41,6 +41,7 @@ import Blink.Interaction (Interaction (..), InteractionResult (..), runInteracti
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.Style (StyleKey (..), Theme (..))
 import Blink.View
+import Blink.Testing
 
 -- | The focus behaviour that varies between an ordinary control and a
 -- special case like 'Blink.Controls.Label.label' or 'Blink.Controls.ProgressBar.progressBar'.

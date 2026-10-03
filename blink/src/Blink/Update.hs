@@ -125,7 +125,7 @@ gets f = Update $ \s -> (f s, s, [], [])
 modify :: (s -> s) -> Update s e msg ()
 modify f = Update $ \s -> ((), f s, [], [])
 
--- | Requests that an 'IO' action be run as a 'Cmd'. Its result is folded
+-- | Requests that an 'IO' action be run as a 'Blink.Cmd.Cmd'. Its result is folded
 -- back into the state as an ordinary message, on whichever later frame the
 -- backend's 'Blink.App.MsgQueue' delivers it.
 cmd :: IO msg -> Update s e msg ()

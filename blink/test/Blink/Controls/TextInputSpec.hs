@@ -16,6 +16,7 @@ import Blink.Style (Style (..), Theme)
 import Blink.Controls.TextInput
   (TextInputConfig, displayFilter, inputFilter, onInput, onSubmit, placeholder, value, textInput)
 import Blink.View
+import Blink.Testing
 
 data TestElement = Field | Other | Second | FocusHolder deriving (Eq, Ord, Show)
 

@@ -8,6 +8,7 @@ import Blink.Input (InputState (..), Key (..), KeyEvent (..))
 import Blink.Rendering (Colour (..))
 import Blink.Style (Style (..), StyleKey (..), StyleSet (..), Theme (..), VisualState (..))
 import Blink.View
+import Blink.Testing
 import Blink.View.Fixtures
 
 spec :: Spec

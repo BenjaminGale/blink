@@ -4,6 +4,7 @@ import Test.Hspec
 import Test.Hspec.QuickCheck (prop)
 
 import Blink.View
+import Blink.Testing
 import Blink.View.Fixtures
 
 spec :: Spec

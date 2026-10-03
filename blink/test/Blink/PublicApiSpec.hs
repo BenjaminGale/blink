@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | Builds a small application with nothing but @import Blink@, so a name
 -- an application needs but "Blink" does not export fails to compile here.
+-- The test drives it the way a backend would, through "Blink.Backend".
 module Blink.PublicApiSpec (spec) where
 
 import qualified Data.Map.Strict as Map
@@ -9,6 +10,7 @@ import qualified Data.Text as T
 import Test.Hspec
 
 import Blink
+import Blink.Backend
 
 data ControlId = NewItemInput | AddButton | ItemCheckbox Int
   deriving (Eq, Ord)

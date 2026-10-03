@@ -4,6 +4,7 @@ import Test.Hspec
 
 import Blink.Style (Theme (..))
 import Blink.View
+import Blink.Testing
 import Blink.View.Fixtures
 
 -- | A scope id (@Group@) plus two elements nested inside it, for testing

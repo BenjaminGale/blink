@@ -171,7 +171,7 @@ isOccludedFor eid = do
 -- the main view tree's hit-rects and a popup's -- called once per frame by
 -- "Blink.App"'s drain step, immediately before it starts running that
 -- frame's popups, so every hit-rect registered from here on this frame is a
--- popup's. See 'mousePopupFloor' and 'isOccludedByPopupFor'.
+-- popup's. See 'mousePopupFloor'.
 markPopupFloor :: View e msg ()
 markPopupFloor = modifyMouse $ \m -> m { mousePopupFloor = Map.size (mouseHitRectsNext m) }
 

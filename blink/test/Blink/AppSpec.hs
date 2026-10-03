@@ -17,6 +17,7 @@ import Blink.Popup (content, popup)
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
 import Blink.Style (emptyTheme)
 import Blink.View
+import Blink.Testing
 import Blink.View.Drawing (fillRect, drawText)
 import Blink.Element (Element, elLayout, elementWithLayout)
 import Blink.Controls.Checkbox (checkbox)

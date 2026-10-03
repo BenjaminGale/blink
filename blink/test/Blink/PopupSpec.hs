@@ -9,6 +9,7 @@ import Blink.Layout.Constraints (Layout (..), exactly)
 import Blink.Popup (at, content, offset, placement, popup)
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.View
+import Blink.Testing
 import Blink.View.Drawing (fillRect)
 import Blink.View.Fixtures
 

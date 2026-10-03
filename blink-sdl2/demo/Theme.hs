@@ -17,19 +17,9 @@ module Theme
 import qualified Data.Map.Strict as Map
 
 import Data.Text (Text)
-import Blink.Geometry
-import Blink.Rendering (TextAlign (..))
-import Blink.Controls.List (ListPart)
-import Blink.Controls.MenuBar (MenuBarPart)
-import Blink.Controls.MenuButton (MenuButtonPart)
-import Blink.Controls.ScrollPanel (ScrollPanelPart)
-import Blink.Controls.ToggleGroup (ToggleGroupPart)
-import Blink.Controls.Table (TablePart)
-import Blink.Controls.Tree (TreePart)
-import Blink.Controls.TreeTable (TreeTablePart)
-import Blink.Style
-import Blink.Style.Defaults (defaultTheme, plainStyle)
+import Blink
 import Blink.Controls.Style (transparent)
+import Blink.Style.Defaults (plainStyle)
 
 -- | Which of the demo's sidebar-selected pages is showing.
 data Page

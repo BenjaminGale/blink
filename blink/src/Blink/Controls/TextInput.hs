@@ -39,7 +39,6 @@ import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.View
 import Blink.View.Drawing (fillRect, drawText)
-import Blink.View.Selection (selectionHasExtent, selectionLow, selectionHigh, cursor, extendActive)
 import Blink.Element (Element (..), HasLayoutConfig (..), HasValue (..))
 import Blink.Style
 import Blink.Controls.Style (buttonStyle, controlMetrics, plainFillStyle, zeroMetrics)

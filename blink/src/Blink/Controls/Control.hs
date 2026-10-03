@@ -113,6 +113,7 @@ import Blink.Layout.Constraints (Layout, MeasureCtx (..), shrink)
 import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), VisualState (..), resolveStyle)
 import Blink.View
 import Blink.View.Context (Effect (..))
+import Blink.View.Mouse (isOccludedByPopupFor)
 import Blink.View.Drawing (withClip, withBackground, withBorder)
 import Blink.Element (Attribute (..), Element (..), appendTo, nested, resolve)
 
@@ -733,12 +734,12 @@ canAutoClaim eid cc = do
 -- key matched, so nothing else reacts to the same press. Disabled controls
 -- never react.
 --
--- A retreat whose 'previousTabStop' equals the current scope's own id
+-- A retreat whose @previousTabStop@ equals the current scope's own id
 -- means there's no real predecessor to hand off to in this scope. That
 -- case leaves the key unconsumed instead of swallowing it, so whatever
 -- encloses this scope gets a chance to react to it once this scope
 -- closes. A composite that wants Shift-Tab to stop at its own first
--- child, rather than wrap to its last, seeds 'previousTabStop' with its
+-- child, rather than wrap to its last, seeds @previousTabStop@ with its
 -- own scope id before rendering that child, so no descendant's id can
 -- ever match it.
 advanceOrRetreat :: Eq e => Bool -> [(Key, [Modifier])] -> [(Key, [Modifier])] -> View e msg ()

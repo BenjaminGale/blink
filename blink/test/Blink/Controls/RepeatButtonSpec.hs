@@ -16,6 +16,7 @@ import Blink.Input (InputState (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Style (Theme)
 import Blink.View
+import Blink.Testing
 
 data TestElement = Ok | FocusHolder deriving (Eq, Ord, Show)
 

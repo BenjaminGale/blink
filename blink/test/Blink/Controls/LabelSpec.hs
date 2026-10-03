@@ -14,6 +14,7 @@ import Blink.Controls.Label (LabelConfig, label, mnemonic, target, text)
 import Blink.Rendering (DrawCommand (..), TextAlign (..))
 import Blink.Style (Theme)
 import Blink.View
+import Blink.Testing
 
 data TestElement = Caption | Target | FocusHolder deriving (Eq, Ord, Show)
 

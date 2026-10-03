@@ -22,6 +22,7 @@ import Blink.Style
   , BorderLayer (..), EdgeVisibility (..), allEdgesVisible, styleBackground, styleBorder, uniformRadii
   )
 import Blink.View
+import Blink.Testing
 
 data TestElement
   = ElemA | ElemB | ElemC | FocusHolder

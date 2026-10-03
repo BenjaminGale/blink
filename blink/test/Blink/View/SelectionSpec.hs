@@ -5,11 +5,8 @@ import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (choose, forAll)
 
 import Blink.View
+import Blink.Testing
 import Blink.View.Fixtures
-import Blink.View.Selection
-  ( collapseToActive, collapseToHigh, collapseToLow, cursor, extendActive
-  , selectionHasExtent, selectionHigh, selectionLow
-  )
 
 spec :: Spec
 spec = describe "Blink.View.Selection" $ do

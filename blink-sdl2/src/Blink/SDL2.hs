@@ -24,7 +24,7 @@ module Blink.SDL2
   , runApp
   ) where
 
-import Blink
+import Blink.Backend
 import Blink.SDL2.Input (sdlPoint, toKeyEvents, toTypedText, toWheelDelta, updateButton)
 import Blink.SDL2.Rendering
 import SDL (($=))
@@ -113,8 +113,8 @@ runApp config app = do
   SDL.quit
 
 -- | A bounded, STM-backed 'MsgQueue' -- Blink only defines the interface
--- ('MsgQueue', 'Cmd'); the backend owns the actual data structure and its
--- backpressure policy. 'writeTBQueue' blocks the thread of a completing 'Cmd'
+-- ('MsgQueue', 'Blink.Cmd.Cmd'); the backend owns the actual data structure and its
+-- backpressure policy. 'writeTBQueue' blocks the thread of a completing 'Blink.Cmd.Cmd'
 -- once @capacity@ results are already waiting to be drained, rather
 -- than dropping any; 'flushTBQueue' drains everything currently queued
 -- without blocking, which is exactly what 'stepFrame' needs each frame.

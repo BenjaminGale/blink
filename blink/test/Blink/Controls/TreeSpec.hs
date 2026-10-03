@@ -23,6 +23,7 @@ import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonMouseOver))
 import Blink.View
+import Blink.Testing
 
 -- * flattenVisible
 

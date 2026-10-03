@@ -86,7 +86,7 @@ isFocused :: Eq e => e -> View e msg Bool
 isFocused eid = (== Just eid) <$> getFocus
 
 -- | 'True' when the currently ambient scope's most recent redirect (a
--- @Focus@ effect landing within the last two frames -- see 'FocusClaim')
+-- @Focus@ effect landing within the last two frames -- see @FocusClaim@)
 -- granted this element focus. Single-hop, exactly like 'isFocused'; never
 -- 'True' from 'setFocus' reaffirming a claim, only from an explicit @Focus@.
 hasGainedFocus :: Eq e => e -> View e msg Bool
@@ -94,7 +94,7 @@ hasGainedFocus eid = gets (isGained eid . focusClaim . ftAmbient . ctxFocus)
 
 -- | 'True' when the currently ambient scope's most recent redirect (a
 -- @Focus@\/@ClearFocus@ effect, still within its one-frame observation
--- window -- see 'LostFocus') displaced this element.
+-- window -- see @LostFocus@) displaced this element.
 hasLostFocus :: Eq e => e -> View e msg Bool
 hasLostFocus eid = gets ((== Just (Just eid)) . pendingLostFocus . focusLost . ftAmbient . ctxFocus)
 
@@ -103,7 +103,7 @@ hasLostFocus eid = gets ((== Just (Just eid)) . pendingLostFocus . focusLost . f
 -- and mouse capture, not like the deferred scroll\/selection writes —
 -- because a control's own focus decision (take it when nothing else has it,
 -- hand off on Tab) is only correct if the next sibling in the same tree walk
--- can see it happened. Refused (see 'tryClaim') if a different element
+-- can see it happened. Refused if a different element
 -- already holds it this frame, so it can never steal focus out from under
 -- whoever legitimately has it.
 setFocus :: Eq e => e -> View e msg ()
@@ -151,7 +151,7 @@ requestFocus scopeId target = queueEffect (Focus scopeId target)
 requestClearFocus :: HasUiEffect e m => Maybe e -> m ()
 requestClearFocus scopeId = queueEffect (ClearFocus scopeId)
 
--- | 'True' when a 'Focus'\/'ClearFocus' effect targeting this scope is
+-- | 'True' when a @Focus@\/@ClearFocus@ effect targeting this scope is
 -- already queued this frame. Lets a fallback focus request (e.g. returning
 -- focus to a trigger on close) skip itself rather than clobber a fresher
 -- claim made earlier in the same pass -- see 'requestFocus'.
@@ -168,7 +168,7 @@ hasQueuedFocus scopeId = gets (any matches . getUiEffects)
 -- state depends on whether the scope is /currently/ the live focus target:
 --
 --   * It is (the ambient's focused element is already this id). Descendants
---     run against this scope's own persisted 'FocusState', looked up from
+--     run against this scope's own persisted @FocusState@, looked up from
 --     @ftScopes@ (defaulting to @emptyFocusState@ the first time), so they
 --     can auto-claim or resume exactly as if they were standalone. Whatever
 --     they end up with is folded back into @ftScopes@ under this id, and the
@@ -217,7 +217,7 @@ withFocusScope scopeId (View f) = View $ \ctx ->
       Blocked blockValue  -> runBlocked scopeId f ctx blockValue
 
 -- | The claiming scope's descendants run against its own persisted
--- 'FocusState' (or a fresh one), and whatever they end up with is folded
+-- @FocusState@ (or a fresh one), and whatever they end up with is folded
 -- back under this id, with the enclosing scope reaffirmed as pointing here.
 -- See 'withFocusScope'.
 runClaimed

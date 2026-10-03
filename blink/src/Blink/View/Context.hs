@@ -555,7 +555,7 @@ defaultNavigationKeys = NavigationKeys
 -- when the effect is *applied* (real 'ViewContext' access, unlike the
 -- reaction that queued it), and deferring lets every affected element
 -- observe the change consistently regardless of render order — see
--- 'FocusClaim' and 'LostFocus'.
+-- @FocusClaim@ and @LostFocus@.
 --
 -- Constructors are exposed to sibling feature modules (e.g.
 -- "Blink.View.Focus" constructs @Focus@\/@ClearFocus@) but not re-exported
@@ -590,7 +590,7 @@ data UiEffect e
     -- ^ See 'Blink.View.Selection.requestSelectionAt'.
   | SetHoldState e (Maybe HoldState)
     -- ^ Sets ('Just') or clears ('Nothing') an element's repeat-press
-    -- state -- see 'HoldState' and 'Blink.View.Hold.resolveHoldRepeats',
+    -- state -- see @HoldState@ and 'Blink.View.Hold.resolveHoldRepeats',
     -- its only caller. Last-write-wins; unlike @ScrollTo@\/@ScrollBy@
     -- there's no absolute\/relative pair since a repeat-press has no
     -- meaningful "adjust by" -- a control either anchors a fresh press or
