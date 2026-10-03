@@ -30,6 +30,7 @@ import qualified Blink.InputSpec as Input
 import qualified Blink.InteractionSpec as Interaction
 import qualified Blink.LayoutSpec as Layout
 import qualified Blink.PopupSpec as Popup
+import qualified Blink.PublicApiSpec as PublicApi
 import qualified Blink.StyleSpec as Style
 import qualified Blink.Style.DefaultsSpec as StyleDefaults
 import qualified Blink.View.AnimationSpec as ViewAnimation
@@ -66,6 +67,7 @@ main = hspec $ do
   Geometry.spec
   Layout.spec
   Popup.spec
+  PublicApi.spec
   Input.spec
   Control.spec
   Label.spec

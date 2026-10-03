@@ -120,6 +120,7 @@ test-suite blink-tests
         Blink.Interaction
         Blink.InteractionSpec
         Blink.PopupSpec
+        Blink.PublicApiSpec
         Blink.UpdateSpec
         Blink.Controls.ButtonBehaviour
         Blink.Controls.ButtonSpec

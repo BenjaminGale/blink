@@ -7,10 +7,16 @@
 -- An attribute several widgets share ('value', 'step', 'orientation',
 -- 'items', 'itemAttrs', 'selection', 'onSelectionChanged', 'content') is
 -- one name, defined in "Blink.Element", that works on every widget that
--- has it.
+-- has it. 'isEnabled' and 'style' work on every widget.
 module Blink.Controls
-  ( -- * Attributes shared across widgets
-    value
+  ( -- * Building handlers
+    post
+  , postWith
+    -- * Attributes every widget accepts
+  , isEnabled
+  , style
+    -- * Attributes shared across widgets
+  , value
   , step
   , orientation
   , items
@@ -101,6 +107,7 @@ module Blink.Controls
   ) where
 
 import Blink.Element (content, itemAttrs, items, onSelectionChanged, orientation, selection, step, value)
+import Blink.Controls.Control (isEnabled, post, postWith, style)
 import Blink.Controls.Button (activation, button, onActivated)
 import Blink.Controls.Checkbox (checkbox)
 import Blink.Controls.Divider (divider, thickness)

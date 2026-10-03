@@ -3,7 +3,6 @@ module UI (ControlId, AppState (..), demoApp) where
 
 import Blink.App hiding (Continue)
 import Blink.Controls hiding (rowHeight)
-import Blink.Controls.Control (StyleKey (..), isEnabled, post, postWith, style)
 import Blink.Controls.Label (LabelConfig)
 import Blink.Controls.List
   (ListPart (..), MultiSelection, SingleSelection, multiSelection, selectFirst, selectedItems, singleSelection)
@@ -19,7 +18,7 @@ import Blink.Controls.Table
 import Blink.Controls.Tree (TreeItemState (..), flattenVisible)
 import Blink.Controls.TreeTable (treeTable)
 import qualified Blink.Controls.TreeTable as TreeTable
-import Blink.Style (Style (..))
+import Blink.Style (Style (..), StyleKey (..))
 import Blink.Geometry
 import Blink.Input
 import Blink.Layout
