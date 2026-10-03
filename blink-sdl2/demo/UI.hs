@@ -9,6 +9,7 @@ import Blink.View.Drawing (drawText, fillRect)
 import ColourPicker (colourPicker)
 import Theme (ControlId (..), Page (..), lightTheme, darkTheme, heading)
 import Control.Concurrent (threadDelay)
+import Control.Exception (displayException)
 import Control.Monad (when)
 import GHC.Clock (getMonotonicTimeNSec)
 import Data.List (sortOn)
@@ -63,7 +64,7 @@ data AppState = AppState
 -- | Where a 'BackgroundPage' fetch stands: not yet started, in flight (a
 -- 'Blink.Cmd.Cmd' is currently running), or finished with the file's
 -- (simulated) contents.
-data BackgroundStatus = NotStarted | Fetching | Fetched Text
+data BackgroundStatus = NotStarted | Fetching | Fetched Text | FetchError Text
 
 data Msg
   = SetDarkMode Bool
@@ -95,6 +96,7 @@ data Msg
   | FileSizeTreeSortRequested (Int, SortDirection)
   | StartFetch
   | FetchFinished Text
+  | FetchFailed Text
   | JumpToLongListEnd
   | SetImageFitWidthEnabled Bool
   | SetImageFitWidth Double
@@ -209,8 +211,9 @@ updateApp msg = case msg of
     }
   StartFetch -> do
     modify $ \s -> s { backgroundStatus = Fetching }
-    cmd fetchDemoFile
+    cmd fetchDemoFile (FetchFailed . T.pack . displayException)
   FetchFinished contents -> modify $ \s -> s { backgroundStatus = Fetched contents }
+  FetchFailed err -> modify $ \s -> s { backgroundStatus = FetchError err }
   JumpToLongListEnd -> scrollListTo LongList 1
   SetImageFitWidthEnabled v  -> modify $ \s -> s { imageFitWidthEnabled = v }
   SetImageFitWidth v          -> modify $ \s -> s { imageFitWidth = v }
@@ -223,12 +226,14 @@ updateApp msg = case msg of
 -- waits somewhere between 3 and 5 seconds -- the delay seeded from the
 -- clock rather than a proper RNG, since it only needs to look
 -- unpredictable, not be reproducible or statistically sound -- then
--- "returns" fixed file contents.
+-- "returns" fixed file contents. A wait over 4.5 seconds throws instead,
+-- to show a failing command reporting back through its error message.
 fetchDemoFile :: IO Msg
 fetchDemoFile = do
   now <- getMonotonicTimeNSec
   let seconds = 3 + fromIntegral (now `mod` 2000) / 1000 :: Double
   threadDelay (round (seconds * 1000000))
+  when (seconds > 4.5) $ ioError (userError "config.json timed out")
   pure (FetchFinished ("config.json loaded after " <> T.pack (show (round seconds :: Int)) <> "s"))
 
 -- Shell
@@ -873,6 +878,7 @@ backgroundPage s =
       NotStarted     -> "Idle"
       Fetching       -> "Fetching…"
       Fetched result -> result
+      FetchError err -> "Failed: " <> err
     description =
       "\"Fetch file\" requests a Cmd -- an IO action run off the frame \
       \thread. Its result reaches `update` as an ordinary message once it \

@@ -403,15 +403,16 @@ quitOnSecondPassApp = App
 
 data CmdMsg = Start | Done Text
 
--- | Requests a 'Cmd' the first time it's rendered with empty state, and
--- folds the message that 'Cmd' completes with into the state.
-cmdApp :: App () CmdMsg [Text]
-cmdApp = App
+-- | Requests a 'Cmd' running @io@ the first time it's rendered with empty
+-- state, and folds the message that 'Cmd' completes with into the state --
+-- @Done "failed"@ if @io@ throws.
+cmdApp :: IO CmdMsg -> App () CmdMsg [Text]
+cmdApp io = App
   { startUp = pure []
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
   , view    = \s -> fullView (when (null s) (emit Start))
   , update  = \m -> case m of
-      Start  -> cmd (pure (Done "done"))
+      Start  -> cmd io (const (Done "failed"))
       Done t -> modify (++ [t])
   }
 
@@ -638,12 +639,20 @@ spec = do
     describe "Cmd dispatch" $ do
       it "a Cmd's result is folded into state on a later frame, via the MsgQueue" $ do
         (queue, waitForResult) <- newTestMsgQueue
-        handle <- configureContinuous cmdApp queue nullMeasurers
+        handle <- configureContinuous (cmdApp (pure (Done "done"))) queue nullMeasurers
         r1     <- stepFrame handle normalInput -- requests the Cmd; too soon to see its result
         waitForResult                          -- block until the forked Cmd has enqueued it
         r2     <- stepFrame handle normalInput -- drains and folds it
         resultState r1 `shouldBe` []
         resultState r2 `shouldBe` ["done"]
+
+      it "a Cmd that throws delivers its error message instead" $ do
+        (queue, waitForResult) <- newTestMsgQueue
+        handle <- configureContinuous (cmdApp (ioError (userError "boom"))) queue nullMeasurers
+        _      <- stepFrame handle normalInput
+        waitForResult
+        result <- stepFrame handle normalInput
+        resultState result `shouldBe` ["failed"]
 
     describe "UiEffect dispatch" $
       it "a UiEffect requested from update takes effect on a later frame" $ do

@@ -41,14 +41,17 @@ update ResetIfOverLimit = do
 
 'cmd' queues a 'Cmd' to run once the frame's messages have all been folded.
 Its result is delivered back as an ordinary message on a later frame, once
-the backend's 'Blink.App.MsgQueue' has it:
+the backend's 'Blink.App.MsgQueue' has it. If the action throws an
+exception, the second argument turns the exception into the message
+instead, so every command reports back:
 
 @
 update :: Msg -> Update AppState ElementId Msg ()
 update FetchClicked = do
   modify (\\s -> s { status = Loading })
-  cmd (FileLoaded \<$\> Control.Exception.try (readFile path))
-update (FileLoaded result) = modify (\\s -> s { status = Loaded result })
+  cmd (FileLoaded \<$\> readFile path) LoadFailed
+update (FileLoaded contents) = modify (\\s -> s { status = Loaded contents })
+update (LoadFailed err)      = modify (\\s -> s { status = Failed err })
 @
 
 = Quitting
@@ -90,6 +93,8 @@ module Blink.Update
   , quit
   , UpdateResult (..)
   ) where
+
+import Control.Exception (SomeAsyncException (..), SomeException, catch, fromException, throwIO)
 
 import Blink.Cmd (Cmd (..))
 import Blink.View.Context (ControlId (..), HasUiEffect (..), UiEffect)
@@ -147,11 +152,20 @@ gets f = Update $ \s -> (f s, s, mempty)
 modify :: (s -> s) -> Update s e msg ()
 modify f = Update $ \s -> ((), f s, mempty)
 
--- | Requests that an 'IO' action be run as a 'Blink.Cmd.Cmd'. Its result is folded
+-- | Requests that @io@ be run as a 'Blink.Cmd.Cmd'. Its result is folded
 -- back into the state as an ordinary message, on whichever later frame the
--- backend's 'Blink.App.MsgQueue' delivers it.
-cmd :: IO msg -> Update s e msg ()
-cmd io = Update $ \s -> ((), s, Requests [Cmd io] [] False)
+-- backend's 'Blink.App.MsgQueue' delivers it. If @io@ throws, @onError@
+-- turns the exception into that message instead.
+cmd :: IO msg -> (SomeException -> msg) -> Update s e msg ()
+cmd io onError = Update $ \s -> ((), s, Requests [Cmd (io `catchSync` onError)] [] False)
+
+-- | Runs @io@, turning a synchronous exception into a message with
+-- @onError@. Asynchronous exceptions, such as the thread being killed,
+-- are rethrown.
+catchSync :: IO msg -> (SomeException -> msg) -> IO msg
+catchSync io onError = io `catch` \err -> case fromException err of
+  Just (SomeAsyncException _) -> throwIO err
+  Nothing                     -> pure (onError err)
 
 -- | Ends the application once this frame finishes: 'Blink.App.stepFrame'
 -- returns 'Blink.App.Quit', as it does when the window is closed.
