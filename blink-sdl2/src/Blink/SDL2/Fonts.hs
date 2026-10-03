@@ -6,9 +6,11 @@ module Blink.SDL2.Fonts
   , newFontCache
   , freeFontCache
   , loadFont
+  , checkFontFiles
   ) where
 
 import Blink.Backend (Font (..), FontWeight (..))
+import Control.Exception (SomeException, throwIO, try)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
@@ -63,3 +65,14 @@ loadFont cache font = do
     file          = case filter ((== weight) . fontFileWeight) inFamily ++ inFamily of
       (f : _) -> f
       []      -> NE.head files
+
+-- | Opens and closes every file, failing with an error that names the
+-- first file SDL_ttf can't load.
+checkFontFiles :: NonEmpty FontFile -> IO ()
+checkFontFiles = mapM_ check
+  where
+    check file = do
+      result <- try (SDLFont.load (fontFilePath file) 12) :: IO (Either SomeException SDLFont.Font)
+      case result of
+        Right sdlFont -> SDLFont.free sdlFont
+        Left err      -> throwIO (userError ("could not load font file " ++ show (fontFilePath file) ++ ": " ++ show err))

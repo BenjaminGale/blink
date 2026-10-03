@@ -27,12 +27,13 @@ module Blink.SDL2
 
 import Blink.Backend
 import Blink.SDL2.Input (sdlPoint, toKeyEvents, toModifiers, toTypedText, toWheelDelta, updateButton)
-import Blink.SDL2.Fonts (FontFile (..), freeFontCache, newFontCache)
+import Blink.SDL2.Fonts (FontFile (..), checkFontFiles, freeFontCache, newFontCache)
 import Blink.SDL2.Rendering
 import SDL (($=))
 import qualified SDL
 import qualified SDL.Font as Font
 import qualified SDL.Raw
+import Control.Exception (onException)
 import Control.Concurrent.STM (atomically, flushTBQueue, newTBQueueIO, writeTBQueue)
 import Control.Monad (foldM, unless, void)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
@@ -55,11 +56,14 @@ data Config = Config
   }
 
 -- | Opens a window, runs @app@ until the window is closed, then releases
--- every SDL resource it acquired.
+-- every SDL resource it acquired. Checks every file in 'fontFiles' before
+-- opening the window, and fails with an 'IOError' naming the first one
+-- that can't be loaded.
 runApp :: Ord e => Config -> App e msg s -> IO ()
 runApp config app = do
   SDL.initializeAll
   Font.initialize
+  checkFontFiles (fontFiles config) `onException` (Font.quit >> SDL.quit)
   -- Without this, SDL defaults to nearest-neighbor sampling, so any
   -- stretched texture (an image scaled above its natural size, in
   -- particular) comes out blocky rather than smooth.
