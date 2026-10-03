@@ -62,8 +62,10 @@ and calls into Blink.
 A minimal todo list, showing the shape of a Blink application:
 
 ```haskell
+{-# LANGUAGE OverloadedStrings #-}
 import Blink
-import Blink.Element (Element)
+import Blink.Style.Defaults (defaultTheme)
+import Data.Text (Text)
 
 data ControlId = NewItemInput | AddButton | ItemCheckbox Int
   deriving (Eq, Ord)
@@ -73,41 +75,57 @@ data Msg
   | AddItem
   | ToggleItem Int Bool
 
-data AppState = AppState { newItemText :: Text, items :: [(Text, Bool)] }
+data AppState = AppState { newItemText :: Text, todoItems :: [(Text, Bool)] }
 
 todoView :: AppState -> Element ControlId Msg
 todoView s = vBox
   [ spacing 8, margin 12
   , children
       [ hBox
-          [ spacing 8
+          [ spacing 8, height (exactly 32)
           , children
-              [ textInput NewItemInput [value (newItemText s), onInput (postWith SetNewItemText), width Fill]
-              , button AddButton [text "Add", onActivated (post AddItem), width (Exactly 80)]
+              [ textInput NewItemInput [value (newItemText s), onInput (postWith SetNewItemText), width fill]
+              , button AddButton [text "Add", onActivated (post AddItem), width (exactly 80)]
               ]
           ]
       , vBox
           [ spacing 4
           , children
               [ checkbox (ItemCheckbox i)
-                  [text label, isSelected done, onSelectedChanged (postWith (ToggleItem i)), height (Exactly 24)]
-              | (i, (label, done)) <- zip [0 ..] (items s)
+                  [text itemText, isSelected done, onSelectedChanged (postWith (ToggleItem i)), height (exactly 24)]
+              | (i, (itemText, done)) <- zip [0 ..] (todoItems s)
               ]
           ]
       ]
   ]
 
-todoUpdate :: Msg -> Update AppState ()
+todoUpdate :: Msg -> Update AppState ControlId Msg ()
 todoUpdate msg = case msg of
   SetNewItemText t -> modify $ \s -> s { newItemText = t }
-  AddItem           -> modify $ \s -> s { items = items s ++ [(newItemText s, False)], newItemText = "" }
+  AddItem           -> modify $ \s -> s { todoItems = todoItems s ++ [(newItemText s, False)], newItemText = "" }
   ToggleItem i done -> modify $ \s -> s
-    { items = [ if j == i then (t, done) else item | (j, item@(t, _)) <- zip [0 ..] (items s) ] }
+    { todoItems = [ if j == i then (t, done) else item | (j, item@(t, _)) <- zip [0 ..] (todoItems s) ] }
+
+palette :: Palette
+palette = Palette
+  { paletteAccent          = RGBA 0.29 0.55 0.94 1
+  , paletteFocusRing       = RGBA 0.29 0.55 0.94 1
+  , paletteSurface         = RGBA 0.95 0.95 0.96 1
+  , paletteSurfaceHover    = RGBA 0.85 0.85 0.87 1
+  , paletteSurfaceDisabled = RGBA 0.97 0.97 0.97 1
+  , paletteTextPrimary     = RGBA 0.23 0.23 0.25 1
+  , paletteTextMuted       = RGBA 0.66 0.67 0.68 1
+  , paletteTextOnAccent    = RGBA 1 1 1 1
+  , paletteBorder          = RGBA 0.80 0.80 0.82 1
+  , paletteBorderHover     = RGBA 0.65 0.65 0.68 1
+  , paletteIcon            = RGBA 0.23 0.23 0.25 1
+  , paletteIconHover       = RGBA 0.29 0.55 0.94 1
+  }
 
 app :: App ControlId Msg AppState
 app = App
   { startUp = pure (AppState "" [])
-  , theme   = const myTheme
+  , theme   = const (defaultTheme palette)
   , view    = todoView
   , update  = todoUpdate
   }
@@ -124,7 +142,7 @@ click, and `onSelectedChanged (postWith (ToggleItem i))` queues which item
 changed and its new state.
 
 `view` takes `AppState` and rebuilds the full `Element` tree from it every
-frame — `items` in `todoView` is just read straight off `AppState`, with no
+frame — `todoItems` in `todoView` is just read straight off `AppState`, with no
 manual diffing. `update` then folds each queued `Msg` into the state once the
 frame completes, in emission order.
 
@@ -145,10 +163,10 @@ documentation is the reference material once you have that model in hand.
 
 ### Dependencies
 
-Install the SDL2 and SDL2 TTF development libraries:
+Install the SDL2, SDL2 image and SDL2 TTF development libraries:
 
 ```
-sudo apt-get install libsdl2-dev libsdl2-ttf-dev
+sudo apt-get install libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev
 ```
 
 ### Running the demo
