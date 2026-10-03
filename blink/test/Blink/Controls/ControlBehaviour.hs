@@ -55,10 +55,14 @@ data ControlBehaviourConfig = ControlBehaviourConfig
     -- ^ Whether clicking it grants it focus at all. 'False' for a control
     -- whose default click behaviour doesn't focus itself (e.g. a label
     -- with no 'Blink.Controls.Label.target').
+  , cbcFocusableById :: Bool
+    -- ^ Whether it can be given focus through its id, by 'Blink.View.setFocus'
+    -- or 'Blink.View.requestFocus'. 'False' for a label, which is tracked
+    -- as a part of its target and never holds focus.
   }
 
 defaultControlBehaviourConfig :: ControlBehaviourConfig
-defaultControlBehaviourConfig = ControlBehaviourConfig { cbcAutoClaims = True, cbcClickFocuses = True }
+defaultControlBehaviourConfig = ControlBehaviourConfig { cbcAutoClaims = True, cbcClickFocuses = True, cbcFocusableById = True }
 
 -- | The focus\/hit-region contract: given how to render the control under
 -- test with a given attrs list, asserts it claims and gives up focus the
@@ -79,7 +83,7 @@ controlBehaviourSpec
   -> ([Attribute cfg] -> View e String ())                -- ^ render the control under test with these attrs
   -> Spec
 controlBehaviourSpec cfg bounds ctx eid holder marginPoint insideRect outsidePoint render = do
-  controlEventSpec bounds ctx eid holder marginPoint insideRect outsidePoint render
+  controlEventSpec (cbcFocusableById cfg) bounds ctx eid holder marginPoint insideRect outsidePoint render
   styleAttributeSpec bounds ctx insideRect render
   focusBehaviourSpec cfg bounds ctx insideRect outsidePoint render
   enabledAttributeSpec bounds ctx insideRect render
@@ -88,7 +92,8 @@ controlBehaviourSpec cfg bounds ctx eid holder marginPoint insideRect outsidePoi
 -- those events respect.
 controlEventSpec
   :: (Ord e, HasControlConfig e String cfg, HasEventHandlers cfg)
-  => Rectangle                                   -- ^ bounds the control renders at
+  => Bool                                        -- ^ whether it can be given focus through its id
+  -> Rectangle                                   -- ^ bounds the control renders at
   -> ViewContext e String                          -- ^ starting context (theme\/measurer already set up)
   -> e                                             -- ^ element id under test
   -> e                                             -- ^ an unused id, for a control that holds focus away from it
@@ -97,11 +102,11 @@ controlEventSpec
   -> Point                                         -- ^ a point outside its bounds entirely
   -> ([Attribute cfg] -> View e String ())                -- ^ render the control under test with these attrs
   -> Spec
-controlEventSpec bounds ctx eid holder marginPoint insideRect outsidePoint render = do
+controlEventSpec focusableById bounds ctx eid holder marginPoint insideRect outsidePoint render = do
   -- A control auto-claims focus the moment nothing else holds it, which
   -- would otherwise leak an incidental focus-gained event into every one
   -- of these raw-fact checks.
-  elementBehaviourSpec bounds ctx eid insideRect outsidePoint (\attrs -> focusHeldBy holder >> render attrs)
+  elementBehaviourSpec focusableById bounds ctx eid insideRect outsidePoint (\attrs -> focusHeldBy holder >> render attrs)
 
   describe "hit region" $ do
     it "does not raise a click event for a press and release inside its margin" $ do

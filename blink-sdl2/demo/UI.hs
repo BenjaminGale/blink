@@ -232,25 +232,23 @@ fetchDemoFile = do
 
 -- Shell
 
--- | Plain, non-interactive text under the shared 'Label' element ID.
+-- | Plain, non-interactive text.
 caption :: Text -> [Attribute (LabelConfig ControlId Msg)] -> Element ControlId Msg
-caption t attrs = label Label (text t : attrs)
+caption t attrs = label (text t : attrs)
 
 -- | A row pairing a caption with the control it describes: fixed-width
 -- label on the left (redirecting clicks to @targetId@ via 'target'),
 -- control filling the rest. Takes 'rowLayout' (or another layout) so the
 -- row's own width\/height fit alongside its siblings. The label shares
 -- @enabled@ with @control@, so a disabled field's label stops redirecting
--- clicks to it too. Identified by its own 'FieldLabel' id rather than
--- 'caption's shared one -- a redirecting label needs its click tracked
--- against its own row, not conflated with every other label on screen.
+-- clicks to it too.
 field :: [Attribute (BoxConfig ControlId Msg)] -> Bool -> ControlId -> Text -> Element ControlId Msg -> Element ControlId Msg
 field layoutAttrs enabled targetId labelText fieldControl =
   hBox
     ( layoutAttrs ++
       [ spacing 8, alignment Center
       , children
-          [ label (FieldLabel targetId)
+          [ label
               [text labelText, target targetId, isEnabled enabled, width (exactly 120), height fill, align MiddleLeft]
           , fieldControl
           ]
@@ -992,7 +990,7 @@ bordersPage _ =
       vBox
         [ spacing 16
         , children
-            [ label eid [style (ElementId eid), width (exactly 140), height (exactly 100)]
+            [ label [style (ElementId eid), width (exactly 140), height (exactly 100)]
             , caption caption' [width (exactly 140), height (exactly 28), align TopCenter]
             ]
         ]

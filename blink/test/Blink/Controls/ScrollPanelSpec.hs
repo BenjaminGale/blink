@@ -112,5 +112,5 @@ spec = describe "Blink.Controls.ScrollPanel" $ do
       -- so 116px of horizontal range and 156px of vertical range.
       resultDraws result `shouldContain` [FillRect (Rectangle (-116) (-156) 200 200) testColour]
 
-  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
+  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False, cbcFocusableById = True })
     testBounds contractCtx Panel FocusHolder (Point 5 5) contractHitRect (Point 200 200) render

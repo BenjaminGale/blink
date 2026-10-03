@@ -3,7 +3,7 @@ module Blink.Controls.LabelSpec (spec) where
 
 import Test.Hspec
 
-import Blink.Controls.Control (Attribute)
+import Blink.Controls.Control (Attribute, onClicked, post)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.Fixtures
   (fullSizeAt, hitRectFor, mkTestTheme, monospaceTextMeasurer, noInput, plainStyle, plainStyleSet, standardMetrics, startAt, testColour)
@@ -16,7 +16,7 @@ import Blink.Style (Theme)
 import Blink.View
 import Blink.Testing
 
-data TestElement = Caption | Target | FocusHolder deriving (Eq, Ord, Show)
+data TestElement = Target | FocusHolder deriving (Eq, Ord, Show)
 
 testBounds :: Rectangle
 testBounds = Rectangle 0 0 100 100
@@ -36,7 +36,7 @@ seedCtx :: ViewContext TestElement String
 seedCtx = emptyViewContext testBounds noInput testTheme
 
 fullSize :: [Attribute'] -> View TestElement String ()
-fullSize attrs = fullSizeAt (label Caption attrs)
+fullSize attrs = fullSizeAt (label attrs)
 
 start :: [Attribute'] -> IO (ViewContext TestElement String)
 start attrs = startAt seedCtx (fullSize attrs)
@@ -96,8 +96,10 @@ startShortOverflowing attrs =
 
 spec :: Spec
 spec = describe "Blink.Controls.Label" $ do
-  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    testBounds seedCtx Caption FocusHolder (Point 5 5) hitRect (Point 200 200) fullSize
+  -- A label only reacts to anything once it has a target, so the shared
+  -- behaviour is checked on one that has.
+  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False, cbcFocusableById = False })
+    testBounds seedCtx Target FocusHolder (Point 5 5) hitRect (Point 200 200) (fullSize . (target Target :))
 
 
   it "draws its text in the resolved style" $ do
@@ -128,6 +130,10 @@ spec = describe "Blink.Controls.Label" $ do
     it "stays inside bounds shorter than the glyph, rather than landing in the clipped-away overflow" $ do
       ctx <- startShortOverflowing [text "Hi", mnemonic 'H']
       getDrawCommands ctx `shouldContain` [FillRect (Rectangle 90 34 10 1) testColour]
+
+  it "raises no events without a target, having no id of its own" $ do
+    result <- runInteractions testBounds seedCtx (fullSize [onClicked (post ("Clicked" :: String))]) [] [ClickAt onCaption]
+    resultMessages result `shouldBe` []
 
   it "never claims focus, even with nothing else focused" $ do
     result <- runInteractions testBounds seedCtx (fullSize []) [] []

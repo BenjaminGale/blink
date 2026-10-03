@@ -26,9 +26,7 @@ data Page
   | BackgroundPage | ImagePage | BordersPage
   deriving (Eq, Ord, Show)
 
-data ControlId = Label
-             | FieldLabel ControlId
-             | StatusBar
+data ControlId = StatusBar
              | SidebarPages
              | DarkModeCheckbox
              | EditingCheckbox

@@ -46,7 +46,7 @@ import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..), uniform)
 import Blink.Input (InputState (inputHeldModifiers), Modifier (Alt))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Rendering (TextAlign (..))
-import Blink.View (View, charOffset, currentStyle, getBounds, getCurrentScope, getInput, measureText, withBounds)
+import Blink.View (View, charOffset, currentStyle, getBounds, getCurrentScope, getInput, measureText, withBounds, withPart)
 import Blink.View.Drawing (drawText, fillRect)
 import Blink.Element (Element (..), HasLayoutConfig (..))
 import Blink.Style
@@ -190,18 +190,30 @@ target t = Attribute (\c -> c { lblTarget = Just t })
 -- other content in a row (a field name next to its input) rather than
 -- spanning it alone, so it shouldn't claim the whole row by default.
 -- Override with 'Blink.Element.width'\/'Blink.Element.height'\/'Blink.Element.align'.
-label :: Ord e => e -> [Attribute (LabelConfig e msg)] -> Element e msg
-label eid attrs = chromeElement (lblLayout cfg) (ccStyleKey ctrl) (captionElement (lcText (lblLabelled cfg))) $ do
-  scope <- getCurrentScope
-  ci    <- control ctrl
-  forM_ (lblTarget cfg) (\t -> focusTargetOnClick scope t ci)
+--
+-- A label has no id of its own. One with a 'target' is tracked as a part
+-- of that target, which is all it needs to notice a click; one without is
+-- plain, non-interactive content.
+label :: Ord e => [Attribute (LabelConfig e msg)] -> Element e msg
+label attrs = chromeElement (lblLayout cfg) (ccStyleKey ctrl) (captionElement (lcText (lblLabelled cfg))) $
+  case lblTarget cfg of
+    Nothing -> () <$ control ctrl
+    Just t  -> do
+      scope <- getCurrentScope
+      ci    <- withPart t (partName Caption) (control ctrl { ccElementId = Just t })
+      -- Outside the part, so @t@ means the target itself again.
+      focusTargetOnClick scope t ci
   where
     cfg  = resolve defaultLabelConfig attrs
     ctrl = (lblControl cfg)
       { ccFocusPolicy = NotFocusable
       , ccContent     = const (renderLabelledContent (lblLabelled cfg))
-      , ccElementId   = Just eid
+      , ccElementId   = Nothing
       }
+
+-- | The part a label with a 'target' is tracked as, within that target.
+data LabelPart = Caption
+  deriving Show
 
 -- * Style
 

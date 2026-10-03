@@ -11,6 +11,7 @@ module Blink.Controls.ElementBehaviour
   , tagged
   ) where
 
+import Control.Monad (when)
 import Test.Hspec
 
 import Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
@@ -54,14 +55,15 @@ tagged =
 -- because one particular point happens to work.
 elementBehaviourSpec
   :: (Ord e, HasControlConfig e String cfg, HasEventHandlers cfg)
-  => Rectangle                                    -- ^ bounds the thing under test renders at
+  => Bool                                         -- ^ whether it can be given focus through its id
+  -> Rectangle                                    -- ^ bounds the thing under test renders at
   -> ViewContext e String                           -- ^ starting context (theme\/measurer already set up)
   -> e                                             -- ^ element id under test
   -> Rectangle                                     -- ^ the region making up its hit area
   -> Point                                         -- ^ a point outside its bounds
   -> ([Attribute cfg] -> View e String ())                -- ^ render the thing under test with these attrs
   -> Spec
-elementBehaviourSpec bounds ctx eid insideRect outside render = do
+elementBehaviourSpec focusableById bounds ctx eid insideRect outside render = do
   describe "hover" $ do
     it "raises a mouse enter event when the cursor moves into its bounds" $ monadicIO $ do
       p <- pick (genPointIn insideRect)
@@ -94,7 +96,7 @@ elementBehaviourSpec bounds ctx eid insideRect outside render = do
       result <- run (runInteractions bounds ctx (render tagged) [] [ClickAt p])
       assert ("Clicked" `elem` resultMessages result)
 
-  describe "keyboard" $ do
+  when focusableById $ describe "keyboard" $ do
     it "raises a key event while it holds focus" $ do
       focused <- runInteractions bounds ctx (setFocus eid) [] []
       result  <- runInteractions bounds (resultContext focused) (render tagged) [] [PressKey KeySpace []]
@@ -114,7 +116,7 @@ elementBehaviourSpec bounds ctx eid insideRect outside render = do
   -- observes it) rather than two calls glued together via 'resultContext'
   -- -- see "Blink.InteractionSpec"'s "chaining two runInteractions calls
   -- via resultContext" for why the latter corrupts a focus change's origin.
-  describe "focus" $ do
+  when focusableById $ describe "focus" $ do
     it "raises a focus gained event when given focus" $ do
       result <- runInteractions bounds ctx (requestFocus Nothing eid >> render tagged) [Wait 1] []
       resultMessages result `shouldBe` ["FocusGained"]

@@ -177,7 +177,7 @@ renderSingleLabel attrs = runElement $ menuBar ContractPart
 -- | The bar's own container is fixed 'NotFocusable'.
 contractSpec :: Spec
 contractSpec = do
-  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
+  controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False, cbcFocusableById = True })
     contractBounds contractCtx ContractPart FocusHolder (Point 5 5) contractHitRect (Point 200 200) renderEmptyMenuBar
   describe "label" $
     styleAttributeSpec labelContractBounds contractCtx (hitRectFor (contentRectFor labelContractBounds)) renderSingleLabel

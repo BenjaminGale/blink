@@ -170,7 +170,7 @@ spec = describe "Blink.Controls.ToggleGroup" $ do
   -- between its items, never landing on the group itself.
   describe "as a control" $
     controlBehaviourSpec
-      (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
+      (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False, cbcFocusableById = True })
       controlTestBounds controlSeedCtx Group FocusHolder (Point 5 5) controlHitRect (Point 400 400)
       render
 
