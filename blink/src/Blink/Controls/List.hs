@@ -190,6 +190,11 @@ class SelectionModel sel where
   extendCursor :: Direction -> sel a -> sel a
   extendCursor = moveCursor
 
+  -- | The same selection over a new list of items -- after the app sorts,
+  -- filters or adds to them. Items still in the new list stay selected,
+  -- and the cursor stays on its item if that item is still there.
+  replaceItems :: Eq a => [a] -> sel a -> sel a
+
 -- | A 'SelectionModel' that has a value with no items -- every model
 -- except 'RequiredSelection', whose whole invariant is that one item is
 -- always selected. Kept separate from 'SelectionModel' itself so that
@@ -256,6 +261,8 @@ instance SelectionModel SingleSelection where
 
   activate x s = activateZipper (\(b, y, a) -> Selected b y a) x (singleItems s) s
 
+  replaceItems xs s = singleSelection xs (cursorItem s)
+
   moveCursor _ (Unselected (x : xs)) = Selected [] x xs   -- first key press selects the first item
   moveCursor _ (Unselected [])       = Unselected []
   moveCursor d s@(Selected b x a)    =
@@ -306,6 +313,14 @@ instance SelectionModel RequiredSelection where
 
   activate x s = activateZipper (\(b, y, a) -> RequiredSelection b y a) x (requiredItems s) s
 
+  -- A required selection can't be empty, so an empty new list leaves it
+  -- as it is; a selected item that's gone moves the selection to the
+  -- first item.
+  replaceItems xs s@(RequiredSelection _ x _) = case (requireItem x xs, xs) of
+    (Just s', _)       -> s'
+    (Nothing, y : ys)  -> RequiredSelection [] y ys
+    (Nothing, [])      -> s
+
   moveCursor d s@(RequiredSelection b x a) =
     maybe s (\(b', x', a') -> RequiredSelection b' x' a') (shiftZipper d (b, x, a))
 
@@ -348,6 +363,12 @@ instance SelectionModel MultiSelection where
       (b', (sx, y) : a') -> MultiSelection (reverse b') (not sx, y) a'
       _                  -> s
 
+  replaceItems xs s = case cursorItem s of
+    Just c | c `elem` xs -> withCursorOn c marked
+    _                    -> fromMarked marked
+    where
+      marked = [ (x `elem` selectedItems s, x) | x <- xs ]
+
   moveCursor _ MultiEmpty                = MultiEmpty
   moveCursor d s@(MultiSelection b x a)  =
     maybe s (\(b', x', a') -> MultiSelection b' x' a') (shiftZipper d (b, x, a))
@@ -371,6 +392,18 @@ multiSelectedAt :: [Int] -> [a] -> MultiSelection a
 multiSelectedAt _   []       = MultiEmpty
 multiSelectedAt sel (x : xs) =
   MultiSelection [] (0 `elem` sel, x) [(i `elem` sel, y) | (i, y) <- zip [1 ..] xs]
+
+-- | A multi-selection over @marked@ with the cursor on the first item.
+fromMarked :: [(Bool, a)] -> MultiSelection a
+fromMarked []       = MultiEmpty
+fromMarked (x : xs) = MultiSelection [] x xs
+
+-- | A multi-selection over @marked@ with the cursor on @c@, which must be
+-- one of its items.
+withCursorOn :: Eq a => a -> [(Bool, a)] -> MultiSelection a
+withCursorOn c marked = case break ((== c) . snd) marked of
+  (b, x : a) -> MultiSelection (reverse b) x a
+  _          -> fromMarked marked
 
 -- | Every item, in order.
 multiItems :: MultiSelection a -> [a]
@@ -446,6 +479,16 @@ instance SelectionModel RangeSelection where
 
   -- Collapse to the single item x.
   activate x s = rangeAt x (rangeItems s)
+
+  -- Keeps the run when both its ends are still there, collapses it to the
+  -- cursor when only the cursor is, and clears it otherwise.
+  replaceItems xs (NoRange _) = NoRange xs
+  replaceItems xs (Range b run a end)
+    | anchor `elem` xs && cursorX `elem` xs = rangeFrom anchor cursorX xs
+    | otherwise                              = rangeAt cursorX xs
+    where
+      anchor          = anchorOf run end
+      (_, cursorX, _) = cursorZipper b run a end
 
   -- Collapse to the cursor item, then move it one step.
   moveCursor _ (NoRange [])       = NoRange []

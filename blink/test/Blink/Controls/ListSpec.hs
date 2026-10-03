@@ -27,9 +27,42 @@ spec = describe "Blink.Controls.List" $ do
   requiredSpec
   multiSpec
   rangeSpec
+  replaceItemsSpec
   contractSpec
   widgetSpec
   scrollingSpec
+
+replaceItemsSpec :: Spec
+replaceItemsSpec = describe "replaceItems" $ do
+  it "keeps a single selection whose item is still present, in the new order" $ do
+    let s = replaceItems [3, 1, 2] (selectItem 2 [1, 2, 3 :: Int])
+    selectedItems s `shouldBe` [2]
+    singleItems s   `shouldBe` [3, 1, 2]
+
+  it "clears a single selection whose item is gone" $
+    selectedItems (replaceItems [1, 3] (selectItem 2 [1, 2, 3 :: Int])) `shouldBe` []
+
+  it "keeps a required selection whose item is still present" $
+    selectedItems (replaceItems [3, 2] (fromJust (requireItem 2 [1, 2, 3 :: Int]))) `shouldBe` [2]
+
+  it "moves a required selection whose item is gone to the first item" $
+    selectedItems (replaceItems [3, 2] (requireFirst (1 :| [2, 3 :: Int]))) `shouldBe` [3]
+
+  it "leaves a required selection unchanged by an empty list" $
+    requiredItems (replaceItems [] (requireFirst (1 :| [2, 3 :: Int]))) `shouldBe` [1, 2, 3]
+
+  it "keeps the multi-selected items still present, and the cursor" $ do
+    let s = replaceItems [3, 2, 4] (moveCursor Next (multiSelected [1, 2, 3 :: Int] [1, 3]))
+    selectedItems s `shouldBe` [3]
+    cursorItem s    `shouldBe` Just 2
+
+  it "keeps a range when both its ends are still present" $ do
+    let s = replaceItems [5, 3, 2, 1] (rangeFrom 1 3 [1, 2, 3, 4, 5 :: Int])
+    selectedItems s `shouldBe` [3, 2, 1]
+    cursorItem s    `shouldBe` Just 3
+
+  it "collapses a range to its cursor when its anchor is gone" $
+    selectedItems (replaceItems [2, 3, 4] (rangeFrom 1 3 [1, 2, 3, 4, 5 :: Int])) `shouldBe` [3]
 
 singleSpec :: Spec
 singleSpec = describe "SingleSelection" $ do

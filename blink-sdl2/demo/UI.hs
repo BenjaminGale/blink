@@ -12,7 +12,6 @@ import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import GHC.Clock (getMonotonicTimeNSec)
 import Data.List (sortOn)
-import Data.Maybe (listToMaybe)
 import Data.Ord (Down (..))
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -182,29 +181,29 @@ updateApp msg = case msg of
   -- itself derived from the current visible items already.
   FileTreeExpansionChanged e -> modify $ \s -> s
     { fileTreeExpanded  = e
-    , fileTreeSelection = singleSelection (visibleFileTreeItems e) (listToMaybe (selectedItems (fileTreeSelection s)))
+    , fileTreeSelection = replaceItems (visibleFileTreeItems e) (fileTreeSelection s)
     }
   FileTreeSelectionChanged v -> modify $ \s -> s { fileTreeSelection = v }
   GroceryTableSelectionChanged v -> modify $ \s -> s { groceryTableSelection = v }
   -- Rebuilds against the new order, same as 'FileTreeExpansionChanged'.
   GroceryTableSortRequested req -> modify $ \s -> s
     { groceryTableSort      = Just req
-    , groceryTableSelection = singleSelection
+    , groceryTableSelection = replaceItems
         (map fst (sortedGroceryItems (Just req)))
-        (listToMaybe (selectedItems (groceryTableSelection s)))
+        (groceryTableSelection s)
     }
   FileSizeTreeExpansionChanged e -> modify $ \s -> s
     { fileSizeTreeExpanded  = e
-    , fileSizeTreeSelection = singleSelection
+    , fileSizeTreeSelection = replaceItems
         (visibleFileSizeTreeItems (fileSizeTreeSort s) e)
-        (listToMaybe (selectedItems (fileSizeTreeSelection s)))
+        (fileSizeTreeSelection s)
     }
   FileSizeTreeSelectionChanged v -> modify $ \s -> s { fileSizeTreeSelection = v }
   FileSizeTreeSortRequested req -> modify $ \s -> s
     { fileSizeTreeSort      = Just req
-    , fileSizeTreeSelection = singleSelection
+    , fileSizeTreeSelection = replaceItems
         (visibleFileSizeTreeItems (Just req) (fileSizeTreeExpanded s))
-        (listToMaybe (selectedItems (fileSizeTreeSelection s)))
+        (fileSizeTreeSelection s)
     }
   StartFetch -> do
     modify $ \s -> s { backgroundStatus = Fetching }
