@@ -97,8 +97,8 @@ spec = describe "Blink.View.Selection" $ do
       let ctx' = settleEffects ctx
       (_, ctx'') <- runView (requestSelectionAt ElemB (cursor 1)) ctx'
       let settled = settleEffects ctx''
-      contextSelection ElemA settled `shouldBe` Nothing
-      contextSelection ElemB settled `shouldBe` Just (cursor 1)
+      contextSelection (Control ElemA) settled `shouldBe` Nothing
+      contextSelection (Control ElemB) settled `shouldBe` Just (cursor 1)
 
   describe "Selection invariants" $ do
     prop "selectionLow is never greater than selectionHigh" $

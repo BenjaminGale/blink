@@ -20,15 +20,15 @@ import Blink.View.Context
 -- the start of this frame -- 'Nothing' for an element nothing has
 -- recorded yet. See 'Blink.Controls.List.listBase'.
 getCursorIndex :: Ord e => e -> View e msg (Maybe Int)
-getCursorIndex eid = gets (contextCursorIndex eid)
+getCursorIndex eid = controlIdOf eid >>= gets . contextCursorIndex
 
 -- | 'getCursorIndex', read directly from a 'ViewContext' outside the
 -- 'View' monad -- e.g. to assert on the result of a completed frame.
-contextCursorIndex :: Ord e => e -> ViewContext e msg -> Maybe Int
+contextCursorIndex :: Ord e => ControlId e -> ViewContext e msg -> Maybe Int
 contextCursorIndex eid ctx =
   cursorIndexValue <$> Map.lookup eid (elmCursorIndices (ctxElements ctx))
 
 -- | Records ('Just') or clears ('Nothing') the row index a list-like
 -- control's cursor currently holds, from the next frame onward.
-setCursorIndex :: e -> Maybe Int -> View e msg ()
-setCursorIndex eid mi = emitUi (SetCursorIndex eid mi)
+setCursorIndex :: Ord e => e -> Maybe Int -> View e msg ()
+setCursorIndex eid mi = controlIdOf eid >>= \k -> emitUi (SetCursorIndex k mi)

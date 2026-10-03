@@ -46,6 +46,11 @@ module Blink.View.Context
     -- * Messages
   , Effect (..)
   , UiEffect (..)
+  , ControlId (..)
+  , controlIdOf
+  , controlIdIn
+  , withPart
+  , partId
   , HasUiEffect (..)
   , emit
   , emitUi
@@ -145,6 +150,7 @@ import Data.Char (toUpper)
 import Data.List (find, foldl')
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
+import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Blink.Rendering (DrawCommand, CursorShape (..), Measurers (..), noOpMeasurers, TextMeasurer (..), ImageMeasurer (..), ImagePath)
@@ -541,6 +547,17 @@ defaultNavigationKeys = NavigationKeys
 -- The View monad and ViewContext
 --------------------------------------------------------------------------------
 
+-- | How Blink identifies a control internally: the id the application
+-- gave it, or a named part of a control with that id (see 'withPart').
+-- Every piece of per-control state -- hover, capture, focus, scroll,
+-- selection -- is stored under one of these.
+data ControlId e
+  = Control e
+  | Part e Text
+    -- ^ A part of the control with this id, named by a @/@-separated path
+    -- such as @"viewport/vertical-bar"@.
+  deriving (Eq, Ord, Show)
+
 -- | A cross-frame presentation effect: a scroll, selection, or explicit
 -- focus change that takes effect starting the next frame rather than
 -- immediately. Queued with 'emitUi' and applied by @applyUiEffects@, which
@@ -569,7 +586,7 @@ defaultNavigationKeys = NavigationKeys
 -- 'Blink.Update.Update' handler reacting to a message, not only from
 -- view code reacting to an input event.
 data UiEffect e
-  = ScrollTo e Double
+  = ScrollTo (ControlId e) Double
     -- ^ Sets the scroll position to an absolute value, clamped to @[0, 1]@
     -- when applied. Every caller ('Blink.Controls.ScrollBar.scrollBar',
     -- 'Blink.Controls.TextInput.textInput') already passes a value in
@@ -577,36 +594,36 @@ data UiEffect e
     -- 'Blink.Controls.TextInput.textInput' converts to and from pixels
     -- locally since its selection\/cursor math is naturally pixel-based.
     -- See 'Blink.View.Scroll.requestScrollTo'.
-  | ScrollBy e Double
+  | ScrollBy (ControlId e) Double
     -- ^ Adjusts the scroll position by a delta, clamped to @[0, 1]@ — this
     -- constructor is only ever used in the normalised @[0, 1]@ convention.
     -- Composes with other @ScrollBy@ effects queued in the same frame for
     -- the same element rather than last-write-wins. See
     -- 'Blink.View.Scroll.requestScrollBy'\/'Blink.View.Scroll.postScrollBy'.
-  | AdjustExtent e Double
+  | AdjustExtent (ControlId e) Double
     -- ^ Adjusts an element's 'ExtentState' by a delta, unclamped —
     -- composes with other @AdjustExtent@ effects queued in the same
     -- frame for the same element, the same way @ScrollBy@ does. See
     -- 'Blink.View.Extent.requestExtentBy'.
-  | SetSelectionAt e Selection
+  | SetSelectionAt (ControlId e) Selection
     -- ^ See 'Blink.View.Selection.requestSelectionAt'.
-  | SetHoldState e (Maybe HoldState)
+  | SetHoldState (ControlId e) (Maybe HoldState)
     -- ^ Sets ('Just') or clears ('Nothing') an element's repeat-press
     -- state -- see @HoldState@ and 'Blink.View.Hold.resolveHoldRepeats',
     -- its only caller. Last-write-wins; unlike @ScrollTo@\/@ScrollBy@
     -- there's no absolute\/relative pair since a repeat-press has no
     -- meaningful "adjust by" -- a control either anchors a fresh press or
     -- clears one.
-  | SetCursorIndex e (Maybe Int)
+  | SetCursorIndex (ControlId e) (Maybe Int)
     -- ^ Sets ('Just') or clears ('Nothing') a list-like control's
     -- 'CursorIndexState' -- see 'Blink.Controls.List.listBase', its only
     -- caller. Last-write-wins, the same as @SetHoldState@.
-  | Focus (Maybe e) e
+  | Focus (Maybe (ControlId e)) (ControlId e)
     -- ^ Makes the given element focused within the given scope (@Nothing@ =
     -- root, @Just scopeId@ = the composite scope with that id — see
     -- @Blink.View.Focus.withFocusScope@), applied atomically at the next
     -- frame boundary. See @Blink.View.Focus.requestFocus@.
-  | ClearFocus (Maybe e)
+  | ClearFocus (Maybe (ControlId e))
     -- ^ Clears whoever is focused within the given scope, with nothing new
     -- claiming it, applied atomically at the next frame boundary — the
     -- "clear" counterpart to @Focus@. See
@@ -667,7 +684,7 @@ data FrameOutputs e msg = FrameOutputs
 -- its draw commands and hit-rects are appended last and land on top of
 -- everything else rendered this frame.
 data PendingPopup e msg = PendingPopup
-  { popupId        :: e
+  { popupId        :: ControlId e
     -- ^ The id passed to 'Blink.Popup.popup'.
   , popupAnchor    :: Rectangle
     -- ^ The anchor rect placement is computed against -- either the calling
@@ -684,7 +701,7 @@ data PendingPopup e msg = PendingPopup
     -- 'Blink.Popup.offset'.
   , popupRun       :: View e msg ()
     -- ^ The popup content's own frame action, extracted at queue time.
-  , popupOriginScope :: Maybe e
+  , popupOriginScope :: Maybe (ControlId e)
     -- ^ The focus scope ambient when 'Blink.Popup.popup' was called
     -- ('Nothing' for root) -- see 'Blink.View.Focus.getCurrentScope'.
     -- "Blink.App"'s drain step re-enters it before running 'popupRun', so a
@@ -726,28 +743,31 @@ data ViewContext e msg = ViewContext
     -- ^ Measurement services supplied at configure time. Controls call
     -- 'charOffset', 'charAtOffset', 'measureText', and 'measureImage'
     -- rather than accessing this directly.
-  , ctxFocus           :: FocusTracker e
+  , ctxFocus           :: FocusTracker (ControlId e)
     -- ^ Keyboard-focus targeting state. See 'FocusTracker'.
   , ctxNavigationKeys  :: NavigationKeys
     -- ^ Which keys currently mean "advance"\/"retreat" focus. See
     -- 'NavigationKeys'; set via 'Blink.View.Navigation.withNavigationKeys'.
-  , ctxCurrentScope    :: Maybe e
+  , ctxCurrentScope    :: Maybe (ControlId e)
     -- ^ The scope id currently ambient -- 'Nothing' for root, @'Just'
     -- scopeId@ while inside that scope's own
     -- @Blink.View.Focus.withFocusScope@ call. Lets an effect queued from
     -- deep inside a scope (a Shift-Tab retreat, a click redirecting focus
     -- to a different element) address /that/ scope instead of always root.
     -- See 'getCurrentScope'.
-  , ctxCurrentPopupId  :: Maybe e
+  , ctxCurrentPopupId  :: Maybe (ControlId e)
     -- ^ The id of the popup currently being drained -- 'Nothing' outside
     -- 'Blink.App.drainPopups', @'Just' popupId@ while running that popup's
     -- own content. See 'getCurrentPopupId'.
-  , ctxMouse           :: Mouse e
+  , ctxMouse           :: Mouse (ControlId e)
     -- ^ The left mouse button's state this frame (and which element, if
     -- any, holds mouse capture), plus per-element hover state. See
     -- 'Blink.Input.Mouse'. Unlike focus, the button reading does not change
     -- on a re-render of the same frame — see 'rerenderContext'.
-  , ctxElements        :: ElementState e
+  , ctxElements        :: ElementState (ControlId e)
+  , ctxParts           :: Map.Map e Text
+    -- ^ The controls currently inside a 'withPart', each mapped to the
+    -- part path its own id is turned into -- see 'controlIdOf'.
   , ctxOutputs         :: FrameOutputs e msg
   , ctxStyle           :: Style
     -- ^ Set by 'withStyle', read back via 'currentStyle'.
@@ -822,6 +842,7 @@ emptyViewContext bounds input thm = ViewContext
       , elmCursorIndices = Map.empty
       , elmSelection     = NoSelection
       }
+  , ctxParts           = Map.empty
   , ctxOutputs         = emptyFrameOutputs
   , ctxStyle           = resolveStyle (snd (themeDefaultStyle thm)) Set.empty
   , ctxMetrics         = fst (themeDefaultStyle thm)
@@ -979,13 +1000,13 @@ withoutKeyEvents keys (View f) = View $ \ctx ->
 -- @Blink.View.Focus.requestFocus@ for a Shift-Tab retreat) should use this
 -- rather than assuming root, so it still targets the right scope when
 -- called from inside one.
-getCurrentScope :: View e msg (Maybe e)
+getCurrentScope :: View e msg (Maybe (ControlId e))
 getCurrentScope = gets ctxCurrentScope
 
 -- | The id of the popup currently being drained -- 'Nothing' outside
 -- 'Blink.App.drainPopups', @'Just' popupId@ while running that popup's own
 -- content (set by 'withCurrentPopup'). See 'ctxCurrentPopupId'.
-getCurrentPopupId :: View e msg (Maybe e)
+getCurrentPopupId :: View e msg (Maybe (ControlId e))
 getCurrentPopupId = gets ctxCurrentPopupId
 
 -- | Runs @action@ with 'ctxCurrentPopupId' set to @'Just' popId@, restoring
@@ -993,7 +1014,7 @@ getCurrentPopupId = gets ctxCurrentPopupId
 -- shape as focus-scope nesting, but without any of its claim/persistence
 -- logic, since a popup's identity while draining is purely a read-only
 -- ambient value.
-withCurrentPopup :: e -> View e msg a -> View e msg a
+withCurrentPopup :: ControlId e -> View e msg a -> View e msg a
 withCurrentPopup popId (View f) = View $ \ctx -> do
   (a, ctx') <- f (ctx { ctxCurrentPopupId = Just popId })
   pure (a, ctx' { ctxCurrentPopupId = ctxCurrentPopupId ctx })
@@ -1100,9 +1121,43 @@ emitUi eff = modifyOut $ \out -> out { outEvents = EffectUi eff : outEvents out 
 -- of each for 'Blink.Update.Update'.
 class HasUiEffect e m | m -> e where
   queueEffect :: UiEffect e -> m ()
+  -- | The key an effect addressed to this id should use: the id's part
+  -- path inside a 'withPart' in a view, the whole control elsewhere.
+  controlIdFor :: Ord e => e -> m (ControlId e)
 
 instance HasUiEffect e (View e msg) where
   queueEffect = emitUi
+  controlIdFor      = controlIdOf
+
+-- | The key a control with this id is stored under right now: its part
+-- path while inside a 'withPart' for that id, otherwise the whole control.
+controlIdOf :: Ord e => e -> View e msg (ControlId e)
+controlIdOf eid = gets (`controlIdIn` eid)
+
+-- | 'controlIdOf', read directly from a 'ViewContext'.
+controlIdIn :: Ord e => ViewContext e msg -> e -> ControlId e
+controlIdIn ctx eid = maybe (Control eid) (Part eid) (Map.lookup eid (ctxParts ctx))
+
+-- | Runs @v@ with every control whose id is @owner@ stored as the part
+-- @name@ of @owner@ instead of as @owner@ itself. Nested calls for the same
+-- owner join their names with @/@. Controls with any other id are
+-- unaffected.
+withPart :: Ord e => e -> Text -> View e msg a -> View e msg a
+withPart owner name (View f) = View $ \ctx -> do
+  let path = maybe name (`joinPath` name) (Map.lookup owner (ctxParts ctx))
+  (a, ctx') <- f ctx { ctxParts = Map.insert owner path (ctxParts ctx) }
+  pure (a, ctx' { ctxParts = ctxParts ctx })
+
+-- | The id of the part named @name@ of the control or part @cid@ -- where
+-- a 'withPart' for @name@ inside @cid@ stores its controls. Lets a
+-- composite address one of its parts from outside it, e.g. to read a
+-- scroll position its scroll bar part owns.
+partId :: ControlId e -> Text -> ControlId e
+partId (Control e) name = Part e name
+partId (Part e p)  name = Part e (p `joinPath` name)
+
+joinPath :: Text -> Text -> Text
+joinPath outer name = outer <> T.pack "/" <> name
 
 -- | Extracts the draw commands produced during the frame, in submission order.
 getDrawCommands :: ViewContext e msg -> [DrawCommand]
@@ -1169,20 +1224,20 @@ contextRequiresAnimation = outRequiresAnimation . ctxOutputs
 -- user gesture like a drag, which should stay on the deferred queue so a
 -- frame's own read of "current scroll" stays stable throughout its
 -- rendering.
-writeScrollState :: Ord e => e -> Double -> ViewContext e msg -> ViewContext e msg
+writeScrollState :: Ord e => ControlId e -> Double -> ViewContext e msg -> ViewContext e msg
 writeScrollState eid v ctx = ctx { ctxElements = (ctxElements ctx)
   { elmScrollStates = Map.insert eid (ScrollState (clampScrollPos v)) (elmScrollStates (ctxElements ctx)) } }
 
 -- Internal: writes an extent value directly into the context, bypassing
 -- the deferred-effect queue. Used only by @applyUiEffects@.
-writeExtentState :: Ord e => e -> Double -> ViewContext e msg -> ViewContext e msg
+writeExtentState :: Ord e => ControlId e -> Double -> ViewContext e msg -> ViewContext e msg
 writeExtentState eid v ctx = ctx { ctxElements = (ctxElements ctx)
   { elmExtentStates = Map.insert eid (ExtentState v) (elmExtentStates (ctxElements ctx)) } }
 
 -- Internal: writes (or clears) an element's repeat-press state directly
 -- into the context, bypassing the deferred-effect queue. Used only by
 -- @applyUiEffects@.
-writeHoldState :: Ord e => e -> Maybe HoldState -> ViewContext e msg -> ViewContext e msg
+writeHoldState :: Ord e => ControlId e -> Maybe HoldState -> ViewContext e msg -> ViewContext e msg
 writeHoldState eid mhs ctx = ctx { ctxElements = (ctxElements ctx)
   { elmHoldStates = case mhs of
       Just hs -> Map.insert eid hs (elmHoldStates (ctxElements ctx))
@@ -1192,7 +1247,7 @@ writeHoldState eid mhs ctx = ctx { ctxElements = (ctxElements ctx)
 -- Internal: writes (or clears) a list-like control's cursor index directly
 -- into the context, bypassing the deferred-effect queue. Used only by
 -- @applyUiEffects@.
-writeCursorIndexState :: Ord e => e -> Maybe Int -> ViewContext e msg -> ViewContext e msg
+writeCursorIndexState :: Ord e => ControlId e -> Maybe Int -> ViewContext e msg -> ViewContext e msg
 writeCursorIndexState eid mi ctx = ctx { ctxElements = (ctxElements ctx)
   { elmCursorIndices = case mi of
       Just i  -> Map.insert eid (CursorIndexState i) (elmCursorIndices (ctxElements ctx))
@@ -1202,7 +1257,7 @@ writeCursorIndexState eid mi ctx = ctx { ctxElements = (ctxElements ctx)
 -- Internal: writes a selection directly into the context, bypassing the
 -- deferred-effect queue, replacing whichever element held the selection
 -- before. Used only by @applyUiEffects@.
-writeSelection :: e -> Selection -> ViewContext e msg -> ViewContext e msg
+writeSelection :: ControlId e -> Selection -> ViewContext e msg -> ViewContext e msg
 writeSelection eid sel ctx = ctx { ctxElements = (ctxElements ctx)
   { elmSelection = SelectionAt eid sel } }
 
@@ -1259,7 +1314,7 @@ hasPendingUiEffects = not . null . getUiEffects
 -- fresh 'GainedThisFrame' claim) and recording whoever it displaced (looking
 -- up the scope's previous holder to fill in 'focusLost') for one frame's
 -- observation. Used only by @applyUiEffects@.
-setFocusChange :: Ord e => Maybe e -> Maybe e -> ViewContext e msg -> ViewContext e msg
+setFocusChange :: Ord e => Maybe (ControlId e) -> Maybe (ControlId e) -> ViewContext e msg -> ViewContext e msg
 setFocusChange scopeId newFocus ctx = ctx { ctxFocus = updateScope (ctxFocus ctx) }
   where
     updateScope ft = case scopeId of

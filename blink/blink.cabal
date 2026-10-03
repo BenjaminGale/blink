@@ -105,6 +105,7 @@ test-suite blink-tests
         Blink.InputSpec
         Blink.Interaction
         Blink.InteractionSpec
+        Blink.PartSpec
         Blink.PopupSpec
         Blink.PublicApiSpec
         Blink.UpdateSpec

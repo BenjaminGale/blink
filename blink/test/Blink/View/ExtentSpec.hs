@@ -36,5 +36,5 @@ spec = describe "Blink.View.Extent" $ do
   it "keeps extent state separate per element" $ do
     (_, ctx) <- runTwoElem (requestExtentBy ElemA 5 >> requestExtentBy ElemB 8)
     let settled = settleEffects ctx
-    contextExtentState ElemA settled `shouldBe` 5
-    contextExtentState ElemB settled `shouldBe` 8
+    contextExtentState (Control ElemA) settled `shouldBe` 5
+    contextExtentState (Control ElemB) settled `shouldBe` 8

@@ -44,7 +44,8 @@ executable demo
     main-is: Main.hs
     other-modules:
         UI,
-        Theme
+        Theme,
+        ColourPicker
     build-depends:
         blink-sdl2
     hs-source-dirs: demo

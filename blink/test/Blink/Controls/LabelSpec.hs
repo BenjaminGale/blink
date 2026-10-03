@@ -145,4 +145,4 @@ spec = describe "Blink.Controls.Label" $ do
   it "redirects a click's focus onto the element named by target" $ do
     let attrs = [target Target]
     result <- runInteractions testBounds seedCtx (fullSize attrs) [] [ClickAt onCaption, Wait 1]
-    contextFocus (resultContext result) `shouldBe` Just Target
+    contextFocus (resultContext result) `shouldBe` Just (Control Target)

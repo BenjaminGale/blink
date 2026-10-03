@@ -44,7 +44,8 @@ data ControlId = Label
              | PasswordInputCtl
              | AnimateCheckbox
              | SliderCtl
-             | MainListScroll ScrollPanelPart
+             | MainListScroll
+             | ColourPickerCtl
              | FruitList (ListPart Text)
              | GroceryList (ListPart Text)
              | LongList (ListPart Int)

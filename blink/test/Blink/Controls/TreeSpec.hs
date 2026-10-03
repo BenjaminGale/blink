@@ -12,7 +12,7 @@ import Blink.Controls.List
   ( Direction (..), ListPart (..), MultiSelection, SingleSelection, itemValue, listStyleKey, moveCursor, multiSelected
   , onSelectionChanged, rowHeight, selectItem, selectedItems, selection, unselected
   )
-import Blink.Controls.ScrollBar (ScrollBarPart (..), ScrollViewportPart (..))
+import Blink.Controls.ScrollBar (scrollViewportTo)
 import Blink.Controls.Tree
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
 import Blink.Element (Element (..), height, measureElement, runElement, width)
@@ -22,7 +22,8 @@ import Blink.Interaction (Interaction (..), InteractionResult (..), runInteracti
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
 import Blink.Rendering (Colour (..), DrawCommand (..))
 import Blink.Style (Metrics (..), Style (..), StyleSet (..), Theme (..), VisualState (CommonMouseOver))
-import Blink.View
+import Blink.View hiding (ControlId (..))
+import qualified Blink.View as V (ControlId (..))
 import Blink.Testing
 
 -- * flattenVisible
@@ -300,8 +301,8 @@ multiKeyboardSpec = describe "tree keyboard with MultiSelection" $
 -- | The tree's own scrollbar id -- 'tree' reads\/writes its position
 -- under @mkId (TreeRow (ListViewport (ViewportVerticalBar ScrollBar)))@, the same @tag@
 -- pattern 'Blink.Controls.List.list' documents for its own.
-treeScrollEid :: TestElem
-treeScrollEid = Part (TreeRow (ListViewport (ViewportVerticalBar ScrollBar)))
+treeScrollEid :: V.ControlId TestElem
+treeScrollEid = V.Part (Part (TreeRow ListViewport)) "VerticalBar"
 
 -- | Narrower than 'testBounds' -- with both "src" and "src/Controls"
 -- expanded there are 5 rows (100px), so a 40px viewport (2 rows) is
@@ -319,7 +320,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
     -- Scrolled all the way down: rows 0-2 ("src".."src/Controls") are out
     -- of view, cursor starts on the last row, "src/Controls/Button.hs".
     seeded <- resultContext <$> runInteractions scrollTestBounds seedCtx
-      (requestScrollTo treeScrollEid 1)
+      (scrollViewportTo (Part (TreeRow ListViewport)) 1)
       []
       []
 
@@ -370,7 +371,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
     -- the 40px window (y 20-60) -- at the bottom edge, still fully
     -- visible, before it has any children of its own in view.
     step1 <- runInteractions scrollTestBounds seedCtx
-      (requestScrollTo treeScrollEid (1 / 2))
+      (scrollViewportTo (Part (TreeRow ListViewport)) (1 / 2))
       []
       []
 
@@ -415,7 +416,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
     -- expanded, simply the next later sibling, pushed down by "src" and
     -- "src/Controls" both being expanded -- sits just below the window.
     seeded <- resultContext <$> runInteractions scrollTestBounds seedCtx
-      (requestScrollTo treeScrollEid (2 / 3))
+      (scrollViewportTo (Part (TreeRow ListViewport)) (2 / 3))
       []
       []
 

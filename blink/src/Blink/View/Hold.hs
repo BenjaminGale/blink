@@ -21,7 +21,7 @@ import Blink.View.Animation (requiresAnimation, getAnimElapsed)
 
 -- Internal: the given element's repeat-press state, or 'Nothing' while it
 -- isn't currently being held\/repeating. Used only by 'resolveHoldRepeats'.
-contextHoldState :: Ord e => e -> ViewContext e msg -> Maybe HoldState
+contextHoldState :: Ord e => ControlId e -> ViewContext e msg -> Maybe HoldState
 contextHoldState eid ctx = Map.lookup eid (elmHoldStates (ctxElements ctx))
 
 -- | Seconds the element has been continuously held, or 0 while it isn't.
@@ -29,7 +29,10 @@ contextHoldState eid ctx = Map.lookup eid (elmHoldStates (ctxElements ctx))
 -- frame, this lets a caller act on any later frame once a threshold has
 -- passed. Requires animation while held.
 resolveHeldFor :: Ord e => e -> Bool -> View e msg Double
-resolveHeldFor eid held
+resolveHeldFor eid held = controlIdOf eid >>= \k -> heldFor k held
+
+heldFor :: Ord e => ControlId e -> Bool -> View e msg Double
+heldFor eid held
   | not held = clearHold eid >> pure 0
   | otherwise = do
       requiresAnimation
@@ -39,7 +42,7 @@ resolveHeldFor eid held
       when (isNothing mHold) $ emitUi (SetHoldState eid (Just hold))
       pure (now - holdStartedAt hold)
 
-clearHold :: Ord e => e -> View e msg ()
+clearHold :: Ord e => ControlId e -> View e msg ()
 clearHold eid = do
   mHold <- gets (contextHoldState eid)
   when (isJust mHold) $ emitUi (SetHoldState eid Nothing)
@@ -48,7 +51,10 @@ clearHold eid = do
 -- cadence, returns how many repeats are due this frame. Requires animation
 -- while held.
 resolveHoldRepeats :: Ord e => e -> Bool -> Double -> Double -> View e msg Int
-resolveHoldRepeats eid held initialDelay interval
+resolveHoldRepeats eid held initialDelay interval = controlIdOf eid >>= \k -> holdRepeats k held initialDelay interval
+
+holdRepeats :: Ord e => ControlId e -> Bool -> Double -> Double -> View e msg Int
+holdRepeats eid held initialDelay interval
   | not held = clearHold eid >> pure 0
   | otherwise = do
       requiresAnimation

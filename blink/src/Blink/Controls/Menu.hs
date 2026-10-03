@@ -47,6 +47,7 @@ import Blink.Layout.Box (children, vBox)
 import Blink.Layout.Constraints (Layout (..), atLeast, fill, fitContent)
 import Blink.Popup (Edge (Start), Side (SideRight), content, placement, popup)
 import Blink.View
+import Blink.View.Context (controlIdIn, gets)
 import Blink.Element (Element (..), height, width)
 import Blink.Controls.Style (plainStyle)
 import Blink.Style
@@ -223,23 +224,24 @@ menuListCore styleKey menu closeBehaviour pressKeepsOpen =
     -- Keeps a single highlight shared by mouse and keyboard.
     highlightOnHover item r = do
       pointed <- pointerMovedOver menu r
-      when pointed $ requestFocus (Just listId) (itemId item)
+      when pointed $ requestFocusWithin listId (itemId item)
 
     -- A press on this list keeps the submenu open too, so a click on
     -- another item (to activate it) doesn't close the whole menu first.
     submenuElement item subId subItems pressKeepsSubmenuOpen =
       menuListCore styleKey menu { miListId = subId, miItems = subItems }
-        (Nested (closeAll closeBehaviour) (requestFocus (Just listId) (itemId item)))
+        (Nested (closeAll closeBehaviour) (requestFocusWithin listId (itemId item)))
         pressKeepsSubmenuOpen
 
-anySubmenuFocused :: Eq e => MenuItems e b msg -> View e msg Bool
+anySubmenuFocused :: Ord e => MenuItems e b msg -> View e msg Bool
 anySubmenuFocused menu = do
-  cur <- getFocus
-  pure $ any (submenuFocused menu cur) (miItems menu)
+  cur   <- getFocus
+  toKey <- gets controlIdIn
+  pure $ any (submenuFocused toKey menu cur) (miItems menu)
 
 -- | Moves focus by index because Tab traversal doesn't wrap, and menu
 -- items should.
-handleArrowKeys :: Eq e => MenuItems e b msg -> View e msg ()
+handleArrowKeys :: Ord e => MenuItems e b msg -> View e msg ()
 handleArrowKeys menu = case miItems menu of
   [] -> pure ()
   is -> do
@@ -247,24 +249,25 @@ handleArrowKeys menu = case miItems menu of
     forM_ (find ((`elem` [KeyDown, KeyUp]) . key) evs) $ \e -> do
       consumeKey (key e)
       current <- getFocus
+      toKey   <- gets controlIdIn
       let count        = length is
-          currentIndex = current >>= (`lookup` zip (map (miItemId menu) is) [0 ..])
+          currentIndex = current >>= (`lookup` zip (map (toKey . miItemId menu) is) [0 ..])
           nextIndex = case (key e, currentIndex) of
             (KeyDown, Nothing) -> 0
             (KeyDown, Just i)  -> (i + 1) `mod` count
             (_,       Nothing) -> count - 1
             (_,       Just i)  -> (i - 1) `mod` count
-      forM_ (itemAt is nextIndex) $ \item -> requestFocus (Just (miListId menu)) (miItemId menu item)
+      forM_ (itemAt is nextIndex) $ \item -> requestFocusWithin (miListId menu) (miItemId menu item)
   where
     itemAt xs idx = case drop idx xs of
       (x : _) -> Just x
       []      -> Nothing
 
-handleMnemonics :: MenuItems e b msg -> CloseBehaviour e msg -> View e msg ()
+handleMnemonics :: Ord e => MenuItems e b msg -> CloseBehaviour e msg -> View e msg ()
 handleMnemonics menu closeBehaviour =
   takeMnemonic itemMnemonic (miItems menu) >>= mapM_ (\item ->
     case miSubmenu menu item of
-      Just (subId, _) -> requestFocus (Just (miListId menu)) subId
+      Just (subId, _) -> requestFocusWithin (miListId menu) subId
       Nothing         -> do
         runHandlers (bcOnActivated (itemConfig menu item)) ()
         closeAll closeBehaviour)
@@ -278,7 +281,7 @@ itemConfig menu item =
 -- | Movement rather than entry, so the pointer takes the highlight back
 -- from the keyboard without first leaving the item. While a sibling's
 -- submenu is open, the delayed switch in 'runSubmenu' moves it instead.
-pointerMovedOver :: Eq e => MenuItems e b msg -> ButtonInteraction e msg -> View e msg Bool
+pointerMovedOver :: Ord e => MenuItems e b msg -> ButtonInteraction e msg -> View e msg Bool
 pointerMovedOver menu r = do
   moved       <- hasMouseMoved
   siblingOpen <- anySubmenuFocused menu
@@ -298,12 +301,12 @@ runSubmenu menu item subId r showSubmenu = do
     highlighted  <- isFocused (miItemId menu item)
     rightPressed <- if highlighted then takeKey KeyRight else pure False
     when (pointed || biActivated r || rightPressed) $
-      requestFocus (Just (miListId menu)) subId
+      requestFocusWithin (miListId menu) subId
   leaving <- if opened then leavingSubmenu menu item subId else pure False
   heldFor <- resolveHeldFor subId leaving
   when (heldFor >= submenuSwitchDelay) $ do
     sibling <- hoveredSibling menu item
-    forM_ sibling $ \it -> requestFocus (Just (miListId menu)) (maybe (miItemId menu it) fst (miSubmenu menu it))
+    forM_ sibling $ \it -> requestFocusWithin (miListId menu) (maybe (miItemId menu it) fst (miSubmenu menu it))
   when opened showSubmenu
 
 -- | Anywhere on this list other than @item@ counts, including the gaps
@@ -327,13 +330,14 @@ hoveredSibling menu item = listToMaybe <$> filterM (wasMouseOverLastFrame . miIt
 -- menus.
 submenuInPlay :: (Ord e, Ord b) => MenuItems e b msg -> View e msg Bool
 submenuInPlay menu = withFocusScope (miListId menu) $ do
-  cur <- getFocus
-  let itemFocused it = isJust (miSubmenu menu it) && cur == Just (miItemId menu it)
-  pure $ any (\it -> itemFocused it || submenuFocused menu cur it) (miItems menu)
+  cur   <- getFocus
+  toKey <- gets controlIdIn
+  let itemFocused it = isJust (miSubmenu menu it) && cur == Just (toKey (miItemId menu it))
+  pure $ any (\it -> itemFocused it || submenuFocused toKey menu cur it) (miItems menu)
 
 -- | Whether @cur@ is @item@'s own submenu.
-submenuFocused :: Eq e => MenuItems e b msg -> Maybe e -> b -> Bool
-submenuFocused menu cur item = maybe False ((== cur) . Just . fst) (miSubmenu menu item)
+submenuFocused :: Ord e => (e -> ControlId e) -> MenuItems e b msg -> Maybe (ControlId e) -> b -> Bool
+submenuFocused toKey menu cur item = maybe False ((== cur) . Just . toKey . fst) (miSubmenu menu item)
 
 -- * Style
 

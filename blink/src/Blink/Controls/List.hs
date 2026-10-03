@@ -133,8 +133,10 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
 import Blink.Controls.Control
+import Blink.View.Context (controlIdOf, gets, modify, writeScrollState)
+import Blink.View.Scroll (contextScrollState)
 import Blink.Controls.ScrollBar
-  (ScrollBarPart (..), ScrollViewportConfig (..), ScrollViewportPart (..), scrollBarThickness, scrollViewport)
+  (ScrollViewportConfig (..), scrollBarThickness, scrollViewport, verticalBarOf)
 import Blink.Element
   ( Element (..), HasLayoutConfig (..), HasSelection (..), HasSelectionChanged (..), elementWithLayout, emptyElement
   , noIntrinsicSize, runElement
@@ -143,7 +145,7 @@ import Blink.Geometry (Alignment (TopLeft), Rectangle (..), Size (..), insetRect
 import Blink.Input (Key (..), KeyEvent (..), Modifier (Shift))
 import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
-import Blink.View (Effect, View, getBounds, getCursorIndex, getScrollState, getStyleSet, setCursorIndex, setScrollStateNow)
+import Blink.View (Effect, View, getBounds, getCursorIndex, getStyleSet, setCursorIndex)
 import Blink.Style
 import Blink.Controls.Style (containerStyle, controlMetrics, flatRowMetrics, flatRowStyle)
 
@@ -517,7 +519,7 @@ rangeFrom anchor cursor xs = case (elemIndex anchor xs, elemIndex cursor xs) of
 data ListPart a
   = List
   | ListItem a
-  | ListViewport ScrollViewportPart
+  | ListViewport
   deriving (Eq, Ord, Show)
 
 -- | Every capability 'list' resolves: the wrapped 'ControlConfig'\/
@@ -781,7 +783,7 @@ listBase mkId cfg = do
     -- every row's, so the scrollbar's thumb geometry never shifts as the
     -- visible set changes. The content has no width of its own, so it
     -- never scrolls horizontally.
-    renderViewport = scrollViewport (mkId . ListViewport) ScrollViewportConfig
+    renderViewport = scrollViewport (mkId ListViewport) ScrollViewportConfig
       { svWheelStep   = lstRowHeight cfg * wheelRowsPerNotch
       , svContentSize = Size 0 (totalRowsHeight (lstRowHeight cfg) itemCount)
       , svContent     = runElement . visibleRows
@@ -911,7 +913,9 @@ listFrom mkId cfg =
 -- and be passed down.
 scrollRowIntoView :: Ord e => (ListPart a -> e) -> ListConfig sel e msg a -> Int -> Double -> Int -> View e msg ()
 scrollRowIntoView mkId cfg itemCount viewportHeight idx = when (maxOffset > 0) $ do
-  scrollFrac <- getScrollState listScrollEid
+  viewportId <- controlIdOf (mkId ListViewport)
+  let barId = verticalBarOf viewportId
+  scrollFrac <- gets (contextScrollState barId)
   let rh        = lstRowHeight cfg
       rowTop    = fromIntegral idx * rh
       rowBottom = rowTop + rh
@@ -920,9 +924,8 @@ scrollRowIntoView mkId cfg itemCount viewportHeight idx = when (maxOffset > 0) $
         | rowTop < offsetY                    = Just (rowTop / maxOffset)
         | rowBottom > offsetY + viewportHeight = Just ((rowBottom - viewportHeight) / maxOffset)
         | otherwise                            = Nothing
-  mapM_ (setScrollStateNow listScrollEid) newFrac
+  mapM_ (modify . writeScrollState barId) newFrac
   where
-    listScrollEid = mkId (ListViewport (ViewportVerticalBar ScrollBar))
     contentHeight = totalRowsHeight (lstRowHeight cfg) itemCount
     maxOffset     = contentHeight - viewportHeight
 

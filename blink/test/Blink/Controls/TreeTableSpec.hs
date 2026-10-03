@@ -20,7 +20,7 @@ import Blink.Input (Key (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
 import Blink.Style (Theme)
-import Blink.View
+import Blink.View hiding (ControlId (..))
 import Blink.Testing
 
 -- | src

@@ -21,7 +21,7 @@ spec = describe "Blink.View.Mouse" $ do
     it "carries existing capture forward on continued ButtonDown frames" $ do
       ctx1 <- capturedCtx
       let ctx2 = advance mouseOnCenterDown ctx1
-      contextCaptured ctx2 `shouldBe` MouseCapturedBy ()
+      contextCaptured ctx2 `shouldBe` MouseCapturedBy (Control ())
 
     it "clears capture on a fresh press even if capture was stale" $ do
       ctx1 <- capturedCtx                                  -- Pressed: capture acquired
@@ -37,7 +37,7 @@ spec = describe "Blink.View.Mouse" $ do
     it "carries capture through the release frame so focus logic can inspect it" $ do
       ctx1 <- capturedCtx
       let ctx2 = advance mouseOnCenter ctx1
-      contextCaptured ctx2 `shouldBe` MouseCapturedBy ()
+      contextCaptured ctx2 `shouldBe` MouseCapturedBy (Control ())
 
     it "clears capture once the button is fully up" $ do
       ctx1 <- capturedCtx
@@ -106,12 +106,12 @@ spec = describe "Blink.View.Mouse" $ do
   describe "acquireCapture" $ do
     it "acquires capture when the button is down and nothing is captured" $ do
       (_, ctx) <- runWith buttonDown (acquireCapture ())
-      contextCaptured ctx `shouldBe` MouseCapturedBy ()
+      contextCaptured ctx `shouldBe` MouseCapturedBy (Control ())
 
     it "does not acquire capture when another element already holds it" $ do
       (_, ctx') <- runView (acquireCapture ElemB >> acquireCapture ElemA)
                      (emptyViewContext testBounds buttonDown twoElemTheme)
-      contextCaptured ctx' `shouldBe` MouseCapturedBy ElemB
+      contextCaptured ctx' `shouldBe` MouseCapturedBy (Control ElemB)
 
     it "does nothing when the button is not down" $ do
       (_, ctx) <- run0 (acquireCapture ())
@@ -130,7 +130,7 @@ spec = describe "Blink.View.Mouse" $ do
       (_, ctx1) <- runWith mouseOnCenterDown (pure ())
       let ctx2 = advance mouseOnCenterDown ctx1
       (_, ctx3) <- runView (acquireCapture ()) ctx2
-      contextCaptured ctx3 `shouldBe` MouseCapturedBy ()
+      contextCaptured ctx3 `shouldBe` MouseCapturedBy (Control ())
 
   describe "isMouseFree" $ do
     it "is True when no element holds capture" $ do

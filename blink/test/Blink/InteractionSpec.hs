@@ -89,7 +89,7 @@ spec = describe "Blink.Interaction" $ do
   describe "auto-settle" $ do
     it "makes a deferred requestScrollTo visible immediately in resultContext" $ do
       result <- runInteractions testBounds seedAt0 (requestScrollTo () 0.5) [] []
-      contextScrollState () (resultContext result) `shouldBe` 0.5
+      contextScrollState (Control ()) (resultContext result) `shouldBe` 0.5
 
   describe "chaining two runInteractions calls via resultContext" $ do
     -- 'resultContext' settles (applies) its queued effects and clears them
@@ -99,7 +99,7 @@ spec = describe "Blink.Interaction" $ do
     it "still reports the same scroll position after being carried into a second call" $ do
       seeded <- runInteractions testBounds seedAt0 (requestScrollTo () 0.5) [] []
       result <- runInteractions testBounds (resultContext seeded) tick [] []
-      contextScrollState () (resultContext result) `shouldBe` 0.5
+      contextScrollState (Control ()) (resultContext result) `shouldBe` 0.5
 
     it "still reports the real loser when carried into a second call" $ do
       seeded  <- runInteractions testBounds seedAt0 (setFocus () >> requestClearFocus Nothing) [] []

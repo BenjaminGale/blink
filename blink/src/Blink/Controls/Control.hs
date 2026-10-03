@@ -41,8 +41,10 @@
 -- click (self-focus on mouse-down) is a direct 'UiEffect', not a handler
 -- call.
 module Blink.Controls.Control
-  ( -- * Attributes
-    Attribute (..)
+  ( -- * Parts
+    partName
+    -- * Attributes
+  , Attribute (..)
   , resolve
   , nested
   , appendTo
@@ -102,6 +104,8 @@ module Blink.Controls.Control
 import Control.Monad (forM_, void, when)
 import Data.List (find)
 import Data.Set (Set)
+import Data.Text (Text)
+import qualified Data.Text as T
 import qualified Data.Set as Set
 
 import Blink.Geometry
@@ -112,10 +116,17 @@ import Blink.Input (ButtonState (..), InputState (..), Key, KeyEvent (..), Modif
 import Blink.Layout.Constraints (Layout, MeasureCtx (..), shrink)
 import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), VisualState (..), resolveStyle)
 import Blink.View
-import Blink.View.Context (Effect (..))
-import Blink.View.Mouse (isOccludedByPopupFor)
+import Blink.View.Context (Effect (..), UiEffect (..), gets)
+import Blink.View.Mouse (contextCaptured, isOccludedByPopupFor)
 import Blink.View.Drawing (withClip, withBackground, withBorder)
 import Blink.Element (Attribute (..), Element (..), appendTo, nested, resolve)
+
+-- | The name a part type's constructor gives a part (see
+-- 'Blink.Element.part'): its 'Show' text. Lets a control keep its parts as
+-- a private type, e.g. @data ScrollBarPart = Decrement | Increment@, and
+-- name them with @part eid (partName Decrement)@.
+partName :: Show p => p -> Text
+partName = T.pack . show
 
 -- * Raw events
 
@@ -234,11 +245,12 @@ postWith f a = [EffectMsg (f a)]
 -- would read as contested by its own composite for that entire press, so
 -- nothing could claim the scope's freshly-granted focus until release.
 -- Shared by 'control's own auto-claim logic.
-isMouseFreeFor :: Eq e => e -> View e msg Bool
+isMouseFreeFor :: Ord e => e -> View e msg Bool
 isMouseFreeFor eid = do
   capturedByMe    <- isDragging eid
   scope           <- getCurrentScope
-  capturedByScope <- maybe (pure False) isDragging scope
+  captured        <- gets contextCaptured
+  let capturedByScope = maybe False ((== captured) . MouseCapturedBy) scope
   (|| capturedByMe || capturedByScope) <$> isMouseFree
 
 -- | 'watchHover's own report: hovered, plus the enter\/exit edges against
@@ -293,10 +305,11 @@ data MouseButtonInteraction = MouseButtonInteraction
 -- 'control' gives it, see 'control'), so capture would otherwise still
 -- read "free" for the ancestor on that frame even though it correctly
 -- declined to acquire it itself.
-watchMouseButton :: Eq e => e -> MouseActivation -> Bool -> Bool -> View e msg MouseButtonInteraction
+watchMouseButton :: Ord e => e -> MouseActivation -> Bool -> Bool -> View e msg MouseButtonInteraction
 watchMouseButton eid activation eligible occluded = do
   mouse <- getMouse
-  let capturedByMe  = captureOf (mouseButton mouse) == MouseCapturedBy eid
+  self  <- controlIdOf eid
+  let capturedByMe  = captureOf (mouseButton mouse) == MouseCapturedBy self
       releasedEvent = isButtonReleasedEvent (mouseButton mouse)
       mouseDown     = eligible && isButtonDownEvent (mouseButton mouse)
       mouseUp       = eligible && releasedEvent
@@ -333,7 +346,7 @@ data FocusInteraction = FocusInteraction
 -- | Reports whether the control is focused this frame, the key events it
 -- received (empty when disabled or unfocused), and whether a focus
 -- transfer this frame named it winner or loser.
-watchFocus :: Eq e => e -> Bool -> View e msg FocusInteraction
+watchFocus :: Ord e => e -> Bool -> View e msg FocusInteraction
 watchFocus eid disabled = do
   focused <- isFocused eid
   input   <- getInput
@@ -744,7 +757,7 @@ canAutoClaim eid cc = do
 -- child, rather than wrap to its last, seeds @previousTabStop@ with its
 -- own scope id before rendering that child, so no descendant's id can
 -- ever match it.
-advanceOrRetreat :: Eq e => Bool -> [(Key, [Modifier])] -> [(Key, [Modifier])] -> View e msg ()
+advanceOrRetreat :: Ord e => Bool -> [(Key, [Modifier])] -> [(Key, [Modifier])] -> View e msg ()
 advanceOrRetreat wasFocused advanceKeys retreatKeys = do
   disabled <- isDisabled
   when (not disabled) $ do
@@ -757,7 +770,7 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
       (True, Just e, _)
         -> clearFocus >> consumeKey (key e)
       (True, _, Just e)
-        | prevCtrl /= scopeId -> forM_ prevCtrl (requestFocus scopeId) >> consumeKey (key e)
+        | prevCtrl /= scopeId -> forM_ prevCtrl (emitUi . Focus scopeId) >> consumeKey (key e)
       _ -> pure ()
 
 -- | Watches this control's hover, mouse-button, keyboard, and focus
@@ -910,7 +923,7 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
 -- capture). For a control that hands focus to a different control than
 -- itself when clicked -- e.g. 'Blink.Controls.Label.label' redirecting
 -- onto its 'Blink.Controls.Label.target'.
-focusTargetOnClick :: Maybe e -> e -> ControlInteraction e msg -> View e msg ()
+focusTargetOnClick :: Ord e => Maybe (ControlId e) -> e -> ControlInteraction e msg -> View e msg ()
 focusTargetOnClick scope target ci = when (ciClicked ci) (requestFocus scope target)
 
 -- | An element laid out by @layout@ that measures as @content@ wrapped in

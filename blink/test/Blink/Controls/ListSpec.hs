@@ -8,7 +8,7 @@ import Test.Hspec
 import Blink.Controls.Control (Attribute, postWith, resolve)
 import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBehaviourConfig)
 import Blink.Controls.List
-import Blink.Controls.ScrollBar (ScrollBarPart (..), ScrollViewportPart (..))
+import Blink.Controls.ScrollBar (scrollViewportTo)
 import Blink.Controls.Fixtures (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
 import Blink.Element (Element (..), height, measureElement, runElement, width)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
@@ -16,7 +16,8 @@ import Blink.Input (Key (..), Modifier (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), exactly, fill, fitContent)
 import Blink.Style (Theme)
-import Blink.View
+import Blink.View hiding (ControlId (..))
+import qualified Blink.View as V (ControlId (..))
 import Blink.Testing
 
 -- * Pure model tests
@@ -420,8 +421,8 @@ scrollItems = [1, 2, 3, 4, 5]
 -- position under -- the same @tag ('ListViewport' ('ViewportVerticalBar'
 -- 'ScrollBar'))@ pattern 'Blink.Controls.ScrollBar.scrollBar' documents for
 -- its own composite.
-listScrollEid :: TestElem
-listScrollEid = Part (ListViewport (ViewportVerticalBar ScrollBar))
+listScrollEid :: V.ControlId TestElem
+listScrollEid = V.Part (Part ListViewport) "VerticalBar"
 
 renderScrollList :: (SelectionModel sel, EmptySelection sel, Eq (sel Int)) => [Attribute (ListConfig sel TestElem String Int)] -> View TestElem String ()
 renderScrollList attrs = runElement $ list Part
@@ -452,7 +453,7 @@ scrollingSpec = describe "list scrolling" $ do
     resultMessages result `shouldBe` []
 
   it "offsets and clips the rows by the scrollbar's own scroll position" $ do
-    ctx <- resultContext <$> runInteractions testBounds seedCtx (requestScrollTo listScrollEid 1) [] []
+    ctx <- resultContext <$> runInteractions testBounds seedCtx (scrollViewportTo (Part (ListViewport)) 1) [] []
     -- Scrolled all the way down (40px of the 100px content is out of
     -- view), item 3's row is now the first one visible, at the top of
     -- the viewport.
@@ -485,7 +486,7 @@ scrollingSpec = describe "list scrolling" $ do
     atTop <- runInteractions testBounds seedCtx renderMarked [] [Wait 1]
     resultMessages atTop `shouldBe` ["Rendered:1", "Rendered:2", "Rendered:3"]
 
-    ctx <- resultContext <$> runInteractions testBounds seedCtx (requestScrollTo listScrollEid 1) [] []
+    ctx <- resultContext <$> runInteractions testBounds seedCtx (scrollViewportTo (Part (ListViewport)) 1) [] []
     atBottom <- runInteractions testBounds ctx renderMarked [] [Wait 1]
     resultMessages atBottom `shouldBe` ["Rendered:3", "Rendered:4", "Rendered:5"]
 
@@ -503,7 +504,7 @@ scrollingSpec = describe "list scrolling" $ do
     atTop <- dragOffCentre 26 6 seedCtx
     contextScrollState listScrollEid (resultContext atTop) `shouldBe` 0.75
 
-    seededAtEnd <- resultContext <$> runInteractions testBounds seedCtx (requestScrollTo listScrollEid 1) [] []
+    seededAtEnd <- resultContext <$> runInteractions testBounds seedCtx (scrollViewportTo (Part (ListViewport)) 1) [] []
     atBottom <- dragOffCentre 34 (-6) seededAtEnd
     contextScrollState listScrollEid (resultContext atBottom) `shouldBe` 0.25
 
@@ -543,7 +544,7 @@ scrollingSpec = describe "list scrolling" $ do
 
   it "scrolls up just enough to keep a cursor moved above the viewport visible" $ do
     let atRow3 = selectAt 2 scrollItems -- cursor on item 3
-    seeded <- resultContext <$> runInteractions testBounds seedCtx (requestScrollTo listScrollEid 1) [] []
+    seeded <- resultContext <$> runInteractions testBounds seedCtx (scrollViewportTo (Part (ListViewport)) 1) [] []
     -- Scrolled to the bottom, items 3-5 (y 40-100) are in view; one Up
     -- moves the cursor from item 3 to item 2 (y 20-40), one row above
     -- the top edge.
@@ -561,7 +562,7 @@ scrollingSpec = describe "list scrolling" $ do
     -- 10px (y 50-60). Both are still clickable on their visible sliver
     -- -- virtualisation only excludes rows with *no* overlap at all (see
     -- 'visibleRows') -- and neither is fully in view yet.
-    let seededPartway = resultContext <$> runInteractions testBounds seedCtx (requestScrollTo listScrollEid 0.25) [] []
+    let seededPartway = resultContext <$> runInteractions testBounds seedCtx (scrollViewportTo (Part (ListViewport)) 0.25) [] []
 
     it "scrolls a row straddling the top edge fully into view on click" $ do
       seeded <- seededPartway

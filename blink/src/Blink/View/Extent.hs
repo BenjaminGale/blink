@@ -25,12 +25,12 @@ import Blink.View.Context
 -- | The given element's current extent, or @0@ if nothing has adjusted
 -- it yet.
 getExtentState :: Ord e => e -> View e msg Double
-getExtentState eid = gets (contextExtentState eid)
+getExtentState eid = controlIdOf eid >>= gets . contextExtentState
 
 -- | The given element's current extent, or @0@ if nothing has adjusted
 -- it yet, read directly from a 'ViewContext' outside the 'View' monad --
 -- e.g. to assert on the result of a completed frame.
-contextExtentState :: Ord e => e -> ViewContext e msg -> Double
+contextExtentState :: Ord e => ControlId e -> ViewContext e msg -> Double
 contextExtentState eid ctx =
   extentValue (Map.findWithDefault (ExtentState 0) eid (elmExtentStates (ctxElements ctx)))
 
@@ -38,5 +38,5 @@ contextExtentState eid ctx =
 -- onward. Multiple calls in the same frame for the same element
 -- accumulate. Callable from 'View' or 'Blink.Update.Update' -- see
 -- 'HasUiEffect'.
-requestExtentBy :: HasUiEffect e m => e -> Double -> m ()
-requestExtentBy eid dv = queueEffect (AdjustExtent eid dv)
+requestExtentBy :: (Ord e, Monad m, HasUiEffect e m) => e -> Double -> m ()
+requestExtentBy eid dv = controlIdFor eid >>= \k -> queueEffect (AdjustExtent k dv)

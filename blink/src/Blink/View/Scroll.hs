@@ -24,13 +24,13 @@ import Blink.View.Context
 -- | The current scroll position for the given element, in @[0, 1]@. Returns
 -- @0@ when no position has been recorded yet.
 getScrollState :: Ord e => e -> View e msg Double
-getScrollState eid = gets (contextScrollState eid)
+getScrollState eid = controlIdOf eid >>= gets . contextScrollState
 
 -- | The current scroll position for the given element, in @[0, 1]@, read
 -- directly from a 'ViewContext' outside the 'View' monad — e.g. to assert on the
 -- result of a completed frame. Returns @0@ when no position has been
 -- recorded yet.
-contextScrollState :: Ord e => e -> ViewContext e msg -> Double
+contextScrollState :: Ord e => ControlId e -> ViewContext e msg -> Double
 contextScrollState eid ctx =
   scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
@@ -38,19 +38,20 @@ contextScrollState eid ctx =
 -- next frame onward. Callable from 'View' (queued immediately) or
 -- 'Blink.Update.Update' (queued to apply once the frame's messages are
 -- folded) -- see 'HasUiEffect'.
-requestScrollTo :: HasUiEffect e m => e -> Double -> m ()
-requestScrollTo eid v = queueEffect (ScrollTo eid v)
+requestScrollTo :: (Ord e, Monad m, HasUiEffect e m) => e -> Double -> m ()
+requestScrollTo eid v = controlIdFor eid >>= \k -> queueEffect (ScrollTo k v)
 
 -- | Adjusts the given element's scroll position by @dv@, clamped to
 -- @[0, 1]@, from the next frame onward. Multiple calls in the same frame
 -- for the same element accumulate. Callable from 'View' or
 -- 'Blink.Update.Update' -- see 'HasUiEffect'.
-requestScrollBy :: HasUiEffect e m => e -> Double -> m ()
-requestScrollBy eid dv = queueEffect (ScrollBy eid dv)
+requestScrollBy :: (Ord e, Monad m, HasUiEffect e m) => e -> Double -> m ()
+requestScrollBy eid dv = controlIdFor eid >>= \k -> queueEffect (ScrollBy k dv)
 
 -- | 'requestScrollBy' as a handler reaction, ignoring the triggering
--- event's own data.
-postScrollBy :: e -> Double -> a -> [Effect e msg]
+-- event's own data. Takes the full 'ControlId', since a handler runs
+-- outside the view and so can't look up which part it was built in.
+postScrollBy :: ControlId e -> Double -> a -> [Effect e msg]
 postScrollBy eid dv = const [EffectUi (ScrollBy eid dv)]
 
 -- | Sets the given element's scroll position, clamped to @[0, 1]@,
@@ -63,4 +64,4 @@ postScrollBy eid dv = const [EffectUi (ScrollBy eid dv)]
 -- a wheel event, which should stay deferred so a frame's own reads of
 -- "current scroll" stay stable throughout its rendering.
 setScrollStateNow :: Ord e => e -> Double -> View e msg ()
-setScrollStateNow eid v = modify (writeScrollState eid v)
+setScrollStateNow eid v = controlIdOf eid >>= \k -> modify (writeScrollState k v)

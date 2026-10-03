@@ -18,7 +18,7 @@
 -- A caller that needs to know the current position too -- to offset the
 -- content being scrolled, say -- reads it the same way, via
 -- 'Blink.View.getScrollState' passed the identical element id
--- (@mkId 'ScrollBar'@); no attribute\/reaction pair is needed to expose
+-- (the one given to 'scrollBar'); no attribute\/reaction pair is needed to expose
 -- it, the same way none is needed to read a text input's own scroll
 -- offset from outside it.
 --
@@ -37,7 +37,6 @@
 -- @
 module Blink.Controls.ScrollBar
   ( ScrollBarConfig (..)
-  , ScrollBarPart (..)
   , defaultScrollBarConfig
   , scrollBarStyleKey
   , scrollBarButtonStyleKey
@@ -49,9 +48,10 @@ module Blink.Controls.ScrollBar
   , visibleFraction
   , step
     -- * Scrollable viewports
-  , ScrollViewportPart (..)
   , ScrollViewportConfig (..)
   , scrollViewport
+  , scrollViewportTo
+  , verticalBarOf
     -- * Style
   , defaultStyleEntries
   ) where
@@ -67,8 +67,10 @@ import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (ImagePath)
 import Blink.View
+import Blink.View.Context (UiEffect (..), gets)
+import Blink.View.Scroll (contextScrollState)
 import Blink.View.Drawing (drawImage, withClip)
-import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, height, noIntrinsicSize, runElement, width, HasOrientation (..), HasStep (..))
+import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, height, noIntrinsicSize, part, runElement, width, HasOrientation (..), HasStep (..))
 import Blink.Style
 import Blink.Controls.Style (iconStyle, plainFillStyle, trackMetrics, thumbStyle, zeroMetrics, plainStyle)
 
@@ -85,16 +87,13 @@ scrollBarThickness = 16
 minThumbLength :: Double
 minThumbLength = 20
 
--- | Identifies one part of a 'scrollBar' for the purpose of building element
--- ids -- the draggable track, the two arrow buttons, and the composite's
--- own root, which doubles as the 'Blink.View.ScrollState' key its position
--- is stored under (see the module header).
-data ScrollBarPart
-  = ScrollBarTrack
-  | ScrollBarDecrement
-  | ScrollBarIncrement
-  | ScrollBar
-  deriving (Eq, Ord, Show)
+-- | The parts a 'scrollBar' is made of, besides itself.
+data ScrollBarPart = Decrement | Increment | Track
+  deriving Show
+
+-- | The scroll bars a 'scrollViewport' can show.
+data ViewportPart = VerticalBar | HorizontalBar
+  deriving Show
 
 -- | Every capability 'scrollBar' resolves: the wrapped 'ControlConfig', the
 -- caller's layout attributes (applied over the default layout for its axis
@@ -262,53 +261,55 @@ arrowButton eid path attrs =
 -- tracking the pointer without recentring under it; holding either arrow
 -- steps the position by 'step', repeating for as long as it's held.
 --
--- @mkId@ builds each part's element id from a 'ScrollBarPart' -- the caller
--- never writes a per-part id by hand. @mkId 'ScrollBar'@ doubles as the
--- 'Blink.View.ScrollState' key -- see the module header for reading it
--- from elsewhere.
-scrollBar :: Ord e => (ScrollBarPart -> e) -> [Attribute (ScrollBarConfig e msg)] -> Element e msg
-scrollBar mkId attrs = controlElement (scrollBarLayout cfg) box ctrl
+-- The arrows and the track are parts of @eid@ (see 'Blink.Element.part'),
+-- named by the private @ScrollBarPart@. The position is stored
+-- under @eid@ itself -- see the module header for reading it from
+-- elsewhere.
+scrollBar :: Ord e => e -> [Attribute (ScrollBarConfig e msg)] -> Element e msg
+scrollBar eid attrs = controlElement (scrollBarLayout cfg) (box (Control eid)) ctrl
   where
-    cfg       = resolve defaultScrollBarConfig attrs
-    o         = sbOrientation cfg
-    scrollEid = mkId ScrollBar
+    cfg = resolve defaultScrollBarConfig attrs
+    o   = sbOrientation cfg
 
-    box = (if o == Horizontal then hBox else vBox) [children [decrementBtn, trackEl, incrementBtn]]
+    -- @barId@ is the bar's own id as stored this frame. Its parts can't
+    -- look it up themselves: inside a part, @eid@ means that part.
+    box barId = (if o == Horizontal then hBox else vBox)
+      [children [decrementBtn barId, trackEl barId, incrementBtn barId]]
 
-    decrementBtn = arrowButton (mkId ScrollBarDecrement)
+    decrementBtn barId = part eid (partName Decrement) $ arrowButton eid
       (if o == Horizontal then "assets/icons/arrow_left.svg" else "assets/icons/arrow_drop_up.svg")
       ( [ style scrollBarButtonStyleKey
         , overControl (focusPolicy NotFocusable)
-        , onActivated (postScrollBy scrollEid (negate (sbStep cfg)))
+        , onActivated (postScrollBy barId (negate (sbStep cfg)))
         ] ++ arrowLayoutAttrs o
       )
 
-    incrementBtn = arrowButton (mkId ScrollBarIncrement)
+    incrementBtn barId = part eid (partName Increment) $ arrowButton eid
       (if o == Horizontal then "assets/icons/arrow_right.svg" else "assets/icons/arrow_drop_down.svg")
       ( [ style scrollBarButtonStyleKey
         , overControl (focusPolicy NotFocusable)
-        , onActivated (postScrollBy scrollEid (sbStep cfg))
+        , onActivated (postScrollBy barId (sbStep cfg))
         ] ++ arrowLayoutAttrs o
       )
 
-    trackEl = controlElement (Layout fill fill TopLeft) (Element (Layout fill fill TopLeft) noIntrinsicSize (pure ())) trackCtrl
+    trackEl barId = part eid (partName Track) $
+      controlElement (Layout fill fill TopLeft) (Element (Layout fill fill TopLeft) noIntrinsicSize (pure ())) (trackCtrl barId)
 
-    trackCtrl = defaultControlConfig
-      { ccElementId       = Just (mkId ScrollBarTrack)
+    trackCtrl barId = defaultControlConfig
+      { ccElementId       = Just eid
       , ccStyleKey        = scrollBarTrackStyleKey
       , ccFocusPolicy     = NotFocusable
       , ccMouseActivation = CaptureActivated
-      , ccContent         = trackBody
+      , ccContent         = trackBody barId
       }
 
-    trackBody ci = do
+    trackBody barId ci = do
       bounds <- getBounds
-      value0 <- getScrollState scrollEid
-      let trackId  = mkId ScrollBarTrack
-          thumbLen = thumbLengthFor o bounds (sbVisibleFraction cfg)
+      value0 <- gets (contextScrollState barId)
+      let thumbLen = thumbLengthFor o bounds (sbVisibleFraction cfg)
       when (not (ciDisabled ci) && ciIsCaptured ci) $ do
         mouseMain <- pointMain o <$> getMousePos
-        current   <- getExtentState trackId
+        current   <- getExtentState eid
         -- 'requestExtentBy' accumulates, so the delta zeroes out whatever
         -- the last drag on this track left behind before fixing this
         -- drag's own offset.
@@ -316,28 +317,20 @@ scrollBar mkId attrs = controlElement (scrollBarLayout cfg) box ctrl
           if ciCaptureStarted ci
             then do
               let offset = grabOffsetAt (thumbOriginFor o bounds thumbLen value0) thumbLen mouseMain
-              requestExtentBy trackId (offset - current)
+              requestExtentBy eid (offset - current)
               pure offset
             else pure current
         let newValue = fractionForOrigin o bounds thumbLen (mouseMain - grabOffset)
-        when (newValue /= value0) $ requestScrollTo scrollEid newValue
+        when (newValue /= value0) $ emitUi (ScrollTo barId newValue)
       drawThumb o bounds (ciDisabled ci) (ciHovered ci) (ciIsCaptured ci) (sbVisibleFraction cfg) value0
 
     ctrl = (sbControl cfg)
-      { ccElementId   = Just scrollEid
+      { ccElementId   = Just eid
       , ccFocusPolicy = NotFocusable
-      , ccContent     = const (runElement box)
+      , ccContent     = const (controlIdOf eid >>= runElement . box)
       }
 
 -- * Scrollable viewports
-
--- | Identifies one of the two scrollbars a 'scrollViewport' can show, and a
--- part of it. Each bar's own root id ('ScrollBar') is also where its
--- position is stored.
-data ScrollViewportPart
-  = ViewportVerticalBar ScrollBarPart
-  | ViewportHorizontalBar ScrollBarPart
-  deriving (Eq, Ord, Show)
 
 -- | Every capability 'scrollViewport' resolves: how far a wheel notch
 -- scrolls, the content's full size, and how to draw it.
@@ -356,9 +349,11 @@ data ScrollViewportConfig e msg = ScrollViewportConfig
 -- | A clipped area showing @cfg@'s content, with a 'scrollBar' along each
 -- axis the content overflows (and a blank corner where both meet). The
 -- mouse wheel scrolls the vertical axis while it overflows, otherwise the
--- horizontal one. @mkId@ builds every part id of both bars.
-scrollViewport :: Ord e => (ScrollViewportPart -> e) -> ScrollViewportConfig e msg -> View e msg ()
-scrollViewport mkId cfg = do
+-- horizontal one. The bars are parts of @vid@, named by the private
+-- @ViewportPart@; see 'scrollViewportTo' to move the vertical
+-- one from elsewhere.
+scrollViewport :: Ord e => e -> ScrollViewportConfig e msg -> View e msg ()
+scrollViewport vid cfg = do
   bounds <- getBounds
   -- A scrollbar shown on one axis takes space from the other, which can
   -- itself tip that axis into overflow -- so the overflow check runs
@@ -377,10 +372,12 @@ scrollViewport mkId cfg = do
     else runElement (scrollableArea viewportW viewportH showV showH)
   where
     Size contentW contentH = svContentSize cfg
-    vScrollEid = mkId (ViewportVerticalBar ScrollBar)
-    hScrollEid = mkId (ViewportHorizontalBar ScrollBar)
 
     overflows content viewport = content > max 0 viewport
+
+    barState bar = do
+      self <- controlIdOf vid
+      gets (contextScrollState (partId self (partName bar)))
 
     scrollableArea viewportW viewportH showV showH = vBox
       [ children
@@ -399,9 +396,9 @@ scrollViewport mkId cfg = do
           )
       ]
       where
-        vBar = scrollBar (mkId . ViewportVerticalBar)
+        vBar = part vid (partName VerticalBar) $ scrollBar vid
           [ orientation Vertical, height fill, visibleFraction (viewportH / contentH) ]
-        hBar = scrollBar (mkId . ViewportHorizontalBar)
+        hBar = part vid (partName HorizontalBar) $ scrollBar vid
           [ orientation Horizontal, width fill, visibleFraction (viewportW / contentW) ]
         corner = elementWithLayout (Layout (exactly scrollBarThickness) (exactly scrollBarThickness) TopLeft) (pure ())
 
@@ -410,8 +407,8 @@ scrollViewport mkId cfg = do
     clippedContent viewportW viewportH showV showH = do
       applyWheel viewportW viewportH showV showH
       bounds <- getBounds
-      hFrac  <- if showH then getScrollState hScrollEid else pure 0
-      vFrac  <- if showV then getScrollState vScrollEid else pure 0
+      hFrac  <- if showH then barState HorizontalBar else pure 0
+      vFrac  <- if showV then barState VerticalBar else pure 0
       let offsetX = if showH then hFrac * (contentW - viewportW) else 0
           offsetY = if showV then vFrac * (contentH - viewportH) else 0
           contentBounds = bounds
@@ -425,19 +422,34 @@ scrollViewport mkId cfg = do
 
     -- Only a vertical wheel delta exists in the input model, so it drives
     -- whichever axis actually scrolls, favouring vertical. Checked against
-    -- the viewport's own (unscrolled) bounds, and deferred via
-    -- 'requestScrollBy' like every other user gesture.
+    -- the viewport's own (unscrolled) bounds, and deferred like every
+    -- other user gesture.
     applyWheel viewportW viewportH showV showH = do
       wheel <- getWheelDelta
       when (wheel /= 0) $ do
         over <- isRegionHit
         when over $ case (showV, showH) of
-          (True, _)      -> scrollBy vScrollEid (contentH - viewportH) wheel
-          (False, True)  -> scrollBy hScrollEid (contentW - viewportW) wheel
+          (True, _)      -> scrollBy VerticalBar (contentH - viewportH) wheel
+          (False, True)  -> scrollBy HorizontalBar (contentW - viewportW) wheel
           (False, False) -> pure ()
 
-    scrollBy eid maxOffset wheel =
-      when (maxOffset > 0) $ requestScrollBy eid (wheel * svWheelStep cfg / maxOffset)
+    scrollBy bar maxOffset wheel =
+      when (maxOffset > 0) $ do
+        self <- controlIdOf vid
+        emitUi (ScrollBy (partId self (partName bar)) (wheel * svWheelStep cfg / maxOffset))
+
+-- | The id of the vertical scroll bar of the viewport @self@ -- where
+-- that viewport's vertical position is stored.
+verticalBarOf :: ControlId e -> ControlId e
+verticalBarOf self = partId self (partName VerticalBar)
+
+-- | Scrolls the vertical scroll bar of the viewport @vid@ to @position@,
+-- from @0@ (top) to @1@ (bottom), from the next frame onward. Callable
+-- from 'View' or 'Blink.Update.Update'.
+scrollViewportTo :: (Ord e, Monad m, HasUiEffect e m) => e -> Double -> m ()
+scrollViewportTo vid position = do
+  self <- controlIdFor vid
+  queueEffect (ScrollTo (verticalBarOf self) position)
 
 -- * Style
 

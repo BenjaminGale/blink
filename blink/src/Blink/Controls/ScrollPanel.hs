@@ -16,10 +16,10 @@
 -- control --> scrollViewport --> content
 -- @
 module Blink.Controls.ScrollPanel
-  ( ScrollPanelPart (..)
-  , ScrollPanelConfig (..)
+  ( ScrollPanelConfig (..)
   , defaultScrollPanelConfig
   , scrollPanel
+  , scrollPanelTo
   , content
     -- * Style
   , scrollPanelStyleKey
@@ -28,20 +28,14 @@ module Blink.Controls.ScrollPanel
 
 
 import Blink.Controls.Control
-import Blink.Controls.ScrollBar (ScrollViewportConfig (..), ScrollViewportPart, scrollViewport)
+import Blink.Controls.ScrollBar (ScrollViewportConfig (..), scrollViewport, verticalBarOf)
+import Blink.View (HasUiEffect (..), partId, withPart)
+import Blink.View.Context (UiEffect (..))
 import Blink.Element (Element (..), HasLayoutConfig (..), emptyElement, runElement, HasContent (..))
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Size (..))
 import Blink.Layout.Constraints (Available (..), Layout (..), MeasureCtx (..), fill)
 import Blink.Style
 import Blink.Controls.Style (zeroMetrics, plainStyle)
-
--- | Identifies one part of a 'scrollPanel' for the purpose of building
--- element ids: the panel's own root, or a part of its
--- 'Blink.Controls.ScrollBar.scrollViewport'.
-data ScrollPanelPart
-  = ScrollPanel
-  | ScrollPanelViewport ScrollViewportPart
-  deriving (Eq, Ord, Show)
 
 -- | Every capability 'scrollPanel' resolves.
 data ScrollPanelConfig e msg = ScrollPanelConfig
@@ -75,10 +69,10 @@ instance HasContent e msg (ScrollPanelConfig e msg) where
 wheelStepPx :: Double
 wheelStepPx = 48
 
--- | A scrollable viewport onto @cfg@'s own 'spContent' (see 'content').
--- @mkId@ builds every part's element id from a 'ScrollPanelPart'.
-scrollPanel :: Ord e => (ScrollPanelPart -> e) -> [Attribute (ScrollPanelConfig e msg)] -> Element e msg
-scrollPanel mkId attrs = controlElement (spLayout cfg) measureEl ctrl
+-- | A scrollable viewport onto @cfg@'s own 'spContent' (see 'content'),
+-- identified by @eid@. See 'scrollPanelTo' to scroll it from elsewhere.
+scrollPanel :: Ord e => e -> [Attribute (ScrollPanelConfig e msg)] -> Element e msg
+scrollPanel eid attrs = controlElement (spLayout cfg) measureEl ctrl
   where
     cfg   = resolve defaultScrollPanelConfig attrs
     child = spContent cfg
@@ -99,18 +93,30 @@ scrollPanel mkId attrs = controlElement (spLayout cfg) measureEl ctrl
       pure (Size w h)
 
     ctrl = (spControl cfg)
-      { ccElementId   = Just (mkId ScrollPanel)
+      { ccElementId   = Just eid
       , ccFocusPolicy = NotFocusable
       , ccContent     = const viewport
       }
 
     viewport = do
       contentSize <- naturalSize
-      scrollViewport (mkId . ScrollPanelViewport) ScrollViewportConfig
+      withPart eid (partName Viewport) $ scrollViewport eid ScrollViewportConfig
         { svWheelStep   = wheelStepPx
         , svContentSize = contentSize
         , svContent     = const (runElement child)
         }
+
+-- | The parts a 'scrollPanel' is made of, besides itself.
+data ScrollPanelPart = Viewport
+  deriving Show
+
+-- | Scrolls the scroll panel @eid@ vertically to @position@, from @0@ (top)
+-- to @1@ (bottom), from the next frame onward. Callable from 'Blink.View.View' or
+-- 'Blink.Update.Update'.
+scrollPanelTo :: (Ord e, Monad m, HasUiEffect e m) => e -> Double -> m ()
+scrollPanelTo eid position = do
+  self <- controlIdFor eid
+  queueEffect (ScrollTo (verticalBarOf (partId self (partName Viewport))) position)
 
 -- * Style
 

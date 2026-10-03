@@ -24,9 +24,11 @@ module Blink.View.Focus
   , clearFocus
   , disclaimFocus
   , requestFocus
+  , requestFocusWithin
   , requestClearFocus
   , hasQueuedFocus
   , withFocusScope
+  , withFocusScopeAt
   , getPreviousTabStop
   , setPreviousTabStop
   , contextFocus
@@ -40,17 +42,17 @@ import qualified Data.Set as Set
 import Blink.View.Context
 
 -- | Modifies the currently ambient scope's own 'FocusState'.
-modifyFocusState :: (FocusState e -> FocusState e) -> View e msg ()
+modifyFocusState :: (FocusState (ControlId e) -> FocusState (ControlId e)) -> View e msg ()
 modifyFocusState f = modify $ \ctx -> ctx { ctxFocus = (ctxFocus ctx) { ftAmbient = f (ftAmbient (ctxFocus ctx)) } }
 
 -- | The currently ambient scope's focused element, if any — root's, unless
 -- inside 'withFocusScope'.
-getFocus :: View e msg (Maybe e)
+getFocus :: View e msg (Maybe (ControlId e))
 getFocus = gets contextFocus
 
 -- | The currently ambient scope's focused element, read directly from a
 -- 'ViewContext' outside the 'View' monad.
-contextFocus :: ViewContext e msg -> Maybe e
+contextFocus :: ViewContext e msg -> Maybe (ControlId e)
 contextFocus = currentFocus . focusClaim . ftAmbient . ctxFocus
 
 -- | The full root-to-leaf focus chain, read directly from a 'ViewContext'
@@ -68,7 +70,7 @@ contextFocus = currentFocus . focusClaim . ftAmbient . ctxFocus
 -- own scope entry in @ftScopes@. That's harmless for the single-hop checks
 -- every real caller uses, but would otherwise send this walk into an
 -- infinite loop.
-contextFocusChain :: Ord e => ViewContext e msg -> [e]
+contextFocusChain :: Ord e => ViewContext e msg -> [ControlId e]
 contextFocusChain ctx = go Set.empty (contextFocus ctx)
   where
     go _    Nothing  = []
@@ -82,21 +84,21 @@ contextFocusChain ctx = go Set.empty (contextFocus ctx)
 -- CSS's @:focus-within@ for free — 'withFocusScope' is what makes a
 -- composite's own id read as ambiently focused whenever a descendant is, by
 -- construction, so no chain-walk is needed here.
-isFocused :: Eq e => e -> View e msg Bool
-isFocused eid = (== Just eid) <$> getFocus
+isFocused :: Ord e => e -> View e msg Bool
+isFocused appId = controlIdOf appId >>= \eid -> (== Just eid) <$> getFocus
 
 -- | 'True' when the currently ambient scope's most recent redirect (a
 -- @Focus@ effect landing within the last two frames -- see @FocusClaim@)
 -- granted this element focus. Single-hop, exactly like 'isFocused'; never
 -- 'True' from 'setFocus' reaffirming a claim, only from an explicit @Focus@.
-hasGainedFocus :: Eq e => e -> View e msg Bool
-hasGainedFocus eid = gets (isGained eid . focusClaim . ftAmbient . ctxFocus)
+hasGainedFocus :: Ord e => e -> View e msg Bool
+hasGainedFocus appId = controlIdOf appId >>= \eid -> gets (isGained eid . focusClaim . ftAmbient . ctxFocus)
 
 -- | 'True' when the currently ambient scope's most recent redirect (a
 -- @Focus@\/@ClearFocus@ effect, still within its one-frame observation
 -- window -- see @LostFocus@) displaced this element.
-hasLostFocus :: Eq e => e -> View e msg Bool
-hasLostFocus eid = gets ((== Just (Just eid)) . pendingLostFocus . focusLost . ftAmbient . ctxFocus)
+hasLostFocus :: Ord e => e -> View e msg Bool
+hasLostFocus appId = controlIdOf appId >>= \eid -> gets ((== Just (Just eid)) . pendingLostFocus . focusLost . ftAmbient . ctxFocus)
 
 -- | Transfers keyboard focus to the given element, in the currently ambient
 -- scope. Takes effect immediately — like 'Blink.View.Mouse.registerMouseOver'
@@ -106,12 +108,12 @@ hasLostFocus eid = gets ((== Just (Just eid)) . pendingLostFocus . focusLost . f
 -- can see it happened. Refused if a different element
 -- already holds it this frame, so it can never steal focus out from under
 -- whoever legitimately has it.
-setFocus :: Eq e => e -> View e msg ()
-setFocus eid = modifyFocusState $ \fs -> fs { focusClaim = tryClaim eid (focusClaim fs) }
+setFocus :: Ord e => e -> View e msg ()
+setFocus appId = controlIdOf appId >>= \eid -> modifyFocusState $ \fs -> fs { focusClaim = tryClaim eid (focusClaim fs) }
 
 -- | Transfers keyboard focus to the given element when the condition is
 -- 'True'.
-setFocusWhen :: Eq e => Bool -> e -> View e msg ()
+setFocusWhen :: Ord e => Bool -> e -> View e msg ()
 setFocusWhen b eid = when b (setFocus eid)
 
 -- | Removes keyboard focus from the currently ambient scope. Immediate,
@@ -141,21 +143,27 @@ disclaimFocus = modifyFocusState $ \fs -> fs
 -- every affected element observe the change consistently regardless of
 -- render order (see 'hasGainedFocus'\/'hasLostFocus').
 -- Callable from 'View' or 'Blink.Update.Update' -- see 'HasUiEffect'.
-requestFocus :: HasUiEffect e m => Maybe e -> e -> m ()
-requestFocus scopeId target = queueEffect (Focus scopeId target)
+requestFocus :: (Ord e, Monad m, HasUiEffect e m) => Maybe (ControlId e) -> e -> m ()
+requestFocus scopeId target = controlIdFor target >>= \k -> queueEffect (Focus scopeId k)
+
+-- | Focuses @target@ within the focus scope of the control @scope@, both
+-- given by the application's ids -- how a composite moves focus between
+-- its own children.
+requestFocusWithin :: Ord e => e -> e -> View e msg ()
+requestFocusWithin scope target = controlIdOf scope >>= \s -> requestFocus (Just s) target
 
 -- | Queues a @ClearFocus@ effect: clears whoever is focused within the
 -- given scope, with nothing new claiming it, taking effect at the next
 -- frame boundary — the "clear" counterpart to 'requestFocus'. Callable
 -- from 'View' or 'Blink.Update.Update' -- see 'HasUiEffect'.
-requestClearFocus :: HasUiEffect e m => Maybe e -> m ()
+requestClearFocus :: HasUiEffect e m => Maybe (ControlId e) -> m ()
 requestClearFocus scopeId = queueEffect (ClearFocus scopeId)
 
 -- | 'True' when a @Focus@\/@ClearFocus@ effect targeting this scope is
 -- already queued this frame. Lets a fallback focus request (e.g. returning
 -- focus to a trigger on close) skip itself rather than clobber a fresher
 -- claim made earlier in the same pass -- see 'requestFocus'.
-hasQueuedFocus :: Eq e => Maybe e -> View e msg Bool
+hasQueuedFocus :: Eq e => Maybe (ControlId e) -> View e msg Bool
 hasQueuedFocus scopeId = gets (any matches . getUiEffects)
   where
     matches (Focus sid _)    = sid == scopeId
@@ -209,7 +217,12 @@ hasQueuedFocus scopeId = gets (any matches . getUiEffects)
 -- see the integration coverage in "Blink.ControlsSpec" for the regression
 -- this guards against.
 withFocusScope :: Ord e => e -> View e msg a -> View e msg a
-withFocusScope scopeId (View f) = View $ \ctx ->
+withFocusScope appId v = controlIdOf appId >>= \scopeId -> withFocusScopeAt scopeId v
+
+-- | 'withFocusScope' for a scope already identified by its 'ControlId' --
+-- e.g. a popup re-entering the scope it was queued from.
+withFocusScopeAt :: Ord e => ControlId e -> View e msg a -> View e msg a
+withFocusScopeAt scopeId (View f) = View $ \ctx ->
   if ctxDisabled ctx
     then f ctx
     else case scopeMode scopeId (contextFocus ctx) of
@@ -222,7 +235,7 @@ withFocusScope scopeId (View f) = View $ \ctx ->
 -- See 'withFocusScope'.
 runClaimed
   :: Ord e
-  => e
+  => ControlId e
   -> (ViewContext e msg -> IO (a, ViewContext e msg))
   -> ViewContext e msg
   -> IO (a, ViewContext e msg)
@@ -245,10 +258,10 @@ runClaimed scopeId f ctx = do
 -- composite removed from the tree). See 'withFocusScope'.
 runBlocked
   :: Ord e
-  => e
+  => ControlId e
   -> (ViewContext e msg -> IO (a, ViewContext e msg))
   -> ViewContext e msg
-  -> Maybe e
+  -> Maybe (ControlId e)
   -> IO (a, ViewContext e msg)
 runBlocked scopeId f ctx blockValue = do
   let real      = ftAmbient (ctxFocus ctx)
@@ -269,9 +282,9 @@ runBlocked scopeId f ctx blockValue = do
 -- after, so nesting reports each level's own immediate scope, not just the
 -- outermost one. See 'withFocusScope'.
 runWithAmbient
-  :: e
+  :: ControlId e
   -> (ViewContext e msg -> IO (a, ViewContext e msg))
-  -> FocusState e
+  -> FocusState (ControlId e)
   -> ViewContext e msg
   -> IO (a, ViewContext e msg)
 runWithAmbient scopeId f ambient ctx = do
@@ -282,7 +295,7 @@ runWithAmbient scopeId f ambient ctx = do
 -- (the value to restore around this scope) at this scope's id -- the
 -- write-back shared by a claim and a blocked-but-claimed-anyway resolution
 -- alike. See 'withFocusScope'.
-foldBackAsClaim :: Ord e => e -> FocusState e -> FocusState e -> ViewContext e msg -> ViewContext e msg
+foldBackAsClaim :: Ord e => ControlId e -> FocusState (ControlId e) -> FocusState (ControlId e) -> ViewContext e msg -> ViewContext e msg
 foldBackAsClaim scopeId base after ctx' = ctx'
   { ctxFocus = (ctxFocus ctx')
       { ftAmbient = base { focusClaim = tryClaim scopeId (focusClaim base) }
@@ -293,16 +306,16 @@ foldBackAsClaim scopeId base after ctx' = ctx'
 -- scoped to the currently ambient scope (root, or a composite's own while
 -- inside 'withFocusScope') — used by 'Blink.Controls.control' to implement
 -- Shift-Tab navigation.
-getPreviousTabStop :: View e msg (Maybe e)
+getPreviousTabStop :: View e msg (Maybe (ControlId e))
 getPreviousTabStop = gets contextPreviousTabStop
 
 -- | The element that was the most recent tab stop before the current one,
 -- read directly from a 'ViewContext' outside the 'View' monad.
-contextPreviousTabStop :: ViewContext e msg -> Maybe e
+contextPreviousTabStop :: ViewContext e msg -> Maybe (ControlId e)
 contextPreviousTabStop = previousTabStop . ftAmbient . ctxFocus
 
 -- | Records the current element as the previous tab stop, scoped to the
 -- currently ambient scope. Called automatically by 'Blink.Controls.control';
 -- call manually when building custom focusable controls.
-setPreviousTabStop :: e -> View e msg ()
-setPreviousTabStop eid = modifyFocusState $ \fs -> fs { previousTabStop = Just eid }
+setPreviousTabStop :: Ord e => e -> View e msg ()
+setPreviousTabStop appId = controlIdOf appId >>= \eid -> modifyFocusState $ \fs -> fs { previousTabStop = Just eid }

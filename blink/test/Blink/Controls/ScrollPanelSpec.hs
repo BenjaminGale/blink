@@ -7,7 +7,6 @@ import Blink.Controls.Control (Attribute)
 import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBehaviourSpec)
 import Blink.Controls.Fixtures
   (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
-import Blink.Controls.ScrollBar (ScrollBarPart (..), ScrollViewportPart (..))
 import Blink.Controls.ScrollPanel
 import Blink.Element (Element (..), runElement)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
@@ -15,18 +14,21 @@ import Blink.Interaction (Interaction (..), InteractionResult (..), runInteracti
 import Blink.Layout.Constraints (Layout (..), fill)
 import Blink.Rendering (DrawCommand (..))
 import Blink.Style (Theme)
-import Blink.View
+import Blink.View hiding (ControlId (..))
+import qualified Blink.View as V (ControlId (..))
 import Blink.Testing
 import Blink.View.Drawing (fillRect)
 
-data TestElem = Part ScrollPanelPart | FocusHolder deriving (Eq, Ord, Show)
+data TestElem = Panel | FocusHolder deriving (Eq, Ord, Show)
 
-tag :: ScrollPanelPart -> TestElem
-tag = Part
+-- | Where the panel's viewport keeps its vertical scroll bar's position.
+vScrollEid :: V.ControlId TestElem
+vScrollEid = V.Part Panel "Viewport/VerticalBar"
 
-hScrollEid, vScrollEid :: TestElem
-hScrollEid = tag (ScrollPanelViewport (ViewportHorizontalBar ScrollBar))
-vScrollEid = tag (ScrollPanelViewport (ViewportVerticalBar ScrollBar))
+-- | Seeds the horizontal position, which has no request function of its
+-- own, by running 'requestScrollTo' inside the parts the bar lives in.
+seedHorizontal :: Double -> View TestElem String ()
+seedHorizontal v = withPart Panel "Viewport" (withPart Panel "HorizontalBar" (requestScrollTo Panel v))
 
 testTheme :: Theme TestElem
 testTheme = mkTestTheme zeroMetrics (plainStyleSet (plainStyle testColour))
@@ -51,7 +53,7 @@ fixedChild w h = Element
 type Attribute' = Attribute (ScrollPanelConfig TestElem String)
 
 render :: [Attribute'] -> View TestElem String ()
-render attrs = runElement (scrollPanel tag attrs)
+render attrs = runElement (scrollPanel Panel attrs)
 
 contractTheme :: Theme TestElem
 contractTheme = mkTestTheme standardMetrics (plainStyleSet (plainStyle testColour))
@@ -62,8 +64,8 @@ contractCtx = emptyViewContext testBounds noInput contractTheme
 contractHitRect :: Rectangle
 contractHitRect = hitRectFor testBounds
 
-seededAt :: TestElem -> Double -> IO (ViewContext TestElem String)
-seededAt eid v = resultContext <$> runInteractions testBounds seedCtx (requestScrollTo eid v) [] []
+seededAt :: View TestElem String () -> IO (ViewContext TestElem String)
+seededAt seed = resultContext <$> runInteractions testBounds seedCtx seed [] []
 
 spec :: Spec
 spec = describe "Blink.Controls.ScrollPanel" $ do
@@ -74,7 +76,7 @@ spec = describe "Blink.Controls.ScrollPanel" $ do
 
   describe "vertical overflow" $ do
     it "offsets the content by the scroll fraction, reserving width for the vertical bar" $ do
-      ctx <- seededAt vScrollEid 0.5
+      ctx <- seededAt (scrollPanelTo Panel 0.5)
       result <- runInteractions testBounds ctx (render [content (fixedChild 50 200)]) [] [Wait 1]
       -- viewport: 100x60 minus a 16px-wide vertical bar = 84x60; content is
       -- 200px tall, so 140px of scrollable range -- half of that is 70px.
@@ -95,7 +97,7 @@ spec = describe "Blink.Controls.ScrollPanel" $ do
 
   describe "horizontal overflow" $
     it "offsets the content by the scroll fraction, reserving height for the horizontal bar" $ do
-      ctx <- seededAt hScrollEid 0.5
+      ctx <- seededAt (seedHorizontal 0.5)
       result <- runInteractions testBounds ctx (render [content (fixedChild 200 40)]) [] [Wait 1]
       -- viewport: 100x60 minus a 16px-tall horizontal bar = 100x44; content
       -- is 200px wide, so 100px of scrollable range -- half of that is 50px.
@@ -103,12 +105,12 @@ spec = describe "Blink.Controls.ScrollPanel" $ do
 
   describe "both axes overflowing" $
     it "shows both bars and offsets both axes, each against its own reduced viewport" $ do
-      ctxV <- seededAt vScrollEid 1
-      ctx  <- resultContext <$> runInteractions testBounds ctxV (requestScrollTo hScrollEid 1) [] []
+      ctxV <- seededAt (scrollPanelTo Panel 1)
+      ctx  <- resultContext <$> runInteractions testBounds ctxV (seedHorizontal 1) [] []
       result <- runInteractions testBounds ctx (render [content (fixedChild 200 200)]) [] [Wait 1]
       -- viewport: 100x60 minus both 16px bars = 84x44; content is 200x200,
       -- so 116px of horizontal range and 156px of vertical range.
       resultDraws result `shouldContain` [FillRect (Rectangle (-116) (-156) 200 200) testColour]
 
   controlBehaviourSpec (ControlBehaviourConfig { cbcAutoClaims = False, cbcClickFocuses = False })
-    testBounds contractCtx (tag ScrollPanel) FocusHolder (Point 5 5) contractHitRect (Point 200 200) render
+    testBounds contractCtx Panel FocusHolder (Point 5 5) contractHitRect (Point 200 200) render

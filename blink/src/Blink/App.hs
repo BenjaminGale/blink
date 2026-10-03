@@ -145,7 +145,7 @@ import Blink.View.Context
   , getWindowSize, withBounds
   , withCurrentPopup
   )
-import Blink.View.Focus (withFocusScope)
+import Blink.View.Focus (withFocusScopeAt)
 import Blink.View.Mouse (markPopupFloor)
 import Blink.Element (Element, runElement)
 import Blink.Update (Update, runUpdateEffects)
@@ -338,7 +338,7 @@ drainPopups ctx0 = do
           run  = withCurrentPopup (popupId p) (withBounds rect (popupRun p))
       -- Re-enters the scope this popup was queued from, so it runs with
       -- the focus ambient it would have had inline (see PendingPopup.popupOriginScope).
-      maybe run (`withFocusScope` run) (popupOriginScope p)
+      maybe run (`withFocusScopeAt` run) (popupOriginScope p)
 
 -- | Folds a batch of messages into state via @update@, in order, collecting
 -- every 'Cmd' and 'UiEffect' any of them requested along the way.

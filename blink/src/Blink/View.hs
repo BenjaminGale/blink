@@ -229,6 +229,11 @@ selection, hold, animation, navigation); import this module to use them.
 module Blink.View
   ( -- * The View monad
     View
+    -- * Control identity
+  , ControlId (..)
+  , controlIdOf
+  , withPart
+  , partId
     -- * Messages and effects
   , Effect
   , UiEffect
@@ -313,6 +318,7 @@ module Blink.View
   , clearFocus
   , disclaimFocus
   , requestFocus
+  , requestFocusWithin
   , requestClearFocus
   , hasQueuedFocus
   , withFocusScope

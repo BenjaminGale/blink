@@ -215,7 +215,7 @@ runMenuBarLabel mkId cfg menuKey labelCfg onBar = do
     toOpenMenu opened = if opened then Just menuKey else Nothing
 
 -- | Opens @newKey@'s dropdown and focuses its item list.
-openMenuFor :: (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> Maybe e -> a -> View e msg ()
+openMenuFor :: Ord e => (MenuBarPart a b -> e) -> MenuBarConfig e a b msg -> Maybe (ControlId e) -> a -> View e msg ()
 openMenuFor mkId cfg enclosingScope newKey = do
   runHandlers (mbrOnOpenMenuChanged cfg) (Just newKey)
   requestFocus enclosingScope (mkId (MenuBarList newKey))

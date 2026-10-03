@@ -4,8 +4,9 @@ module UI (ControlId, AppState (..), demoApp) where
 import Blink
 import Blink.Element (Element (..), elementWithLayout, runElement)
 import Blink.Input (InputState (..))
-import Blink.View
+import Blink.View hiding (ControlId (..))
 import Blink.View.Drawing (drawText, fillRect)
+import ColourPicker (colourPicker)
 import Theme (ControlId (..), Page (..), lightTheme, darkTheme)
 import Control.Concurrent (threadDelay)
 import Control.Monad (when)
@@ -56,6 +57,7 @@ data AppState = AppState
   , imageFitHeightEnabled :: Bool
   , imageFitHeight         :: Double
   , imagePreserveRatio    :: Bool
+  , pickedColour          :: Colour
   }
 
 -- | Where a 'BackgroundPage' fetch stands: not yet started, in flight (a
@@ -99,6 +101,7 @@ data Msg
   | SetImageFitHeightEnabled Bool
   | SetImageFitHeight Double
   | SetImagePreserveRatio Bool
+  | SetPickedColour Colour
 
 demoApp :: App ControlId Msg AppState
 demoApp = App
@@ -137,6 +140,7 @@ demoApp = App
       , imageFitHeightEnabled = False
       , imageFitHeight         = 0.3
       , imagePreserveRatio    = True
+      , pickedColour          = RGBA 0.29 0.55 0.94 1
       }
   , theme   = \s -> if darkMode s then darkTheme else lightTheme
   , view    = demoView
@@ -206,12 +210,13 @@ updateApp msg = case msg of
     modify $ \s -> s { backgroundStatus = Fetching }
     cmd fetchDemoFile
   FetchFinished contents -> modify $ \s -> s { backgroundStatus = Fetched contents }
-  JumpToLongListEnd -> requestScrollTo (LongList (ListViewport (ViewportVerticalBar ScrollBar))) 1
+  JumpToLongListEnd -> scrollViewportTo (LongList ListViewport) 1
   SetImageFitWidthEnabled v  -> modify $ \s -> s { imageFitWidthEnabled = v }
   SetImageFitWidth v          -> modify $ \s -> s { imageFitWidth = v }
   SetImageFitHeightEnabled v -> modify $ \s -> s { imageFitHeightEnabled = v }
   SetImageFitHeight v         -> modify $ \s -> s { imageFitHeight = v }
   SetImagePreserveRatio v    -> modify $ \s -> s { imagePreserveRatio = v }
+  SetPickedColour c          -> modify $ \s -> s { pickedColour = c }
 
 -- | Stands in for an async IO operation (fetching a file, calling an API):
 -- waits somewhere between 3 and 5 seconds -- the delay seeded from the
@@ -389,6 +394,17 @@ rowSlider s =
             ]
         ]
     )
+
+rowColour :: AppState -> Element ControlId Msg
+rowColour s =
+  hBox
+    [ width fill, height (exactly 84), align TopLeft, spacing 8
+    , children
+        [ caption "Colour" [width (exactly 120), height fill, align MiddleLeft]
+        , colourPicker ColourPickerCtl (pickedColour s) SetPickedColour
+        , elementWithLayout (Layout (exactly 60) fill TopLeft) (fillRect (pickedColour s))
+        ]
+    ]
 
 -- Footer
 
@@ -1060,6 +1076,7 @@ mainList s =
             , rowAnimate s
             , rowProgress s
             , rowSlider s
+            , rowColour s
             ]
         ]
     ]

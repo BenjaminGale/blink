@@ -42,11 +42,11 @@ spec = describe "Blink.View.Focus" $ do
 
     it "setFocus refuses to steal focus from a different element that already holds it this frame" $ do
       (f, _) <- runTwoElem (setFocus ElemA >> setFocus ElemB >> getFocus)
-      f `shouldBe` Just ElemA
+      f `shouldBe` Just (Control ElemA)
 
     it "setFocus still lets an element reaffirm itself after already claiming it this frame" $ do
       (f, _) <- runTwoElem (setFocus ElemA >> setFocus ElemA >> getFocus)
-      f `shouldBe` Just ElemA
+      f `shouldBe` Just (Control ElemA)
 
     it "clearFocus removes the focused element" $ do
       (f, _) <- run0 (setFocus () >> clearFocus >> getFocus)
@@ -58,13 +58,13 @@ spec = describe "Blink.View.Focus" $ do
 
     it "setFocusWhen sets focus when the condition is True" $ do
       (f, _) <- run0 (setFocusWhen True () >> getFocus)
-      f `shouldBe` Just ()
+      f `shouldBe` Just (Control ())
 
     it "nextFrameContext carries focus forward when the element was visited this frame" $ do
       (_, ctx) <- run0 (setFocus ())
       let ctx' = advance noInput ctx
       (f, _) <- runView getFocus ctx'
-      f `shouldBe` Just ()
+      f `shouldBe` Just (Control ())
 
     it "nextFrameContext clears focus when the element was not visited this frame" $ do
       (_, ctx0) <- run0 (setFocus ())
@@ -81,7 +81,7 @@ spec = describe "Blink.View.Focus" $ do
 
     it "returns the element registered as the previous tab stop" $ do
       (s, _) <- run0 (setPreviousTabStop () >> getPreviousTabStop)
-      s `shouldBe` Just ()
+      s `shouldBe` Just (Control ())
 
   describe "focus change (requestFocus / requestClearFocus)" $ do
     it "a focus request sets the new focus and reports it to the winner and the loser" $ do
@@ -91,7 +91,7 @@ spec = describe "Blink.View.Focus" $ do
       (newFocus, _)               <- runView getFocus ctx1
       (winnerGained, winnerLost)  <- focusReport ctx1 ElemB
       (loserGained, loserLost)    <- focusReport ctx1 ElemA
-      newFocus     `shouldBe` Just ElemB
+      newFocus     `shouldBe` Just (Control ElemB)
       winnerGained `shouldBe` True
       winnerLost   `shouldBe` False
       loserGained  `shouldBe` False
@@ -144,7 +144,7 @@ spec = describe "Blink.View.Focus" $ do
     it "a scoped focus request updates only that scope's FocusState, not root's" $ do
       let ctx0' = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()
       (_, ctx0a) <- runView (requestFocus Nothing Group) ctx0'
-      (_, ctx0)  <- runView (requestFocus (Just Group) ItemB) ctx0a
+      (_, ctx0)  <- runView (requestFocus (Just (Control Group)) ItemB) ctx0a
       let ctx1 = settleEffects ctx0
       (insideGained, _) <- runView (withFocusScope Group (hasGainedFocus ItemB)) ctx1
       (rootGained, _)   <- runView (hasGainedFocus ItemB) ctx1
@@ -157,25 +157,25 @@ spec = describe "Blink.View.Focus" $ do
       (_, ctx0) <- runView (requestFocus Nothing Group) ctx0'
       let ctx1 = settleEffects ctx0
       (inside, _) <- runView (withFocusScope Group (setFocus ItemA >> getFocus)) ctx1
-      inside `shouldBe` Just ItemA
+      inside `shouldBe` Just (Control ItemA)
 
     it "blocks a child from claiming focus when nothing is focused anywhere" $ do
       let ctx0 = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()
       (inside, _) <- runView (withFocusScope Group (setFocus ItemA >> getFocus)) ctx0
-      inside `shouldNotBe` Just ItemA
+      inside `shouldNotBe` Just (Control ItemA)
 
     it "blocks a child from claiming focus when a different element holds root focus" $ do
       let ctx0' = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()
       (_, ctx0)   <- runView (setFocus Sibling) ctx0'
       (inside, _) <- runView (withFocusScope Group (setFocus ItemA >> getFocus)) ctx0
-      inside `shouldNotBe` Just ItemA
+      inside `shouldNotBe` Just (Control ItemA)
 
     it "leaves root's own focus untouched by a blocked child's claim attempt" $ do
       let ctx0' = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()
       (_, ctx0) <- runView (setFocus Sibling) ctx0'
       (_, ctx1) <- runView (withFocusScope Group (setFocus ItemA)) ctx0
       (root, _) <- runView getFocus ctx1
-      root `shouldBe` Just Sibling
+      root `shouldBe` Just (Control Sibling)
 
     it "reads the scope's own id as focused once a child inside it is claimed" $ do
       let ctx0' = emptyViewContext testBounds noInput scopeTheme :: ViewContext ScopeElems ()

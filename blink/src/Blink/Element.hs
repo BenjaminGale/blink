@@ -13,6 +13,7 @@ module Blink.Element
   , spacer
   , emptyElement
   , elementWithLayout
+  , part
     -- * Attributes
   , Attribute (..)
   , resolve
@@ -44,7 +45,9 @@ import Blink.Layout.Constraints
   ( Available (..), Layout (..), Length, MeasureCtx (..)
   , exactly, fill, layoutWithConstraints, preferredSize, resolveLength
   )
-import Blink.View (Effect, View, getBounds)
+import Data.Text (Text)
+
+import Blink.View (Effect, View, getBounds, withPart)
 
 -- | The layout-facing pairing of a component's size request, its measure,
 -- and its frame action. A container consumes a list of these to arrange a
@@ -133,6 +136,23 @@ emptyElement = Element (Layout (exactly 0) (exactly 0) TopLeft) noIntrinsicSize 
 -- measure.
 elementWithLayout :: Layout -> View e msg () -> Element e msg
 elementWithLayout layout ui = Element layout noIntrinsicSize ui
+
+-- | Makes every control inside @el@ whose id is @owner@ a part of @owner@
+-- named @name@, rather than @owner@ itself, so one id can stand for several
+-- separately tracked controls. Controls with any other id are unaffected.
+-- Nested parts of the same owner join their names with @/@.
+--
+-- @
+-- colourPicker pickerId ... = vBox [children
+--   [ part pickerId \"red\"   (slider pickerId [...])
+--   , part pickerId \"green\" (slider pickerId [...])
+--   ]]
+-- @
+part :: Ord e => e -> Text -> Element e msg -> Element e msg
+part owner name el = el
+  { elMeasure = withPart owner name . elMeasure el
+  , elRun     = withPart owner name (elRun el)
+  }
 
 -- | A single field update on @cfg@, applied by 'resolve'.
 newtype Attribute cfg = Attribute { runAttribute :: cfg -> cfg }

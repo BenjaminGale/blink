@@ -63,6 +63,7 @@ module Blink
   , Attribute
   , spacer
   , emptyElement
+  , part
     -- * Controls
   , module Blink.Controls
     -- * Layout
@@ -81,7 +82,7 @@ module Blink
 
 import Blink.App (App (..))
 import Blink.Controls
-import Blink.Element (Attribute, Element, emptyElement, spacer)
+import Blink.Element (Attribute, Element, emptyElement, part, spacer)
 import Blink.Geometry
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..))
 import Blink.Layout

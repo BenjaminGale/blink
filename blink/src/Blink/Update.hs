@@ -80,7 +80,7 @@ module Blink.Update
   ) where
 
 import Blink.Cmd (Cmd (..))
-import Blink.View.Context (HasUiEffect (..), UiEffect)
+import Blink.View.Context (ControlId (..), HasUiEffect (..), UiEffect)
 
 -- | A pure, state-threading computation over the application state @s@,
 -- producing a result @a@ and, via 'cmd' or one of the 'HasUiEffect'
@@ -108,6 +108,7 @@ instance Monad (Update s e msg) where
 
 instance HasUiEffect e (Update s e msg) where
   queueEffect u = Update $ \s -> ((), s, [], [u])
+  controlIdFor        = pure . Control
 
 -- | The current application state.
 get :: Update s e msg s

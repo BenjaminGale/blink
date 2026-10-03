@@ -31,5 +31,5 @@ spec = describe "Blink.View.Cursor" $ do
   it "keeps cursor indices separate per element" $ do
     (_, ctx) <- runTwoElem (setCursorIndex ElemA (Just 1) >> setCursorIndex ElemB (Just 2))
     let settled = settleEffects ctx
-    contextCursorIndex ElemA settled `shouldBe` Just 1
-    contextCursorIndex ElemB settled `shouldBe` Just 2
+    contextCursorIndex (Control ElemA) settled `shouldBe` Just 1
+    contextCursorIndex (Control ElemB) settled `shouldBe` Just 2

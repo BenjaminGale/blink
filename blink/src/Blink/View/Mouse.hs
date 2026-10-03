@@ -43,16 +43,16 @@ import Blink.View.Context
 
 -- | The current frame's 'Mouse' state: button\/capture and per-element
 -- hover.
-getMouse :: View e msg (Mouse e)
+getMouse :: View e msg (Mouse (ControlId e))
 getMouse = gets ctxMouse
 
 -- | The current frame's 'Mouse' state, read directly from a 'ViewContext'
 -- outside the 'View' monad.
-contextMouse :: ViewContext e msg -> Mouse e
+contextMouse :: ViewContext e msg -> Mouse (ControlId e)
 contextMouse = ctxMouse
 
 -- | Modifies the current frame's 'Mouse'.
-modifyMouse :: (Mouse e -> Mouse e) -> View e msg ()
+modifyMouse :: (Mouse (ControlId e) -> Mouse (ControlId e)) -> View e msg ()
 modifyMouse f = modify $ \ctx -> ctx { ctxMouse = f (ctxMouse ctx) }
 
 -- | The current mouse cursor position in window coordinates.
@@ -86,8 +86,8 @@ isRegionHit = do
 -- 'ButtonHeld' since a press that started over one element (or over nothing)
 -- can still be claimed by a different element the cursor moves onto later in
 -- the same held press, as long as nothing else has claimed it first.
-acquireCapture :: e -> View e msg ()
-acquireCapture eid = modifyMouse $ \m -> m { mouseButton = case mouseButton m of
+acquireCapture :: Ord e => e -> View e msg ()
+acquireCapture appId = controlIdOf appId >>= \eid -> modifyMouse $ \m -> m { mouseButton = case mouseButton m of
   ButtonDown MouseNotCaptured -> ButtonDown (MouseCapturedBy eid)
   ButtonHeld MouseNotCaptured -> ButtonHeld (MouseCapturedBy eid)
   btn                         -> btn
@@ -99,7 +99,7 @@ acquireCapture eid = modifyMouse $ \m -> m { mouseButton = case mouseButton m of
 -- the same element to detect the transition. Any number of elements can each
 -- call this in the same frame; all are remembered.
 registerMouseOver :: Ord e => e -> View e msg ()
-registerMouseOver eid = modifyMouse $ \m ->
+registerMouseOver appId = controlIdOf appId >>= \eid -> modifyMouse $ \m ->
   let prev = Map.findWithDefault NotOver eid (mouseHoverPrev m)
   in m { mouseHoverNext = Map.insert eid (nextHoverState prev True) (mouseHoverNext m) }
 
@@ -108,7 +108,7 @@ registerMouseOver eid = modifyMouse $ \m ->
 -- mouse-enter (@not wasOver && isOver@) and mouse-exit (@wasOver && not
 -- isOver@).
 wasMouseOverLastFrame :: Ord e => e -> View e msg Bool
-wasMouseOverLastFrame eid = gets $ \ctx ->
+wasMouseOverLastFrame appId = controlIdOf appId >>= \eid -> gets $ \ctx ->
   wasHit (Map.findWithDefault NotOver eid (mouseHoverPrev (ctxMouse ctx)))
 
 -- | 'True' when 'registerMouseOver' has been called for any element so far
@@ -134,7 +134,7 @@ isAnyMouseOver = gets (not . Map.null . mouseHoverNext . ctxMouse)
 -- proportional to whatever's actually under the pointer, not the size of
 -- the whole view.
 registerHitRect :: Ord e => e -> View e msg ()
-registerHitRect eid = do
+registerHitRect appId = controlIdOf appId >>= \eid -> do
   r      <- getBounds
   popId  <- getCurrentPopupId
   modifyMouse $ \m ->
@@ -158,7 +158,7 @@ registerHitRect eid = do
 -- landed on the child, instead of the container claiming it purely because
 -- its own hit test ran first.
 isOccludedFor :: Ord e => e -> View e msg Bool
-isOccludedFor eid = do
+isOccludedFor appId = controlIdOf appId >>= \eid -> do
   p    <- getMousePos
   prev <- gets (mouseHitRectsPrev . ctxMouse)
   case Map.lookup eid prev of
@@ -203,7 +203,7 @@ markPopupFloor = modifyMouse $ \m -> m { mousePopupFloor = Map.size (mouseHitRec
 -- covered by content it is itself responsible for, even when that
 -- content's previous-frame footprint overlaps the trigger's own bounds.
 isOccludedByPopupFor :: Ord e => e -> View e msg Bool
-isOccludedByPopupFor eid = do
+isOccludedByPopupFor appId = controlIdOf appId >>= \eid -> do
   p     <- getMousePos
   mouse <- gets ctxMouse
   popId <- getCurrentPopupId
@@ -214,10 +214,10 @@ isOccludedByPopupFor eid = do
         Just (HitRect _ i _) | i >= floorIdx -> i
         _ | not (null ownPopupIdxs)          -> maximum ownPopupIdxs
           | otherwise                        -> floorIdx - 1
-  pure $ any (occludesByPopup ownIdx p) (Map.toList (Map.delete eid prev))
+  pure $ any (occludesByPopup eid ownIdx p) (Map.toList (Map.delete eid prev))
   where
-    occludesByPopup ownIdx p (_, HitRect r idx ownerId)
-      = idx > ownIdx && ownerId /= Just eid && containsPoint p r
+    occludesByPopup self ownIdx p (_, HitRect r idx ownerId)
+      = idx > ownIdx && ownerId /= Just self && containsPoint p r
 
 -- | 'True' when the left button is currently held, whether this is the
 -- first frame of the press or a later one -- callers that only care whether
@@ -257,18 +257,18 @@ contextButtonReleased ctx = case mouseButton (ctxMouse ctx) of
 
 -- | 'True' on every frame that the given element is being dragged — from the
 -- initial press through to release.
-isDragging :: Eq e => e -> View e msg Bool
-isDragging eid = (== MouseCapturedBy eid) <$> gets contextCaptured
+isDragging :: Ord e => e -> View e msg Bool
+isDragging appId = controlIdOf appId >>= \eid -> (== MouseCapturedBy eid) <$> gets contextCaptured
 
 -- | Which element currently holds mouse capture, if any. Exported for
 -- control authors that need to inspect capture state directly, e.g. when
 -- implementing focus-on-click without using 'Blink.Controls.control'.
-getCaptured :: View e msg (MouseCapture e)
+getCaptured :: View e msg (MouseCapture (ControlId e))
 getCaptured = gets contextCaptured
 
 -- | Which element currently holds mouse capture, if any, read directly from
 -- a 'ViewContext' outside the 'View' monad.
-contextCaptured :: ViewContext e msg -> MouseCapture e
+contextCaptured :: ViewContext e msg -> MouseCapture (ControlId e)
 contextCaptured = captureOf . mouseButton . ctxMouse
 
 -- | 'True' when no element currently holds mouse capture — i.e. no drag is

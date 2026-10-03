@@ -29,18 +29,18 @@ import Blink.View.Context
 
 -- | The given element's selection, or 'Nothing' if it isn't the element
 -- currently holding one.
-getSelection :: Eq e => e -> View e msg (Maybe Selection)
-getSelection eid = gets (contextSelection eid)
+getSelection :: Ord e => e -> View e msg (Maybe Selection)
+getSelection eid = controlIdOf eid >>= gets . contextSelection
 
 -- | The given element's selection, or 'Nothing' if it isn't the element
 -- currently holding one, read directly from a 'ViewContext' outside the 'View'
 -- monad.
-contextSelection :: Eq e => e -> ViewContext e msg -> Maybe Selection
+contextSelection :: Eq e => ControlId e -> ViewContext e msg -> Maybe Selection
 contextSelection eid ctx = case elmSelection (ctxElements ctx) of
   SelectionAt owner sel | owner == eid -> Just sel
   _                                    -> Nothing
 
 -- | Sets the given element's selection, from the next frame onward.
 -- Callable from 'View' or 'Blink.Update.Update' -- see 'HasUiEffect'.
-requestSelectionAt :: HasUiEffect e m => e -> Selection -> m ()
-requestSelectionAt eid sel = queueEffect (SetSelectionAt eid sel)
+requestSelectionAt :: (Ord e, Monad m, HasUiEffect e m) => e -> Selection -> m ()
+requestSelectionAt eid sel = controlIdFor eid >>= \k -> queueEffect (SetSelectionAt k sel)

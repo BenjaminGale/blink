@@ -156,14 +156,13 @@ module Blink.Controls
   , onSubmit
     -- * ScrollBar
   , ScrollBarConfig
-  , ScrollBarPart (..)
-  , ScrollViewportPart (..)
   , scrollBar
+  , scrollViewportTo
   , visibleFraction
     -- * ScrollPanel
   , ScrollPanelConfig
-  , ScrollPanelPart (..)
   , scrollPanel
+  , scrollPanelTo
     -- * ToggleGroup
   , ToggleGroupConfig
   , ToggleGroupPart (..)
@@ -209,8 +208,8 @@ import Blink.Controls.MenuButton (MenuButtonConfig, MenuButtonPart (..), isOpen,
 import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, bandWidth, progress, progressBar)
 import Blink.Controls.RadioButton (radioButton)
 import Blink.Controls.RepeatButton (RepeatButtonConfig, initialDelay, repeatButton, repeatInterval)
-import Blink.Controls.ScrollBar (ScrollBarConfig, ScrollBarPart (..), ScrollViewportPart (..), scrollBar, visibleFraction)
-import Blink.Controls.ScrollPanel (ScrollPanelConfig, ScrollPanelPart (..), scrollPanel)
+import Blink.Controls.ScrollBar (ScrollBarConfig, scrollBar, scrollViewportTo, visibleFraction)
+import Blink.Controls.ScrollPanel (ScrollPanelConfig, scrollPanel, scrollPanelTo)
 import Blink.Controls.Slider (SliderConfig, onValueChanged, slider)
 import Blink.Controls.TextInput (TextInputConfig, displayFilter, inputFilter, onInput, onSubmit, placeholder, textInput)
 import Blink.Controls.ToggleButton (ToggleConfig, isSelected, onSelectedChanged, toggleButton)

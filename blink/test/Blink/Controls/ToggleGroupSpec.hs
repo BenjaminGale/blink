@@ -105,7 +105,7 @@ renderScene attrs = do
 focusedOn :: TestElement -> InteractionResult TestElement String a -> Bool
 focusedOn eid result = case contextFocusChain (resultContext result) of
   [] -> False
-  xs -> last xs == eid
+  xs -> last xs == Control eid
 
 spec :: Spec
 spec = describe "Blink.Controls.ToggleGroup" $ do
