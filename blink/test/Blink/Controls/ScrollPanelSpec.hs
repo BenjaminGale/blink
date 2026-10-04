@@ -8,7 +8,7 @@ import Blink.Controls.ControlBehaviour (ControlBehaviourConfig (..), controlBeha
 import Blink.Controls.Fixtures
   (hitRectFor, mkTestTheme, noInput, plainStyle, plainStyleSet, standardMetrics, testColour, zeroMetrics)
 import Blink.Controls.ScrollPanel
-import Blink.Element (Element (..), runElement)
+import Blink.Element (Element (..), emptyElement, preserveState, runElement)
 import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), Size (..))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.Layout.Constraints (Layout (..), fill)
@@ -19,7 +19,7 @@ import qualified Blink.View as V (ControlId (..))
 import Blink.Testing
 import Blink.View.Drawing (fillRect)
 
-data TestElem = Panel | FocusHolder deriving (Eq, Ord, Show)
+data TestElem = Panel | Pages | FocusHolder deriving (Eq, Ord, Show)
 
 -- | Where the panel's viewport keeps its vertical scroll bar's position.
 vScrollEid :: V.ControlId TestElem
@@ -82,12 +82,26 @@ spec = describe "Blink.Controls.ScrollPanel" $ do
       -- 200px tall, so 140px of scrollable range -- half of that is 70px.
       resultDraws result `shouldContain` [FillRect (Rectangle 0 (-70) 84 200) testColour]
 
+    it "keeps showing the same content when more is added below it" $ do
+      ctx   <- seededAt (scrollPanelTo Panel 0.5)
+      short <- runInteractions testBounds ctx (render [content (fixedChild 50 200)]) [] [Wait 1]
+      grown <- runInteractions testBounds (resultContext short) (render [content (fixedChild 50 400)]) [] [Wait 1]
+      -- Scrolled 70px down before the content doubled; still 70px after.
+      resultDraws grown `shouldContain` [FillRect (Rectangle 0 (-70) 84 400) testColour]
+
+    it "scrolls back to the new end when the content shrinks below the scrolled offset" $ do
+      ctx   <- seededAt (scrollPanelTo Panel 1)
+      long  <- runInteractions testBounds ctx (render [content (fixedChild 50 400)]) [] [Wait 1]
+      short <- runInteractions testBounds (resultContext long) (render [content (fixedChild 50 200)]) [] [Wait 1]
+      -- 340px scrolled before; 200px of content leaves 140px of range.
+      resultDraws short `shouldContain` [FillRect (Rectangle 0 (-140) 84 200) testColour]
+
     it "scrolls with the mouse wheel while the pointer is over the panel" $ do
       result <- runInteractions testBounds seedCtx (render [content (fixedChild 50 200)])
                   [MoveTo (Point 50 10)]
                   [Wheel 1]
-      -- One 48px notch against 140px of scrollable range.
-      contextScrollState vScrollEid (resultContext result) `shouldSatisfy` (\v -> abs (v - 48 / 140) < 1e-9)
+      -- One 48px notch, well within the 140px of scrollable range.
+      contextScrollState vScrollEid (resultContext result) `shouldBe` 48
 
     it "does not scroll when the wheel moves while the pointer is elsewhere" $ do
       result <- runInteractions testBounds seedCtx (render [content (fixedChild 50 200)])
@@ -102,6 +116,39 @@ spec = describe "Blink.Controls.ScrollPanel" $ do
       -- viewport: 100x60 minus a 16px-tall horizontal bar = 100x44; content
       -- is 200px wide, so 100px of scrollable range -- half of that is 50px.
       resultDraws result `shouldContain` [FillRect (Rectangle (-50) 0 200 44) testColour]
+
+  describe "kept state" $ do
+    let panel      = scrollPanel Panel [content (fixedChild 50 200)]
+        scrolled   = FillRect (Rectangle 0 (-70) 84 200) testColour
+        unscrolled = FillRect (Rectangle 0 0 84 200) testColour
+        frame ctx v = runInteractions testBounds ctx v [] [Wait 1]
+
+    it "forgets its scroll position after a frame in which it isn't drawn" $ do
+      ctx    <- seededAt (scrollPanelTo Panel 0.5)
+      shown  <- frame ctx (runElement panel)
+      hidden <- frame (resultContext shown) (pure ())
+      again  <- frame (resultContext hidden) (runElement panel)
+      resultDraws again `shouldContain` [unscrolled]
+
+    it "keeps its scroll position while hidden inside preserveState" $ do
+      ctx    <- seededAt (scrollPanelTo Panel 0.5)
+      shown  <- frame ctx (runElement (preserveState Pages panel))
+      hidden <- frame (resultContext shown) (runElement (preserveState Pages emptyElement))
+      again  <- frame (resultContext hidden) (runElement (preserveState Pages panel))
+      resultDraws again `shouldContain` [scrolled]
+
+    it "forgets its scroll position once the preserveState around it stops being drawn too" $ do
+      ctx    <- seededAt (scrollPanelTo Panel 0.5)
+      shown  <- frame ctx (runElement (preserveState Pages panel))
+      hidden <- frame (resultContext shown) (pure ())
+      again  <- frame (resultContext hidden) (runElement (preserveState Pages panel))
+      resultDraws again `shouldContain` [unscrolled]
+
+    it "keeps a scroll position requested before it was first drawn" $ do
+      ctx    <- seededAt (scrollPanelTo Panel 0.5)
+      idle   <- frame ctx (pure ())
+      shown  <- frame (resultContext idle) (runElement panel)
+      resultDraws shown `shouldContain` [scrolled]
 
   describe "both axes overflowing" $
     it "shows both bars and offsets both axes, each against its own reduced viewport" $ do

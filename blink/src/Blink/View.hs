@@ -85,7 +85,10 @@ This state is baked directly into the 'Blink.Testing.ViewContext': focus lives i
 interaction state, and scroll positions (@elmScrollStates@, a @Map e
 'ScrollState'@) and repeat-press state (@elmHoldStates@, a @Map e
 HoldState@) live in the element state, both keyed by element ID,
-populating lazily on first write and persisting across frames. Selection
+populating lazily on first write and persisting across frames for as long
+as the element keeps being drawn. An element's state is dropped after the
+first frame it isn't drawn in, unless it was drawn inside
+'Blink.Element.preserveState'. Selection
 (@elmSelection@, a @SelectionSlot@) holds just one 'Selection' at a time,
 tagged with the element it belongs to, since only the focused control ever
 has one; writing a new element's selection replaces whichever one was there
@@ -243,7 +246,6 @@ module Blink.View
     -- * Scroll state
   , ScrollState
   , getScrollState
-  , clampScrollPos
   , requestScrollTo
   , requestScrollBy
   , setScrollStateNow

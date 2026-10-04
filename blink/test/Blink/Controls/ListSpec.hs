@@ -532,11 +532,11 @@ scrollingSpec = describe "list scrolling" $ do
                [MouseDown centre, DragTo (centre { pointY = thumbCentreY + delta })]
 
     atTop <- dragOffCentre 26 6 seedCtx
-    contextScrollState listScrollEid (resultContext atTop) `shouldBe` 0.75
+    contextScrollState listScrollEid (resultContext atTop) `shouldBe` 30
 
     seededAtEnd <- resultContext <$> runInteractions testBounds seedCtx (scrollListTo TestList 1) [] []
     atBottom <- dragOffCentre 34 (-6) seededAtEnd
-    contextScrollState listScrollEid (resultContext atBottom) `shouldBe` 0.25
+    contextScrollState listScrollEid (resultContext atBottom) `shouldBe` 10
 
   it "scrolls when the wheel moves while the pointer is over the list" $ do
     result <- runInteractions testBounds seedCtx
@@ -545,7 +545,7 @@ scrollingSpec = describe "list scrolling" $ do
       [Wheel 1]
     -- 3 rows (60px) per notch against 40px of scrollable range clamps
     -- straight to the bottom.
-    contextScrollState listScrollEid (resultContext result) `shouldBe` 1
+    contextScrollState listScrollEid (resultContext result) `shouldBe` 40
 
   it "does not scroll when the wheel moves while the pointer is elsewhere" $ do
     result <- runInteractions testBounds seedCtx
@@ -570,7 +570,7 @@ scrollingSpec = describe "list scrolling" $ do
       (renderScrollList [selection atRow3])
       [Wait 1]
       [PressKey KeyDown []]
-    contextScrollState listScrollEid (resultContext result) `shouldBe` 0.5
+    contextScrollState listScrollEid (resultContext result) `shouldBe` 20
 
   it "scrolls up just enough to keep a cursor moved above the viewport visible" $ do
     let atRow3 = selectAt 2 scrollItems -- cursor on item 3
@@ -582,7 +582,7 @@ scrollingSpec = describe "list scrolling" $ do
       (renderScrollList [selection atRow3])
       [Wait 1]
       [PressKey KeyUp []]
-    contextScrollState listScrollEid (resultContext result) `shouldBe` 0.5
+    contextScrollState listScrollEid (resultContext result) `shouldBe` 20
 
   describe "clicking a row only partly in view" $ do
     -- Scrolled 10px into the 100px content (a quarter of the 40px
@@ -615,7 +615,7 @@ scrollingSpec = describe "list scrolling" $ do
         [MoveTo clickPoint]
         [ClickAt clickPoint]
       resultMessages result `shouldBe` [selectedMsg (activate 4 start), activatedMsg 4]
-      contextScrollState listScrollEid (resultContext result) `shouldBe` 0.5
+      contextScrollState listScrollEid (resultContext result) `shouldBe` 20
 
   it "scrolls the cursor into view when the caller moves it directly, with no click or key press driving it" $ do
     -- Establishes the list's persisted cursor position at item 1 --
@@ -635,4 +635,14 @@ scrollingSpec = describe "list scrolling" $ do
       []
       [Wait 1]
 
-    contextScrollState listScrollEid (resultContext result) `shouldBe` 1
+    contextScrollState listScrollEid (resultContext result) `shouldBe` 40
+
+  it "puts the item asked for with scrollListToItem at the top of the view" $ do
+    ctx <- resultContext <$> runInteractions testBounds seedCtx (scrollListToItem TestList 1) [] []
+    result <- runInteractions testBounds ctx (renderScrollList [selection start]) [] [Wait 1]
+    contextScrollState listScrollEid (resultContext result) `shouldBe` 20
+
+  it "stops at the end of the list when asked for an item near the end" $ do
+    ctx <- resultContext <$> runInteractions testBounds seedCtx (scrollListToItem TestList 4) [] []
+    result <- runInteractions testBounds ctx (renderScrollList [selection start]) [] [Wait 1]
+    contextScrollState listScrollEid (resultContext result) `shouldBe` 40

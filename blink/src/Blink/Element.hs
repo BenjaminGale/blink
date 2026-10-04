@@ -14,6 +14,7 @@ module Blink.Element
   , emptyElement
   , elementWithLayout
   , part
+  , preserveState
     -- * Attributes
   , Attribute (..)
   , resolve
@@ -48,6 +49,7 @@ import Blink.Layout.Constraints
 import Data.Text (Text)
 
 import Blink.View (View, getBounds, withPart)
+import Blink.View.Context (controlIdOf, withPreservedState)
 
 -- | The layout-facing pairing of a component's size request, its measure,
 -- and its frame action. A container consumes a list of these to arrange a
@@ -152,6 +154,27 @@ part :: Ord e => e -> Text -> Element e msg -> Element e msg
 part owner name el = el
   { elMeasure = withPart owner name . elMeasure el
   , elRun     = withPart owner name (elRun el)
+  }
+
+-- | Keeps the state Blink holds for the controls inside @el@ -- scroll
+-- positions, a text field's selection, a list's cursor row -- for as long
+-- as this element is drawn, even in frames where those controls aren't.
+-- Without it, a control's state is dropped at the end of the first frame
+-- it isn't drawn in, and it starts fresh when it next appears.
+--
+-- Wrap content that is hidden and shown again, such as the pages of a
+-- set of tabs, so each page keeps its scroll position:
+--
+-- @
+-- preserveState Pages $ case currentPage s of
+--   Inbox -> inboxPage s
+--   Sent  -> sentPage s
+-- @
+preserveState :: Ord e => e -> Element e msg -> Element e msg
+preserveState region el = el
+  { elRun = do
+      self <- controlIdOf region
+      withPreservedState self (elRun el)
   }
 
 -- | A single field update on @cfg@, applied by 'resolve'.

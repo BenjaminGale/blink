@@ -64,6 +64,7 @@ module Blink.Controls
   , rowHeight
   , onItemActivated
   , scrollListTo
+  , scrollListToItem
     -- ** Selection models
   , SelectionModel (..)
   , EmptySelection (..)
@@ -154,8 +155,8 @@ module Blink.Controls
     -- * ScrollBar
   , ScrollBarConfig
   , scrollBar
-  , scrollViewportTo
   , visibleFraction
+  , maxScrollOffset
     -- * ScrollPanel
   , ScrollPanelConfig
   , scrollPanel
@@ -239,7 +240,7 @@ import Blink.Controls.List
   , RangeSelection, RequiredSelection, SelectionModel (..), SingleSelection
   , cursorItem, list, multiItems, multiSelected, multiSelectedAt, multiSelection, noRange, onItemActivated
   , rangeAt, rangeAtPositions, rangeEnd, rangeFrom, rangeItems, renderItem, requireAt, requireFirst, requireItem
-  , requiredItems, requiredList, rowHeight, scrollListTo, selectAt, selectFirst, selectItem, selectedItems, singleItems
+  , requiredItems, requiredList, rowHeight, scrollListTo, scrollListToItem, selectAt, selectFirst, selectItem, selectedItems, singleItems
   , singleSelection, unselected
   , listStyleKey, listItemStyleKey, listSelected, listUnselected, listCursor, listNoCursor
   )
@@ -248,7 +249,7 @@ import Blink.Controls.MenuButton (MenuButtonConfig, isOpen, menuButton, onOpenCh
 import Blink.Controls.ProgressBar (ProgressBarConfig, ProgressValue (..), bandSpeed, bandWidth, progress, progressBar, progressBarStyleKey, progressBarTrackStyleKey, progressBarFillStyleKey)
 import Blink.Controls.RadioButton (radioButton, radioButtonStyleKey)
 import Blink.Controls.RepeatButton (RepeatButtonConfig, initialDelay, repeatButton, repeatInterval)
-import Blink.Controls.ScrollBar (ScrollBarConfig, scrollBar, scrollViewportTo, visibleFraction, scrollBarStyleKey, scrollBarButtonStyleKey, scrollBarTrackStyleKey, scrollBarThumbStyleKey)
+import Blink.Controls.ScrollBar (ScrollBarConfig, maxScrollOffset, scrollBar, visibleFraction, scrollBarStyleKey, scrollBarButtonStyleKey, scrollBarTrackStyleKey, scrollBarThumbStyleKey)
 import Blink.Controls.ScrollPanel (ScrollPanelConfig, scrollPanel, scrollPanelTo, scrollPanelStyleKey)
 import Blink.Controls.Slider (SliderConfig, onValueChanged, slider, sliderStyleKey, sliderTrackStyleKey, sliderFillStyleKey, sliderThumbStyleKey)
 import Blink.Controls.TextInput (TextInputConfig, displayFilter, inputFilter, onInput, onSubmit, placeholder, textInput, textInputStyleKey, textInputSelectionStyleKey)

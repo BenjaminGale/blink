@@ -7,9 +7,9 @@ pure 'ExtentState' type, plus the monadic accessors ('getExtentState',
 'requestExtentBy') built on top of it. See "Blink.View" for the module
 overview; import that instead of this module directly.
 
-Unlike 'Blink.View.Scroll.ScrollState', never clamped to @[0, 1]@ --
-built for a value like a resized column's width delta, which has no
-natural upper bound. A caller wanting bounds of its own (e.g. a minimum
+Unlike 'Blink.View.Scroll.ScrollState', never clamped to the size of any
+content -- built for a value like a resized column's width delta, which
+has no natural upper bound. A caller wanting bounds of its own (e.g. a minimum
 width) applies them when reading the value back.
 -}
 module Blink.View.Extent

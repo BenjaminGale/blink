@@ -1,7 +1,6 @@
 module Blink.View.ScrollSpec (spec) where
 
 import Test.Hspec
-import Test.Hspec.QuickCheck (prop)
 
 import Blink.View
 import Blink.Testing
@@ -14,45 +13,35 @@ spec = describe "Blink.View.Scroll" $ do
       (v, _) <- run0 (getScrollState ())
       v `shouldBe` 0
 
-    it "requestScrollTo is deferred rather than applied immediately" $ do
-      (v, _) <- run0 (requestScrollTo () 0.5 >> getScrollState ())
+    it "requestScrollBy is deferred rather than applied immediately" $ do
+      (v, _) <- run0 (requestScrollBy () 30 >> getScrollState ())
       v `shouldBe` 0
 
-    it "a requested scroll position is visible via getScrollState once settled" $ do
-      (_, ctx) <- run0 (requestScrollTo () 0.5)
+    it "a requested scroll offset is visible via getScrollState once settled" $ do
+      (_, ctx) <- run0 (requestScrollBy () 30)
       (v, _) <- runView (getScrollState ()) (settleEffects ctx)
-      v `shouldBe` 0.5
+      v `shouldBe` 30
 
-    it "requestScrollBy composes with the current position, clamped to [0, 1]" $ do
-      (_, ctx) <- run0 (requestScrollTo () 0.5 >> requestScrollBy () 0.7)
+    it "accumulates requestScrollBy calls in the same frame" $ do
+      (_, ctx) <- run0 (requestScrollBy () 30 >> requestScrollBy () 20)
       (v, _) <- runView (getScrollState ()) (settleEffects ctx)
-      v `shouldBe` 1.0
+      v `shouldBe` 50
 
-    it "requestScrollTo clamps an out-of-range value to [0, 1]" $ do
-      (_, ctx) <- run0 (requestScrollTo () 1.5)
+    it "never scrolls to a negative offset" $ do
+      (_, ctx) <- run0 (requestScrollBy () 30 >> requestScrollBy () (-50))
       (v, _) <- runView (getScrollState ()) (settleEffects ctx)
-      v `shouldBe` 1.0
+      v `shouldBe` 0
 
-    it "keeps scroll positions separate per element" $ do
-      (_, ctx) <- runTwoElem (requestScrollTo ElemA 0.3 >> requestScrollTo ElemB 0.7)
+    it "leaves the offset alone until the control draws when asked for a fraction" $ do
+      (_, ctx) <- run0 (requestScrollBy () 30 >> requestScrollTo () 1)
+      (v, _) <- runView (getScrollState ()) (settleEffects ctx)
+      v `shouldBe` 30
+
+    it "applies setScrollStateNow within the same frame" $ do
+      (v, _) <- run0 (setScrollStateNow () 40 >> getScrollState ())
+      v `shouldBe` 40
+
+    it "keeps scroll offsets separate per element" $ do
+      (_, ctx) <- runTwoElem (requestScrollBy ElemA 30 >> requestScrollBy ElemB 70)
       (v, _) <- runView (getScrollState ElemA) (settleEffects ctx)
-      v `shouldBe` 0.3
-
-  describe "clampScrollPos" $ do
-    it "clamps values below 0 to 0" $
-      clampScrollPos (-0.5) `shouldBe` 0
-    it "clamps values above 1 to 1" $
-      clampScrollPos 1.5 `shouldBe` 1
-    it "preserves values inside [0, 1]" $
-      clampScrollPos 0.5 `shouldBe` 0.5
-    it "preserves 0" $
-      clampScrollPos 0 `shouldBe` 0
-    it "preserves 1" $
-      clampScrollPos 1 `shouldBe` 1
-
-  describe "clampScrollPos properties" $ do
-    prop "is idempotent" $ \x ->
-      clampScrollPos (clampScrollPos x) == (clampScrollPos x :: Double)
-
-    prop "result is always in [0, 1]" $ \x ->
-      let v = clampScrollPos (x :: Double) in v >= 0 && v <= 1
+      v `shouldBe` 30

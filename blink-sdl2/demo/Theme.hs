@@ -29,6 +29,7 @@ data Page
 
 data ControlId = StatusBar
              | SidebarPages
+             | PageArea
              | DarkModeCheckbox
              | EditingCheckbox
              | ClickButton

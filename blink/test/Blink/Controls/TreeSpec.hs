@@ -335,7 +335,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
       [PressKey KeyLeft []]
 
     resultMessages result `shouldBe` [selectedMsg (moveCursor Prev cursorOnButton)]
-    contextScrollState treeScrollEid (resultContext result) `shouldBe` (2 / 3)
+    contextScrollState treeScrollEid (resultContext result) `shouldBe` 40
 
   it "scrolls a Right-driven move into a sibling below the viewport into view" $ do
     let expandedBoth  = Set.fromList ["src", "src/Controls"]
@@ -357,7 +357,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
     -- y 40-60) -- below the current 40px window (y 0-40) -- so this
     -- should scroll just enough to bring its bottom edge into view.
     resultMessages result `shouldBe` [selectedMsg (moveCursor Next cursorOnChild)]
-    contextScrollState treeScrollEid (resultContext result) `shouldBe` (1 / 3)
+    contextScrollState treeScrollEid (resultContext result) `shouldBe` 20
 
   it "scrolls the child revealed by expanding a bottom-edge row into view once Right navigates onto it" $ do
     let expandedSrc      = Set.singleton "src"
@@ -385,7 +385,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
       []
       [PressKey KeyRight []]
     resultMessages step2 `shouldBe` [expandedMsg expandedBoth]
-    contextScrollState treeScrollEid (resultContext step2) `shouldBe` (1 / 2)
+    contextScrollState treeScrollEid (resultContext step2) `shouldBe` 20
 
     -- Right again, now that "src/Controls" is expanded and the app has
     -- passed the updated set back in: moves the cursor onto that child,
@@ -401,7 +401,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
       []
       [PressKey KeyRight []]
     resultMessages step3 `shouldBe` [selectedMsg (moveCursor Next cursorOnControls')]
-    contextScrollState treeScrollEid (resultContext step3) `shouldBe` (2 / 3)
+    contextScrollState treeScrollEid (resultContext step3) `shouldBe` 40
 
   it "scrolls a later, unrelated sibling pushed down by an earlier expansion into view" $ do
     let expandedBoth = Set.fromList ["src", "src/Controls"]
@@ -428,7 +428,7 @@ scrollingKeyboardSpec = describe "tree keyboard scrolling" $ do
       [PressKey KeyRight []]
 
     resultMessages result `shouldBe` [selectedMsg (moveCursor Next cursorOnButton)]
-    contextScrollState treeScrollEid (resultContext result) `shouldBe` 1
+    contextScrollState treeScrollEid (resultContext result) `shouldBe` 60
 
 chromeSeedCtx :: ViewContext TestElem String
 chromeSeedCtx = emptyViewContext scrollTestBounds noInput chromeTheme
@@ -454,7 +454,7 @@ chromeSpec = describe "tree keyboard scrolling with list chrome" $
     -- content 100px -> max offset 76px. Row 1 (y 20-40) doesn't fit the
     -- 24px window, so this must scroll -- reading the outer 40px bounds
     -- alone would wrongly conclude it already fits.
-    contextScrollState treeScrollEid (resultContext result) `shouldBe` (16 / 76)
+    contextScrollState treeScrollEid (resultContext result) `shouldBe` 16
 
 spec :: Spec
 spec = describe "Blink.Controls.Tree" $ do

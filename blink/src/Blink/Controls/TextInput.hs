@@ -33,12 +33,13 @@ import qualified Data.Set as Set
 
 import Blink.Controls.Control
 import Blink.Controls.Label (captionElement)
-import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..), clampFraction)
+import Blink.Geometry (Alignment (TopLeft), Point (..), Rectangle (..))
 import Blink.Input (Key (..), KeyEvent (..), Modifier (..), InputState (..))
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.Rendering (Colour (..), TextAlign (..))
 import Blink.View
-import Blink.View.Context (Effect (..))
+import Blink.View.Context (Effect (..), UiEffect (..))
+import Blink.View.Scroll (resolveScrollOffset)
 import Blink.View.Drawing (fillRect, drawText)
 import Blink.Element (Element (..), HasLayoutConfig (..), HasValue (..))
 import Blink.Style
@@ -248,10 +249,7 @@ resolveSelectionAndEdit cfg eid bounds canEdit ci currentValue displayValue scro
   pure selFinal
 
 -- | The scroll offset needed to keep a cursor at @cursorAbs@ visible within
--- a viewport of width @w@ currently scrolled to @scrollX@. Pixels in,
--- pixels out -- @scrollFraction@\/@scrollPixels@ convert at the boundary
--- with 'getScrollState'\/'requestScrollTo' so the stored value stays in the same
--- @[0, 1]@ convention every other scroll-state consumer uses.
+-- a viewport of width @w@ currently scrolled to @scrollX@, in pixels.
 resolveScroll :: Double -> Double -> Double -> Double
 resolveScroll w scrollX cursorAbs
   | cursorAbs < scrollX         = cursorAbs
@@ -262,19 +260,6 @@ resolveScroll w scrollX cursorAbs
 -- already fits within the viewport.
 maxScrollPixels :: Double -> Double -> Double
 maxScrollPixels contentW viewportW = max 0 (contentW - viewportW)
-
--- | Converts a pixel scroll offset to the @[0, 1]@ fraction 'ScrollState'
--- stores, given the max offset from 'maxScrollPixels'. @0@ when there's
--- nothing to scroll.
-scrollFraction :: Double -> Double -> Double
-scrollFraction maxPx px
-  | maxPx > 0 = clampFraction (px / maxPx)
-  | otherwise = 0
-
--- | The inverse of 'scrollFraction': converts a stored @[0, 1]@ fraction
--- back to a pixel offset, given the max offset from 'maxScrollPixels'.
-scrollPixels :: Double -> Double -> Double
-scrollPixels maxPx frac = frac * maxPx
 
 -- | Mixes @text@'s RGB 60% of the way toward @bg@, leaving alpha alone --
 -- how the placeholder is muted against whatever text/background colours
@@ -353,7 +338,7 @@ textInput eid attrs =
       bounds   <- getBounds
       input    <- getInput
       sel      <- getSelection eid
-      frac     <- getScrollState eid
+      self     <- controlIdOf eid
 
       let displayValue = ticDisplayFilter cfg currentValue
           w            = rectWidth bounds
@@ -361,8 +346,7 @@ textInput eid attrs =
           canEdit      = ciFocused ci && not (ciDisabled ci)
 
       contentW <- realToFrac <$> charOffset displayValue (T.length displayValue)
-      let maxScrollPx = maxScrollPixels contentW w
-          scrollX     = scrollPixels maxScrollPx frac
+      scrollX  <- resolveScrollOffset self (maxScrollPixels contentW w) Nothing
 
       selFinal <- resolveSelectionAndEdit cfg eid bounds canEdit ci currentValue displayValue scrollX
         (inputTypedText input) selInit
@@ -376,7 +360,7 @@ textInput eid attrs =
           then do
             curX <- charOffset displayValue (selectionActive selFinal)
             let newScrollX = resolveScroll w scrollX (realToFrac curX)
-            when (newScrollX /= scrollX) $ requestScrollTo eid (scrollFraction maxScrollPx newScrollX)
+            when (newScrollX /= scrollX) $ emitUi (ScrollToOffset self newScrollX)
             pure newScrollX
           else pure scrollX
 

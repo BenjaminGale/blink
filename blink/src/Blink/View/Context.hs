@@ -32,6 +32,8 @@ module Blink.View.Context
   , modify
   , withField
   , modifyOut
+  , markDrawn
+  , withPreservedState
     -- * The render loop
   , emptyViewContext
   , nextFrameContext
@@ -119,7 +121,10 @@ module Blink.View.Context
   , scopeMode
     -- * Scroll (pure)
   , ScrollState (..)
-  , clampScrollPos
+  , ScrollRequest (..)
+  , noScroll
+  , clampScrollOffset
+  , updateScrollState
   , writeScrollState
     -- * Extent (pure)
   , ExtentState (..)
@@ -155,7 +160,7 @@ import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Blink.Rendering (DrawCommand, CursorShape (..), Measurers (..), noOpMeasurers, TextMeasurer (..), ImageMeasurer (..), ImagePath)
-import Blink.Geometry (Edge, Rectangle, Side, Size, clampFraction)
+import Blink.Geometry (Edge, Rectangle, Side, Size)
 import Blink.Input
   ( Key (..), KeyEvent (..), Modifier (..), InputState (..)
   , Mouse (..), emptyMouse, advanceButton, advanceHover, mnemonicActivated
@@ -390,17 +395,38 @@ scopeMode scopeId currentAmbient = case currentAmbient of
 -- Scroll (pure)
 --------------------------------------------------------------------------------
 
--- | Per-instance scroll position in @[0, 1]@.
-newtype ScrollState = ScrollState { scrollPosition :: Double }
-  deriving (Eq, Ord, Show)
+-- | A control's scroll position: how many pixels of its content are
+-- scrolled out of view at the start, any request made since it last drew,
+-- and the largest offset its content allowed when it last drew. A request
+-- is turned into an offset when the control next draws, because only then
+-- is the size of its content known.
+data ScrollState = ScrollState
+  { scrollOffset    :: Double
+  , scrollPending   :: Maybe ScrollRequest
+  , scrollMaxOffset :: Maybe Double
+    -- ^ 'Nothing' until the control first draws.
+  }
+  deriving (Eq, Show)
 
--- | Clamp a scroll position to @[0, 1]@.
-clampScrollPos :: Double -> Double
-clampScrollPos = clampFraction
+-- | A scroll position asked for before the size of the content is known.
+data ScrollRequest
+  = ScrollToFraction Double
+    -- ^ A point in the scrollable range: @0@ the start, @1@ the end.
+  | ScrollToItem Int
+    -- ^ The item at this index at the top of the view, for a control whose
+    -- content is a list of items.
+  deriving (Eq, Show)
+
+-- | Not scrolled, and nothing requested.
+noScroll :: ScrollState
+noScroll = ScrollState { scrollOffset = 0, scrollPending = Nothing, scrollMaxOffset = Nothing }
+
+-- | @v@ limited to the offsets @st@'s content allowed when it last drew.
+clampScrollOffset :: ScrollState -> Double -> Double
+clampScrollOffset st v = max 0 (maybe v (min v) (scrollMaxOffset st))
 
 -- | An accumulated offset for one element, in whatever unit the caller
--- gives it (e.g. pixels) -- unlike 'ScrollState', never clamped to
--- @[0, 1]@; a caller wanting bounds of its own (e.g. a minimum column
+-- gives it (e.g. pixels) -- never clamped; a caller wanting bounds of its own (e.g. a minimum column
 -- width) applies them itself when reading it back. Defaults to @0@ for
 -- an element nothing has adjusted yet.
 newtype ExtentState = ExtentState { extentValue :: Double }
@@ -587,19 +613,15 @@ data ControlId e
 -- 'Blink.Update.Update' handler reacting to a message, not only from
 -- view code reacting to an input event.
 data UiEffect e
-  = ScrollTo (ControlId e) Double
-    -- ^ Sets the scroll position to an absolute value, clamped to @[0, 1]@
-    -- when applied. Every caller ('Blink.Controls.ScrollBar.scrollBar',
-    -- 'Blink.Controls.TextInput.textInput') already passes a value in
-    -- the @[0, 1]@ convention documented on 'ScrollState';
-    -- 'Blink.Controls.TextInput.textInput' converts to and from pixels
-    -- locally since its selection\/cursor math is naturally pixel-based.
-    -- See 'Blink.View.Scroll.requestScrollTo'.
+  = ScrollTo (ControlId e) ScrollRequest
+    -- ^ Records a 'ScrollRequest' for the control to apply when it next
+    -- draws. See 'Blink.View.Scroll.requestScrollTo'.
+  | ScrollToOffset (ControlId e) Double
+    -- ^ Sets the scroll offset in pixels, dropping any pending request.
   | ScrollBy (ControlId e) Double
-    -- ^ Adjusts the scroll position by a delta, clamped to @[0, 1]@ — this
-    -- constructor is only ever used in the normalised @[0, 1]@ convention.
-    -- Composes with other @ScrollBy@ effects queued in the same frame for
-    -- the same element rather than last-write-wins. See
+    -- ^ Adjusts the scroll offset by a number of pixels. Composes with
+    -- other @ScrollBy@ effects queued in the same frame for the same
+    -- element rather than last-write-wins. See
     -- 'Blink.View.Scroll.requestScrollBy'.
   | AdjustExtent (ControlId e) Double
     -- ^ Adjusts an element's 'ExtentState' by a delta, unclamped —
@@ -640,19 +662,29 @@ data Effect e msg
   | EffectUi (UiEffect e)
   deriving (Eq, Show)
 
--- | Cross-frame presentation state. Persists unchanged across frames; never
--- exposed to the application. Scroll position is tracked per element
--- (@elmScrollStates@), as is an unclamped accumulated extent
--- (@elmExtentStates@), repeat-press ("hold") state (@elmHoldStates@), and a
--- list-like control's last-known cursor row index (@elmCursorIndices@);
--- selection is exclusive across elements, tracked as a single
--- 'SelectionSlot' (@elmSelection@) rather than a map.
+-- | Cross-frame presentation state, never exposed to the application.
+-- Scroll position is tracked per element (@elmScrollStates@), as is an
+-- unclamped accumulated extent (@elmExtentStates@), repeat-press ("hold")
+-- state (@elmHoldStates@), and a list-like control's last-known cursor row
+-- index (@elmCursorIndices@); selection is exclusive across elements,
+-- tracked as a single 'SelectionSlot' (@elmSelection@) rather than a map.
+--
+-- An element's state is dropped at the end of a frame it wasn't drawn in,
+-- unless it was last drawn inside a 'withPreservedState' region that was
+-- drawn (see @dropUndrawnState@).
 data ElementState e = ElementState
   { elmScrollStates   :: Map.Map e ScrollState
   , elmExtentStates   :: Map.Map e ExtentState
   , elmHoldStates     :: Map.Map e HoldState
   , elmCursorIndices  :: Map.Map e CursorIndexState
   , elmSelection      :: SelectionSlot e
+  , elmDrawnBefore    :: Set.Set e
+    -- ^ Every element drawn in an earlier frame and not dropped since --
+    -- the ones the end-of-frame check looks at. State recorded for an
+    -- element that has never been drawn is kept until it is.
+  , elmPreservedIn    :: Map.Map e e
+    -- ^ The 'withPreservedState' region each element was last drawn
+    -- inside, if any.
   }
 
 -- | At most one element holds a selection at a time; setting it on one
@@ -678,6 +710,8 @@ data FrameOutputs e msg = FrameOutputs
   , outPendingPopups      :: [PendingPopup e msg]
     -- ^ Queued by 'Blink.View.Popup.popup' in call order -- see
     -- 'PendingPopup'.
+  , outDrawn              :: Set.Set (ControlId e)
+    -- ^ The elements drawn this frame -- see 'markDrawn'.
   }
 
 -- | A popup queued by 'Blink.View.Popup.popup' during the main view tree
@@ -756,6 +790,8 @@ data ViewContext e msg = ViewContext
     -- deep inside a scope (a Shift-Tab retreat, a click redirecting focus
     -- to a different element) address /that/ scope instead of always root.
     -- See 'getCurrentScope'.
+  , ctxPreservedRegion :: Maybe (ControlId e)
+    -- ^ The innermost 'withPreservedState' region being drawn, if any.
   , ctxCurrentPopupId  :: Maybe (ControlId e)
     -- ^ The id of the popup currently being drained -- 'Nothing' outside
     -- 'Blink.App.drainPopups', @'Just' popupId@ while running that popup's
@@ -815,6 +851,7 @@ emptyFrameOutputs = FrameOutputs
   , outRequiresAnimation  = False
   , outCursorShape        = CursorArrow
   , outPendingPopups      = []
+  , outDrawn              = Set.empty
   }
 
 -- | Constructs the initial 'ViewContext' for the first frame, with
@@ -834,6 +871,7 @@ emptyViewContext bounds input thm = ViewContext
   , ctxFocus           = emptyFocusTracker
   , ctxNavigationKeys  = defaultNavigationKeys
   , ctxCurrentScope    = Nothing
+  , ctxPreservedRegion = Nothing
   , ctxCurrentPopupId  = Nothing
   , ctxMouse           = advanceButton False (inputLeftButtonDown input) emptyMouse
   , ctxElements        = ElementState
@@ -842,6 +880,8 @@ emptyViewContext bounds input thm = ViewContext
       , elmHoldStates    = Map.empty
       , elmCursorIndices = Map.empty
       , elmSelection     = NoSelection
+      , elmDrawnBefore   = Set.empty
+      , elmPreservedIn   = Map.empty
       }
   , ctxParts           = Map.empty
   , ctxOutputs         = emptyFrameOutputs
@@ -864,7 +904,9 @@ nextFrameContext :: Ord e => Rectangle -> InputState -> Theme e -> AnimationStat
 nextFrameContext bounds input thm anim ctx0 =
   fctx { ctxMouse = (advanceButton wasDown isDown (ctxMouse fctx)) { mouseMoved = moved } }
   where
-    ctx     = settleEffects ctx0
+    -- Dropped before settling, so an effect queued this frame for an
+    -- element that wasn't drawn still reaches it.
+    ctx     = settleEffects (dropUndrawnState ctx0)
     fctx    = finishFrame bounds input thm anim ctx
     wasDown = inputLeftButtonDown (ctxInput ctx)
     isDown  = inputLeftButtonDown input
@@ -1222,12 +1264,12 @@ getUiEffects ctx = [eff | EffectUi eff <- reverse (outEvents (ctxOutputs ctx))]
 contextRequiresAnimation :: ViewContext e msg -> Bool
 contextRequiresAnimation = outRequiresAnimation . ctxOutputs
 
--- | Writes a scroll position directly into the context, bypassing the
--- deferred-effect queue -- visible to any 'Blink.View.Scroll.getScrollState'
--- read later in this same frame, unlike 'Blink.View.Scroll.requestScrollTo', which only
--- takes effect from the next frame onward. Clamps to @[0, 1]@ so this is
--- the single point that enforces the 'ScrollState' invariant regardless of
--- which caller reaches it, @applyUiEffects@ included. See
+-- | Writes a scroll offset in pixels directly into the context, bypassing
+-- the deferred-effect queue and dropping any pending request -- visible to
+-- any 'Blink.View.Scroll.getScrollState' read later in this same frame,
+-- unlike 'Blink.View.Scroll.requestScrollTo', which only takes effect from
+-- the next frame onward. Clamped to the offsets the content allowed when
+-- the control last drew. See
 -- 'Blink.View.Scroll.setScrollStateNow', the monadic wrapper built on top
 -- of it for a control correcting its own scroll position as a direct,
 -- same-frame consequence of what it's about to render (e.g.
@@ -1236,8 +1278,13 @@ contextRequiresAnimation = outRequiresAnimation . ctxOutputs
 -- frame's own read of "current scroll" stays stable throughout its
 -- rendering.
 writeScrollState :: Ord e => ControlId e -> Double -> ViewContext e msg -> ViewContext e msg
-writeScrollState eid v ctx = ctx { ctxElements = (ctxElements ctx)
-  { elmScrollStates = Map.insert eid (ScrollState (clampScrollPos v)) (elmScrollStates (ctxElements ctx)) } }
+writeScrollState eid v = updateScrollState eid (\st -> st { scrollOffset = clampScrollOffset st v, scrollPending = Nothing })
+
+-- | Applies @f@ to @eid@'s 'ScrollState', starting from 'noScroll' when it
+-- has none.
+updateScrollState :: Ord e => ControlId e -> (ScrollState -> ScrollState) -> ViewContext e msg -> ViewContext e msg
+updateScrollState eid f ctx = ctx { ctxElements = (ctxElements ctx)
+  { elmScrollStates = Map.alter (Just . f . fromMaybe noScroll) eid (elmScrollStates (ctxElements ctx)) } }
 
 -- Internal: writes an extent value directly into the context, bypassing
 -- the deferred-effect queue. Used only by @applyUiEffects@.
@@ -1276,8 +1323,9 @@ writeSelection eid sel ctx = ctx { ctxElements = (ctxElements ctx)
 applyUiEffects :: Ord e => [UiEffect e] -> ViewContext e msg -> ViewContext e msg
 applyUiEffects effects ctx0 = foldl' step ctx0 effects
   where
-    step ctx (ScrollTo eid v)        = writeScrollState eid v ctx
-    step ctx (ScrollBy eid dv)       = writeScrollState eid (currentScroll eid ctx + dv) ctx
+    step ctx (ScrollTo eid req)      = updateScrollState eid (\st -> st { scrollPending = Just req }) ctx
+    step ctx (ScrollToOffset eid v)  = writeScrollState eid v ctx
+    step ctx (ScrollBy eid dv)       = updateScrollState eid (\st -> st { scrollOffset = clampScrollOffset st (scrollOffset st + dv) }) ctx
     step ctx (AdjustExtent eid dv)   = writeExtentState eid (currentExtent eid ctx + dv) ctx
     step ctx (SetSelectionAt eid sel) = writeSelection eid sel ctx
     step ctx (SetHoldState eid mhs)  = writeHoldState eid mhs ctx
@@ -1285,11 +1333,51 @@ applyUiEffects effects ctx0 = foldl' step ctx0 effects
     step ctx (Focus sid target)     = setFocusChange sid (Just target) ctx
     step ctx (ClearFocus sid)       = setFocusChange sid Nothing ctx
 
-    currentScroll eid ctx =
-      scrollPosition (Map.findWithDefault (ScrollState 0) eid (elmScrollStates (ctxElements ctx)))
 
     currentExtent eid ctx =
       extentValue (Map.findWithDefault (ExtentState 0) eid (elmExtentStates (ctxElements ctx)))
+
+-- | Records that @eid@ was drawn this frame, and which
+-- 'withPreservedState' region, if any, it was drawn inside.
+markDrawn :: Ord e => ControlId e -> View e msg ()
+markDrawn eid = modify $ \ctx -> ctx
+  { ctxOutputs  = (ctxOutputs ctx) { outDrawn = Set.insert eid (outDrawn (ctxOutputs ctx)) }
+  , ctxElements = (ctxElements ctx)
+      { elmPreservedIn = Map.alter (const (ctxPreservedRegion ctx)) eid (elmPreservedIn (ctxElements ctx)) }
+  }
+
+-- | Runs @inner@ as the region @region@: the state of every element drawn
+-- inside it is kept while @region@ itself is drawn, even in frames where
+-- that element isn't.
+withPreservedState :: Ord e => ControlId e -> View e msg a -> View e msg a
+withPreservedState region inner = do
+  markDrawn region
+  withField ctxPreservedRegion (\v c -> c { ctxPreservedRegion = v }) (Just region) inner
+
+-- | Drops the state of every element drawn in an earlier frame but not in
+-- the one just finished, unless the 'withPreservedState' region it was last
+-- drawn inside (or one enclosing that) was drawn.
+dropUndrawnState :: Ord e => ViewContext e msg -> ViewContext e msg
+dropUndrawnState ctx = ctx { ctxElements = els
+  { elmScrollStates  = Map.withoutKeys (elmScrollStates els) gone
+  , elmExtentStates  = Map.withoutKeys (elmExtentStates els) gone
+  , elmHoldStates    = Map.withoutKeys (elmHoldStates els) gone
+  , elmCursorIndices = Map.withoutKeys (elmCursorIndices els) gone
+  , elmSelection     = case elmSelection els of
+      SelectionAt k _ | k `Set.member` gone -> NoSelection
+      sel                                   -> sel
+  , elmDrawnBefore   = kept
+  , elmPreservedIn   = Map.withoutKeys (elmPreservedIn els) gone
+  } }
+  where
+    els          = ctxElements ctx
+    drawn        = outDrawn (ctxOutputs ctx)
+    (kept, gone) = Set.partition (alive (Map.size (elmPreservedIn els))) (elmDrawnBefore els `Set.union` drawn)
+    -- The depth limit stops a region recorded inside itself from looping.
+    alive depth k
+      | k `Set.member` drawn = True
+      | depth <= 0           = False
+      | otherwise            = maybe False (alive (depth - 1)) (Map.lookup k (elmPreservedIn els))
 
 -- | Applies whatever effects are pending on @ctx@.
 settleEffects :: Ord e => ViewContext e msg -> ViewContext e msg

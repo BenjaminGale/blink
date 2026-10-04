@@ -8,7 +8,7 @@ import Blink.Controls.Control
   (Attribute, control, defaultControlConfig, elementId, resolve)
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.ScrollBar
-  (ScrollBarConfig, scrollBar, scrollBarButtonStyleKey, orientation, step)
+  (ScrollBarConfig, maxScrollOffset, scrollBar, scrollBarButtonStyleKey, orientation, step)
 import Blink.Controls.Fixtures (mkTestTheme, noInput, plainStyle, plainStyleSet, testColour, zeroMetrics)
 import Blink.Geometry (Orientation (..), Point (..), Rectangle (..), Size (..))
 import Blink.Input (InputState (..))
@@ -80,12 +80,15 @@ arrowHoverSeedCtx = emptyViewContext barBounds noInput arrowHoverTheme
 
 type Attribute' = Attribute (ScrollBarConfig TestElement String)
 
+-- | A bar over 100px of scrollable content, so a position in pixels reads
+-- as a percentage of the range.
 render :: [Attribute'] -> View TestElement String ()
-render attrs = runElement (scrollBar Bar attrs)
+render attrs = runElement (scrollBar Bar (maxScrollOffset 100 : attrs))
 
 -- | Seeds the scrollbar's position directly via 'requestScrollTo', the same
 -- way 'Blink.Interaction's own module header documents for scroll\/selection
--- state that's impractical to reach via a pixel-accurate drag.
+-- state that's impractical to reach via a pixel-accurate drag. Takes a
+-- fraction of the range, applied when the bar next draws.
 seededAt :: Double -> IO (ViewContext TestElement String)
 seededAt v = resultContext <$> runInteractions barBounds seedCtx (requestScrollTo scrollEid v) [] []
 
@@ -150,14 +153,14 @@ spec = describe "Blink.Controls.ScrollBar" $ do
     it "moves to the end when clicked at the point that centres the thumb there" $ do
       ctx <- seededAt 0.5
       result <- runInteractions barBounds ctx (render []) [MoveTo valueOnePoint] [MouseDown valueOnePoint]
-      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 1
+      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 100
 
     it "keeps following the pointer as a drag continues past the track" $ do
       ctx <- seededAt 0
       result <- runInteractions barBounds ctx (render [])
                   [MoveTo valueHalfPoint]
                   [MouseDown valueHalfPoint, DragTo (Point 8 500)]
-      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 1
+      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 100
 
     it "does not move while disabled" $ do
       ctx <- seededAt 0
@@ -168,7 +171,7 @@ spec = describe "Blink.Controls.ScrollBar" $ do
       ctx <- seededAt 0.5
       let grabPoint = Point 8 45
       result <- runInteractions barBounds ctx (render []) [MoveTo grabPoint] [MouseDown grabPoint]
-      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 0.5
+      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 50
 
     it "keeps the grabbed point under the pointer while dragging, instead of recentring the thumb under it" $ do
       ctx <- seededAt 0.5
@@ -176,24 +179,24 @@ spec = describe "Blink.Controls.ScrollBar" $ do
       result <- runInteractions barBounds ctx (render [])
                   [MoveTo grabPoint]
                   [MouseDown grabPoint, DragTo (Point 8 65)]
-      -- Thumb edge follows 5px behind the grab point: (65 - 5 - 16) / 48.
-      contextScrollState (V.Control scrollEid) (resultContext result) `shouldSatisfy` (\v -> abs (v - (44 / 48)) < 1e-9)
+      -- Thumb edge follows 5px behind the grab point: (65 - 5 - 16) / 48 of the range.
+      contextScrollState (V.Control scrollEid) (resultContext result) `shouldSatisfy` (\v -> abs (v - 100 * 44 / 48) < 1e-9)
 
   describe "arrow buttons" $ do
     it "decreases the value by the step when the decrement arrow is pressed" $ do
       ctx <- seededAt 0.5
       result <- runInteractions barBounds ctx (render []) [MoveTo decrementPoint] [MouseDown decrementPoint]
-      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 0.45
+      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 30
 
     it "increases the value by the step when the increment arrow is pressed" $ do
       ctx <- seededAt 0.5
       result <- runInteractions barBounds ctx (render []) [MoveTo incrementPoint] [MouseDown incrementPoint]
-      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 0.55
+      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 70
 
     it "respects a custom step" $ do
       ctx <- seededAt 0.5
-      result <- runInteractions barBounds ctx (render [step 0.25]) [MoveTo incrementPoint] [MouseDown incrementPoint]
-      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 0.75
+      result <- runInteractions barBounds ctx (render [step 25]) [MoveTo incrementPoint] [MouseDown incrementPoint]
+      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 75
 
     it "clamps at the minimum instead of going below it" $ do
       ctx <- seededAt 0
@@ -203,7 +206,7 @@ spec = describe "Blink.Controls.ScrollBar" $ do
     it "clamps at the maximum instead of going above it" $ do
       ctx <- seededAt 1
       result <- runInteractions barBounds ctx (render []) [MoveTo incrementPoint] [MouseDown incrementPoint]
-      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 1
+      contextScrollState (V.Control scrollEid) (resultContext result) `shouldBe` 100
 
     -- 'RepeatButton' owns its own repeat cadence entirely (see
     -- 'Blink.Controls.RepeatButtonSpec' for the cadence itself, tested
@@ -217,10 +220,10 @@ spec = describe "Blink.Controls.ScrollBar" $ do
       (_, ctxMoved)   <- runView (render []) (nextFrameContext barBounds moveInput testTheme (mkAnimationState 0 0 True) ctx0)
       (_, ctxPressed) <- runView (render []) (nextFrameContext barBounds downInput testTheme (mkAnimationState 0 0 True) ctxMoved)
       -- Crosses the 0.4s initial delay plus two 0.08s intervals: the press
-      -- itself plus 3 repeats, 4 decrements of 0.05 each in total.
+      -- itself plus 3 repeats, 4 decrements of the default 20px step in total.
       (_, ctxHeld) <- runView (render []) (nextFrameContext barBounds downInput testTheme (mkAnimationState 0.6 0.6 True) ctxPressed)
       let settled = settleEffects ctxHeld
-      contextScrollState (V.Control scrollEid) settled `shouldSatisfy` (\v -> abs (v - (0.9 - 4 * 0.05)) < 1e-9)
+      contextScrollState (V.Control scrollEid) settled `shouldSatisfy` (\v -> abs (v - (90 - 4 * 20)) < 1e-9)
 
   describe "orientation" $ do
     it "gives the same size whichever order height and orientation come in" $ do

@@ -30,7 +30,7 @@ module Blink.Controls.ScrollPanel
 import Blink.Controls.Control
 import Blink.Controls.ScrollBar (ScrollViewportConfig (..), scrollViewport, verticalBarOf)
 import Blink.View (HasUiEffect (..), partId, withPart)
-import Blink.View.Context (UiEffect (..))
+import Blink.View.Context (ScrollRequest (..), UiEffect (..))
 import Blink.Element (Element (..), HasLayoutConfig (..), emptyElement, runElement, HasContent (..))
 import Blink.Geometry (Alignment (TopLeft), Orientation (..), Size (..))
 import Blink.Layout.Constraints (Available (..), Layout (..), MeasureCtx (..), fill)
@@ -102,6 +102,7 @@ scrollPanel eid attrs = controlElement (spLayout cfg) measureEl ctrl
       contentSize <- naturalSize
       withPart eid (partName Viewport) $ scrollViewport eid ScrollViewportConfig
         { svWheelStep   = wheelStepPx
+        , svItemOffset  = Nothing
         , svContentSize = contentSize
         , svContent     = const (runElement child)
         }
@@ -116,7 +117,7 @@ data ScrollPanelPart = Viewport
 scrollPanelTo :: (Ord e, Monad m, HasUiEffect e m) => e -> Double -> m ()
 scrollPanelTo eid position = do
   self <- controlIdFor eid
-  queueEffect (ScrollTo (verticalBarOf (partId self (partName Viewport))) position)
+  queueEffect (ScrollTo (verticalBarOf (partId self (partName Viewport))) (ScrollToFraction position))
 
 -- * Style
 

@@ -487,8 +487,10 @@ sidebar s =
   where
     pageLabel page = maybe "" id (lookup page pages)
 
+-- | The current page. Each page keeps its scroll positions and list
+-- cursors while another page is shown.
 pageContent :: AppState -> Element ControlId Msg
-pageContent s = case currentPage s of
+pageContent s = preserveState PageArea $ case currentPage s of
   ControlsPage   -> mainList s
   ListPage       -> listPage s
   TreePage       -> treePage s

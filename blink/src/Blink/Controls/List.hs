@@ -99,6 +99,7 @@ module Blink.Controls.List
   , listMeasure
   , scrollRowIntoView
   , scrollListTo
+  , scrollListToItem
   , selection
   , renderItem
   , rowHeight
@@ -133,7 +134,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
 import Blink.Controls.Control
-import Blink.View.Context (ControlId, Effect (..), HasUiEffect (..), UiEffect (..), controlIdOf, gets, modify, partId, withPart, writeScrollState)
+import Blink.View.Context (ControlId, Effect (..), HasUiEffect (..), ScrollRequest (..), UiEffect (..), controlIdOf, gets, modify, partId, withPart, writeScrollState)
 import Blink.View.Scroll (contextScrollState)
 import Blink.Controls.ScrollBar
   (ScrollViewportConfig (..), scrollBarThickness, scrollViewport, verticalBarOf)
@@ -818,6 +819,7 @@ listBase lid cfg = do
     -- never scrolls horizontally.
     renderViewport self = withPart lid (partName Viewport) $ scrollViewport lid ScrollViewportConfig
       { svWheelStep   = lstRowHeight cfg * wheelRowsPerNotch
+      , svItemOffset  = Just (\i -> fromIntegral i * lstRowHeight cfg)
       , svContentSize = Size 0 (totalRowsHeight (lstRowHeight cfg) itemCount)
       , svContent     = runElement . visibleRows self
       }
@@ -925,7 +927,16 @@ listFrom lid cfg =
 scrollListTo :: (Ord e, Monad m, HasUiEffect e m) => e -> Double -> m ()
 scrollListTo lid position = do
   self <- controlIdFor lid
-  queueEffect (ScrollTo (verticalBarOf (partId self (partName Viewport))) position)
+  queueEffect (ScrollTo (verticalBarOf (partId self (partName Viewport))) (ScrollToFraction position))
+
+-- | Scrolls the list (or tree, table or tree-table) @lid@ so the item at
+-- @idx@ (0-based, counting the rows currently shown) is at the top of the
+-- view, or as near as the end of the list allows, from the next frame
+-- onward. Callable from 'View' or 'Blink.Update.Update'.
+scrollListToItem :: (Ord e, Monad m, HasUiEffect e m) => e -> Int -> m ()
+scrollListToItem lid idx = do
+  self <- controlIdFor lid
+  queueEffect (ScrollTo (verticalBarOf (partId self (partName Viewport))) (ScrollToItem idx))
 
 -- | Brings row @idx@ (0-based, into a flat list of @itemCount@ rows at
 -- @cfg@'s own 'lstRowHeight') into a @viewportHeight@-tall viewport --
@@ -955,16 +966,15 @@ scrollListTo lid position = do
 scrollRowIntoView :: Ord e => ControlId e -> ListConfig sel e msg a -> Int -> Double -> Int -> View e msg ()
 scrollRowIntoView self cfg itemCount viewportHeight idx = when (maxOffset > 0) $ do
   let barId = verticalBarOf (partId self (partName Viewport))
-  scrollFrac <- gets (contextScrollState barId)
+  offsetY <- gets (contextScrollState barId)
   let rh        = lstRowHeight cfg
       rowTop    = fromIntegral idx * rh
       rowBottom = rowTop + rh
-      offsetY   = scrollFrac * maxOffset
-      newFrac
-        | rowTop < offsetY                    = Just (rowTop / maxOffset)
-        | rowBottom > offsetY + viewportHeight = Just ((rowBottom - viewportHeight) / maxOffset)
+      newOffset
+        | rowTop < offsetY                    = Just rowTop
+        | rowBottom > offsetY + viewportHeight = Just (rowBottom - viewportHeight)
         | otherwise                            = Nothing
-  mapM_ (modify . writeScrollState barId) newFrac
+  mapM_ (modify . writeScrollState barId) newOffset
   where
     contentHeight = totalRowsHeight (lstRowHeight cfg) itemCount
     maxOffset     = contentHeight - viewportHeight

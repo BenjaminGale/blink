@@ -235,7 +235,7 @@ uiStateApp = App
   , theme   = const (emptyTheme (testMetrics, testStyleSet))
   , view    = \_ -> fullView $ do
       pos <- getScrollState ()
-      requestScrollTo () (pos + 1)
+      requestScrollBy () 1
       emit (\_ -> round pos)
   , update  = modify
   }
@@ -418,7 +418,7 @@ cmdApp io = App
 
 data UiEffectMsg = RequestScroll | ReportScroll Double
 
--- | Calls 'requestScrollTo' from 'update' (rather than from the view, the
+-- | Calls 'requestScrollBy' from 'update' (rather than from the view, the
 -- usual way) the first time it renders, then reports the resulting scroll
 -- state as app state every frame.
 uiEffectApp :: App () UiEffectMsg (Maybe Double)
@@ -430,7 +430,7 @@ uiEffectApp = App
       pos <- getScrollState ()
       emit (ReportScroll pos)
   , update  = \m -> case m of
-      RequestScroll    -> requestScrollTo () 1
+      RequestScroll    -> requestScrollBy () 1
       ReportScroll pos -> put (Just pos)
   }
 

@@ -116,7 +116,7 @@ import Blink.Input (ButtonState (..), InputState (..), Key, KeyEvent (..), Modif
 import Blink.Layout.Constraints (Layout, MeasureCtx (..), shrink)
 import Blink.Style (Metrics (..), Style (..), StyleKey (..), StyleSet (..), Theme (..), VisualState (..), resolveStyle)
 import Blink.View
-import Blink.View.Context (Effect (..), UiEffect (..), contextTheme, gets)
+import Blink.View.Context (Effect (..), UiEffect (..), contextTheme, gets, markDrawn)
 import Blink.View.Mouse (contextCaptured, isOccludedByPopupFor)
 import Blink.View.Drawing (withClip, withBackground, withBorder)
 import Blink.Element (Attribute (..), Element (..), appendTo, nested, resolve)
@@ -824,6 +824,7 @@ control cc = disableWhen (not (ccIsEnabled cc)) $
       pure interaction
 
     renderTracked eid = do
+      controlIdOf eid >>= markDrawn
       disabled <- isDisabled
       -- A click can't focus this control directly while disabled, but a
       -- 'Blink.Controls.Label.target' pointed at it isn't stopped that

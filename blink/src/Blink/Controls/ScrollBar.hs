@@ -46,11 +46,11 @@ module Blink.Controls.ScrollBar
   , orientation
   , scrollBarThickness
   , visibleFraction
+  , maxScrollOffset
   , step
     -- * Scrollable viewports
   , ScrollViewportConfig (..)
   , scrollViewport
-  , scrollViewportTo
   , verticalBarOf
     -- * Style
   , defaultStyleEntries
@@ -67,8 +67,8 @@ import Blink.Layout.Box (children, hBox, vBox)
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Rendering (ImagePath)
 import Blink.View
-import Blink.View.Context (Effect (..), UiEffect (..), gets)
-import Blink.View.Scroll (contextScrollState)
+import Blink.View.Context (Effect (..), UiEffect (..))
+import Blink.View.Scroll (resolveScrollOffset)
 import Blink.View.Drawing (drawImage, withClip)
 import Blink.Element (Element (..), HasLayoutConfig (..), elementWithLayout, height, noIntrinsicSize, part, runElement, width, HasOrientation (..), HasStep (..))
 import Blink.Style
@@ -98,12 +98,14 @@ data ViewportPart = VerticalBar | HorizontalBar
 -- | Every capability 'scrollBar' resolves: the wrapped 'ControlConfig', the
 -- caller's layout attributes (applied over the default layout for its axis
 -- when the scrollbar is built), which axis it runs along, the proportion of
--- the track its thumb covers, and the step each arrow moves the position by.
+-- the track its thumb covers, the largest offset in pixels the content can
+-- scroll to, and the pixels each arrow moves the position by.
 data ScrollBarConfig e msg = ScrollBarConfig
   { sbControl         :: ControlConfig e msg
   , sbLayoutAttrs     :: [Attribute Layout]
   , sbOrientation     :: Orientation
   , sbVisibleFraction :: Double
+  , sbMaxOffset       :: Double
   , sbStep            :: Double
   }
 
@@ -115,14 +117,15 @@ layoutFor Horizontal = Layout fill (exactly scrollBarThickness) TopLeft
 layoutFor Vertical   = Layout (exactly scrollBarThickness) fill TopLeft
 
 -- | 'defaultControlConfig' (styled via 'scrollBarStyleKey'), 'Vertical', a
--- visible fraction of 0.2, and a step of 0.05.
+-- visible fraction of 0.2, nothing to scroll, and a step of 20 pixels.
 defaultScrollBarConfig :: ScrollBarConfig e msg
 defaultScrollBarConfig = ScrollBarConfig
   { sbControl         = defaultControlConfig { ccStyleKey = scrollBarStyleKey }
   , sbLayoutAttrs     = []
   , sbOrientation     = Vertical
   , sbVisibleFraction = 0.2
-  , sbStep            = 0.05
+  , sbMaxOffset       = 0
+  , sbStep            = 20
   }
 
 instance HasControlConfig e msg (ScrollBarConfig e msg) where
@@ -154,8 +157,14 @@ instance HasOrientation (ScrollBarConfig e msg) where
 visibleFraction :: Double -> Attribute (ScrollBarConfig e msg)
 visibleFraction v = Attribute (\sc -> sc { sbVisibleFraction = v })
 
--- | How much each arrow button moves the position by, once per activation
--- (including each repeat while held -- see @arrowButton@). Defaults to 0.05.
+-- | The largest offset in pixels the content can scroll to: its length
+-- minus the visible length. Defaults to 0.
+maxScrollOffset :: Double -> Attribute (ScrollBarConfig e msg)
+maxScrollOffset m = Attribute (\sc -> sc { sbMaxOffset = m })
+
+-- | How many pixels each arrow button moves the position by, once per
+-- activation (including each repeat while held -- see @arrowButton@).
+-- Defaults to 20.
 instance HasStep (ScrollBarConfig e msg) where
   step s = Attribute (\sc -> sc { sbStep = s })
 
@@ -190,16 +199,16 @@ thumbLengthFor o bounds frac =
   in min len (max minThumbLength (clampFraction frac * len))
 
 -- | The pixel offset along @o@ of the thumb's own leading edge (of length
--- @thumbLen@) for scroll position @v@ within @bounds@ -- the near end of
--- the track when @v@ is 0, the far end (minus the thumb's own length) when
--- @v@ is 1.
+-- @thumbLen@) for @v@, the fraction of the scrollable range scrolled,
+-- within @bounds@ -- the near end of the track when @v@ is 0, the far end
+-- (minus the thumb's own length) when @v@ is 1.
 thumbOriginFor :: Orientation -> Rectangle -> Double -> Double -> Double
 thumbOriginFor o bounds thumbLen v = axisOrigin o bounds + clampFraction v * travel
   where
     travel = max 0 (axisLength o bounds - thumbLen)
 
--- | The @[0, 1]@ scroll position whose thumb (of length @thumbLen@) would
--- sit with its leading edge at pixel position @originMain@ along @o@ within
+-- | The fraction of the scrollable range whose thumb (of length @thumbLen@)
+-- would sit with its leading edge at pixel position @originMain@ along @o@ within
 -- @bounds@ -- the inverse of 'thumbOriginFor'. Reads as @0@ when the track
 -- has no room for the thumb to travel at all.
 fractionForOrigin :: Orientation -> Rectangle -> Double -> Double -> Double
@@ -308,8 +317,10 @@ scrollBar eid attrs = controlElement (scrollBarLayout cfg) (box (Control eid)) c
 
     trackBody barId ci = do
       bounds <- getBounds
-      value0 <- gets (contextScrollState barId)
+      let maxOff = sbMaxOffset cfg
+      offset0 <- resolveScrollOffset barId maxOff Nothing
       let thumbLen = thumbLengthFor o bounds (sbVisibleFraction cfg)
+          value0   = if maxOff > 0 then offset0 / maxOff else 0
       when (not (ciDisabled ci) && ciIsCaptured ci) $ do
         mouseMain <- pointMain o <$> getMousePos
         current   <- getExtentState eid
@@ -323,8 +334,8 @@ scrollBar eid attrs = controlElement (scrollBarLayout cfg) (box (Control eid)) c
               requestExtentBy eid (offset - current)
               pure offset
             else pure current
-        let newValue = fractionForOrigin o bounds thumbLen (mouseMain - grabOffset)
-        when (newValue /= value0) $ emitUi (ScrollTo barId newValue)
+        let newOffset = fractionForOrigin o bounds thumbLen (mouseMain - grabOffset) * maxOff
+        when (newOffset /= offset0) $ emitUi (ScrollToOffset barId newOffset)
       drawThumb o bounds (ciDisabled ci) (ciHovered ci) (ciIsCaptured ci) (sbVisibleFraction cfg) value0
 
     ctrl = (sbControl cfg)
@@ -336,10 +347,14 @@ scrollBar eid attrs = controlElement (scrollBarLayout cfg) (box (Control eid)) c
 -- * Scrollable viewports
 
 -- | Every capability 'scrollViewport' resolves: how far a wheel notch
--- scrolls, the content's full size, and how to draw it.
+-- scrolls, how to turn an item index into a vertical offset, the
+-- content's full size, and how to draw it.
 data ScrollViewportConfig e msg = ScrollViewportConfig
   { svWheelStep   :: Double
-    -- ^ Pixels one mouse-wheel notch scrolls.
+    -- ^ Pixels one mouse-wheel notch, or one press of an arrow, scrolls.
+  , svItemOffset  :: Maybe (Int -> Double)
+    -- ^ The vertical offset that puts an item at the top of the view, for
+    -- content made of items; 'Nothing' for any other content.
   , svContentSize :: Size
     -- ^ The content's full size. Along an axis where it fits, the content
     -- is laid out at the viewport's own size instead.
@@ -353,11 +368,13 @@ data ScrollViewportConfig e msg = ScrollViewportConfig
 -- axis the content overflows (and a blank corner where both meet). The
 -- mouse wheel scrolls the vertical axis while it overflows, otherwise the
 -- horizontal one. The bars are parts of @vid@, named by the private
--- @ViewportPart@; see 'scrollViewportTo' to move the vertical
--- one from elsewhere.
+-- @ViewportPart@; 'verticalBarOf' gives the vertical one's id, where its
+-- scroll position is stored. Each bar's position is a pixel offset,
+-- clamped to the content and applying any pending request as it draws.
 scrollViewport :: Ord e => e -> ScrollViewportConfig e msg -> View e msg ()
 scrollViewport vid cfg = do
   bounds <- getBounds
+  self   <- controlIdOf vid
   -- A scrollbar shown on one axis takes space from the other, which can
   -- itself tip that axis into overflow -- so the overflow check runs
   -- twice: once against the full bounds, once against what's left after
@@ -370,23 +387,26 @@ scrollViewport vid cfg = do
       viewportH  = viewportH0 - (if showH0 then scrollBarThickness else 0)
       showV      = overflows contentH viewportH
       showH      = overflows contentW viewportW
+      maxV       = if showV then contentH - viewportH else 0
+      maxH       = if showH then contentW - viewportW else 0
+  offsetY <- resolveScrollOffset (barOf self VerticalBar) maxV (svItemOffset cfg)
+  offsetX <- resolveScrollOffset (barOf self HorizontalBar) maxH Nothing
   if not showV && not showH
     then svContent cfg (Rectangle 0 0 viewportW0 viewportH0)
-    else runElement (scrollableArea viewportW viewportH showV showH)
+    else runElement (scrollableArea self viewportW viewportH showV showH maxV maxH offsetX offsetY)
   where
     Size contentW contentH = svContentSize cfg
 
     overflows content viewport = content > max 0 viewport
 
-    barState bar = do
-      self <- controlIdOf vid
-      gets (contextScrollState (partId self (partName bar)))
+    barOf self bar = partId self (partName bar)
 
-    scrollableArea viewportW viewportH showV showH = vBox
+    scrollableArea self viewportW viewportH showV showH maxV maxH offsetX offsetY = vBox
       [ children
           ( hBox
               [ children
-                  ( elementWithLayout (Layout fill fill TopLeft) (clippedContent viewportW viewportH showV showH)
+                  ( elementWithLayout (Layout fill fill TopLeft)
+                      (clippedContent self showV showH maxV maxH offsetX offsetY)
                     : [ vBar | showV ]
                   )
               ]
@@ -400,21 +420,19 @@ scrollViewport vid cfg = do
       ]
       where
         vBar = part vid (partName VerticalBar) $ scrollBar vid
-          [ orientation Vertical, height fill, visibleFraction (viewportH / contentH) ]
+          [ orientation Vertical, height fill, visibleFraction (viewportH / contentH)
+          , maxScrollOffset maxV, step (svWheelStep cfg) ]
         hBar = part vid (partName HorizontalBar) $ scrollBar vid
-          [ orientation Horizontal, width fill, visibleFraction (viewportW / contentW) ]
+          [ orientation Horizontal, width fill, visibleFraction (viewportW / contentW)
+          , maxScrollOffset maxH, step (svWheelStep cfg) ]
         corner = elementWithLayout (Layout (exactly scrollBarThickness) (exactly scrollBarThickness) TopLeft) (pure ())
 
     -- 'withClip' must capture this bounds -- the viewport's own, not yet
     -- offset -- before the content moves within it.
-    clippedContent viewportW viewportH showV showH = do
-      applyWheel viewportW viewportH showV showH
+    clippedContent self showV showH maxV maxH offsetX offsetY = do
+      applyWheel self showV showH maxV maxH
       bounds <- getBounds
-      hFrac  <- if showH then barState HorizontalBar else pure 0
-      vFrac  <- if showV then barState VerticalBar else pure 0
-      let offsetX = if showH then hFrac * (contentW - viewportW) else 0
-          offsetY = if showV then vFrac * (contentH - viewportH) else 0
-          contentBounds = bounds
+      let contentBounds = bounds
             { rectX      = rectX bounds - offsetX
             , rectY      = rectY bounds - offsetY
             , rectWidth  = if showH then contentW else rectWidth bounds
@@ -427,32 +445,22 @@ scrollViewport vid cfg = do
     -- whichever axis actually scrolls, favouring vertical. Checked against
     -- the viewport's own (unscrolled) bounds, and deferred like every
     -- other user gesture.
-    applyWheel viewportW viewportH showV showH = do
+    applyWheel self showV showH maxV maxH = do
       wheel <- getWheelDelta
       when (wheel /= 0) $ do
         over <- isRegionHit
         when over $ case (showV, showH) of
-          (True, _)      -> scrollBy VerticalBar (contentH - viewportH) wheel
-          (False, True)  -> scrollBy HorizontalBar (contentW - viewportW) wheel
+          (True, _)      -> scrollBy self VerticalBar maxV wheel
+          (False, True)  -> scrollBy self HorizontalBar maxH wheel
           (False, False) -> pure ()
 
-    scrollBy bar maxOffset wheel =
-      when (maxOffset > 0) $ do
-        self <- controlIdOf vid
-        emitUi (ScrollBy (partId self (partName bar)) (wheel * svWheelStep cfg / maxOffset))
+    scrollBy self bar maxOffset wheel =
+      when (maxOffset > 0) $ emitUi (ScrollBy (barOf self bar) (wheel * svWheelStep cfg))
 
 -- | The id of the vertical scroll bar of the viewport @self@ -- where
 -- that viewport's vertical position is stored.
 verticalBarOf :: ControlId e -> ControlId e
 verticalBarOf self = partId self (partName VerticalBar)
-
--- | Scrolls the vertical scroll bar of the viewport @vid@ to @position@,
--- from @0@ (top) to @1@ (bottom), from the next frame onward. Callable
--- from 'View' or 'Blink.Update.Update'.
-scrollViewportTo :: (Ord e, Monad m, HasUiEffect e m) => e -> Double -> m ()
-scrollViewportTo vid position = do
-  self <- controlIdFor vid
-  queueEffect (ScrollTo (verticalBarOf self) position)
 
 -- * Style
 
