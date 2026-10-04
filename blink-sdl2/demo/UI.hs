@@ -1049,7 +1049,6 @@ topMenuBar s =
 demoView :: AppState -> Element ControlId Msg
 demoView s = elementWithLayout (Layout fill fill TopLeft) $ do
   input <- getInput
-  when (darkMode s) $ fillRect (RGBA 0.082 0.102 0.129 1)
   borderLayout
     [ top (topMenuBar s)
     , left (sidebar s), centre (pageContent s), bottom (footer s)

@@ -71,7 +71,8 @@ data ControlId = StatusBar
 -- colour directly rather than as a shift from an opaque resting fill.
 lightPalette :: Palette
 lightPalette = Palette
-  { paletteAccent          = RGBA 0.290 0.553 0.941 1  -- #4A8DF0
+  { paletteBackground      = RGBA 0.898 0.898 0.918 1  -- #E5E5EA
+  , paletteAccent          = RGBA 0.290 0.553 0.941 1  -- #4A8DF0
   , paletteFocusRing       = RGBA 0.290 0.553 0.941 1  -- #4A8DF0
   , paletteSurface         = RGBA 0.949 0.949 0.957 1  -- #F2F2F4
   , paletteSurfaceHover    = RGBA 0.847 0.847 0.867 1  -- #D8D8DD
@@ -89,7 +90,8 @@ lightPalette = Palette
 -- demo panel).
 darkPalette :: Palette
 darkPalette = Palette
-  { paletteAccent          = RGBA 0.239 0.435 0.941 1  -- #3D6FF0
+  { paletteBackground      = RGBA 0.082 0.102 0.129 1  -- #151A21
+  , paletteAccent          = RGBA 0.239 0.435 0.941 1  -- #3D6FF0
   , paletteFocusRing       = RGBA 0.239 0.435 0.941 1  -- #3D6FF0
   , paletteSurface         = RGBA 0.141 0.161 0.220 1  -- #242938
   , paletteSurfaceHover    = RGBA 0.180 0.204 0.267 1  -- #2E3444

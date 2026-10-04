@@ -95,7 +95,9 @@ runApp config app = do
   msgQueue <- newBoundedMsgQueue 256
 
   let renderFrame calls = do
-        SDL.rendererDrawColor renderer $= SDL.V4 229 229 234 255
+        -- Never seen: Blink fills the window with the theme's background
+        -- before anything else is drawn.
+        SDL.rendererDrawColor renderer $= SDL.V4 0 0 0 255
         SDL.clear renderer
         clipRef <- newIORef ([] :: [SDL.Rectangle CInt])
         mapM_ (submitDrawCommand renderer fonts texCache imgCache clipRef) calls

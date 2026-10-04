@@ -84,7 +84,8 @@ import qualified Blink.Controls.Tree as Tree
 -- actually comes from.
 defaultTheme :: Ord e => Palette -> Theme e
 defaultTheme p = (emptyTheme (controlMetrics, buttonStyle AlignCenter p))
-  { themeElementStyles = Map.fromList (concat
+  { themeBackground    = paletteBackground p
+  , themeElementStyles = Map.fromList (concat
       [ Button.defaultStyleEntries p
       , ToggleButton.defaultStyleEntries p
       , Checkbox.defaultStyleEntries p

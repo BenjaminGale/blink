@@ -45,7 +45,8 @@ the states that actually look different from the base:
 @
 palette :: Palette
 palette = Palette
-  { paletteAccent           = RGBA 0.1 0.4 0.8 1
+  { paletteBackground       = RGBA 0.1 0.1 0.1 1
+  , paletteAccent           = RGBA 0.1 0.4 0.8 1
   , paletteFocusRing        = RGBA 0.4 0.6 1.0 1
   , paletteSurface          = RGBA 0.2 0.2 0.2 1
   , paletteSurfaceHover     = RGBA 0.3 0.3 0.3 1
@@ -163,7 +164,8 @@ import Blink.Rendering (Colour (..), Font (..), FontWeight (..), TextAlign (..),
 -- colours only; swapping the builders while keeping the 'Palette' changes
 -- structure while keeping colours consistent.
 data Palette = Palette
-  { paletteAccent :: Colour           -- ^ The theme's primary accent colour (pressed\/selected fills, etc.).
+  { paletteBackground :: Colour       -- ^ The window behind every control.
+  , paletteAccent :: Colour           -- ^ The theme's primary accent colour (pressed\/selected fills, etc.).
   , paletteFocusRing :: Colour        -- ^ Border colour for a focused control.
   , paletteSurface :: Colour          -- ^ Default background for a control's normal state.
   , paletteSurfaceHover :: Colour     -- ^ Background while hovered.
@@ -347,6 +349,9 @@ data Theme e = Theme
   , themeFont :: Font
     -- ^ The font for every style whose 'styleFont' is 'Nothing'. Change
     -- this to change the font of every control that doesn't choose its own.
+  , themeBackground :: Colour
+    -- ^ The colour the whole window is filled with at the start of every
+    -- frame, before the view draws.
   }
 
 -- | The @('Metrics', 'StyleSet')@ pair @thm@ has for @key@, or
@@ -355,6 +360,11 @@ lookupStyle :: Ord e => StyleKey e -> Theme e -> (Metrics, StyleSet)
 lookupStyle key thm = Map.findWithDefault (themeDefaultStyle thm) key (themeElementStyles thm)
 
 -- | Creates a 'Theme' with no per-element overrides; every element
--- resolves to @def@, in 'defaultFont'.
+-- resolves to @def@, in 'defaultFont', over a white window.
 emptyTheme :: (Metrics, StyleSet) -> Theme e
-emptyTheme def = Theme { themeElementStyles = Map.empty, themeDefaultStyle = def, themeFont = defaultFont }
+emptyTheme def = Theme
+  { themeElementStyles = Map.empty
+  , themeDefaultStyle  = def
+  , themeFont          = defaultFont
+  , themeBackground    = RGBA 1 1 1 1
+  }

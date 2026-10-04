@@ -75,7 +75,7 @@ testStyleSet = StyleSet { styleBase = testStyle, styleOverrides = mempty }
 -- Record-update the fields a test needs to tell apart.
 solidPalette :: Colour -> Palette
 solidPalette c = Palette
-  { paletteAccent = c, paletteFocusRing = c, paletteSurface = c, paletteSurfaceHover = c
+  { paletteBackground = c, paletteAccent = c, paletteFocusRing = c, paletteSurface = c, paletteSurfaceHover = c
   , paletteSurfaceDisabled = c, paletteTextPrimary = c, paletteTextMuted = c, paletteTextOnAccent = c
   , paletteBorder = c, paletteBorderHover = c, paletteIcon = c, paletteIconHover = c
   }

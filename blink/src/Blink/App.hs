@@ -135,7 +135,7 @@ import Blink.Cmd (Cmd, runCmd)
 import Blink.Geometry (Point (..), Rectangle, Size (..), placePopup, rectFromSize)
 import Blink.Input (KeyEvent, Modifier, InputState (..), Mouse (..), advanceButton, emptyInputState)
 import Blink.Rendering (DrawCommand, CursorShape, TextMeasurer (..), ImageMeasurer (..), Measurers (..))
-import Blink.Style (Theme)
+import Blink.Style (Theme (themeBackground))
 import Blink.View.Animation (AnimationState (animElapsed), contextAnimation, mkAnimationState)
 import Blink.View.Context
   ( View (..), ViewContext, ctxMouse
@@ -147,7 +147,9 @@ import Blink.View.Context
   , getPendingPopups, clearPendingPopups
   , getWindowSize, withBounds
   , withCurrentPopup
+  , contextTheme, gets
   )
+import Blink.View.Drawing (fillRect)
 import Blink.View.Focus (withFocusScopeAt)
 import Blink.View.Mouse (markPopupFloor)
 import Blink.Element (Element, runElement)
@@ -314,9 +316,14 @@ buildCtx app winRect inputState delta isAnimTick state prevCtx =
 -- ('rerenderPass') is always run out before that pass's output is read.
 runViewAndPopups :: Ord e => Element e msg -> ViewContext e msg -> IO ((), ViewContext e msg)
 runViewAndPopups el ctx = do
-  (a, ctx') <- runView (runElement el) ctx
+  (a, ctx') <- runView (fillBackground >> runElement el) ctx
   ctx''     <- drainPopups ctx'
   pure (a, ctx'')
+
+-- | Fills the current bounds -- the whole window, at the start of a frame
+-- -- with the theme's 'themeBackground'.
+fillBackground :: View e msg ()
+fillBackground = gets (themeBackground . contextTheme) >>= fillRect
 
 -- | Runs each popup queued this render pass, in queue order, positioned per
 -- 'placePopup', and repeats against whatever a popup's own run queues in

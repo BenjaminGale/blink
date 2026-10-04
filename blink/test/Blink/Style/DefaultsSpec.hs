@@ -35,7 +35,8 @@ import Blink.Testing (emptyViewContext, runView)
 
 testPalette :: Palette
 testPalette = Palette
-  { paletteAccent          = RGBA 1 0 0 1
+  { paletteBackground = RGBA 0.5 0.5 0.5 1
+  , paletteAccent          = RGBA 1 0 0 1
   , paletteFocusRing       = RGBA 0 1 0 1
   , paletteSurface         = RGBA 0.2 0.2 0.2 1
   , paletteSurfaceHover    = RGBA 0.3 0.3 0.3 1

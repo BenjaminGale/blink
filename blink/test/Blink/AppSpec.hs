@@ -15,7 +15,7 @@ import Blink.Input (Key (..), KeyEvent (..), InputState (..))
 import Blink.Layout.Constraints (Layout (..), exactly, fill)
 import Blink.Popup (content, popup)
 import Blink.Rendering (Colour (..), TextAlign (..), DrawCommand (..))
-import Blink.Style (emptyTheme)
+import Blink.Style (Theme (themeBackground), emptyTheme)
 import Blink.View
 import Blink.Testing
 import Blink.View.Drawing (fillRect, drawText)
@@ -464,6 +464,14 @@ spec = do
         result <- stepFrame handle normalInput
         resultDraws result `shouldContain` [FillRect (Rectangle 0 0 100 100) c]
 
+      it "fills the window with the theme's background before the view draws" $ do
+        let background = RGBA 0 0 1 1
+            app        = (drawingApp (RGBA 1 0 0 1))
+              { theme = const ((emptyTheme (testMetrics, testStyleSet)) { themeBackground = background }) }
+        handle <- configureContinuous app nullMsgQueue nullMeasurers
+        result <- stepFrame handle normalInput
+        take 1 (resultDraws result) `shouldBe` [FillRect (Rectangle 0 0 100 100) background]
+
       it "state accumulates correctly across multiple frames" $ do
         handle <- configureContinuous counterApp nullMsgQueue nullMeasurers
         _ <- stepFrame handle normalInput
@@ -488,7 +496,8 @@ spec = do
         handle <- configureContinuous (popupDrawOrderApp (mainColour, popupColour)) nullMsgQueue nullMeasurers
         result <- stepFrame handle normalInput
         resultDraws result `shouldBe`
-          [ FillRect (Rectangle 0 0 100 100) mainColour
+          [ FillRect (Rectangle 0 0 100 100) (RGBA 1 1 1 1) -- the theme's background
+          , FillRect (Rectangle 0 0 100 100) mainColour
           , FillRect popupPlacedRect popupColour
           ]
 
