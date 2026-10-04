@@ -392,6 +392,13 @@ widgetSpec = describe "list" $ do
       [PressKey KeyDown []]
     resultMessages result `shouldBe` [selectedMsg (moveCursor Next start)]
 
+  it "leaves Down with Ctrl held to the app, moving nothing" $ do
+    result <- runInteractions testBounds seedCtx
+      (renderList (selection start : reactions))
+      [Wait 1]
+      [PressKey KeyDown [Ctrl]]
+    resultMessages result `shouldBe` []
+
   it "Enter on the already-selected (cursor) row only activates it" $ do
     result <- runInteractions testBounds seedCtx
       (renderList (selection start : reactions))

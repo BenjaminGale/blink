@@ -25,7 +25,7 @@ import Blink.Controls.ControlBehaviour (controlBehaviourSpec, defaultControlBeha
 import Blink.Controls.ElementBehaviour (tagged)
 import Blink.Controls.Fixtures (focusHeldBy)
 import Blink.Geometry (Point, Rectangle)
-import Blink.Input (InputState (..), Key (KeyReturn), KeyEvent (..))
+import Blink.Input (InputState (..), Key (KeyReturn), KeyEvent (..), Modifier (Ctrl))
 import Blink.Interaction (Interaction (..), InteractionResult (..), runInteractions)
 import Blink.View
 import Blink.Testing
@@ -84,6 +84,10 @@ buttonBehaviourSpec cfg bounds ctx eid holder marginPoint insideRect outsidePoin
     it "does not raise Clicked from Enter -- onClicked is mouse-only, unlike onActivated" $ do
       result <- runInteractions bounds ctx (render taggedActivated) [Wait 1] [PressKey KeyReturn []]
       resultMessages result `shouldNotContain` ["Clicked"]
+
+    it "raises no Activated event from Enter with a modifier held, leaving it to the app" $ do
+      result <- runInteractions bounds ctx (render taggedActivated) [Wait 1] [PressKey KeyReturn [Ctrl]]
+      resultMessages result `shouldNotContain` ["Activated"]
 
     it "raises no Activated event from Enter while it doesn't hold focus" $ do
       result <- runInteractions bounds ctx (focusHeldBy holder >> render taggedActivated) [] [PressKey KeyReturn []]

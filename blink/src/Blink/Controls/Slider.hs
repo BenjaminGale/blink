@@ -141,7 +141,7 @@ resolveKeyboardValue s keyEvts v
   | pressed KeyRight || pressed KeyUp   = Just (clampFraction (v + s))
   | otherwise                           = Nothing
   where
-    pressed k = any ((== k) . key) keyEvts
+    pressed k = any (\e -> key e == k && null (modifiers e)) keyEvts
 
 -- | Draws the groove (border colour), the filled bar and thumb (text
 -- colour, thumb shaded for hover\/drag), and a focus ring around the whole

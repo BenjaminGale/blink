@@ -146,7 +146,7 @@ buttonBase eid cfg = do
   let ctrl = bcControl cfg
   r <- control ctrl { ccElementId = Just eid }
   let e         = r
-      isEnter ev = key ev == KeyReturn && case bcActivation cfg of
+      isEnter ev = key ev == KeyReturn && null (modifiers ev) && case bcActivation cfg of
         ActivateOnClick -> not (keyRepeat ev)
         ActivateOnPress -> True
       enter     = any isEnter (ciKeysPressed e)

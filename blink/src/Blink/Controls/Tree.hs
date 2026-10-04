@@ -331,6 +331,7 @@ handleExpansionKey
   -> View e msg ()
 handleExpansionKey self listCfg visRows nodeInfo expanded0 onExpansionChanged0 viewportHeight ev =
   case (key ev, cursorItem s0) of
+    _ | not (null (modifiers ev)) -> pure ()
     (KeyRight, Just x) -> case Map.lookup x nodeInfo of
       Just (_, True) | not (Set.member x expanded0) -> setExpanded (Set.insert x expanded0)
       Just _                                        -> moveCursorTo (moveCursor Next s0)

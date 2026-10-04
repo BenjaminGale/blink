@@ -42,7 +42,7 @@ import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), t
 import Blink.Geometry (Alignment (TopLeft), Insets (..), uniform)
 import Blink.Input
   ( InputState (inputKeyEvents), Key (KeyDown, KeyEscape, KeyLeft, KeyRight, KeyTab, KeyUp)
-  , KeyEvent (key)
+  , KeyEvent (key, modifiers), Modifier (Shift)
   )
 import Blink.Layout.Box (children, vBox)
 import Blink.Layout.Constraints (Layout (..), atLeast, fill, fitContent)
@@ -228,7 +228,11 @@ menuListCore styleKey menu closeBehaviour pressKeepsOpen =
 
     -- Closes on Tab\/Shift-Tab too: this list renders after its trigger's
     -- own siblings, so a plain handoff can't reach them.
-    handleTabOut = onKey KeyTab (closeAll closeBehaviour)
+    handleTabOut = do
+      evs <- inputKeyEvents <$> getInput
+      forM_ (find (\e -> key e == KeyTab && all (== Shift) (modifiers e)) evs) $ \e -> do
+        consumeKey e
+        closeAll closeBehaviour
 
     -- Closes on the press: the pressed control takes focus then, and waiting
     -- for the release would show this list without focus until it came.
@@ -278,8 +282,8 @@ handleArrowKeys menu = case miItems menu of
   [] -> pure ()
   is -> do
     evs <- inputKeyEvents <$> getInput
-    forM_ (find ((`elem` [KeyDown, KeyUp]) . key) evs) $ \e -> do
-      consumeKey (key e)
+    forM_ (find (\e -> key e `elem` [KeyDown, KeyUp] && null (modifiers e)) evs) $ \e -> do
+      consumeKey e
       current <- getFocus
       let count        = length is
           currentIndex = current >>= (`lookup` zip (map (itemIdIn menu) is) [0 ..])

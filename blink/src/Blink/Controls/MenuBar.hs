@@ -51,7 +51,7 @@ import Blink.Controls.Label (lcMnemonic)
 import Blink.Controls.Menu (MenuItems (..), menuListMetrics, menuListWithSubmenus, menuTrigger, submenuInPlay)
 import Blink.Controls.ToggleButton (ToggleConfig (..), ToggleInteraction (..), defaultToggleButtonConfig, toggleChecked)
 import Blink.Geometry (Alignment (TopLeft), Insets (..), uniform)
-import Blink.Input (InputState (inputKeyEvents), Key (KeyLeft, KeyRight), KeyEvent (key))
+import Blink.Input (InputState (inputKeyEvents), Key (KeyLeft, KeyRight), KeyEvent (key, modifiers))
 import Blink.Layout.Box (children, hBox)
 import Blink.Layout.Constraints (Layout (..), fill, fitContent)
 import Blink.View
@@ -257,8 +257,8 @@ itemsElement bid listId cfg menuKey close onBar switchMenu = base { elRun = hand
     handleMenuSwitchKeys = do
       inPlay <- submenuInPlay menu
       evs    <- inputKeyEvents <$> getInput
-      when (not inPlay) $ forM_ (find (isJust . menuStep . key) evs) $ \e -> do
-        consumeKey (key e)
+      when (not inPlay) $ forM_ (find (\e -> isJust (menuStep (key e)) && null (modifiers e)) evs) $ \e -> do
+        consumeKey e
         forM_ (menuStep (key e)) switchMenu
 
     menuStep :: Key -> Maybe Int

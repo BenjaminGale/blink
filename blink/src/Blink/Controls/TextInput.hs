@@ -239,7 +239,7 @@ resolveSelectionAndEdit cfg eid bounds canEdit ci currentValue displayValue scro
         | canEdit   = applyEdit (ticInputFilter cfg) currentValue keyEvts typedText selAfterKeys
         | otherwise = (selAfterKeys, Nothing)
 
-      submitted = canEdit && any (\e -> key e == KeyReturn) keyEvts
+      submitted = canEdit && any (\e -> key e == KeyReturn && null (modifiers e)) keyEvts
 
   when submitted $ runEffects (ticOnSubmit cfg)
   forM_ edited $ \t -> runHandlers (ticOnInput cfg) t

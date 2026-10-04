@@ -152,7 +152,6 @@ module Blink.View.Context
   ) where
 
 import Control.Monad (forM_, unless)
-import Data.Char (toUpper)
 import Data.List (find, foldl')
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -995,19 +994,23 @@ getInput = gets contextInput
 contextInput :: ViewContext e msg -> InputState
 contextInput = ctxInput
 
--- | Removes all events for the given key from the current frame's key queue,
--- preventing other controls from handling the same keypress.
-consumeKey :: Key -> View e msg ()
-consumeKey k = modify $ \ctx ->
+-- | Removes every event for @ev@'s key with @ev@'s modifiers from the
+-- current frame's key queue, preventing other controls from handling the
+-- same keypress. Events for the same key with other modifiers stay.
+consumeKey :: KeyEvent -> View e msg ()
+consumeKey ev = modify $ \ctx ->
   let input = ctxInput ctx
-  in ctx { ctxInput = input { inputKeyEvents = filter (\e -> key e /= k) (inputKeyEvents input) } }
+  in ctx { ctxInput = input { inputKeyEvents = filter (not . sameKeyPress) (inputKeyEvents input) } }
+  where
+    sameKeyPress e = key e == key ev && modifiers e == modifiers ev
 
--- | Whether this frame's key events include @k@, consuming it if so.
+-- | Whether this frame's key events include @k@ pressed with no modifier,
+-- consuming it if so.
 takeKey :: Key -> View e msg Bool
 takeKey k = do
   evs <- inputKeyEvents <$> getInput
-  case find ((== k) . key) evs of
-    Just _  -> consumeKey k >> pure True
+  case find (\e -> key e == k && null (modifiers e)) evs of
+    Just e  -> consumeKey e >> pure True
     Nothing -> pure False
 
 -- | The first of @xs@ whose mnemonic this frame's key events activate,
@@ -1016,7 +1019,8 @@ takeMnemonic :: (x -> Maybe Char) -> [x] -> View e msg (Maybe x)
 takeMnemonic mnemonicOf xs = do
   evs <- inputKeyEvents <$> getInput
   let hit = find (maybe False (`mnemonicActivated` evs) . mnemonicOf) xs
-  forM_ (hit >>= mnemonicOf) (consumeKey . KeyChar . toUpper)
+  forM_ (hit >>= mnemonicOf) $ \c ->
+    forM_ (find (\e -> mnemonicActivated c [e]) evs) consumeKey
   pure hit
 
 -- | Hides the given key\/modifier combinations from 'getInput' -- and so

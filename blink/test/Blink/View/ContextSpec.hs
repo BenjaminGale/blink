@@ -4,7 +4,7 @@ import qualified Data.Map.Strict as Map
 import Test.Hspec
 
 import Blink.Geometry (Rectangle (..))
-import Blink.Input (InputState (..), Key (..), KeyEvent (..))
+import Blink.Input (InputState (..), Key (..), KeyEvent (..), Modifier (..))
 import Blink.Rendering (Colour (..))
 import Blink.Style (Style (..), StyleKey (..), StyleSet (..), Theme (..), VisualState (..))
 import Blink.View
@@ -79,17 +79,38 @@ spec = describe "Blink.View.Context" $ do
 
   describe "keyboard" $ do
     describe "consumeKey" $ do
-      it "removes all events for the given key from the queue" $ do
-        let input = noInput { inputKeyEvents = [ KeyEvent KeyTab [] False, KeyEvent KeyTab [] False ] }
-        (remaining, _) <- runWith input (consumeKey KeyTab >> getInput)
+      it "removes every event for the same key and modifiers from the queue" $ do
+        let tabEv = KeyEvent KeyTab [] False
+            input = noInput { inputKeyEvents = [tabEv, tabEv] }
+        (remaining, _) <- runWith input (consumeKey tabEv >> getInput)
         inputKeyEvents remaining `shouldBe` []
 
       it "leaves events for other keys in the queue" $ do
         let tabEv    = KeyEvent KeyTab [] False
             returnEv = KeyEvent KeyReturn [] False
             input    = noInput { inputKeyEvents = [tabEv, returnEv] }
-        (remaining, _) <- runWith input (consumeKey KeyTab >> getInput)
+        (remaining, _) <- runWith input (consumeKey tabEv >> getInput)
         inputKeyEvents remaining `shouldBe` [returnEv]
+
+      it "leaves events for the same key with other modifiers in the queue" $ do
+        let returnEv     = KeyEvent KeyReturn [] False
+            ctrlReturnEv = KeyEvent KeyReturn [Ctrl] False
+            input        = noInput { inputKeyEvents = [returnEv, ctrlReturnEv] }
+        (remaining, _) <- runWith input (consumeKey returnEv >> getInput)
+        inputKeyEvents remaining `shouldBe` [ctrlReturnEv]
+
+    describe "takeKey" $ do
+      it "takes the key pressed with no modifier" $ do
+        let input = noInput { inputKeyEvents = [KeyEvent KeyEscape [] False] }
+        (taken, _) <- runWith input (takeKey KeyEscape)
+        taken `shouldBe` True
+
+      it "ignores the key pressed with a modifier, leaving it in the queue" $ do
+        let shiftEscEv = KeyEvent KeyEscape [Shift] False
+            input      = noInput { inputKeyEvents = [shiftEscEv] }
+        ((taken, remaining), _) <- runWith input ((,) <$> takeKey KeyEscape <*> getInput)
+        taken `shouldBe` False
+        inputKeyEvents remaining `shouldBe` [shiftEscEv]
 
     describe "withoutKeyEvents" $ do
       it "hides the given keys from the wrapped action" $ do
@@ -110,7 +131,7 @@ spec = describe "Blink.View.Context" $ do
         let tabEv    = KeyEvent KeyTab [] False
             returnEv = KeyEvent KeyReturn [] False
             input    = noInput { inputKeyEvents = [tabEv, returnEv] }
-        (_, ctx) <- runWith input (withoutKeyEvents [(KeyTab, [])] (consumeKey KeyReturn))
+        (_, ctx) <- runWith input (withoutKeyEvents [(KeyTab, [])] (consumeKey returnEv))
         inputKeyEvents (contextInput ctx) `shouldBe` [tabEv]
 
   describe "styles" $ do

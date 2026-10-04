@@ -775,9 +775,9 @@ advanceOrRetreat wasFocused advanceKeys retreatKeys = do
         retreatHit = find (\e -> (key e, modifiers e) `elem` retreatKeys) evs
     case (wasFocused, advanceHit, retreatHit) of
       (True, Just e, _)
-        -> clearFocus >> consumeKey (key e)
+        -> clearFocus >> consumeKey e
       (True, _, Just e)
-        | prevCtrl /= scopeId -> forM_ prevCtrl (emitUi . Focus scopeId) >> consumeKey (key e)
+        | prevCtrl /= scopeId -> forM_ prevCtrl (emitUi . Focus scopeId) >> consumeKey e
       _ -> pure ()
 
 -- | Watches this control's hover, mouse-button, keyboard, and focus

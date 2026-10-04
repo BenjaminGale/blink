@@ -839,13 +839,16 @@ listBase lid cfg = do
         bottomSkipped  = fromIntegral (itemCount - hiIdx) * rh
         spacer h       = elementWithLayout (Layout fill (exactly h) TopLeft) (pure ())
 
+    -- Shift extends the selection; any other modifier leaves the key to the app.
     stepKey (s, activated) ev = case key ev of
-      KeyUp                        -> (move Prev, activated)
-      KeyDown                      -> (move Next, activated)
-      KeyReturn | not (keyRepeat ev) -> activateCursor
-      KeySpace  | not (keyRepeat ev) -> activateCursor
-      _                             -> (s, activated)
+      KeyUp     | shiftOnly                     -> (move Prev, activated)
+      KeyDown   | shiftOnly                     -> (move Next, activated)
+      KeyReturn | plain && not (keyRepeat ev) -> activateCursor
+      KeySpace  | plain && not (keyRepeat ev) -> activateCursor
+      _                                         -> (s, activated)
       where
+        plain     = null (modifiers ev)
+        shiftOnly = all (== Shift) (modifiers ev)
         move d
           | Shift `elem` modifiers ev = extendCursor d s
           | otherwise                 = moveCursor d s
